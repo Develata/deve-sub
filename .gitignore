@@ -1,0 +1,48 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# CodeGraph runtime index
+.codegraph/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Generated/local runtime state
+tmp/
+cache/
+logs/
+dist/
+coverage/
+node_modules/
+
+# SQLite runtime data (migrations are tracked)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+data/
+
+# Spike builds
+spikes/*/target/
+spikes/*/dist/
+spikes/*/node_modules/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# opencode
+.opencode/

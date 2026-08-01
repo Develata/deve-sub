@@ -1,0 +1,5 @@
+//! API DTOs, event DTOs, and client capability contracts shared across the
+//! delivery and application layers.
+//!
+//! `ToSchema` implementations for OpenAPI generation live here. See
+//! `docs/plan/03-architecture.md` and ADR-0004 for the API boundary policy.

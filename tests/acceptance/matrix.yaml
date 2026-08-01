@@ -1,0 +1,1332 @@
+# Acceptance Matrix — Deve Sub
+# Generated from docs/product-and-architecture-spec.md §21.
+# This file is the machine-readable source; human-readable view:
+# docs/acceptance-matrix.md
+
+parameterized_dimensions:
+  address: [IPv4, IPv6 literal, A-only domain, AAAA-only domain, dual-stack domain]
+  input: [URI, Base64, Mihomo YAML, sing-box JSON, Xray JSON, V2Ray JSON, Shadowrocket]
+  protocol: [VLESS Reality, Hysteria2, TUIC v5, Naive, VMess, Trojan, Shadowsocks]
+  output: [Mihomo, FlClash, sing-box, Xray, v2rayN, v2rayNG, Shadowrocket]
+
+cases:
+  - id: UI-001
+    title: 首次启动
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["进入管理员初始化", "不出现默认弱密码"]
+    fixtures: []
+    evidence: planned
+  - id: UI-002
+    title: 中英文切换
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["当前页面和导航即时切换", "刷新后保留"]
+    fixtures: []
+    evidence: planned
+  - id: UI-003
+    title: 日间/夜间
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["所有页面无不可读文字"]
+    fixtures: []
+    evidence: planned
+  - id: UI-004
+    title: Minimal Warm
+    priority: P0
+    layer: Visual
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["布局和设计 Token 正确"]
+    fixtures: []
+    evidence: planned
+  - id: UI-005
+    title: Fantasy Violet
+    priority: P0
+    layer: Visual
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["棋盘背景、装饰和卡片仍保持可读"]
+    fixtures: []
+    evidence: planned
+  - id: UI-006
+    title: 自定义主题
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["修改颜色、Logo 后持久化"]
+    fixtures: []
+    evidence: planned
+  - id: UI-007
+    title: 减少动画
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["系统设置后关闭非必要动画"]
+    fixtures: []
+    evidence: planned
+  - id: UI-008
+    title: 10,000 节点
+    priority: P0
+    layer: Performance
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["滚动、筛选和选择不明显卡顿"]
+    fixtures: []
+    evidence: planned
+  - id: UI-009
+    title: 移动端
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["能查看订阅、刷新源和复制链接"]
+    fixtures: []
+    evidence: planned
+  - id: UI-010
+    title: 键盘导航
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["导航、表格和对话框可使用键盘"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-001
+    title: 初始化管理员
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["成功创建且只能执行一次"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-002
+    title: 正确登录
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["创建安全 Session"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-003
+    title: 错误密码
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["不泄露用户名是否存在"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-004
+    title: 登录限流
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["超阈值后暂时限制"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-005
+    title: 2FA
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["开启、登录、关闭完整通过"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-006
+    title: 恢复码
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["单次使用后立即失效"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-007
+    title: 禁用用户
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["现有 Session 被撤销"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-008
+    title: 普通用户越权
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["无法访问管理员资源"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-009
+    title: Token 重置
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["旧订阅 Token 失效"]
+    fixtures: []
+    evidence: planned
+  - id: AUTH-010
+    title: 强制注销
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["指定会话立即失效"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-001
+    title: 新建 HTTP 源
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["保存并脱敏显示凭据"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-002
+    title: 手动刷新
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["创建任务并显示进度"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-003
+    title: 自动刷新
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["按间隔执行且不重复并发"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-004
+    title: ETag
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["未变化返回 304 时不重复解析"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-005
+    title: 抓取失败
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["保留上次成功节点"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-006
+    title: 解析为零节点
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["不覆盖旧 Snapshot"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-007
+    title: 响应过大
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["中止并记录明确错误"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-008
+    title: 请求超时
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["任务超时且可重试"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-009
+    title: 取消刷新
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["取消后不发布半成品"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-010
+    title: 条件过滤
+    priority: P0
+    layer: Unit/E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["包含和排除规则正确"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-011
+    title: IPv6 URL
+    priority: P0
+    layer: Integration
+    dimensions: ["address:IPv6 literal"]
+    preconditions: []
+    steps: []
+    assertions: ["能抓取 IPv6 literal 源"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-012
+    title: 压缩响应
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["gzip、br、zstd 正确处理"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-013
+    title: 多个刷新
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["并发受控且互不污染"]
+    fixtures: []
+    evidence: planned
+  - id: SRC-014
+    title: Diff
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["新增、删除、修改数量正确"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-001
+    title: VLESS Reality URI
+    priority: P0
+    layer: Golden
+    dimensions: ["input:URI", "protocol:VLESS Reality"]
+    preconditions: []
+    steps: []
+    assertions: ["所有 Reality 字段无损"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-002
+    title: HY2 URI
+    priority: P0
+    layer: Golden
+    dimensions: ["input:URI", "protocol:Hysteria2"]
+    preconditions: []
+    steps: []
+    assertions: ["obfs、端口跳跃和证书字段无损"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-003
+    title: TUIC v5 URI
+    priority: P0
+    layer: Golden
+    dimensions: ["input:URI", "protocol:TUIC v5"]
+    preconditions: []
+    steps: []
+    assertions: ["心跳和拥塞字段无损"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-004
+    title: Naive URI
+    priority: P0
+    layer: Golden
+    dimensions: ["input:URI", "protocol:Naive"]
+    preconditions: []
+    steps: []
+    assertions: ["不降级为 HTTP"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-005
+    title: Mihomo YAML
+    priority: P0
+    layer: Golden
+    dimensions: ["input:Mihomo YAML"]
+    preconditions: []
+    steps: []
+    assertions: ["可解析支持协议和 IPv6"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-006
+    title: sing-box JSON
+    priority: P0
+    layer: Golden
+    dimensions: ["input:sing-box JSON"]
+    preconditions: []
+    steps: []
+    assertions: ["可解析 Outbound"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-007
+    title: Xray JSON
+    priority: P0
+    layer: Golden
+    dimensions: ["input:Xray JSON"]
+    preconditions: []
+    steps: []
+    assertions: ["可解析 Outbound"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-008
+    title: V2Ray JSON
+    priority: P0
+    layer: Golden
+    dimensions: ["input:V2Ray JSON"]
+    preconditions: []
+    steps: []
+    assertions: ["可解析 Outbound"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-009
+    title: Shadowrocket
+    priority: P0
+    layer: Golden
+    dimensions: ["input:Shadowrocket"]
+    preconditions: []
+    steps: []
+    assertions: ["分享列表正确解析"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-010
+    title: Base64 Padding
+    priority: P0
+    layer: Unit
+    dimensions: ["input:Base64"]
+    preconditions: []
+    steps: []
+    assertions: ["有无 Padding 都正确"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-011
+    title: URL 编码
+    priority: P0
+    layer: Unit
+    dimensions: ["input:URI"]
+    preconditions: []
+    steps: []
+    assertions: ["中文名称和特殊符号无损"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-012
+    title: IPv6 URI
+    priority: P0
+    layer: Golden
+    dimensions: ["address:IPv6 literal", "input:URI"]
+    preconditions: []
+    steps: []
+    assertions: ["导出地址自动加方括号"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-013
+    title: short-id 纯数字
+    priority: P0
+    layer: Regression
+    dimensions: ["protocol:VLESS Reality"]
+    preconditions: []
+    steps: []
+    assertions: ["导出仍是字符串"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-014
+    title: allowInsecure=0
+    priority: P0
+    layer: Regression
+    dimensions: ["protocol:VLESS Reality"]
+    preconditions: []
+    steps: []
+    assertions: ["输出证书校验为 false，不反转"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-015
+    title: 未提供 allowInsecure
+    priority: P0
+    layer: Regression
+    dimensions: ["protocol:VLESS Reality"]
+    preconditions: []
+    steps: []
+    assertions: ["保持 None，不擅自补值"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-016
+    title: 一行一个 URI
+    priority: P0
+    layer: E2E
+    dimensions: ["input:URI"]
+    preconditions: []
+    steps: []
+    assertions: ["输出格式和换行正确"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-017
+    title: Round-trip
+    priority: P0
+    layer: Property
+    dimensions: ["input:URI", "input:Base64", "input:Mihomo YAML", "input:sing-box JSON", "input:Xray JSON", "input:V2Ray JSON", "input:Shadowrocket", "protocol:VLESS Reality", "protocol:Hysteria2", "protocol:TUIC v5", "protocol:Naive", "protocol:VMess", "protocol:Trojan", "protocol:Shadowsocks"]
+    preconditions: []
+    steps: []
+    assertions: ["输入→模型→同格式输出语义一致"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-018
+    title: 非法输入 Fuzz
+    priority: P0
+    layer: Fuzz
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["不崩溃、不无限分配"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-001
+    title: 粘贴批量节点
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["成功、失败和重复分别统计"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-002
+    title: 文件导入
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["大文件流式处理"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-003
+    title: 自动去重
+    priority: P0
+    layer: Regression
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["不误删不同凭据节点"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-004
+    title: 批量启停
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["状态全部正确"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-005
+    title: 批量标签
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["标签查询即时更新"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-006
+    title: 人工地区
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["不被后续自动识别覆盖"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-007
+    title: 自动地区 IPv4
+    priority: P0
+    layer: Integration
+    dimensions: ["address:IPv4"]
+    preconditions: []
+    steps: []
+    assertions: ["本地 GeoIP 正确"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-008
+    title: 自动地区 IPv6
+    priority: P0
+    layer: Integration
+    dimensions: ["address:IPv6 literal"]
+    preconditions: []
+    steps: []
+    assertions: ["IPv6 GeoIP 正确"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-009
+    title: 双栈域名
+    priority: P0
+    layer: Integration
+    dimensions: ["address:dual-stack domain"]
+    preconditions: []
+    steps: []
+    assertions: ["候选 IP 均被记录"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-010
+    title: 人工覆写
+    priority: P0
+    layer: Regression
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["上游刷新后仍生效"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-011
+    title: 上游删除
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["节点标记缺失，不直接消失"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-012
+    title: TCP 延迟
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["记录连接 RTT 和错误分类"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-013
+    title: QUIC 延迟
+    priority: P0
+    layer: Integration
+    dimensions: ["protocol:Hysteria2", "protocol:TUIC v5"]
+    preconditions: []
+    steps: []
+    assertions: ["HY2/TUIC 记录握手 RTT"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-014
+    title: UDP 无响应
+    priority: P0
+    layer: Regression
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["不伪造延迟或直接判死"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-015
+    title: 真实代理测速
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["Runner 结果正确回传"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-016
+    title: 批量取消测速
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["未完成任务被取消"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-017
+    title: 链式代理
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["完整链可保存和测试"]
+    fixtures: []
+    evidence: planned
+  - id: NODE-018
+    title: 代理环
+    priority: P0
+    layer: Regression
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["保存前拒绝并展示路径"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-001
+    title: 新建 V3 模板
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["Schema 验证通过"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-002
+    title: 非法模板
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["返回字段级错误"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-003
+    title: 模板版本
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["编辑创建新版本"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-004
+    title: 模板回滚
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["恢复后生成内容一致"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-005
+    title: 动态选择
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["新节点自动进入结果"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-006
+    title: 固定快照
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["新节点不会自动加入"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-007
+    title: 按地区分组
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["分组成员正确"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-008
+    title: 按协议分组
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["分组成员正确"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-009
+    title: 拖拽排序
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["保存并重新打开顺序一致"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-010
+    title: 多中转组
+    priority: P0
+    layer: Regression
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["UI 不溢出，生成正确"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-011
+    title: 删除节点
+    priority: P0
+    layer: Regression
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["相关组引用被提示处理"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-012
+    title: 循环组依赖
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["服务端拒绝"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-013
+    title: 目标不兼容
+    priority: P0
+    layer: Integration
+    dimensions: ["output:Mihomo", "output:FlClash", "output:sing-box", "output:Xray", "output:v2rayN", "output:v2rayNG", "output:Shadowrocket"]
+    preconditions: []
+    steps: []
+    assertions: ["节点被排除并生成报告"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-014
+    title: 严格模式
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["存在不兼容节点时生成失败"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-015
+    title: 原子发布
+    priority: P0
+    layer: Regression
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["生成失败继续返回旧版本"]
+    fixtures: []
+    evidence: planned
+  - id: GEN-016
+    title: 预览一致性
+    priority: P0
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["预览内容等于发布版本"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-001
+    title: Mihomo
+    priority: P0
+    layer: Compatibility
+    dimensions: ["output:Mihomo"]
+    preconditions: []
+    steps: []
+    assertions: ["官方 Core 可加载"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-002
+    title: FlClash
+    priority: P0
+    layer: Compatibility
+    dimensions: ["output:FlClash"]
+    preconditions: []
+    steps: []
+    assertions: ["指定测试版本可导入"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-003
+    title: sing-box
+    priority: P0
+    layer: Compatibility
+    dimensions: ["output:sing-box"]
+    preconditions: []
+    steps: []
+    assertions: ["check 验证通过"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-004
+    title: Xray
+    priority: P0
+    layer: Compatibility
+    dimensions: ["output:Xray"]
+    preconditions: []
+    steps: []
+    assertions: ["配置验证通过"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-005
+    title: v2rayN
+    priority: P0
+    layer: Compatibility
+    dimensions: ["output:v2rayN"]
+    preconditions: []
+    steps: []
+    assertions: ["URI 列表可导入"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-006
+    title: v2rayNG
+    priority: P0
+    layer: Compatibility
+    dimensions: ["output:v2rayNG"]
+    preconditions: []
+    steps: []
+    assertions: ["URI 列表可导入"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-007
+    title: Shadowrocket
+    priority: P0
+    layer: Compatibility
+    dimensions: ["output:Shadowrocket"]
+    preconditions: []
+    steps: []
+    assertions: ["测试设备或格式 Fixture 通过"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-008
+    title: ETag
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["未变化请求返回 304"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-009
+    title: Token 错误
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["返回 404 或受控错误，不泄露存在性"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-010
+    title: 用户过期
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["按策略拒绝下载"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-011
+    title: 流量超额
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["按策略拒绝下载"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-012
+    title: Token 轮换
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["宽限期和失效时间正确"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-013
+    title: 短码冲突
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["原子拒绝重复值"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-014
+    title: 并发生成
+    priority: P0
+    layer: Concurrency
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["所有客户端只看到完整版本"]
+    fixtures: []
+    evidence: planned
+  - id: PROBE-001
+    title: Nezha
+    priority: P1
+    layer: Contract
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["流量同步正确"]
+    fixtures: []
+    evidence: planned
+  - id: PROBE-002
+    title: DStatus
+    priority: P1
+    layer: Contract
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["流量同步正确"]
+    fixtures: []
+    evidence: planned
+  - id: PROBE-003
+    title: Komari
+    priority: P1
+    layer: Contract
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["流量同步正确"]
+    fixtures: []
+    evidence: planned
+  - id: PROBE-004
+    title: 数据源失败
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["保留旧统计并标记过期"]
+    fixtures: []
+    evidence: planned
+  - id: PROBE-005
+    title: 多源聚合
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["计算过程可追溯"]
+    fixtures: []
+    evidence: planned
+  - id: CLI-001
+    title: Headless 启动
+    priority: P0
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["无 Web UI，API 与订阅正常"]
+    fixtures: []
+    evidence: planned
+  - id: CLI-002
+    title: stdin 导入
+    priority: P0
+    layer: CLI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["节点正确导入"]
+    fixtures: []
+    evidence: planned
+  - id: CLI-003
+    title: stdout 导出
+    priority: P0
+    layer: CLI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["一行一个 URI"]
+    fixtures: []
+    evidence: planned
+  - id: CLI-004
+    title: JSON 输出
+    priority: P0
+    layer: CLI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["可用于自动化脚本"]
+    fixtures: []
+    evidence: planned
+  - id: CLI-005
+    title: doctor
+    priority: P0
+    layer: CLI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["检测数据库、目录、网络和版本"]
+    fixtures: []
+    evidence: planned
+  - id: DEPLOY-001
+    title: SQLite Compose
+    priority: P1
+    layer: Smoke
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["一条命令启动并健康"]
+    fixtures: []
+    evidence: planned
+  - id: DEPLOY-002
+    title: Linux 安装
+    priority: P1
+    layer: VM Test
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["systemd 正常运行"]
+    fixtures: []
+    evidence: planned
+  - id: DEPLOY-003
+    title: amd64 镜像
+    priority: P1
+    layer: CI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["启动通过"]
+    fixtures: []
+    evidence: planned
+  - id: DEPLOY-004
+    title: arm64 镜像
+    priority: P1
+    layer: CI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["启动通过"]
+    fixtures: []
+    evidence: planned
+  - id: UPDATE-001
+    title: 签名更新
+    priority: P1
+    layer: VM Test
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["正常更新并健康"]
+    fixtures: []
+    evidence: planned
+  - id: UPDATE-002
+    title: 更新失败
+    priority: P1
+    layer: VM Test
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["自动回滚"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-001
+    title: localhost SSRF
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["默认阻止"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-002
+    title: 私网 SSRF
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["无白名单时阻止"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-003
+    title: DNS 重绑定
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["解析与连接目标均校验"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-004
+    title: 重定向到内网
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["每一跳重新阻止"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-005
+    title: YAML Bomb
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["限制资源并拒绝"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-006
+    title: 路径穿越
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["上传名称无法越界"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-007
+    title: 真实 IP 伪造
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["非可信代理 Header 被忽略"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-008
+    title: SPA 路由
+    priority: P0
+    layer: Regression
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["/nodes 等不计入短码爆破"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-009
+    title: Token 日志
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["日志中不可见完整 Token"]
+    fixtures: []
+    evidence: planned
+  - id: SEC-010
+    title: CSRF
+    priority: P0
+    layer: Security
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["跨站写请求失败"]
+    fixtures: []
+    evidence: planned
+  - id: PERF-001
+    title: 10k 节点解析
+    priority: P1
+    layer: Benchmark
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["满足内存和耗时基线"]
+    fixtures: []
+    evidence: planned
+  - id: PERF-002
+    title: 10k 节点列表
+    priority: P1
+    layer: Browser Perf
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["P95 交互满足预算"]
+    fixtures: []
+    evidence: planned
+  - id: PERF-003
+    title: 缓存订阅
+    priority: P1
+    layer: Load
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["P95 小于 500 ms"]
+    fixtures: []
+    evidence: planned
+  - id: PERF-004
+    title: 无缓存生成
+    priority: P1
+    layer: Load
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["P95 小于 3 秒，不含抓取"]
+    fixtures: []
+    evidence: planned
+  - id: PERF-005
+    title: 并发订阅下载
+    priority: P1
+    layer: Load
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["不返回部分内容"]
+    fixtures: []
+    evidence: planned
+  - id: PERF-006
+    title: 长时间运行
+    priority: P1
+    layer: Soak
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["WAL、内存和任务数不持续增长"]
+    fixtures: []
+    evidence: planned

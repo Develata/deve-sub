@@ -1,0 +1,133 @@
+id	title	priority	layer	status
+UI-001	首次启动	P0	E2E	planned
+UI-002	中英文切换	P0	E2E	planned
+UI-003	日间/夜间	P0	E2E	planned
+UI-004	Minimal Warm	P0	Visual	planned
+UI-005	Fantasy Violet	P0	Visual	planned
+UI-006	自定义主题	P0	E2E	planned
+UI-007	减少动画	P0	E2E	planned
+UI-008	10,000 节点	P0	Performance	planned
+UI-009	移动端	P0	E2E	planned
+UI-010	键盘导航	P0	E2E	planned
+AUTH-001	初始化管理员	P0	Integration	planned
+AUTH-002	正确登录	P0	E2E	planned
+AUTH-003	错误密码	P0	Integration	planned
+AUTH-004	登录限流	P0	Integration	planned
+AUTH-005	2FA	P0	E2E	planned
+AUTH-006	恢复码	P0	Integration	planned
+AUTH-007	禁用用户	P0	Integration	planned
+AUTH-008	普通用户越权	P0	Security	planned
+AUTH-009	Token 重置	P0	Integration	planned
+AUTH-010	强制注销	P0	E2E	planned
+SRC-001	新建 HTTP 源	P0	E2E	planned
+SRC-002	手动刷新	P0	E2E	planned
+SRC-003	自动刷新	P0	Integration	planned
+SRC-004	ETag	P0	Integration	planned
+SRC-005	抓取失败	P0	Integration	planned
+SRC-006	解析为零节点	P0	Integration	planned
+SRC-007	响应过大	P0	Security	planned
+SRC-008	请求超时	P0	Integration	planned
+SRC-009	取消刷新	P0	Integration	planned
+SRC-010	条件过滤	P0	Unit/E2E	planned
+SRC-011	IPv6 URL	P0	Integration	planned
+SRC-012	压缩响应	P0	Integration	planned
+SRC-013	多个刷新	P0	Integration	planned
+SRC-014	Diff	P0	Integration	planned
+PARSE-001	VLESS Reality URI	P0	Golden	planned
+PARSE-002	HY2 URI	P0	Golden	planned
+PARSE-003	TUIC v5 URI	P0	Golden	planned
+PARSE-004	Naive URI	P0	Golden	planned
+PARSE-005	Mihomo YAML	P0	Golden	planned
+PARSE-006	sing-box JSON	P0	Golden	planned
+PARSE-007	Xray JSON	P0	Golden	planned
+PARSE-008	V2Ray JSON	P0	Golden	planned
+PARSE-009	Shadowrocket	P0	Golden	planned
+PARSE-010	Base64 Padding	P0	Unit	planned
+PARSE-011	URL 编码	P0	Unit	planned
+PARSE-012	IPv6 URI	P0	Golden	planned
+PARSE-013	short-id 纯数字	P0	Regression	planned
+PARSE-014	allowInsecure=0	P0	Regression	planned
+PARSE-015	未提供 allowInsecure	P0	Regression	planned
+PARSE-016	一行一个 URI	P0	E2E	planned
+PARSE-017	Round-trip	P0	Property	planned
+PARSE-018	非法输入 Fuzz	P0	Fuzz	planned
+NODE-001	粘贴批量节点	P0	E2E	planned
+NODE-002	文件导入	P0	Integration	planned
+NODE-003	自动去重	P0	Regression	planned
+NODE-004	批量启停	P0	E2E	planned
+NODE-005	批量标签	P0	E2E	planned
+NODE-006	人工地区	P0	Integration	planned
+NODE-007	自动地区 IPv4	P0	Integration	planned
+NODE-008	自动地区 IPv6	P0	Integration	planned
+NODE-009	双栈域名	P0	Integration	planned
+NODE-010	人工覆写	P0	Regression	planned
+NODE-011	上游删除	P0	Integration	planned
+NODE-012	TCP 延迟	P0	Integration	planned
+NODE-013	QUIC 延迟	P0	Integration	planned
+NODE-014	UDP 无响应	P0	Regression	planned
+NODE-015	真实代理测速	P0	Integration	planned
+NODE-016	批量取消测速	P0	E2E	planned
+NODE-017	链式代理	P0	Integration	planned
+NODE-018	代理环	P0	Regression	planned
+GEN-001	新建 V3 模板	P0	E2E	planned
+GEN-002	非法模板	P0	Integration	planned
+GEN-003	模板版本	P0	Integration	planned
+GEN-004	模板回滚	P0	E2E	planned
+GEN-005	动态选择	P0	Integration	planned
+GEN-006	固定快照	P0	Integration	planned
+GEN-007	按地区分组	P0	E2E	planned
+GEN-008	按协议分组	P0	E2E	planned
+GEN-009	拖拽排序	P0	E2E	planned
+GEN-010	多中转组	P0	Regression	planned
+GEN-011	删除节点	P0	Regression	planned
+GEN-012	循环组依赖	P0	Integration	planned
+GEN-013	目标不兼容	P0	Integration	planned
+GEN-014	严格模式	P0	Integration	planned
+GEN-015	原子发布	P0	Regression	planned
+GEN-016	预览一致性	P0	E2E	planned
+OUT-001	Mihomo	P0	Compatibility	planned
+OUT-002	FlClash	P0	Compatibility	planned
+OUT-003	sing-box	P0	Compatibility	planned
+OUT-004	Xray	P0	Compatibility	planned
+OUT-005	v2rayN	P0	Compatibility	planned
+OUT-006	v2rayNG	P0	Compatibility	planned
+OUT-007	Shadowrocket	P0	Compatibility	planned
+OUT-008	ETag	P0	Integration	planned
+OUT-009	Token 错误	P0	Security	planned
+OUT-010	用户过期	P0	Integration	planned
+OUT-011	流量超额	P0	Integration	planned
+OUT-012	Token 轮换	P0	Integration	planned
+OUT-013	短码冲突	P0	Integration	planned
+OUT-014	并发生成	P0	Concurrency	planned
+PROBE-001	Nezha	P1	Contract	planned
+PROBE-002	DStatus	P1	Contract	planned
+PROBE-003	Komari	P1	Contract	planned
+PROBE-004	数据源失败	P1	Integration	planned
+PROBE-005	多源聚合	P1	Integration	planned
+CLI-001	Headless 启动	P0	Integration	planned
+CLI-002	stdin 导入	P0	CLI	planned
+CLI-003	stdout 导出	P0	CLI	planned
+CLI-004	JSON 输出	P0	CLI	planned
+CLI-005	doctor	P0	CLI	planned
+DEPLOY-001	SQLite Compose	P1	Smoke	planned
+DEPLOY-002	Linux 安装	P1	VM Test	planned
+DEPLOY-003	amd64 镜像	P1	CI	planned
+DEPLOY-004	arm64 镜像	P1	CI	planned
+UPDATE-001	签名更新	P1	VM Test	planned
+UPDATE-002	更新失败	P1	VM Test	planned
+SEC-001	localhost SSRF	P0	Security	planned
+SEC-002	私网 SSRF	P0	Security	planned
+SEC-003	DNS 重绑定	P0	Security	planned
+SEC-004	重定向到内网	P0	Security	planned
+SEC-005	YAML Bomb	P0	Security	planned
+SEC-006	路径穿越	P0	Security	planned
+SEC-007	真实 IP 伪造	P0	Security	planned
+SEC-008	SPA 路由	P0	Regression	planned
+SEC-009	Token 日志	P0	Security	planned
+SEC-010	CSRF	P0	Security	planned
+PERF-001	10k 节点解析	P1	Benchmark	planned
+PERF-002	10k 节点列表	P1	Browser Perf	planned
+PERF-003	缓存订阅	P1	Load	planned
+PERF-004	无缓存生成	P1	Load	planned
+PERF-005	并发订阅下载	P1	Load	planned
+PERF-006	长时间运行	P1	Soak	planned

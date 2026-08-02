@@ -59,7 +59,8 @@ Trojan
 pub struct Node {
     pub id: NodeId,
     pub display_name: String,
-    pub protocol: Protocol,
+    pub protocol: ProtocolKind,
+    pub config: ProtocolConfig,
     pub endpoint: Endpoint,
     pub authentication: Authentication,
     pub transport: Option<Transport>,

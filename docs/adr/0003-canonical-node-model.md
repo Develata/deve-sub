@@ -12,7 +12,7 @@ representation, each input→output pair would need its own converter (N×M
 explosion).
 
 The spec lists 15 protocols. P0 requires full support for 7: VLESS Reality,
-Hysteria2, TUIC v5, NaiveProxy, Shadowsocks, VMess, Trojan. The remaining 9 and
+Hysteria2, TUIC v5, NaiveProxy, Shadowsocks, VMess, Trojan. The remaining 8 and
 future protocols must not be silently lost, but must not be claimed as
 supported either.
 

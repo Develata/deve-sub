@@ -16,7 +16,7 @@ full blueprint.
 An enum with fifteen typed variants plus `Unknown(String)`:
 
 ```text
-VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TuicV5, NaiveProxy,
+Vless, VMess, Trojan, Shadowsocks, Hysteria2, TuicV5, NaiveProxy,
 Socks5, Http, HysteriaV1, AnyTls, Snell, WireGuard, ShadowTls, Ssh,
 Unknown(String)
 ```

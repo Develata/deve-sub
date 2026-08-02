@@ -46,7 +46,7 @@ not own behavior. Authority lives in `docs/plan/` and `docs/contracts/`.
 |---|---|
 | ADR-0001 | Dioxus Web CSR + typed REST, spike gate |
 | ADR-0002 | Storage Port, SQLite-first |
-| ADR-0003 | Canonical Node Model, ProtocolKind 16+Unknown |
+| ADR-0003 | Canonical Node Model, ProtocolKind 15+Unknown |
 | ADR-0004 | utoipa + utoipa-axum + utoipa-scalar |
 | ADR-0005 | TLS skip_cert_verify three-state |
 

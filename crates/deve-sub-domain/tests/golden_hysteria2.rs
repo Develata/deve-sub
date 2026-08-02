@@ -4,6 +4,8 @@
 //! M3 work (acceptance `PARSE-002`). See ADR-0003 and
 //! `docs/plan/05-protocol-engine.md` §6.2.
 
+#![allow(clippy::expect_used)]
+
 use std::collections::BTreeMap;
 use std::time::Duration;
 

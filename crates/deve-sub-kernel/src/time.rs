@@ -31,6 +31,7 @@ impl Timestamp {
 
     /// Return the Unix timestamp in milliseconds.
     #[must_use]
+    #[allow(clippy::expect_used)]
     pub fn unix_ms(&self) -> i64 {
         // WHY: i64::try_from is infallible here because the representable
         // range of OffsetDateTime (±9999 years ≈ ±2.5×10¹⁴ ms) is far

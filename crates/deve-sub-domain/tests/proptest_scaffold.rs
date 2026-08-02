@@ -6,6 +6,8 @@
 //! Coverage-guided fuzz for illegal input (acceptance `PARSE-018`) is
 //! deferred to M3; this proptest suite is the interim property substitute.
 
+#![allow(clippy::expect_used)]
+
 use proptest::prelude::*;
 
 use deve_sub_domain::{ProtocolKind, TlsConfig};

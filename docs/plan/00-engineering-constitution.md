@@ -33,7 +33,14 @@ every block must include a `SAFETY` comment explaining the invariant upheld.
 
 ### Clippy
 
-`dbg_macro = "deny"`, `todo = "deny"`, `unwrap_used = "deny"`.
+`dbg_macro = "deny"`, `todo = "deny"`, `unwrap_used = "deny"`,
+`expect_used = "deny"`.
+
+`expect_used` is denied in non-test code. Library crates use
+`#![cfg_attr(test, allow(clippy::expect_used))]` at the crate root so that
+`#[cfg(test)]` unit-test modules are exempt. Integration test files use
+`#![allow(clippy::expect_used)]`. A non-test `.expect()` requires a targeted
+`#[allow(clippy::expect_used)]` plus a WHY comment justifying infallibility.
 
 ### Error layer
 

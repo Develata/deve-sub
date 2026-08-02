@@ -4,6 +4,8 @@
 //! This crate depends on no other workspace crate and contains no domain
 //! logic. See `docs/plan/04-workspace-layout.md` for the crate's scope.
 
+#![cfg_attr(test, allow(clippy::expect_used))]
+
 pub mod error;
 pub mod id;
 pub mod pagination;

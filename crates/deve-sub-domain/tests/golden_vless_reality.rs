@@ -4,6 +4,8 @@
 //! serde. Full URI parse → emit round-trip is M3 work (acceptance
 //! `PARSE-001`). See ADR-0003 and `docs/plan/05-protocol-engine.md` §6.1.
 
+#![allow(clippy::expect_used)]
+
 use std::collections::BTreeMap;
 
 use deve_sub_domain::{

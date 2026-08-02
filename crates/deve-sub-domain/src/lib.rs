@@ -6,6 +6,8 @@
 //! node model decision and `docs/plan/05-protocol-engine.md` for the full
 //! protocol engine blueprint.
 
+#![cfg_attr(test, allow(clippy::expect_used))]
+
 pub mod endpoint;
 pub mod error;
 pub mod node;

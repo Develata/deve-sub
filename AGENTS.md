@@ -85,7 +85,11 @@ data consistency, authority boundaries, or recoverability.
 
 - `unsafe_code = "forbid"` across the workspace. If `unsafe` is ever needed,
   every block must include a `SAFETY` comment.
-- Clippy denies: `dbg_macro`, `todo`, `unwrap_used`.
+- Clippy denies: `dbg_macro`, `todo`, `unwrap_used`, `expect_used`.
+  `expect_used` is denied in non-test code only; library crates exempt
+  `#[cfg(test)]` modules via `#![cfg_attr(test, allow(...))]`, and integration
+  test files use `#![allow(...)]`. A non-test `.expect()` requires a targeted
+  `#[allow]` plus a WHY comment justifying infallibility.
 - Error layer: all library crates (domain, application, protocol, emitter,
   adapter) use `thiserror` for structured errors. `anyhow` is limited to binary
   entry points, composition roots, top-level CLI execution, startup, config

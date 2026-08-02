@@ -11,13 +11,21 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TransportKind {
+    /// Raw TCP.
     Tcp,
+    /// KCP (reliable UDP).
     Kcp,
+    /// WebSocket.
     Ws,
+    /// HTTP/2.
     H2,
+    /// QUIC.
     Quic,
+    /// gRPC.
     Grpc,
+    /// HTTP Upgrade.
     HttpUpgrade,
+    /// XTLS (Vision).
     Xtls,
 }
 
@@ -67,9 +75,13 @@ pub struct Obfuscation {
 /// Congestion controller kind. `Other` carries controllers not yet typed.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CongestionController {
+    /// BBR (Bottleneck Bandwidth and RTT).
     Bbr,
+    /// CUBIC.
     Cubic,
+    /// New Reno.
     NewReno,
+    /// Controller not yet typed; carries the raw name.
     Other(String),
 }
 

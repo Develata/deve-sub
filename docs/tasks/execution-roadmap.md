@@ -33,7 +33,9 @@ Phase 1 is split into:
 
 ## Current status
 
-Phase 1A is in progress.
+Phase 1A is complete (architecture closure: ADRs, ER, canonical node model,
+acceptance matrix, CI, governance docs — 20 commits, reviewed and closed).
+Phase 1B (M0 Tech Spike) is next.
 
 ## Authority
 

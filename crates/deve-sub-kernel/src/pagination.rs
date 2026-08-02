@@ -47,7 +47,8 @@ impl Cursor {
 /// Pagination request with cursor-based navigation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pagination {
-    /// Maximum number of items to return.
+    /// Maximum number of items to return. The application layer enforces an
+    /// upper bound (e.g. 200) to prevent unbounded queries.
     pub limit: u32,
     /// Opaque cursor from the previous page; `None` for the first page.
     pub cursor: Option<String>,

@@ -8,15 +8,19 @@ use thiserror::Error;
 /// Errors produced by kernel primitives.
 #[derive(Debug, Error)]
 pub enum KernelError {
+    /// A ULID string could not be parsed as a [`NodeId`](crate::NodeId).
     #[error("invalid node ID: {0}")]
     InvalidNodeId(String),
 
+    /// A ULID string could not be parsed as a [`TagId`](crate::TagId).
     #[error("invalid tag ID: {0}")]
     InvalidTagId(String),
 
+    /// An opaque pagination cursor string was malformed.
     #[error("invalid cursor")]
     InvalidCursor,
 
+    /// A Unix timestamp was out of the representable range.
     #[error("invalid timestamp")]
     InvalidTimestamp,
 }

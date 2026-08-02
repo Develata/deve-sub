@@ -60,9 +60,8 @@ mod tests {
 
     #[test]
     fn ordering() {
-        let a = Timestamp::now();
-        std::thread::sleep(std::time::Duration::from_millis(2));
-        let b = Timestamp::now();
+        let a = Timestamp::from_unix_ms(1_700_000_000_000).expect("valid timestamp");
+        let b = Timestamp::from_unix_ms(1_700_000_000_001).expect("valid timestamp");
         assert!(a < b);
     }
 }

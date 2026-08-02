@@ -11,8 +11,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum Host {
+    /// IPv4 address.
     Ipv4(Ipv4Addr),
+    /// IPv6 address. URI output auto-adds brackets.
     Ipv6(Ipv6Addr),
+    /// Domain name.
     Domain(DomainName),
 }
 

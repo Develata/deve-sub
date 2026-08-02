@@ -22,21 +22,39 @@ use crate::protocol_config::{
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum ProtocolKind {
+    /// VLESS. P0 scopes to Reality only; see [`ProtocolConfig::VlessReality`].
     Vless,
+    /// VMess (V2Ray encrypted protocol).
     VMess,
+    /// Trojan.
     Trojan,
+    /// Shadowsocks.
     Shadowsocks,
+    /// Hysteria2.
     Hysteria2,
+    /// TUIC v5.
     TuicV5,
+    /// NaiveProxy.
     NaiveProxy,
+    // --- Non-P0: stored as ProtocolConfig::Unsupported until typed config lands. ---
+    /// SOCKS5 proxy. Non-P0.
     Socks5,
+    /// HTTP/HTTPS proxy. Non-P0.
     Http,
+    /// Hysteria v1. Non-P0.
     HysteriaV1,
+    /// AnyTLS. Non-P0.
     AnyTls,
+    /// Snell. Non-P0.
     Snell,
+    /// WireGuard. Non-P0.
     WireGuard,
+    /// ShadowTLS. Non-P0.
     ShadowTls,
+    /// SSH tunnel. Non-P0.
     Ssh,
+    /// Protocol not yet typed; carries the raw name so the node is preserved
+    /// rather than silently dropped (constraint #7).
     Unknown(String),
 }
 
@@ -59,12 +77,19 @@ pub enum ProtocolKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum ProtocolConfig {
+    /// VLESS Reality configuration. P0 scopes VLESS to Reality only.
     VlessReality(VlessRealityConfig),
+    /// Hysteria2 configuration.
     Hysteria2(Hysteria2Config),
+    /// TUIC v5 configuration.
     TuicV5(TuicV5Config),
+    /// NaiveProxy configuration.
     NaiveProxy(NaiveProxyConfig),
+    /// Shadowsocks configuration.
     Shadowsocks(ShadowsocksConfig),
+    /// VMess configuration.
     VMess(VMessConfig),
+    /// Trojan configuration.
     Trojan(TrojanConfig),
     /// Fallback for non-P0 or unrecognized protocols. Preserves raw data;
     /// emitters must skip it. See ADR-0003.
@@ -84,4 +109,48 @@ pub struct UnsupportedNode {
     pub raw_format: Option<String>,
     /// Human-readable reason this node is unsupported.
     pub reason: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn protocol_kind_serde_names() {
+        // Lock the PascalCase serialized names — especially the mixed-case
+        // variants (VMess, HysteriaV1, TuicV5, AnyTls, ShadowTls) that a
+        // serde/heck version bump could silently alter.
+        let cases = [
+            ("Vless", ProtocolKind::Vless),
+            ("VMess", ProtocolKind::VMess),
+            ("Trojan", ProtocolKind::Trojan),
+            ("Shadowsocks", ProtocolKind::Shadowsocks),
+            ("Hysteria2", ProtocolKind::Hysteria2),
+            ("TuicV5", ProtocolKind::TuicV5),
+            ("NaiveProxy", ProtocolKind::NaiveProxy),
+            ("Socks5", ProtocolKind::Socks5),
+            ("Http", ProtocolKind::Http),
+            ("HysteriaV1", ProtocolKind::HysteriaV1),
+            ("AnyTls", ProtocolKind::AnyTls),
+            ("Snell", ProtocolKind::Snell),
+            ("WireGuard", ProtocolKind::WireGuard),
+            ("ShadowTls", ProtocolKind::ShadowTls),
+            ("Ssh", ProtocolKind::Ssh),
+        ];
+        for (expected, kind) in cases {
+            let json = serde_json::to_string(&kind).expect("serialize");
+            assert_eq!(json, format!("\"{expected}\""));
+            let recovered: ProtocolKind = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(recovered, kind);
+        }
+    }
+
+    #[test]
+    fn protocol_kind_unknown_serde() {
+        let kind = ProtocolKind::Unknown("FutureProto".to_owned());
+        let json = serde_json::to_string(&kind).expect("serialize");
+        assert_eq!(json, "{\"Unknown\":\"FutureProto\"}");
+        let recovered: ProtocolKind = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(recovered, kind);
+    }
 }

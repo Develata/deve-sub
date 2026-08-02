@@ -107,12 +107,16 @@ mod tests {
 
     #[test]
     fn node_id_lexical_ordering() {
-        let a = NodeId::new();
-        std::thread::sleep(std::time::Duration::from_millis(2));
-        let b = NodeId::new();
+        // Construct ULIDs with explicit timestamps to avoid wall-clock
+        // flakiness. ULID lexical order follows (timestamp_ms, random); the
+        // first 10 chars encode the 48-bit ms timestamp in Crockford base32.
+        let a =
+            NodeId::from_ulid(Ulid::from_string("00000000000000000000000000").expect("valid ULID"));
+        let b =
+            NodeId::from_ulid(Ulid::from_string("00000000010000000000000000").expect("valid ULID"));
         assert!(
             a < b,
-            "ULIDs generated later should sort after earlier ones"
+            "ULIDs with later timestamps should sort after earlier ones"
         );
     }
 

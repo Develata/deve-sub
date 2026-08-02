@@ -46,6 +46,12 @@ pub enum ProtocolKind {
 /// wraps [`UnsupportedNode`] for non-P0 or unrecognized protocols: it is
 /// stored in the node pool but excluded from emitters and is not claimed as
 /// supported. See ADR-0003.
+///
+/// Note on VLESS: P0 scopes VLESS support to Reality only, so
+/// [`ProtocolKind::Vless`](crate::ProtocolKind::Vless) pairs with
+/// [`ProtocolConfig::VlessReality`]. A non-Reality VLESS node is valid as
+/// `ProtocolKind::Vless` + `ProtocolConfig::Unsupported`; emitters matching
+/// on `ProtocolKind::Vless` must not assume `VlessRealityConfig`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolConfig {
     VlessReality(VlessRealityConfig),

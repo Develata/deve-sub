@@ -3,6 +3,8 @@
 //! These properties guard against regressions in three-state TLS semantics
 //! (ADR-0005) and `ProtocolKind` round-trip fidelity (ADR-0003). Full
 //! parse → emit property tests arrive with M3 round-trip coverage.
+//! Coverage-guided fuzz for illegal input (acceptance `PARSE-018`) is
+//! deferred to M3; this proptest suite is the interim property substitute.
 
 use proptest::prelude::*;
 

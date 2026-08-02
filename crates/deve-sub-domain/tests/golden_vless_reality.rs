@@ -89,9 +89,13 @@ fn vless_reality_fields_match_reserved_uri() {
     assert_eq!(uuid, RESERVED_UUID);
 
     let tls = node.tls.as_ref().expect("tls present");
+    assert!(tls.enabled);
     assert_eq!(tls.server_name.as_deref(), Some("example.com"));
     assert_eq!(tls.client_fingerprint.as_deref(), Some("chrome"));
     assert_eq!(tls.skip_cert_verify, Some(false));
+
+    let transport = node.transport.as_ref().expect("transport present");
+    assert_eq!(transport.kind, TransportKind::Tcp);
 
     let reality = tls.reality.as_ref().expect("reality present");
     assert_eq!(reality.public_key, "TEST_PUBLIC_KEY");

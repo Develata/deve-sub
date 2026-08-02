@@ -36,29 +36,37 @@ pub struct Hysteria2Config {
     pub ports: Option<String>,
     /// Hop interval. Stored as a duration; emitters convert per target.
     pub hop_interval: Option<std::time::Duration>,
+    /// `fast-open` query parameter.
     pub fast_open: Option<bool>,
+    /// `lazy` query parameter.
     pub lazy: Option<bool>,
 }
 
 /// TUIC v5 configuration.
 ///
-/// `uuid`/`password`/`token` is carried by [`crate::Authentication`]; TLS
-/// fields by [`crate::TlsConfig`]; `congestion-controller` by
-/// [`crate::CongestionConfig`].
+/// `uuid`/`password` is carried by [`crate::Authentication::UuidPassword`];
+/// TLS fields by [`crate::TlsConfig`]; `congestion-controller` by
+/// [`crate::CongestionConfig`]. The `token` auth mode listed in plan/05 §6.3
+/// is not yet modeled — it lands with the M3 parsing layer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TuicV5Config {
+    /// `udp-relay-mode` query parameter.
     pub udp_relay_mode: Option<UdpRelayMode>,
+    /// `zero-rtt-handshake` query parameter.
     pub zero_rtt_handshake: Option<bool>,
     /// Heartbeat interval. Stored as a duration; emitters convert per target
     /// and must never mix seconds and milliseconds.
     pub heartbeat: Option<std::time::Duration>,
+    /// `disable-sni` query parameter.
     pub disable_sni: Option<bool>,
 }
 
 /// TUIC v5 UDP relay mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UdpRelayMode {
+    /// Native UDP relay.
     Native,
+    /// QUIC-based UDP relay.
     Quic,
 }
 
@@ -69,8 +77,11 @@ pub enum UdpRelayMode {
 /// Naive must not be downgraded to a plain HTTP node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NaiveProxyConfig {
+    /// Enable QUIC transport.
     pub quic: Option<bool>,
+    /// Enable HTTP/2.
     pub http2: Option<bool>,
+    /// Enable HTTP/3.
     pub http3: Option<bool>,
 }
 
@@ -97,6 +108,7 @@ pub struct VMessConfig {
     pub alter_id: Option<u32>,
     /// `security`/encryption, e.g. `auto`, `aes-128-gcm`, `none`.
     pub security: Option<String>,
+    /// `packetEncoding` query parameter.
     pub packet_encoding: Option<String>,
 }
 
@@ -107,5 +119,6 @@ pub struct VMessConfig {
 /// `network` by [`crate::Transport`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrojanConfig {
+    /// `packetEncoding` query parameter.
     pub packet_encoding: Option<String>,
 }

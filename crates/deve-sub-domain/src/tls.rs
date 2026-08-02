@@ -26,7 +26,8 @@ pub struct TlsConfig {
 /// Reality TLS extension configuration (used by VLESS Reality).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RealityConfig {
-    /// Public key (`pbk`), Base64URL-encoded.
+    /// Public key (`pbk`), Base64URL-encoded. Character-set validation is
+    /// deferred to the M3 parsing layer (plan/05 §6.1).
     pub public_key: String,
     /// Short ID (`sid`). Always stored as a string; YAML must not coerce
     /// pure-digit short IDs to integers.
@@ -41,11 +42,13 @@ pub struct RealityConfig {
 pub struct CertificatePin(String);
 
 impl CertificatePin {
+    /// Create a pin from a string (e.g. `pinSHA256:...`).
     #[must_use]
     pub fn new(value: String) -> Self {
         Self(value)
     }
 
+    /// Return the underlying pin string.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0

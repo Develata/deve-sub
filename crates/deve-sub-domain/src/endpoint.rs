@@ -1,8 +1,7 @@
 //! Node endpoint addressing: host and port.
 //!
 //! IPv6 output must auto-add brackets in URI form. The database must not
-//! store IPv6 as arbitrary strings for later concatenation. See
-//! `docs/plan/05-protocol-engine.md` §"Canonical Node Model".
+//! store IPv6 as arbitrary strings for later concatenation. See ADR-0003.
 
 use std::net::{Ipv4Addr, Ipv6Addr};
 
@@ -33,7 +32,7 @@ impl Host {
     }
 }
 
-/// A DNS domain name stored as a validated string.
+/// A DNS domain name. Validation is deferred to the M3 parsing layer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct DomainName(String);
@@ -86,5 +85,18 @@ mod tests {
     fn domain_uri_host() {
         let host = Host::Domain(DomainName::new("example.com".to_owned()));
         assert_eq!(host.uri_host(), "example.com");
+    }
+
+    #[test]
+    fn host_serde_roundtrip_all_variants() {
+        for host in [
+            Host::Ipv4("127.0.0.1".parse().expect("valid IPv4")),
+            Host::Ipv6("2001:db8::1".parse().expect("valid IPv6")),
+            Host::Domain(DomainName::new("example.com".to_owned())),
+        ] {
+            let json = serde_json::to_string(&host).expect("serialize");
+            let recovered: Host = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(host, recovered);
+        }
     }
 }

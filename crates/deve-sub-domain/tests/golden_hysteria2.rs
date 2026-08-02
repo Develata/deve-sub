@@ -1,7 +1,7 @@
 //! Golden scaffold for Hysteria2: construct the canonical model with reserved
 //! test identifiers, assert field fidelity (obfuscation, congestion, port
 //! hopping), and round-trip through serde. Full URI parse → emit round-trip is
-//! M3 work (acceptance `PARSE-003`). See ADR-0003 and
+//! M3 work (acceptance `PARSE-002`). See ADR-0003 and
 //! `docs/plan/05-protocol-engine.md` §6.2.
 
 use std::collections::BTreeMap;
@@ -102,6 +102,7 @@ fn hysteria2_fields_match_reserved_fixture() {
     assert_eq!(cfg.ports.as_deref(), Some("20000-40000"));
     assert_eq!(cfg.hop_interval, Some(Duration::from_secs(30)));
     assert_eq!(cfg.fast_open, Some(true));
+    assert_eq!(cfg.lazy, None);
 }
 
 #[test]

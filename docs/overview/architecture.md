@@ -7,25 +7,15 @@ not own behavior. Authority lives in `docs/plan/` and `docs/contracts/`.
 
 ## Layer map
 
-```text
-┌──────────────── Delivery ────────────────┐
-│ Dioxus Web │ REST API │ CLI │ Public Sub │  → apps/server, apps/cli, apps/web
-└──────────────────┬───────────────────────┘
-                   │ typed REST /api/v1
-┌──────────────── Application ─────────────┐
-│ Commands │ Queries │ Jobs │ Event Handler │  → crates/application
-└──────────────────┬───────────────────────┘
-                   │
-┌────────────────── Domain ────────────────┐
-│ Source │ Node │ Template │ Subscription   │  → crates/domain
-│ Identity │ Probe │ Traffic │ Compatibility│
-└──────────────────┬───────────────────────┘
-                   │ Ports (traits)
-┌──────────────── Adapters ────────────────┐
-│ SQLite │ HTTP │ GeoIP │ Probe │ Files     │  → crates/storage-sqlite, crates/adapters
-│ Release Updater │ Notification │ Test Core│
-└──────────────────────────────────────────┘
-```
+The hexagonal layer diagram lives in `plan/03-architecture.md`. The crate
+annotations below map each layer to its workspace location.
+
+| Layer | Components | Crates |
+|---|---|---|
+| Delivery | Dioxus Web, REST API, CLI, Public Sub | `apps/server`, `apps/cli`, `apps/web` |
+| Application | Commands, Queries, Jobs, Event Handler | `crates/application` |
+| Domain | Source, Node, Template, Subscription, Identity, Probe, Traffic, Compatibility | `crates/domain` |
+| Adapters | SQLite, HTTP, GeoIP, Probe, Files, Release Updater, Notification, Test Core | `crates/storage-sqlite`, `crates/adapters` |
 
 ## Document navigation
 
@@ -52,5 +42,5 @@ not own behavior. Authority lives in `docs/plan/` and `docs/contracts/`.
 
 ## Current status
 
-Phase 1A (architecture closure) is in progress. See
+Phase 1A (architecture closure) is complete. See
 `docs/tasks/execution-roadmap.md` for milestone status.

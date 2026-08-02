@@ -30,6 +30,14 @@ This matrix keeps the live documentation layers aligned:
 
 Milestones M2–M8 blueprints are added as each milestone begins.
 
+## Test coverage notes
+
+- Domain core types (Node, Authentication, ProtocolConfig variants, Transport,
+  CongestionConfig, etc.) are covered by golden integration tests
+  (`crates/deve-sub-domain/tests/golden_*.rs`) and the proptest scaffold, not
+  by per-type unit tests. This is the intended coverage layer for Phase 1;
+  dedicated unit tests may be added as complexity grows.
+
 ## Non-matrix documents
 
 | Path | Role | Authority rule |

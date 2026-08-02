@@ -33,8 +33,13 @@ conceptual registry; when they disagree, migrations prevail.
 | Entity | Description |
 |---|---|
 | Node | Canonical node in the unified pool. Core entity of the protocol engine. |
-| ProtocolConfig | Typed payload for P0 protocol parameters (embedded in Node). |
-| UnsupportedNode | Non-P0 or unknown-protocol node preserving raw data (embedded in Node). |
+
+Value types embedded in Node (no identity, not separately ULID-identified):
+
+| Value type | Description |
+|---|---|
+| ProtocolConfig | Typed payload for P0 protocol parameters. |
+| UnsupportedNode | Non-P0 or unknown-protocol node preserving raw data. |
 
 ## M4 — Sources and Node Pool
 

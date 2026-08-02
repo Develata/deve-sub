@@ -11,6 +11,7 @@
 # Core domain and kernel
 /crates/deve-sub-kernel/ @Develata
 /crates/deve-sub-domain/ @Develata
+/crates/deve-sub-contract/ @Develata
 
 # CI and governance
 /.github/ @Develata

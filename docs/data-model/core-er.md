@@ -141,8 +141,16 @@ erDiagram
         string host
         int port
         string protocol_config_json
+        string authentication_json
         string tls_json
+        string transport_json
         string udp_capability
+        string multiplex_json
+        string obfuscation_json
+        string congestion_json
+        string region
+        string extras_json
+        datetime imported_at
         int revision
         string status
         bool missing_from_source
@@ -250,7 +258,8 @@ erDiagram
 
 - `NODE.chains_to` is a self-referential relationship (chain proxy targeting
   another node or group). It is omitted from the diagram to avoid rendering
-  issues; see `docs/plan/05-protocol-engine.md` §"Override" and the spec §9.3.
+  issues; see `docs/plan/05-protocol-engine.md` §"Override model". Chain
+  proxy semantics will be fully specified in the M4 blueprint.
 - `JOB` is a standalone entity; jobs are created by application commands and
   tracked independently. Job types include source refresh, node test,
   subscription generation, and probe sync.

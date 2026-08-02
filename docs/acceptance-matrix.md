@@ -105,7 +105,7 @@ uncached generation, concurrent download, long-running soak.
 
 ## Authority
 
-- Spec: `docs/product-and-architecture-spec.md` §21
 - Machine-readable: `tests/acceptance/matrix.yaml`
 - Compact registry: `docs/acceptance/matrix.tsv`
 - Gate rules: `docs/acceptance/gates.md`
+- Historical source: `docs/product-and-architecture-spec.md` §21 (archived)

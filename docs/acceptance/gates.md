@@ -30,7 +30,8 @@ cargo test --locked --all-features --doc
 
 ## Docs gates
 
-- Mermaid syntax: diagrams in `docs/data-model/` must render.
+- Mermaid syntax: diagrams in `docs/data-model/` are manually reviewed until
+  a validator is wired (deferred — no automated gate yet).
 - `matrix.yaml` schema: `tests/acceptance/matrix.yaml` must parse as valid
   YAML with the required fields per case.
 - `matrix.tsv` consistency: `docs/acceptance/matrix.tsv` must have the same

@@ -1,7 +1,8 @@
 //! Cursor-based pagination primitives.
 //!
-//! The cursor encodes `(created_at, id)` as an opaque string. Clients must not
-//! depend on the internal format; it may change between versions. See
+//! [`Cursor`] is the internal decoded form of a pagination cursor. Only
+//! [`Cursor::encode()`] output is the opaque contract — clients must not
+//! depend on the encoded format; it may change between versions. See
 //! `docs/plan/00-engineering-constitution.md` §"Data and security".
 
 use serde::{Deserialize, Serialize};
@@ -10,10 +11,13 @@ use ulid::Ulid;
 use crate::error::{KernelError, Result};
 use crate::time::Timestamp;
 
-/// Opaque pagination cursor encoding `(created_at, id)`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Decoded pagination cursor carrying `(created_at, id)`. Encode via
+/// [`Cursor::encode()`] to produce the opaque client-facing string.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cursor {
+    /// Timestamp component of the sort key.
     pub created_at: Timestamp,
+    /// ULID component of the sort key.
     pub id: Ulid,
 }
 
@@ -52,6 +56,7 @@ pub struct Pagination {
 /// Paginated response carrying a cursor for the next page.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Page<T> {
+    /// Items in the current page.
     pub items: Vec<T>,
     /// Opaque cursor for the next page; `None` if this is the last page.
     pub next_cursor: Option<String>,

@@ -61,7 +61,9 @@ impl std::fmt::Display for DomainName {
 /// A network endpoint: host plus port.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Endpoint {
+    /// Host portion of the endpoint (IPv4, IPv6, or domain).
     pub host: Host,
+    /// TCP/UDP port number (0–65535).
     pub port: u16,
 }
 

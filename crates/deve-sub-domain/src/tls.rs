@@ -10,16 +10,23 @@ use serde::{Deserialize, Serialize};
 /// TLS settings for a node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TlsConfig {
+    /// Whether TLS is explicitly enabled for this node.
     pub enabled: bool,
+    /// Server name (SNI) for TLS handshake.
     pub server_name: Option<String>,
     /// Three-state certificate verification:
     /// - `None` — not provided; do not fill a default.
     /// - `Some(false)` — explicitly secure (e.g. `allowInsecure=0`).
     /// - `Some(true)` — explicitly insecure (e.g. `allowInsecure=1`).
     pub skip_cert_verify: Option<bool>,
+    /// Application-Layer Protocol Negotiation list (e.g. `h2`, `h3`).
     pub alpn: Vec<String>,
+    /// Client TLS fingerprint (e.g. `chrome`, `firefox`).
     pub client_fingerprint: Option<String>,
+    /// Certificate pins (e.g. `pinSHA256:...`). Emitters must round-trip
+    /// unchanged.
     pub certificate_pins: Vec<CertificatePin>,
+    /// Reality TLS extension configuration, present only for VLESS Reality.
     pub reality: Option<RealityConfig>,
 }
 
@@ -27,7 +34,7 @@ pub struct TlsConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RealityConfig {
     /// Public key (`pbk`), Base64URL-encoded. Character-set validation is
-    /// deferred to the M3 parsing layer (plan/05 §6.1).
+    /// deferred to the M3 parsing layer (plan/05 §"VLESS Reality").
     pub public_key: String,
     /// Short ID (`sid`). Always stored as a string; YAML must not coerce
     /// pure-digit short IDs to integers.

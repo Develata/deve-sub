@@ -2,7 +2,8 @@
 //! reserved test URI, assert field fidelity (especially the three-state
 //! `allowInsecure=0` and string-typed `short_id`), and round-trip through
 //! serde. Full URI parse → emit round-trip is M3 work (acceptance
-//! `PARSE-001`). See ADR-0003 and `docs/plan/05-protocol-engine.md` §6.1.
+//! `PARSE-001`). See ADR-0003 and `docs/plan/05-protocol-engine.md`
+//! §"VLESS Reality".
 
 #![allow(clippy::expect_used)]
 

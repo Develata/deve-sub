@@ -2,7 +2,7 @@
 //! test identifiers, assert field fidelity (obfuscation, congestion, port
 //! hopping), and round-trip through serde. Full URI parse → emit round-trip is
 //! M3 work (acceptance `PARSE-002`). See ADR-0003 and
-//! `docs/plan/05-protocol-engine.md` §6.2.
+//! `docs/plan/05-protocol-engine.md` §"Hysteria2".
 
 #![allow(clippy::expect_used)]
 
@@ -97,6 +97,7 @@ fn hysteria2_fields_match_reserved_fixture() {
     let cong = node.congestion.as_ref().expect("congestion present");
     assert_eq!(cong.controller, CongestionController::Bbr);
     assert_eq!(cong.up_bps, Some(100_000_000));
+    assert_eq!(cong.down_bps, Some(100_000_000));
 
     let ProtocolConfig::Hysteria2(cfg) = &node.config else {
         panic!("expected Hysteria2 config");

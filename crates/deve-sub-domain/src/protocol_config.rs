@@ -4,7 +4,7 @@
 //! the canonical [`crate::Node`] level (endpoint, authentication, transport,
 //! TLS, UDP capability, obfuscation, congestion) are not duplicated here; only
 //! protocol-specific fields that have no shared home live in these structs.
-//! See ADR-0003 and `docs/plan/05-protocol-engine.md` §6.
+//! See ADR-0003 and `docs/plan/05-protocol-engine.md`.
 
 use serde::{Deserialize, Serialize};
 
@@ -46,8 +46,8 @@ pub struct Hysteria2Config {
 ///
 /// `uuid`/`password` is carried by [`crate::Authentication::UuidPassword`];
 /// TLS fields by [`crate::TlsConfig`]; `congestion-controller` by
-/// [`crate::CongestionConfig`]. The `token` auth mode listed in plan/05 §6.3
-/// is not yet modeled — it lands with the M3 parsing layer.
+/// [`crate::CongestionConfig`]. The `token` auth mode listed in plan/05
+/// §"TUIC v5" is not yet modeled — it lands with the M3 parsing layer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TuicV5Config {
     /// `udp-relay-mode` query parameter.

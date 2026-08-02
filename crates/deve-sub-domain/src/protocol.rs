@@ -52,7 +52,12 @@ pub enum ProtocolKind {
 /// [`ProtocolConfig::VlessReality`]. A non-Reality VLESS node is valid as
 /// `ProtocolKind::Vless` + `ProtocolConfig::Unsupported`; emitters matching
 /// on `ProtocolKind::Vless` must not assume `VlessRealityConfig`.
+///
+/// `#[non_exhaustive]` signals that new typed variants will be added as
+/// non-P0 protocols gain typed config (HysteriaV1, AnyTls, etc.); downstream
+/// match arms must include a `_` wildcard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ProtocolConfig {
     VlessReality(VlessRealityConfig),
     Hysteria2(Hysteria2Config),

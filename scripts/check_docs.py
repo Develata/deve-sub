@@ -33,6 +33,8 @@ OPENAPI = ROOT / "docs" / "openapi" / "openapi.json"
 DOCS_DIR = ROOT / "docs"
 
 REQUIRED_CASE_FIELDS = {"id", "title", "priority", "layer", "evidence"}
+VALID_EVIDENCE = {"pass", "fail", "planned", "not-run", "blocked"}
+VALID_PRIORITY_RE = re.compile(r"^P\d+$")
 TOKEN_RE = re.compile(r"(?<![A-Z])([A-Z]+-(?:\*|\d+))")
 
 
@@ -91,6 +93,20 @@ def check_matrix_yaml() -> tuple[int, set[str]]:
         if cid in ids:
             print(f"FAIL: duplicate case id: {cid}", file=sys.stderr)
             return 1, ids
+        evidence = case["evidence"]
+        if evidence not in VALID_EVIDENCE:
+            print(
+                f"FAIL: case {cid} has invalid evidence {evidence!r}; expected one of {sorted(VALID_EVIDENCE)}",
+                file=sys.stderr,
+            )
+            return 1, ids
+        priority = case["priority"]
+        if not VALID_PRIORITY_RE.match(str(priority)):
+            print(
+                f"FAIL: case {cid} has invalid priority {priority!r}; expected P<n>",
+                file=sys.stderr,
+            )
+            return 1, ids
         ids.add(cid)
     print(f"OK: matrix.yaml parsed with {len(cases)} cases, all unique, all required fields present.")
     return 0, ids
@@ -126,7 +142,20 @@ def check_matrix_tsv(yaml_ids: set[str]) -> int:
                 file=sys.stderr,
             )
             return 1
-        tsv_ids.append(cols[0])
+        cid, _title, priority, _layer, status = cols
+        if not VALID_PRIORITY_RE.match(priority):
+            print(
+                f"FAIL: matrix.tsv line {lineno} has invalid priority {priority!r}; expected P<n>",
+                file=sys.stderr,
+            )
+            return 1
+        if status not in VALID_EVIDENCE:
+            print(
+                f"FAIL: matrix.tsv line {lineno} ({cid}) has invalid status {status!r}; expected one of {sorted(VALID_EVIDENCE)}",
+                file=sys.stderr,
+            )
+            return 1
+        tsv_ids.append(cid)
     tsv_set = set(tsv_ids)
     if len(tsv_ids) != len(tsv_set):
         dupes = [i for i in tsv_ids if tsv_ids.count(i) > 1]
@@ -153,10 +182,13 @@ def check_code_fences() -> int:
         if text is None:
             failures += 1
             continue
-        fence_count = text.count("```")
-        if fence_count % 2 != 0:
+        in_fence = False
+        for line in text.splitlines():
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+        if in_fence:
             print(
-                f"FAIL: unbalanced code fences ({fence_count} ticks) in {md.relative_to(ROOT)}",
+                f"FAIL: unbalanced code fences in {md.relative_to(ROOT)}",
                 file=sys.stderr,
             )
             failures += 1
@@ -223,12 +255,18 @@ def main() -> int:
     print("=== Acceptance matrix (YAML) ===")
     rc, yaml_ids = check_matrix_yaml()
     exit_code |= rc
-    print("=== Acceptance matrix (TSV) ===")
-    exit_code |= check_matrix_tsv(yaml_ids)
+    if rc == 0:
+        print("=== Acceptance matrix (TSV) ===")
+        exit_code |= check_matrix_tsv(yaml_ids)
+        print("=== Coverage matrix ===")
+        exit_code |= check_coverage(yaml_ids)
+    else:
+        print("=== Acceptance matrix (TSV) ===")
+        print("SKIP: YAML parse failed; TSV comparison skipped.")
+        print("=== Coverage matrix ===")
+        print("SKIP: YAML parse failed; coverage check skipped.")
     print("=== Markdown code fences ===")
     exit_code |= check_code_fences()
-    print("=== Coverage matrix ===")
-    exit_code |= check_coverage(yaml_ids)
     print("=== OpenAPI ===")
     exit_code |= check_openapi()
     print("=== Summary ===")

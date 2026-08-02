@@ -1,0 +1,25 @@
+name: Engineering task
+description: Track a bounded implementation, docs, or validation slice.
+title: "[task] "
+labels: ["task"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What user-visible or contract-visible result should exist?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance evidence
+      description: Commands, acceptance case IDs, CLI/API smoke, or manual review needed.
+    validations:
+      required: true

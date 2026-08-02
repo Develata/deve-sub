@@ -1,0 +1,18 @@
+# Repository owner fallback
+* @Develata
+
+# Plan and contract authority
+/docs/plan/ @Develata
+/docs/contracts/ @Develata
+/docs/acceptance/ @Develata
+/docs/adr/ @Develata
+/docs/data-model/ @Develata
+
+# Core domain and kernel
+/crates/deve-sub-kernel/ @Develata
+/crates/deve-sub-domain/ @Develata
+
+# CI and governance
+/.github/ @Develata
+/AGENTS.md @Develata
+/scripts/ @Develata

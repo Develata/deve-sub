@@ -5,3 +5,27 @@
 //! framework types, and no database access. See ADR-0003 for the canonical
 //! node model decision and `docs/plan/05-protocol-engine.md` for the full
 //! protocol engine blueprint.
+
+pub mod endpoint;
+pub mod error;
+pub mod node;
+pub mod protocol;
+pub mod protocol_config;
+pub mod tls;
+pub mod transport;
+
+pub use deve_sub_kernel::{NodeId, Revision, TagId, Timestamp};
+
+pub use endpoint::{DomainName, Endpoint, Host};
+pub use error::DomainError;
+pub use node::{Authentication, ChainTarget, Node, NodeSource, RegionAssignment, RegionMethod};
+pub use protocol::{ProtocolConfig, ProtocolKind, UnsupportedNode};
+pub use protocol_config::{
+    Hysteria2Config, NaiveProxyConfig, ShadowsocksConfig, TrojanConfig, TuicV5Config, UdpRelayMode,
+    VMessConfig, VlessRealityConfig,
+};
+pub use tls::{CertificatePin, RealityConfig, TlsConfig};
+pub use transport::{
+    CongestionConfig, CongestionController, MultiplexConfig, Obfuscation, Transport, TransportKind,
+    UdpCapability,
+};

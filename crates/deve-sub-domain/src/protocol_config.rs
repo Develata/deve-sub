@@ -1,0 +1,111 @@
+//! Typed configuration payloads for the seven P0 protocols.
+//!
+//! Only P0 protocols have typed config in Phase 1. Fields already lifted to
+//! the canonical [`crate::Node`] level (endpoint, authentication, transport,
+//! TLS, UDP capability, obfuscation, congestion) are not duplicated here; only
+//! protocol-specific fields that have no shared home live in these structs.
+//! See ADR-0003 and `docs/plan/05-protocol-engine.md` §6.
+
+use serde::{Deserialize, Serialize};
+
+/// VLESS Reality configuration.
+///
+/// `uuid` is carried by [`crate::Authentication::Uuid`]; `server`/`port` by
+/// [`crate::Endpoint`]; `network` by [`crate::Transport`]; `sni`, `fp`,
+/// `allowInsecure`, and Reality `pbk`/`sid`/`spx` by [`crate::TlsConfig`];
+/// `udp`/`xudp` by [`crate::UdpCapability`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VlessRealityConfig {
+    /// `encryption` query parameter, conventionally `none`.
+    pub encryption: Option<String>,
+    /// `flow` query parameter, e.g. `xtls-rprx-vision`. Output profiles
+    /// without Vision support must exclude the node and report it.
+    pub flow: Option<String>,
+    /// `packetEncoding` query parameter.
+    pub packet_encoding: Option<String>,
+}
+
+/// Hysteria2 configuration.
+///
+/// `password`/`auth` is carried by [`crate::Authentication::Password`]; TLS
+/// fields by [`crate::TlsConfig`]; `obfs`/`obfs-password` by
+/// [`crate::Obfuscation`]; `up`/`down` by [`crate::CongestionConfig`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hysteria2Config {
+    /// Port hopping range string, e.g. `20000-40000`.
+    pub ports: Option<String>,
+    /// Hop interval. Stored as a duration; emitters convert per target.
+    pub hop_interval: Option<std::time::Duration>,
+    pub fast_open: Option<bool>,
+    pub lazy: Option<bool>,
+}
+
+/// TUIC v5 configuration.
+///
+/// `uuid`/`password`/`token` is carried by [`crate::Authentication`]; TLS
+/// fields by [`crate::TlsConfig`]; `congestion-controller` by
+/// [`crate::CongestionConfig`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TuicV5Config {
+    pub udp_relay_mode: Option<UdpRelayMode>,
+    pub zero_rtt_handshake: Option<bool>,
+    /// Heartbeat interval. Stored as a duration; emitters convert per target
+    /// and must never mix seconds and milliseconds.
+    pub heartbeat: Option<std::time::Duration>,
+    pub disable_sni: Option<bool>,
+}
+
+/// TUIC v5 UDP relay mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum UdpRelayMode {
+    Native,
+    Quic,
+}
+
+/// NaiveProxy configuration.
+///
+/// `username`/`password` is carried by
+/// [`crate::Authentication::UserPassword`]; TLS fields by [`crate::TlsConfig`].
+/// Naive must not be downgraded to a plain HTTP node.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NaiveProxyConfig {
+    pub quic: Option<bool>,
+    pub http2: Option<bool>,
+    pub http3: Option<bool>,
+}
+
+/// Shadowsocks configuration.
+///
+/// `method`/`password` is carried by [`crate::Authentication::Shadowsocks`];
+/// `server`/`port` by [`crate::Endpoint`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShadowsocksConfig {
+    /// SIP003 plugin name, if any.
+    pub plugin: Option<String>,
+    /// SIP003 plugin options string.
+    pub plugin_opts: Option<String>,
+}
+
+/// VMess configuration.
+///
+/// `uuid` is carried by [`crate::Authentication::Uuid`]; `server`/`port` by
+/// [`crate::Endpoint`]; `network` by [`crate::Transport`]; TLS by
+/// [`crate::TlsConfig`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VMessConfig {
+    /// `alterId`. Deprecated in modern VMess but preserved for fidelity.
+    pub alter_id: Option<u32>,
+    /// `security`/encryption, e.g. `auto`, `aes-128-gcm`, `none`.
+    pub security: Option<String>,
+    pub packet_encoding: Option<String>,
+}
+
+/// Trojan configuration.
+///
+/// `password` is carried by [`crate::Authentication::Password`];
+/// `server`/`port` by [`crate::Endpoint`]; TLS by [`crate::TlsConfig`];
+/// `network` by [`crate::Transport`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrojanConfig {
+    pub packet_encoding: Option<String>,
+}

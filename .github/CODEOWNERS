@@ -17,3 +17,11 @@
 /.github/ @Develata
 /AGENTS.md @Develata
 /scripts/ @Develata
+
+# Workspace root
+/Cargo.toml @Develata
+/Cargo.lock @Develata
+
+# Acceptance and migrations
+/tests/ @Develata
+/migrations/ @Develata

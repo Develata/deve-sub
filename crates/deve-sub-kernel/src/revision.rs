@@ -26,8 +26,11 @@ impl Revision {
     }
 
     /// Increment the revision by one.
+    ///
+    /// Uses saturating addition so the monotonically increasing contract
+    /// holds even at `u64::MAX` (stays at the bound rather than wrapping).
     pub fn increment(&mut self) {
-        self.0 += 1;
+        self.0 = self.0.saturating_add(1);
     }
 }
 

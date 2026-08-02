@@ -32,14 +32,11 @@ impl Timestamp {
     /// Return the Unix timestamp in milliseconds.
     #[must_use]
     pub fn unix_ms(&self) -> i64 {
+        // WHY: i64::try_from is infallible here because the representable
+        // range of OffsetDateTime (±9999 years ≈ ±2.5×10¹⁴ ms) is far
+        // within i64::MAX (9.22×10¹⁸) without the `large-dates` feature.
         i64::try_from(self.0.unix_timestamp_nanos() / 1_000_000)
             .expect("timestamp in milliseconds fits in i64 for any representable OffsetDateTime")
-    }
-
-    /// Return the inner [`time::OffsetDateTime`].
-    #[must_use]
-    pub const fn as_inner(&self) -> time::OffsetDateTime {
-        self.0
     }
 }
 

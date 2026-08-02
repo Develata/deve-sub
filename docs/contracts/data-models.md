@@ -13,7 +13,7 @@ full blueprint.
 
 ### ProtocolKind
 
-An enum with sixteen typed variants plus `Unknown(String)`:
+An enum with fifteen typed variants plus `Unknown(String)`:
 
 ```text
 VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TuicV5, NaiveProxy,

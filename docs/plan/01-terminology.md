@@ -34,7 +34,7 @@ See ADR-0003.
 
 ### ProtocolKind
 
-An enum with sixteen typed protocol variants plus `Unknown(String)` for
+An enum with fifteen typed protocol variants plus `Unknown(String)` for
 protocols not yet supported. `ProtocolKind` identifies what protocol a node
 uses; it does not carry configuration.
 

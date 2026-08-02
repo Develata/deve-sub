@@ -11,7 +11,7 @@ FlClash, sing-box, Xray, v2rayN, v2rayNG, Shadowrocket). Without a unified
 representation, each input→output pair would need its own converter (N×M
 explosion).
 
-The spec lists 16 protocols. P0 requires full support for 7: VLESS Reality,
+The spec lists 15 protocols. P0 requires full support for 7: VLESS Reality,
 Hysteria2, TUIC v5, NaiveProxy, Shadowsocks, VMess, Trojan. The remaining 9 and
 future protocols must not be silently lost, but must not be claimed as
 supported either.
@@ -21,7 +21,7 @@ supported either.
 Define a **Canonical Node Model** as the single normalized node representation.
 All parsers produce it; all emitters consume it.
 
-- **`ProtocolKind`** is an enum with 16 typed protocol variants plus
+- **`ProtocolKind`** is an enum with 15 typed protocol variants plus
   `Unknown(String)` for protocols not yet typed.
 - **`ProtocolConfig`** carries typed configuration payloads for the **seven P0
   protocols only**. Non-P0 protocols do not have typed config in Phase 1.
@@ -46,8 +46,8 @@ All parsers produce it; all emitters consume it.
 
 1. **Only P0 7 in the enum** — rejected: adding non-P0 protocols later cascades
    enum changes across all match arms.
-2. **P0 7 + `Other(String)` catchall, no typed 16** — rejected: loses the
-   16-variant static enumeration benefit; the 16 protocols are known and should
+2. **P0 7 + `Other(String)` catchall, no typed 15** — rejected: loses the
+   15-variant static enumeration benefit; the 15 protocols are known and should
    be typed.
 3. **Dynamic protocol registry** — rejected: overengineered for Phase 1; a
    static enum with `Unknown(String)` is simpler and sufficient.

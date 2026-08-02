@@ -92,7 +92,7 @@ concatenation.
 
 ### ProtocolKind and ProtocolConfig
 
-`ProtocolKind` is an enum with sixteen typed variants plus `Unknown(String)`.
+`ProtocolKind` is an enum with fifteen typed variants plus `Unknown(String)`.
 `ProtocolConfig` carries typed payloads for the seven P0 protocols only. Non-P0
 or unknown protocols use `UnsupportedNode`, which preserves raw data but does
 not enter emitters. See ADR-0003.

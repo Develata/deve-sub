@@ -1,8 +1,15 @@
 [workspace]
 members = [
+    "apps/server",
+    "apps/cli",
+    "apps/web",
     "crates/deve-sub-kernel",
     "crates/deve-sub-contract",
     "crates/deve-sub-domain",
+    "crates/deve-sub-application",
+    "crates/deve-sub-storage-sqlite",
+    "crates/deve-sub-security",
+    "crates/deve-sub-observability",
 ]
 exclude = ["spikes/*"]
 resolver = "3"
@@ -21,14 +28,31 @@ homepage = "https://github.com/Develata/deve-sub"
 deve-sub-kernel = { path = "crates/deve-sub-kernel" }
 deve-sub-contract = { path = "crates/deve-sub-contract" }
 deve-sub-domain = { path = "crates/deve-sub-domain" }
+deve-sub-application = { path = "crates/deve-sub-application" }
+deve-sub-storage-sqlite = { path = "crates/deve-sub-storage-sqlite" }
+deve-sub-security = { path = "crates/deve-sub-security" }
+deve-sub-observability = { path = "crates/deve-sub-observability" }
+deve-sub-server = { path = "apps/server" }
+deve-sub-web = { path = "apps/web" }
 
 # Common
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
+anyhow = "1.0"
 ulid = { version = "1", features = ["serde"] }
 time = { version = "0.3", features = ["serde"] }
 proptest = "1"
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", features = ["macros"] }
+tower-http = { version = "0.6", features = ["cors", "compression-gzip", "trace", "request-id"] }
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-axum = "0.2"
+utoipa-scalar = { version = "0.3", features = ["axum"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

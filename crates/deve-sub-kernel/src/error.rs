@@ -16,6 +16,22 @@ pub enum KernelError {
     #[error("invalid tag ID: {0}")]
     InvalidTagId(String),
 
+    /// A ULID string could not be parsed as a [`UserId`](crate::UserId).
+    #[error("invalid user ID: {0}")]
+    InvalidUserId(String),
+
+    /// A ULID string could not be parsed as a [`SessionId`](crate::SessionId).
+    #[error("invalid session ID: {0}")]
+    InvalidSessionId(String),
+
+    /// A ULID string could not be parsed as a [`AuditLogId`](crate::AuditLogId).
+    #[error("invalid audit log ID: {0}")]
+    InvalidAuditLogId(String),
+
+    /// A ULID string could not be parsed as an [`OutboxEventId`](crate::OutboxEventId).
+    #[error("invalid outbox event ID: {0}")]
+    InvalidOutboxEventId(String),
+
     /// An opaque pagination cursor string was malformed.
     #[error("invalid cursor")]
     InvalidCursor,

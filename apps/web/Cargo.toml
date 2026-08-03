@@ -1,5 +1,5 @@
 [package]
-name = "deve-sub-contract"
+name = "deve-sub-web"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,10 +8,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
-[dependencies]
-serde = { workspace = true }
-serde_json = { workspace = true }
-utoipa = { workspace = true }
+[lib]
+name = "deve_sub_web"
+path = "src/lib.rs"
 
 [lints]
 workspace = true

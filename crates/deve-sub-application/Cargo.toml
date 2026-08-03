@@ -1,5 +1,5 @@
 [package]
-name = "deve-sub-contract"
+name = "deve-sub-application"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,12 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+deve-sub-kernel = { workspace = true }
+deve-sub-domain = { workspace = true }
+deve-sub-contract = { workspace = true }
+thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-utoipa = { workspace = true }
 
 [lints]
 workspace = true

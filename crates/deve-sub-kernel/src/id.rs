@@ -88,6 +88,31 @@ entity_id!(
     "Strong-typed identifier for a user-defined tag."
 );
 
+entity_id!(
+    UserId,
+    InvalidUserId,
+    "Strong-typed identifier for a user account."
+);
+
+entity_id!(
+    SessionId,
+    InvalidSessionId,
+    "Strong-typed identifier for a login session. \
+     Not a session token — ULIDs identify entities, not secrets."
+);
+
+entity_id!(
+    AuditLogId,
+    InvalidAuditLogId,
+    "Strong-typed identifier for an audit log entry."
+);
+
+entity_id!(
+    OutboxEventId,
+    InvalidOutboxEventId,
+    "Strong-typed identifier for an outbox event."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

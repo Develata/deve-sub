@@ -1,0 +1,35 @@
+[package]
+name = "deve-sub-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lib]
+name = "deve_sub_server"
+path = "src/lib.rs"
+
+[dependencies]
+deve-sub-kernel = { workspace = true }
+deve-sub-contract = { workspace = true }
+deve-sub-application = { workspace = true }
+deve-sub-observability = { workspace = true }
+deve-sub-storage-sqlite = { workspace = true }
+deve-sub-web = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+utoipa = { workspace = true }
+utoipa-axum = { workspace = true }
+utoipa-scalar = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

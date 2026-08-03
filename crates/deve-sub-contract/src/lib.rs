@@ -5,3 +5,7 @@
 //! `docs/plan/03-architecture.md` and ADR-0004 for the API boundary policy.
 
 #![cfg_attr(test, allow(clippy::expect_used))]
+
+pub mod health;
+
+pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};

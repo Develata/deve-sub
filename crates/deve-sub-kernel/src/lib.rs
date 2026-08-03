@@ -13,7 +13,7 @@ pub mod revision;
 pub mod time;
 
 pub use error::{KernelError, Result};
-pub use id::{NodeId, TagId};
+pub use id::{AuditLogId, NodeId, OutboxEventId, SessionId, TagId, UserId};
 pub use pagination::{Cursor, Page, Pagination};
 pub use revision::Revision;
 pub use time::Timestamp;

@@ -10,7 +10,7 @@ order. It schedules approved contracts; it cannot override plans.
 | Milestone | Name | Status | Dependency | Vertical slice |
 |---|---|---|---|---|
 | M0 | Tech Spike | done | none | UI spike gate, SQLite spike, Docker build |
-| M1 | Infrastructure | planned | M0 | `deve-sub serve` with health, API skeleton, DB, Docker |
+| M1 | Infrastructure | done | M0 | `deve-sub serve` with health, API skeleton, DB, Docker |
 | M2 | Auth and Users | planned | M1 | Login, RBAC, session, 2FA, user management |
 | M3 | Protocol Engine | planned | M1 | Canonical model, P0 parsers, P0 emitters, golden + fuzz |
 | M4 | Sources and Node Pool | planned | M3 | Source CRUD, snapshot, refresh, diff, node pool, override |
@@ -38,7 +38,13 @@ acceptance matrix, CI, governance docs — 20 commits, reviewed and closed).
 Phase 1B (M0 Tech Spike) is complete — Dioxus UI spike (22/22 Playwright
 tests pass), SQLite concurrency spike, Docker build spike (design validated).
 
-M1 (Infrastructure) is next.
+M1 (Infrastructure) is complete — Axum server with tower-http middleware,
+SQLite WAL pool, initial migration (users/sessions/audit_log/outbox),
+CLI subcommands (serve/doctor/migrate/config validate/openapi), OpenAPI
+spec export, Dockerfile (multi-stage, non-root, healthcheck). Docker image
+build verification pending CI (no local Docker daemon).
+
+M2 (Auth and Users) is next.
 
 ## Authority
 

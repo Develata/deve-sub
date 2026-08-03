@@ -1,0 +1,43 @@
+# Rust build artifacts
+target/
+
+# Spikes (excluded from workspace, not needed for production build)
+spikes/
+
+# Git and CI
+.git/
+.github/
+
+# Documentation (not needed at build time)
+docs/
+
+# Runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Secrets and local config (defense-in-depth — mirror .gitignore)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Editor/OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Tooling
+.codegraph/
+.opencode/
+node_modules/

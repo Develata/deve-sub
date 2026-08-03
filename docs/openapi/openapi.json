@@ -1,0 +1,116 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Deve Sub API",
+    "description": "Self-hosted proxy subscription infrastructure manager",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health/live": {
+      "get": {
+        "summary": "Liveness probe — returns 200 if the process is alive.",
+        "operationId": "health_live",
+        "responses": {
+          "200": {
+            "description": "Service is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthLiveResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "summary": "Readiness probe — returns 200 if the service is ready to serve requests.",
+        "description": "Checks database connectivity. Returns 503 with `degraded` status if the\ndatabase is unreachable.",
+        "operationId": "health_ready",
+        "responses": {
+          "200": {
+            "description": "Service is ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReadyResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service is not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReadyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthLiveResponse": {
+        "type": "object",
+        "description": "Response body for `GET /health/live`.",
+        "required": [
+          "status",
+          "product_name",
+          "version"
+        ],
+        "properties": {
+          "product_name": {
+            "type": "string",
+            "description": "Product display name."
+          },
+          "status": {
+            "$ref": "#/components/schemas/HealthStatusDto",
+            "description": "Overall health status."
+          },
+          "version": {
+            "type": "string",
+            "description": "Software version."
+          }
+        }
+      },
+      "HealthReadyResponse": {
+        "type": "object",
+        "description": "Response body for `GET /health/ready`.",
+        "required": [
+          "status",
+          "product_name",
+          "version"
+        ],
+        "properties": {
+          "product_name": {
+            "type": "string",
+            "description": "Product display name."
+          },
+          "status": {
+            "$ref": "#/components/schemas/HealthStatusDto",
+            "description": "Overall health status."
+          },
+          "version": {
+            "type": "string",
+            "description": "Software version."
+          }
+        }
+      },
+      "HealthStatusDto": {
+        "type": "string",
+        "description": "Overall health status reported by health probes.",
+        "enum": [
+          "healthy",
+          "degraded",
+          "unhealthy"
+        ]
+      }
+    }
+  }
+}

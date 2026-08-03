@@ -57,6 +57,14 @@ pub struct ConfigValidateArgs {
     config: Option<PathBuf>,
 }
 
+/// OpenAPI export command arguments.
+#[derive(Args)]
+pub struct OpenapiArgs {
+    /// Path to configuration file.
+    #[arg(long, env = "DEVE_SUB_CONFIG")]
+    config: Option<PathBuf>,
+}
+
 /// Config subcommand container.
 #[derive(Args)]
 pub struct ConfigArgs {
@@ -180,6 +188,14 @@ pub async fn config_validate(args: ConfigValidateArgs) -> Result<()> {
     println!("  server.bind:   {}", config.server.bind);
     println!("  server.serve_web: {}", config.server.serve_web);
     println!("  database.path: {}", config.database.path);
+    Ok(())
+}
+
+pub async fn openapi(args: OpenapiArgs) -> Result<()> {
+    let config = load_config(&args.config)?;
+    let spec = deve_sub_server::routes::build_openapi_spec(&config.product_name);
+    let json = serde_json::to_string_pretty(&spec).context("failed to serialize OpenAPI spec")?;
+    println!("{json}");
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 //! Deve Sub CLI entry point.
 //!
 //! Subcommands: `serve`, `serve --headless`, `doctor`, `migrate`,
-//! `config validate`. See `docs/plan/milestones/M1-infrastructure.md`.
+//! `config validate`, `openapi`. See `docs/plan/milestones/M1-infrastructure.md`.
 
 use std::process::ExitCode;
 
@@ -27,6 +27,8 @@ enum Commands {
     Migrate(commands::MigrateArgs),
     /// Configuration commands.
     Config(commands::ConfigArgs),
+    /// Export OpenAPI specification to stdout.
+    Openapi(commands::OpenapiArgs),
 }
 
 fn main() -> ExitCode {
@@ -49,6 +51,7 @@ fn main() -> ExitCode {
             Commands::Config(args) => match args.command {
                 commands::ConfigSubCommand::Validate(sub) => commands::config_validate(sub).await,
             },
+            Commands::Openapi(args) => commands::openapi(args).await,
         }
     });
 

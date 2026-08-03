@@ -38,6 +38,30 @@ pub fn build_openapi(product_name: &str) -> OpenApi {
         .build()
 }
 
+/// Register all `#[utoipa::path]`-annotated API routes on the given router.
+///
+/// This is the single registration point shared by both the live server
+/// ([`build_api_router`]) and the spec exporter ([`build_openapi_spec`]),
+/// ensuring the exported spec and the served routes cannot drift apart.
+fn register_api_routes(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
+    router
+        .routes(routes!(health_live))
+        .routes(routes!(health_ready))
+}
+
+/// Build the complete OpenAPI document with all registered paths.
+///
+/// Unlike [`build_api_router`], this does not require a database pool —
+/// it registers the routes via `OpenApiRouter` solely to collect the
+/// OpenAPI paths, then discards the Axum router. Used by the `openapi`
+/// CLI subcommand for spec export.
+#[must_use]
+pub fn build_openapi_spec(product_name: &str) -> OpenApi {
+    let openapi = build_openapi(product_name);
+
+    register_api_routes(OpenApiRouter::with_openapi(openapi)).into_openapi()
+}
+
 /// Build the complete router with OpenAPI documentation.
 ///
 /// Routes registered via `routes!` are simultaneously added to the Axum
@@ -47,9 +71,7 @@ pub fn build_openapi(product_name: &str) -> OpenApi {
 pub fn build_api_router(state: AppState) -> (Router, OpenApi) {
     let openapi = build_openapi(&state.config.product_name);
 
-    let (router, openapi) = OpenApiRouter::with_openapi(openapi)
-        .routes(routes!(health_live))
-        .routes(routes!(health_ready))
+    let (router, openapi) = register_api_routes(OpenApiRouter::with_openapi(openapi))
         .route("/", get(web_placeholder))
         .with_state(state)
         .split_for_parts();

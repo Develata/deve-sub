@@ -26,6 +26,10 @@ jobs:
         run: cargo test --locked --all-targets --all-features
       - name: Doc tests
         run: cargo test --locked --all-features --doc
+      - name: OpenAPI spec up to date
+        run: |
+          cargo run --locked --all-features --bin deve-sub -- openapi > /tmp/openapi.json
+          diff -u /tmp/openapi.json docs/openapi/openapi.json
 
   docs:
     name: docs-and-contracts
@@ -39,3 +43,52 @@ jobs:
         run: pip install pyyaml
       - name: Docs and acceptance checks
         run: python3 scripts/check_docs.py
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    needs: rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t deve-sub:ci .
+      - name: Run container and verify health
+        run: |
+          docker run -d --name deve-sub-test -p 8080:8080 deve-sub:ci
+
+          # Run migrations inside the container
+          docker exec deve-sub-test /app/deve-sub migrate --db-path /app/data/deve-sub.db
+
+          # Poll the Docker healthcheck status until healthy
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' deve-sub-test 2>/dev/null || echo "starting")
+            if [ "$status" = "healthy" ]; then
+              echo "Container is healthy"
+              break
+            fi
+            echo "Waiting for healthy state (attempt $i: $status)..."
+            sleep 1
+          done
+
+          if [ "$status" != "healthy" ]; then
+            echo "FAIL: container did not become healthy within 30s"
+            docker logs deve-sub-test
+            exit 1
+          fi
+
+          # Verify both health endpoints
+          curl -sf http://localhost:8080/health/live
+          curl -sf http://localhost:8080/health/ready
+
+          # Verify non-root user
+          uid=$(docker exec deve-sub-test id -u)
+          if [ "$uid" != "1000" ]; then
+            echo "FAIL: container runs as UID $uid, expected 1000"
+            exit 1
+          fi
+          echo "Container runs as non-root user (UID 1000)"
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop deve-sub-test 2>/dev/null || true
+          docker rm deve-sub-test 2>/dev/null || true

@@ -1,0 +1,7 @@
+[application]
+name = "dioxus-ui-spike"
+asset_dir = "assets"
+
+[web.resource]
+dev = []
+style = ["src/styles/tailwind.css"]

@@ -36,6 +36,9 @@ data/
 spikes/*/target/
 spikes/*/dist/
 spikes/*/node_modules/
+**/test-results/
+**/playwright-report/
+**/blob-report/
 
 # OS/editor
 .DS_Store

@@ -1,0 +1,10 @@
+target/
+*.db
+*.db-wal
+*.db-shm
+.git/
+.env
+.env.*
+*.md
+Dockerfile
+.dockerignore

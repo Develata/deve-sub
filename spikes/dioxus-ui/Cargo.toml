@@ -1,0 +1,21 @@
+[package]
+name = "dioxus-ui-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+dioxus = { version = "0.7", features = ["web"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "DomTokenList", "Storage", "EventSource", "MessageEvent", "AddEventListenerOptions"] }
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = "s"
+lto = true

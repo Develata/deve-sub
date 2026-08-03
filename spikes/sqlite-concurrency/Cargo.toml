@@ -1,0 +1,13 @@
+[package]
+name = "sqlite-concurrency-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+rusqlite = { version = "0.37", features = ["bundled"] }
+
+[profile.release]
+opt-level = 2

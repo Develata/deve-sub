@@ -24,7 +24,7 @@ pub mod routes;
 pub enum ServerError {
     /// The server failed to bind or start.
     #[error("server error: {0}")]
-    Start(String),
+    Start(#[from] std::io::Error),
 }
 
 /// Application state shared across all route handlers.
@@ -43,52 +43,37 @@ pub struct AppState {
 /// 4. `CorsLayer` — permissive CORS for development
 /// 5. `CompressionLayer` — gzip compression
 pub fn build_router(state: AppState) -> Router {
-    let openapi = routes::openapi_docs();
+    let (api_router, openapi) = routes::build_api_router(state);
 
     Router::new()
-        .merge(routes::health_routes())
-        .merge(routes::api_routes())
+        .merge(api_router)
         .merge(Scalar::with_url("/docs", openapi))
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(TraceLayer::new_for_http())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
-        .with_state(state)
 }
 
 /// Run the HTTP server on the given bind address.
+///
+/// The caller provides the shutdown future, keeping signal handling in the
+/// binary entry point rather than coupling this library to platform-specific
+/// signal APIs.
 ///
 /// # Errors
 /// Returns [`ServerError`] if the server fails to bind or start.
 pub async fn serve(
     router: Router,
     bind: SocketAddr,
-    shutdown: tokio::signal::unix::SignalKind,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<(), ServerError> {
-    let listener = tokio::net::TcpListener::bind(bind)
-        .await
-        .map_err(|e| ServerError::Start(e.to_string()))?;
-
+    let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!("HTTP server listening on {bind}");
 
-    let shutdown_signal = async move {
-        // SAFETY: Installing a SIGTERM handler on Unix is infallible in
-        // practice — the only failure mode is an invalid signal number,
-        // which SIGTERM is not. If it somehow fails, the server will not
-        // shut down gracefully but will still function.
-        #[allow(
-            clippy::expect_used,
-            reason = "SIGTERM handler installation is infallible on Unix"
-        )]
-        let mut sig = tokio::signal::unix::signal(shutdown)
-            .expect("installing SIGTERM handler is infallible on Unix");
-        sig.recv().await;
-        tracing::info!("shutdown signal received, draining connections");
-    };
-
     axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal)
-        .await
-        .map_err(|e| ServerError::Start(e.to_string()))
+        .with_graceful_shutdown(shutdown)
+        .await?;
+
+    Ok(())
 }

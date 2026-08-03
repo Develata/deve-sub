@@ -27,8 +27,7 @@ CREATE TABLE sessions (
     revoked     INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1))
 );
 
-CREATE INDEX idx_sessions_user_id    ON sessions(user_id);
-CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
+CREATE INDEX idx_sessions_user_expires ON sessions(user_id, expires_at);
 
 -- Audit log: append-only record of actor actions on targets.
 CREATE TABLE audit_log (
@@ -41,8 +40,7 @@ CREATE TABLE audit_log (
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
-CREATE INDEX idx_audit_log_actor_id   ON audit_log(actor_id);
-CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
+CREATE INDEX idx_audit_log_actor_created ON audit_log(actor_id, created_at);
 
 -- Outbox event: persistent outbox for reliable event dispatch.
 -- See docs/plan/00-engineering-constitution.md §20 (no full event sourcing).
@@ -56,5 +54,4 @@ CREATE TABLE outbox_event (
     processed_at    TEXT
 );
 
-CREATE INDEX idx_outbox_event_unprocessed ON outbox_event(processed_at) WHERE processed_at IS NULL;
-CREATE INDEX idx_outbox_event_created_at  ON outbox_event(created_at);
+CREATE INDEX idx_outbox_event_unprocessed ON outbox_event(created_at) WHERE processed_at IS NULL;

@@ -22,7 +22,7 @@ enum Commands {
     /// Start the HTTP server.
     Serve(commands::ServeArgs),
     /// Run system diagnostics.
-    Doctor,
+    Doctor(commands::DoctorArgs),
     /// Apply database migrations.
     Migrate(commands::MigrateArgs),
     /// Configuration commands.
@@ -44,7 +44,7 @@ fn main() -> ExitCode {
         deve_sub_observability::init_tracing()?;
         match cli.command {
             Commands::Serve(args) => commands::serve(args).await,
-            Commands::Doctor => commands::doctor().await,
+            Commands::Doctor(args) => commands::doctor(args).await,
             Commands::Migrate(args) => commands::migrate(args).await,
             Commands::Config(args) => match args.command {
                 commands::ConfigSubCommand::Validate(sub) => commands::config_validate(sub).await,

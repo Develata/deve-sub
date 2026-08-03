@@ -2,6 +2,8 @@
 //!
 //! Path, method, and status definitions live here in the API crate per
 //! ADR-0004. DTOs and `ToSchema` derives live in `deve-sub-contract`.
+//! Routes and OpenAPI paths are registered simultaneously via
+//! `OpenApiRouter` to prevent spec/code drift.
 
 use axum::Router;
 use axum::extract::State;
@@ -10,44 +12,54 @@ use axum::response::{IntoResponse, Json};
 use axum::routing::get;
 use deve_sub_application::{HealthStatus, HealthView};
 use deve_sub_contract::{HealthLiveResponse, HealthReadyResponse};
-use utoipa::OpenApi;
+use utoipa::openapi::OpenApi;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::AppState;
 
-/// OpenAPI specification for the Deve Sub API.
-#[derive(OpenApi)]
-#[openapi(
-    paths(health_live, health_ready),
-    components(schemas(HealthLiveResponse, HealthReadyResponse)),
-    info(
-        title = "Deve Sub API",
-        version = "0.1.0",
-        description = "Self-hosted proxy subscription infrastructure manager"
-    )
-)]
-pub struct ApiDoc;
-
-/// Build and return the OpenAPI document.
+/// Build the OpenAPI document with info from the application config.
+///
+/// The product name and version are injected at runtime to avoid hardcoded
+/// scattering (AGENTS.md §"Naming").
 #[must_use]
-pub fn openapi_docs() -> utoipa::openapi::OpenApi {
-    ApiDoc::openapi()
+pub fn build_openapi(product_name: &str) -> OpenApi {
+    use utoipa::openapi::InfoBuilder;
+
+    OpenApi::builder()
+        .info(
+            InfoBuilder::new()
+                .title(format!("{product_name} API"))
+                .version(env!("CARGO_PKG_VERSION"))
+                .description(Some(
+                    "Self-hosted proxy subscription infrastructure manager",
+                ))
+                .build(),
+        )
+        .build()
 }
 
-/// Health and API routes.
-pub fn health_routes() -> Router<AppState> {
-    Router::new()
-        .route("/health/live", get(health_live))
-        .route("/health/ready", get(health_ready))
-}
+/// Build the complete router with OpenAPI documentation.
+///
+/// Routes registered via `routes!` are simultaneously added to the Axum
+/// router and the OpenAPI spec, ensuring they cannot drift apart.
+/// Non-API routes (web placeholder) are added via plain `Router::route`
+/// and are intentionally excluded from the spec.
+pub fn build_api_router(state: AppState) -> (Router, OpenApi) {
+    let openapi = build_openapi(&state.config.product_name);
 
-/// API v1 skeleton routes.
-pub fn api_routes() -> Router<AppState> {
-    Router::new()
-        .route("/api/v1/version", get(api_version))
+    let (router, openapi) = OpenApiRouter::with_openapi(openapi)
+        .routes(routes!(health_live))
+        .routes(routes!(health_ready))
         .route("/", get(web_placeholder))
+        .with_state(state)
+        .split_for_parts();
+
+    (router, openapi)
 }
 
 /// Serve the web shell placeholder.
+///
+/// Returns 404 when `serve_web` is disabled (headless mode).
 async fn web_placeholder(State(state): State<AppState>) -> axum::response::Response {
     if state.config.server.serve_web {
         axum::response::Html(deve_sub_web::PLACEHOLDER_HTML).into_response()
@@ -115,12 +127,4 @@ async fn health_ready(State(state): State<AppState>) -> (StatusCode, Json<Health
             version: view.version,
         }),
     )
-}
-
-/// API version endpoint.
-async fn api_version(State(state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "product": state.config.product_name,
-        "version": env!("CARGO_PKG_VERSION"),
-    }))
 }

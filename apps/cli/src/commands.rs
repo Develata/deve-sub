@@ -12,6 +12,10 @@ use deve_sub_server::{AppState, build_router};
 /// Start the HTTP server.
 #[derive(Args)]
 pub struct ServeArgs {
+    /// Path to configuration file.
+    #[arg(long, env = "DEVE_SUB_CONFIG")]
+    config: Option<PathBuf>,
+
     /// Bind address.
     #[arg(long, env = "DEVE_SUB_BIND")]
     bind: Option<String>,
@@ -31,6 +35,18 @@ pub struct MigrateArgs {
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
     db_path: String,
+}
+
+/// Doctor command arguments.
+#[derive(Args)]
+pub struct DoctorArgs {
+    /// Path to configuration file.
+    #[arg(long, env = "DEVE_SUB_CONFIG")]
+    config: Option<PathBuf>,
+
+    /// Database path.
+    #[arg(long, env = "DEVE_SUB_DB_PATH")]
+    db_path: Option<String>,
 }
 
 /// Config validate command arguments.
@@ -56,7 +72,7 @@ pub enum ConfigSubCommand {
 }
 
 pub async fn serve(args: ServeArgs) -> Result<()> {
-    let mut config = load_config(&args.config_path())?;
+    let mut config = load_config(&args.config)?;
     if let Some(bind) = &args.bind {
         config.server.bind = bind.clone();
     }
@@ -76,6 +92,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         "starting server"
     );
 
+    ensure_db_dir(&config.database.path)?;
+
     let sqlite_config = deve_sub_storage_sqlite::SqliteConfig::new(&config.database.path);
     let db = deve_sub_storage_sqlite::create_pool(&sqlite_config)
         .await
@@ -87,14 +105,19 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     };
     let router = build_router(state);
 
-    deve_sub_server::serve(router, bind, tokio::signal::unix::SignalKind::terminate())
+    let shutdown = create_shutdown_signal();
+
+    deve_sub_server::serve(router, bind, shutdown)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
 
     Ok(())
 }
 
-pub async fn doctor() -> Result<()> {
+pub async fn doctor(args: DoctorArgs) -> Result<()> {
+    let config = load_config(&args.config)?;
+    let db_path = args.db_path.unwrap_or(config.database.path);
+
     println!("Deve Sub — System Diagnostics");
     println!("==============================");
 
@@ -104,8 +127,7 @@ pub async fn doctor() -> Result<()> {
 
     // Database check
     println!("\n[2/4] Database");
-    let db_path = "data/deve-sub.db";
-    if Path::new(db_path).exists() {
+    if Path::new(&db_path).exists() {
         println!("  database file: {db_path} (exists)");
     } else {
         println!("  database file: {db_path} (not found — run `deve-sub migrate` first)");
@@ -113,11 +135,14 @@ pub async fn doctor() -> Result<()> {
 
     // Directories check
     println!("\n[3/4] Directories");
-    let data_dir = Path::new("data");
+    let data_dir = Path::new(&db_path).parent().unwrap_or(Path::new("."));
     if data_dir.exists() {
-        println!("  data/: exists");
+        println!("  {}: exists", data_dir.display());
     } else {
-        println!("  data/: missing (will be created on first run)");
+        println!(
+            "  {}: missing (will be created on first run)",
+            data_dir.display()
+        );
     }
 
     // Network check
@@ -131,11 +156,7 @@ pub async fn doctor() -> Result<()> {
 pub async fn migrate(args: MigrateArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, "running migrations");
 
-    if let Some(parent) = Path::new(&args.db_path).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        std::fs::create_dir_all(parent).context("failed to create database directory")?;
-    }
+    ensure_db_dir(&args.db_path)?;
 
     let sqlite_config =
         deve_sub_storage_sqlite::SqliteConfig::new(&args.db_path).max_connections(1);
@@ -175,8 +196,41 @@ fn load_config(path: &Option<PathBuf>) -> Result<AppConfig> {
     }
 }
 
-impl ServeArgs {
-    fn config_path(&self) -> Option<PathBuf> {
-        std::env::var("DEVE_SUB_CONFIG").ok().map(PathBuf::from)
+/// Create the parent directory of the database file if it does not exist.
+fn ensure_db_dir(db_path: &str) -> Result<()> {
+    if let Some(parent) = Path::new(db_path).parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent).context("failed to create database directory")?;
     }
+    Ok(())
+}
+
+/// Create a shutdown future that listens for SIGTERM and SIGINT.
+async fn create_shutdown_signal() {
+    let sigterm = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(e) => {
+                tracing::warn!("failed to install SIGTERM handler: {e}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    let ctrl_c = async {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::warn!("failed to listen for ctrl_c: {e}");
+            std::future::pending::<()>().await;
+        }
+    };
+
+    tokio::select! {
+        _ = sigterm => {}
+        _ = ctrl_c => {}
+    }
+
+    tracing::info!("shutdown signal received, draining connections");
 }

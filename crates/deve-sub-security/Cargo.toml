@@ -9,9 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-deve-sub-kernel = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true }
 
 [lints]
 workspace = true

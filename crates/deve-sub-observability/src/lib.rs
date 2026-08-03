@@ -16,7 +16,7 @@ pub enum ObservabilityError {
     Init(String),
 }
 
-/// Initialize the global tracing subscriber with structured JSON output.
+/// Initialize the global tracing subscriber with structured compact output.
 ///
 /// # Errors
 /// Returns [`ObservabilityError`] if the subscriber is already set or
@@ -24,8 +24,7 @@ pub enum ObservabilityError {
 pub fn init_tracing() -> Result<(), ObservabilityError> {
     use tracing_subscriber::EnvFilter;
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,deve_sub_server=debug"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)

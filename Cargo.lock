@@ -407,11 +407,7 @@ name = "deve-sub-application"
 version = "0.1.0"
 dependencies = [
  "deve-sub-contract",
- "deve-sub-domain",
- "deve-sub-kernel",
  "serde",
- "serde_json",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -437,7 +433,6 @@ name = "deve-sub-contract"
 version = "0.1.0"
 dependencies = [
  "serde",
- "serde_json",
  "utoipa",
 ]
 
@@ -476,8 +471,6 @@ dependencies = [
 name = "deve-sub-security"
 version = "0.1.0"
 dependencies = [
- "deve-sub-kernel",
- "serde",
  "thiserror 1.0.69",
 ]
 
@@ -488,12 +481,8 @@ dependencies = [
  "axum",
  "deve-sub-application",
  "deve-sub-contract",
- "deve-sub-kernel",
- "deve-sub-observability",
  "deve-sub-storage-sqlite",
  "deve-sub-web",
- "serde",
- "serde_json",
  "sqlx",
  "thiserror 1.0.69",
  "tokio",
@@ -510,6 +499,7 @@ version = "0.1.0"
 dependencies = [
  "deve-sub-kernel",
  "sqlx",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -2285,16 +2275,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-serde"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
-dependencies = [
- "serde",
- "tracing-core",
-]
-
-[[package]]
 name = "tracing-subscriber"
 version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2304,15 +2284,12 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex-automata",
- "serde",
- "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
- "tracing-serde",
 ]
 
 [[package]]

@@ -48,11 +48,12 @@ axum = { version = "0.8", features = ["macros"] }
 tower-http = { version = "0.6", features = ["cors", "compression-gzip", "trace", "request-id"] }
 clap = { version = "4", features = ["derive", "env"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
 utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.2"
 utoipa-scalar = { version = "0.3", features = ["axum"] }
+tempfile = "3"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -10,11 +10,11 @@
 use std::collections::BTreeMap;
 
 use deve_sub_domain::{
-    Authentication, Endpoint, Host, Node, NodeId, NodeSource, ProtocolConfig, ProtocolKind,
-    RealityConfig, RegionAssignment, RegionMethod, TlsConfig, Transport, TransportKind,
-    UdpCapability, VlessRealityConfig,
+    Authentication, Endpoint, Host, Node, NodeSource, ProtocolConfig, ProtocolKind, RealityConfig,
+    RegionAssignment, RegionMethod, TlsConfig, Transport, TransportKind, UdpCapability,
+    VlessRealityConfig,
 };
-use deve_sub_kernel::Timestamp;
+use deve_sub_kernel::{NodeId, Timestamp};
 
 /// Reserved test URI from `docs/plan/05-protocol-engine.md` §"Node export":
 /// `vless://00000000-0000-4000-8000-000000000001@[2001:db8::1]:443

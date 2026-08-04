@@ -7,8 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 
-use deve_sub_application::AppConfig;
-use deve_sub_application::LoginRateLimiter;
+use deve_sub_application::{AppConfig, DbHealthPort, LoginRateLimiter};
 use deve_sub_domain::{SessionRepository, UserRepository};
 use deve_sub_server::{AppState, build_router};
 
@@ -30,6 +29,21 @@ pub struct ServeArgs {
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH")]
     db_path: Option<String>,
+}
+
+impl ServeArgs {
+    /// Apply CLI overrides to the loaded configuration in one place.
+    fn apply_overrides(&self, config: &mut AppConfig) {
+        if let Some(bind) = &self.bind {
+            config.server.bind = bind.clone();
+        }
+        if self.headless {
+            config.server.serve_web = false;
+        }
+        if let Some(db_path) = &self.db_path {
+            config.database.path = db_path.clone();
+        }
+    }
 }
 
 /// Migrate command arguments.
@@ -114,15 +128,7 @@ pub enum ConfigSubCommand {
 
 pub async fn serve(args: ServeArgs) -> Result<()> {
     let mut config = load_config(&args.config)?;
-    if let Some(bind) = &args.bind {
-        config.server.bind = bind.clone();
-    }
-    if args.headless {
-        config.server.serve_web = false;
-    }
-    if let Some(db_path) = &args.db_path {
-        config.database.path = db_path.clone();
-    }
+    args.apply_overrides(&mut config);
 
     let bind: SocketAddr = config.server.bind.parse().context("invalid bind address")?;
 
@@ -136,10 +142,10 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     ensure_db_dir(&config.database.path)?;
     ensure_db_dir(&config.security.master_key_path)?;
 
-    let sqlite_config = deve_sub_storage_sqlite::SqliteConfig::new(&config.database.path);
-    let db = deve_sub_storage_sqlite::create_pool(&sqlite_config)
+    let db = open_db(&config.database.path, 8).await?;
+    deve_sub_storage_sqlite::verify_schema(&db)
         .await
-        .context("failed to create database pool")?;
+        .context("database schema check failed — run `deve-sub migrate` first")?;
 
     let master_key = Arc::new(
         deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(
@@ -155,20 +161,22 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         deve_sub_storage_sqlite::SqliteSessionRepository::new(db.clone()),
     );
 
-    let rate_limiter: Arc<dyn LoginRateLimiter> = Arc::new(
-        deve_sub_server::rate_limiter::InMemoryLoginRateLimiter::new(
+    let rate_limiter: Arc<dyn LoginRateLimiter> =
+        Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(
             config.security.max_login_attempts,
             std::time::Duration::from_secs(config.security.lockout_duration_secs),
-        ),
-    );
+        ));
+
+    let db_health: Arc<dyn DbHealthPort> =
+        Arc::new(deve_sub_storage_sqlite::SqliteHealthCheck::new(db));
 
     let state = AppState {
         config: config.clone(),
-        db,
         master_key,
         user_repo,
         session_repo,
         rate_limiter,
+        db_health,
     };
     let router = build_router(state);
 
@@ -225,16 +233,8 @@ pub async fn migrate(args: MigrateArgs) -> Result<()> {
 
     ensure_db_dir(&args.db_path)?;
 
-    let sqlite_config =
-        deve_sub_storage_sqlite::SqliteConfig::new(&args.db_path).max_connections(1);
-    let pool = deve_sub_storage_sqlite::create_pool(&sqlite_config)
-        .await
-        .context("failed to connect to database")?;
-
-    sqlx::migrate!("../../migrations")
-        .run(&pool)
-        .await
-        .context("failed to run migrations")?;
+    let pool = open_db(&args.db_path, 1).await?;
+    deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
     println!("Migrations applied successfully to {db}", db = args.db_path);
     Ok(())
@@ -263,16 +263,8 @@ pub async fn user_init_admin(args: UserInitAdminArgs) -> Result<()> {
 
     ensure_db_dir(&args.db_path)?;
 
-    let sqlite_config =
-        deve_sub_storage_sqlite::SqliteConfig::new(&args.db_path).max_connections(1);
-    let pool = deve_sub_storage_sqlite::create_pool(&sqlite_config)
-        .await
-        .context("failed to connect to database")?;
-
-    sqlx::migrate!("../../migrations")
-        .run(&pool)
-        .await
-        .context("failed to run migrations")?;
+    let pool = open_db(&args.db_path, 1).await?;
+    deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
     let user_repo = deve_sub_storage_sqlite::SqliteUserRepository::new(pool);
 
@@ -303,6 +295,15 @@ fn load_config(path: &Option<PathBuf>) -> Result<AppConfig> {
         }
         None => Ok(AppConfig::default()),
     }
+}
+
+/// Open a SQLite database pool with the given path and connection limit.
+async fn open_db(path: &str, max_connections: u32) -> Result<sqlx::sqlite::SqlitePool> {
+    let sqlite_config =
+        deve_sub_storage_sqlite::SqliteConfig::new(path).max_connections(max_connections);
+    deve_sub_storage_sqlite::create_pool(&sqlite_config)
+        .await
+        .context("failed to create database pool")
 }
 
 /// Create the parent directory of the database file if it does not exist.

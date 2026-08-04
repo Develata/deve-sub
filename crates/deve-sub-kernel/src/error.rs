@@ -8,33 +8,19 @@ use thiserror::Error;
 /// Errors produced by kernel primitives.
 #[derive(Debug, Error)]
 pub enum KernelError {
-    /// A ULID string could not be parsed as a [`NodeId`](crate::NodeId).
-    #[error("invalid node ID: {0}")]
-    InvalidNodeId(String),
-
-    /// A ULID string could not be parsed as a [`TagId`](crate::TagId).
-    #[error("invalid tag ID: {0}")]
-    InvalidTagId(String),
-
-    /// A ULID string could not be parsed as a [`UserId`](crate::UserId).
-    #[error("invalid user ID: {0}")]
-    InvalidUserId(String),
-
-    /// A ULID string could not be parsed as a [`SessionId`](crate::SessionId).
-    #[error("invalid session ID: {0}")]
-    InvalidSessionId(String),
-
-    /// A ULID string could not be parsed as a [`AuditLogId`](crate::AuditLogId).
-    #[error("invalid audit log ID: {0}")]
-    InvalidAuditLogId(String),
-
-    /// A ULID string could not be parsed as an [`OutboxEventId`](crate::OutboxEventId).
-    #[error("invalid outbox event ID: {0}")]
-    InvalidOutboxEventId(String),
-
-    /// An opaque pagination cursor string was malformed.
-    #[error("invalid cursor")]
-    InvalidCursor,
+    /// A ULID string could not be parsed as an entity identifier.
+    ///
+    /// `kind` is a lowercase human-readable label (e.g. `"node"`, `"user"`)
+    /// used in the error message. This generic variant replaces per-aggregate
+    /// `Invalid*Id` variants so that adding a new ID type does not require a
+    /// new error variant.
+    #[error("invalid {kind} ID: {value}")]
+    InvalidId {
+        /// Lowercase human-readable label for the ID kind.
+        kind: &'static str,
+        /// The invalid input string.
+        value: String,
+    },
 
     /// A Unix timestamp was out of the representable range.
     #[error("invalid timestamp")]
@@ -50,7 +36,10 @@ mod tests {
 
     #[test]
     fn error_display() {
-        let e = KernelError::InvalidNodeId("bad".to_owned());
+        let e = KernelError::InvalidId {
+            kind: "node",
+            value: "bad".to_owned(),
+        };
         assert_eq!(e.to_string(), "invalid node ID: bad");
     }
 }

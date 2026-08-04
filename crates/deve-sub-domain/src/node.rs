@@ -77,12 +77,11 @@ pub struct Node {
 pub enum Authentication {
     /// VLESS, VMess, TUIC v5 uuid.
     Uuid { uuid: String },
-    /// Hysteria2, Trojan password.
+    /// Hysteria2, Trojan, Shadowsocks password. The Shadowsocks cipher
+    /// `method` is protocol configuration, carried by [`ShadowsocksConfig`].
     Password { password: String },
     /// NaiveProxy username+password.
     UserPassword { username: String, password: String },
-    /// Shadowsocks method+password.
-    Shadowsocks { method: String, password: String },
     /// TUIC v5 uuid+password.
     UuidPassword { uuid: String, password: String },
     /// No authentication (e.g. unauthed Socks5/HTTP).
@@ -105,6 +104,12 @@ pub struct NodeSource {
     /// Original share URI or raw fragment, if the node came from a URI list.
     /// Sensitive: typically embeds credentials; the persistence adapter must
     /// include this in the encryption set (XChaCha20-Poly1305).
+    ///
+    /// WHY: `#[serde(skip)]` prevents accidental credential leakage when
+    /// `Node` is serialized to JSON (logs, intermediate formats, API DTOs).
+    /// The persistence adapter handles storage separately via encrypted
+    /// columns; this field is only for in-memory processing.
+    #[serde(skip)]
     pub raw_uri: Option<String>,
     /// Import timestamp, distinct from the ULID's embedded time.
     pub imported_at: Timestamp,

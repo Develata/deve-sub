@@ -168,14 +168,23 @@ pub async fn login(params: LoginParams<'_>) -> Result<(User, Session, String), A
 
 /// Revoke a session by ID.
 ///
+/// Idempotent: if the session was already revoked (or does not exist),
+/// returns `Ok(())`. This handles concurrent logout races (e.g. dual-tab
+/// logout) where the second `revoke` call finds `rows_affected = 0`.
+///
 /// # Errors
 /// - [`AuthError::Identity`] — storage error.
 pub async fn logout(
     session_repo: &dyn SessionRepository,
     session_id: SessionId,
 ) -> Result<(), AuthError> {
-    session_repo.revoke(session_id).await?;
-    Ok(())
+    match session_repo.revoke(session_id).await {
+        Ok(()) => Ok(()),
+        // WHY: SessionNotFound means the session was already revoked or
+        // never existed. Treat as success for idempotent logout.
+        Err(deve_sub_domain::IdentityError::SessionNotFound) => Ok(()),
+        Err(e) => Err(AuthError::Identity(e)),
+    }
 }
 
 /// Disable a user and revoke all their sessions.

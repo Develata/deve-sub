@@ -77,6 +77,15 @@ pub struct Node {
 }
 ```
 
+> **Implementation drift (CC3):** `protocol` and `config` are independent
+> public fields, so inconsistent pairings (e.g. `ProtocolKind::Trojan` +
+> `ProtocolConfig::VMess`) are representable. The kind↔config invariant is
+> upheld by parsers and emitters (M3), not by the type system. A sum type
+> (e.g. `NodeProtocol::VlessReality(VlessRealityConfig) | ...`) would make
+> illegal states unrepresentable but is deferred to M3 when the parser/
+> emitter context is available. See the WHY comment on `Node` in
+> `crates/deve-sub-domain/src/node.rs`.
+
 ### Host
 
 ```rust
@@ -193,6 +202,12 @@ When an upstream node is deleted:
 - nodes used by subscriptions are not physically deleted immediately;
 - admin can restore, replace, or clean up;
 - source snapshot is retained for comparison.
+
+> **Implementation drift (C8):** The `missing_from_source` flag and override
+> snapshot fields are not yet present in the current `Node` / `NodeSource`
+> types in `crates/deve-sub-domain/`. They land with the Source aggregate
+> and override machinery in a future milestone (M3+). The current
+> `NodeSource` carries `source_label`, `raw_uri`, and `imported_at` only.
 
 ## Node export
 

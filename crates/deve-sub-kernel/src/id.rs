@@ -15,7 +15,7 @@ use ulid::Ulid;
 use crate::error::{KernelError, Result};
 
 macro_rules! entity_id {
-    ($name:ident, $error_variant:ident, $doc:expr) => {
+    ($name:ident, $kind:expr, $doc:expr) => {
         #[doc = $doc]
         #[derive(
             Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
@@ -51,7 +51,10 @@ macro_rules! entity_id {
             pub fn parse(s: &str) -> Result<Self> {
                 Ulid::from_string(s)
                     .map(Self)
-                    .map_err(|_| KernelError::$error_variant(s.to_owned()))
+                    .map_err(|_| KernelError::InvalidId {
+                        kind: $kind,
+                        value: s.to_owned(),
+                    })
             }
         }
 
@@ -78,38 +81,38 @@ macro_rules! entity_id {
 
 entity_id!(
     NodeId,
-    InvalidNodeId,
+    "node",
     "Strong-typed identifier for a node in the unified node pool."
 );
 
 entity_id!(
     TagId,
-    InvalidTagId,
+    "tag",
     "Strong-typed identifier for a user-defined tag."
 );
 
 entity_id!(
     UserId,
-    InvalidUserId,
+    "user",
     "Strong-typed identifier for a user account."
 );
 
 entity_id!(
     SessionId,
-    InvalidSessionId,
+    "session",
     "Strong-typed identifier for a login session. \
      Not a session token — ULIDs identify entities, not secrets."
 );
 
 entity_id!(
     AuditLogId,
-    InvalidAuditLogId,
+    "audit log",
     "Strong-typed identifier for an audit log entry."
 );
 
 entity_id!(
     OutboxEventId,
-    InvalidOutboxEventId,
+    "outbox event",
     "Strong-typed identifier for an outbox event."
 );
 

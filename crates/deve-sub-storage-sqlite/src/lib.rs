@@ -7,11 +7,14 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 pub mod session_repository;
+pub mod timestamp;
 pub mod user_repository;
 
 use std::path::Path;
 use std::str::FromStr;
 
+use async_trait::async_trait;
+use deve_sub_application::{DbHealthPort, HealthError};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use thiserror::Error;
 
@@ -104,7 +107,37 @@ pub async fn create_pool(config: &SqliteConfig) -> Result<SqlitePool, StorageErr
         .map_err(StorageError::from)
 }
 
+/// Database health checker backed by a SQLite connection pool.
+///
+/// Implements [`DbHealthPort`] so the delivery layer can check database
+/// connectivity without depending directly on the storage adapter.
+pub struct SqliteHealthCheck {
+    pool: SqlitePool,
+}
+
+impl SqliteHealthCheck {
+    /// Create a new health checker wrapping the given pool.
+    #[must_use]
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl DbHealthPort for SqliteHealthCheck {
+    async fn check(&self) -> Result<(), HealthError> {
+        sqlx::query("SELECT 1")
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| HealthError::Database(e.to_string()))
+    }
+}
+
 /// Check database connectivity by executing a trivial query.
+///
+/// Convenience function for non-trait usage. Prefer [`SqliteHealthCheck`]
+/// through the [`DbHealthPort`] trait in delivery-layer code.
 ///
 /// # Errors
 /// Returns [`StorageError`] if the query fails, indicating the database is
@@ -115,4 +148,37 @@ pub async fn check_database(pool: &SqlitePool) -> Result<(), StorageError> {
         .await
         .map(|_| ())
         .map_err(StorageError::from)
+}
+
+/// Run all pending migrations. Wraps `sqlx::migrate!` so callers don't
+/// repeat the migration path.
+///
+/// # Errors
+/// Returns [`StorageError`] if the database path is invalid or a migration
+/// fails.
+pub async fn run_migrations(pool: &SqlitePool) -> Result<(), StorageError> {
+    sqlx::migrate!("../../migrations")
+        .run(pool)
+        .await
+        .map_err(StorageError::from)
+}
+
+/// Verify that the database schema is up-to-date by checking the
+/// `_sqlx_migrations` table exists and has at least one applied migration.
+///
+/// Call this at startup before serving to give a helpful error if the user
+/// forgot to run `deve-sub migrate`.
+///
+/// # Errors
+/// Returns [`StorageError`] if the database is not migrated or unreachable.
+pub async fn verify_schema(pool: &SqlitePool) -> Result<(), StorageError> {
+    sqlx::query("SELECT 1 FROM _sqlx_migrations LIMIT 1")
+        .execute(pool)
+        .await
+        .map(|_| ())
+        .map_err(|e| {
+            StorageError::InvalidPath(format!(
+                "database schema is not initialized — run `deve-sub migrate` first ({e})"
+            ))
+        })
 }

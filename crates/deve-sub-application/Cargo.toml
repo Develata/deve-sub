@@ -16,6 +16,7 @@ deve-sub-kernel = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
+async-trait = { workspace = true }
 
 [lints]
 workspace = true

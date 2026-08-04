@@ -47,3 +47,47 @@ impl Session {
         !self.revoked && self.expires_at > Timestamp::now()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_session(expires_at: Timestamp, revoked: bool) -> Session {
+        Session {
+            id: SessionId::new(),
+            user_id: UserId::new(),
+            token_hash: "dummy-hash".to_owned(),
+            created_at: Timestamp::now(),
+            expires_at,
+            revoked,
+        }
+    }
+
+    #[test]
+    fn valid_session_is_valid() {
+        let future = Timestamp::now() + time::Duration::seconds(3600);
+        let session = make_session(future, false);
+        assert!(session.is_valid());
+    }
+
+    #[test]
+    fn expired_session_is_invalid() {
+        let past = Timestamp::now() - time::Duration::seconds(1);
+        let session = make_session(past, false);
+        assert!(!session.is_valid());
+    }
+
+    #[test]
+    fn revoked_session_is_invalid() {
+        let future = Timestamp::now() + time::Duration::seconds(3600);
+        let session = make_session(future, true);
+        assert!(!session.is_valid());
+    }
+
+    #[test]
+    fn revoked_and_expired_session_is_invalid() {
+        let past = Timestamp::now() - time::Duration::seconds(1);
+        let session = make_session(past, true);
+        assert!(!session.is_valid());
+    }
+}

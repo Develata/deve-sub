@@ -7,10 +7,10 @@
 
 use async_trait::async_trait;
 use deve_sub_domain::{IdentityError, Session, SessionRepository};
-use deve_sub_kernel::{SessionId, Timestamp, UserId};
+use deve_sub_kernel::{SessionId, UserId};
 use sqlx::sqlite::SqlitePool;
-use time::OffsetDateTime;
-use time::format_description::well_known::Rfc3339;
+
+use crate::timestamp::{format_ts, parse_ts};
 
 /// SQLite-backed session repository.
 pub struct SqliteSessionRepository {
@@ -47,18 +47,6 @@ impl SessionRow {
             revoked: self.revoked != 0,
         })
     }
-}
-
-fn format_ts(ts: Timestamp) -> Result<String, IdentityError> {
-    ts.as_offset_date_time()
-        .format(&Rfc3339)
-        .map_err(|e| IdentityError::Storage(format!("timestamp format error: {e}")))
-}
-
-fn parse_ts(s: &str) -> Result<Timestamp, IdentityError> {
-    OffsetDateTime::parse(s, &Rfc3339)
-        .map(Timestamp::from_offset_date_time)
-        .map_err(|e| IdentityError::Storage(format!("timestamp parse error: {e}")))
 }
 
 #[async_trait]

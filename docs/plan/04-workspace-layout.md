@@ -15,7 +15,7 @@ apps/
 └── web/                    # Dioxus Web
 
 crates/
-├── kernel/                 # ID, time, pagination, common errors
+├── kernel/                 # ID, time, revision, common errors
 ├── contract/               # API DTO, event DTO, client capabilities
 ├── domain/                 # domain model
 ├── application/            # commands, queries, use cases
@@ -24,6 +24,7 @@ crates/
 ├── compatibility/          # client capability profiles
 ├── storage-sqlite/         # SQLite adapter
 ├── storage-postgres/       # later version
+├── inmemory/               # in-memory adapter implementations
 ├── adapters/               # HTTP, GeoIP, probe, files
 ├── scheduler/              # job scheduling
 ├── security/               # auth, crypto, SSRF
@@ -72,7 +73,7 @@ build. See ADR-0001 for the frontend spike policy.
 
 Phase 1 scaffolds three foundational crates only:
 
-- `deve-sub-kernel` — ID, time, pagination, errors.
+- `deve-sub-kernel` — ID, time, revision, errors.
 - `deve-sub-contract` — API DTOs, OpenAPI schemas.
 - `deve-sub-domain` — canonical node model.
 

@@ -7,14 +7,13 @@
 #![allow(clippy::expect_used)]
 
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use deve_sub_domain::{
     Authentication, CertificatePin, CongestionConfig, CongestionController, Endpoint, Host,
-    Hysteria2Config, Node, NodeId, NodeSource, Obfuscation, ProtocolConfig, ProtocolKind,
-    RegionAssignment, RegionMethod, TlsConfig, UdpCapability,
+    Hysteria2Config, Node, NodeSource, Obfuscation, ProtocolConfig, ProtocolKind, RegionAssignment,
+    RegionMethod, TlsConfig, UdpCapability,
 };
-use deve_sub_kernel::Timestamp;
+use deve_sub_kernel::{NodeId, Timestamp};
 
 fn build_hysteria2_node() -> Node {
     Node {
@@ -23,7 +22,7 @@ fn build_hysteria2_node() -> Node {
         protocol: ProtocolKind::Hysteria2,
         config: ProtocolConfig::Hysteria2(Hysteria2Config {
             ports: Some("20000-40000".to_owned()),
-            hop_interval: Some(Duration::from_secs(30)),
+            hop_interval: Some(time::Duration::seconds(30)),
             fast_open: Some(true),
             lazy: None,
         }),
@@ -103,7 +102,7 @@ fn hysteria2_fields_match_reserved_fixture() {
         panic!("expected Hysteria2 config");
     };
     assert_eq!(cfg.ports.as_deref(), Some("20000-40000"));
-    assert_eq!(cfg.hop_interval, Some(Duration::from_secs(30)));
+    assert_eq!(cfg.hop_interval, Some(time::Duration::seconds(30)));
     assert_eq!(cfg.fast_open, Some(true));
     assert_eq!(cfg.lazy, None);
 }

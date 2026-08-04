@@ -1,11 +1,37 @@
-//! Health check query.
+//! Health check query and port.
 //!
 //! Implements the health read model for `/health/live` and `/health/ready`
-//! endpoints. See `docs/plan/milestones/M1-infrastructure.md`.
+//! endpoints. Defines [`DbHealthPort`] for database connectivity checks,
+//! keeping the delivery layer decoupled from the storage adapter.
+//! See `docs/plan/milestones/M1-infrastructure.md`.
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 pub use deve_sub_contract::HealthStatusDto as HealthStatus;
+
+/// Errors produced by health check operations.
+#[derive(Debug, thiserror::Error)]
+pub enum HealthError {
+    /// The database connectivity check failed.
+    #[error("database health check failed: {0}")]
+    Database(String),
+}
+
+/// Port for database health checks.
+///
+/// The storage adapter implements this trait. The delivery layer calls it
+/// through the application layer, not directly, preserving the hexagonal
+/// dependency direction (delivery → application → port ← adapter).
+#[async_trait]
+pub trait DbHealthPort: Send + Sync {
+    /// Check database connectivity. Returns `Ok(())` if the database is
+    /// reachable.
+    ///
+    /// # Errors
+    /// Returns [`HealthError`] if the database is unreachable.
+    async fn check(&self) -> Result<(), HealthError>;
+}
 
 /// Health view returned by the health query.
 #[derive(Debug, Clone, Serialize, Deserialize)]

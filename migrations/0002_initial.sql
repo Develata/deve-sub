@@ -2,7 +2,7 @@
 --
 -- Creates the core infrastructure tables: users, sessions, audit_log, and
 -- outbox_event. Real domain schema (sources, nodes, subscriptions, templates)
--- arrives with M2. See docs/data-model/core-er.md for the entity model and
+-- arrives with M3+. See docs/data-model/core-er.md for the entity model and
 -- docs/plan/13-storage.md for the storage policy.
 
 -- Users: authentication and authorization identities.

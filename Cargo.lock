@@ -486,6 +486,7 @@ dependencies = [
 name = "deve-sub-application"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "deve-sub-contract",
  "deve-sub-domain",
  "deve-sub-kernel",
@@ -503,6 +504,7 @@ dependencies = [
  "clap",
  "deve-sub-application",
  "deve-sub-domain",
+ "deve-sub-inmemory",
  "deve-sub-kernel",
  "deve-sub-observability",
  "deve-sub-security",
@@ -533,6 +535,14 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "time",
+]
+
+[[package]]
+name = "deve-sub-inmemory"
+version = "0.1.0"
+dependencies = [
+ "deve-sub-application",
 ]
 
 [[package]]
@@ -578,6 +588,7 @@ dependencies = [
  "deve-sub-application",
  "deve-sub-contract",
  "deve-sub-domain",
+ "deve-sub-inmemory",
  "deve-sub-kernel",
  "deve-sub-security",
  "deve-sub-storage-sqlite",
@@ -603,6 +614,7 @@ name = "deve-sub-storage-sqlite"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "deve-sub-application",
  "deve-sub-domain",
  "deve-sub-kernel",
  "sqlx",

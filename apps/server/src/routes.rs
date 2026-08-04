@@ -122,9 +122,7 @@ async fn health_live(State(state): State<AppState>) -> Json<HealthLiveResponse> 
     )
 )]
 async fn health_ready(State(state): State<AppState>) -> (StatusCode, Json<HealthReadyResponse>) {
-    let db_ok = deve_sub_storage_sqlite::check_database(&state.db)
-        .await
-        .is_ok();
+    let db_ok = state.db_health.check().await.is_ok();
 
     let status = if db_ok {
         HealthStatus::Healthy

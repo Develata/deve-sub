@@ -13,4 +13,4 @@ pub mod health;
 
 pub use auth::{AuthError, LoginRateLimiter};
 pub use config::AppConfig;
-pub use health::{HealthStatus, HealthView};
+pub use health::{DbHealthPort, HealthError, HealthStatus, HealthView};

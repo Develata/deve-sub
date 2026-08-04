@@ -11,10 +11,10 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-use deve_sub_application::LoginRateLimiter;
+use deve_sub_application::{DbHealthPort, LoginRateLimiter};
 use deve_sub_domain::{SessionRepository, UserRepository};
 use deve_sub_security::MasterKey;
-use deve_sub_storage_sqlite::{SqliteSessionRepository, SqliteUserRepository};
+use deve_sub_storage_sqlite::{SqliteHealthCheck, SqliteSessionRepository, SqliteUserRepository};
 
 struct TestApp {
     state: deve_sub_server::AppState,
@@ -40,23 +40,24 @@ impl TestApp {
 
         let config = deve_sub_application::AppConfig::default();
 
-        let rate_limiter: Arc<dyn LoginRateLimiter> = Arc::new(
-            deve_sub_server::rate_limiter::InMemoryLoginRateLimiter::new(
+        let rate_limiter: Arc<dyn LoginRateLimiter> =
+            Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(
                 config.security.max_login_attempts,
                 std::time::Duration::from_secs(config.security.lockout_duration_secs),
-            ),
-        );
+            ));
+
+        let db_health: Arc<dyn DbHealthPort> = Arc::new(SqliteHealthCheck::new(pool.clone()));
 
         Self {
             state: deve_sub_server::AppState {
                 config,
-                db: pool.clone(),
                 master_key,
                 user_repo: Arc::new(SqliteUserRepository::new(pool.clone()))
                     as Arc<dyn UserRepository>,
                 session_repo: Arc::new(SqliteSessionRepository::new(pool))
                     as Arc<dyn SessionRepository>,
                 rate_limiter,
+                db_health,
             },
             _dir: dir,
         }

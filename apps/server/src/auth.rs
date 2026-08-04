@@ -49,12 +49,21 @@ impl FromRequestParts<AppState> for AuthSession {
             &token,
         )
         .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                "session verify error",
-            )
+        .map_err(|e| match e {
+            // WHY: InvalidCredentials means the session was valid but the
+            // user row is gone (e.g. FK cascade). Treat as 401, not 500 —
+            // the session is no longer authenticatable.
+            auth::AuthError::InvalidCredentials => {
+                err(StatusCode::UNAUTHORIZED, "unauthorized", "invalid session")
+            }
+            other => {
+                tracing::warn!(error = %other, "authenticate_session failed");
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal",
+                    "session verify error",
+                )
+            }
         })?
         .ok_or_else(|| {
             err(

@@ -6,8 +6,7 @@
 //! instances and is lost on restart. For a self-hosted single-binary product,
 //! this is sufficient and avoids a database migration (AUTH-004).
 //!
-//! The rate limiter is intentionally in-memory rather than database-backed
-//! (a deviation from the M2 blueprint which mentions migration 0003 columns).
+//! The rate limiter is intentionally in-memory rather than database-backed.
 //! Rationale: per-IP tracking cannot use columns on the `users` table, and
 //! in-memory rate limiting is simpler, faster, and adequate for a
 //! single-instance deployment. The lockout resets on restart, which is

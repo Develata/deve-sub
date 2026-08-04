@@ -10,9 +10,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
-use deve_sub_application::LoginRateLimiter;
+use deve_sub_application::{DbHealthPort, LoginRateLimiter};
 use deve_sub_domain::{SessionRepository, UserRepository};
-use sqlx::sqlite::SqlitePool;
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
@@ -24,7 +23,6 @@ use deve_sub_security::MasterKey;
 
 pub mod auth;
 pub mod csrf;
-pub mod rate_limiter;
 pub mod routes;
 pub mod users;
 
@@ -40,11 +38,11 @@ pub enum ServerError {
 #[derive(Clone)]
 pub struct AppState {
     pub config: deve_sub_application::AppConfig,
-    pub db: SqlitePool,
     pub master_key: Arc<MasterKey>,
     pub user_repo: Arc<dyn UserRepository>,
     pub session_repo: Arc<dyn SessionRepository>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,
+    pub db_health: Arc<dyn DbHealthPort>,
 }
 
 /// Build the complete Axum router with all routes and middleware.

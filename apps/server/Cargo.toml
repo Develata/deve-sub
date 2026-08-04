@@ -18,13 +18,11 @@ deve-sub-application = { workspace = true }
 deve-sub-domain = { workspace = true }
 deve-sub-security = { workspace = true }
 deve-sub-kernel = { workspace = true }
-deve-sub-storage-sqlite = { workspace = true }
 deve-sub-web = { workspace = true }
 axum = { workspace = true }
 tower-http = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-sqlx = { workspace = true }
 utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
 utoipa-scalar = { workspace = true }
@@ -41,3 +39,6 @@ tempfile = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 serde_json = { workspace = true }
 ulid = { workspace = true }
+sqlx = { workspace = true }
+deve-sub-storage-sqlite = { workspace = true }
+deve-sub-inmemory = { workspace = true }

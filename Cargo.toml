@@ -10,6 +10,7 @@ members = [
     "crates/deve-sub-storage-sqlite",
     "crates/deve-sub-security",
     "crates/deve-sub-observability",
+    "crates/deve-sub-inmemory",
 ]
 exclude = ["spikes/*"]
 resolver = "3"
@@ -32,6 +33,7 @@ deve-sub-application = { path = "crates/deve-sub-application" }
 deve-sub-storage-sqlite = { path = "crates/deve-sub-storage-sqlite" }
 deve-sub-security = { path = "crates/deve-sub-security" }
 deve-sub-observability = { path = "crates/deve-sub-observability" }
+deve-sub-inmemory = { path = "crates/deve-sub-inmemory" }
 deve-sub-server = { path = "apps/server" }
 deve-sub-web = { path = "apps/web" }
 

@@ -17,8 +17,6 @@ pub mod protocol_config;
 pub mod tls;
 pub mod transport;
 
-pub use deve_sub_kernel::{NodeId, Revision, SessionId, TagId, Timestamp, UserId};
-
 pub use endpoint::{DomainName, Endpoint, Host};
 pub use error::DomainError;
 pub use identity::{IdentityError, Role, Session, SessionRepository, User, UserRepository};

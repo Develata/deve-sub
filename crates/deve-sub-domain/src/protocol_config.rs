@@ -34,8 +34,9 @@ pub struct VlessRealityConfig {
 pub struct Hysteria2Config {
     /// Port hopping range string, e.g. `20000-40000`.
     pub ports: Option<String>,
-    /// Hop interval. Stored as a duration; emitters convert per target.
-    pub hop_interval: Option<std::time::Duration>,
+    /// Hop interval. Emitters convert per target and must never mix seconds
+    /// and milliseconds.
+    pub hop_interval: Option<time::Duration>,
     /// `fast-open` query parameter.
     pub fast_open: Option<bool>,
     /// `lazy` query parameter.
@@ -54,9 +55,9 @@ pub struct TuicV5Config {
     pub udp_relay_mode: Option<UdpRelayMode>,
     /// `zero-rtt-handshake` query parameter.
     pub zero_rtt_handshake: Option<bool>,
-    /// Heartbeat interval. Stored as a duration; emitters convert per target
-    /// and must never mix seconds and milliseconds.
-    pub heartbeat: Option<std::time::Duration>,
+    /// Heartbeat interval. Emitters convert per target and must never mix
+    /// seconds and milliseconds.
+    pub heartbeat: Option<time::Duration>,
     /// `disable-sni` query parameter.
     pub disable_sni: Option<bool>,
 }
@@ -87,10 +88,12 @@ pub struct NaiveProxyConfig {
 
 /// Shadowsocks configuration.
 ///
-/// `method`/`password` is carried by [`crate::Authentication::Shadowsocks`];
+/// `password` is carried by [`crate::Authentication::Password`];
 /// `server`/`port` by [`crate::Endpoint`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShadowsocksConfig {
+    /// Cipher method (e.g. `aes-256-gcm`, `chacha20-ietf-poly1305`).
+    pub method: String,
     /// SIP003 plugin name, if any.
     pub plugin: Option<String>,
     /// SIP003 plugin options string.

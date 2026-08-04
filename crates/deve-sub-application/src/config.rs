@@ -62,8 +62,15 @@ pub struct SecurityConfig {
     /// Whether to set the `Secure` flag on session cookies.
     ///
     /// When `true` (the default), cookies are only sent over HTTPS. Disable
-    /// only for local development over plain HTTP. Production deployments
-    /// must keep this enabled.
+    /// only for local development over plain HTTP by setting
+    /// `cookie_secure: false` in the config file or `DEVE_SUB_COOKIE_SECURE=0`.
+    /// Production deployments must keep this enabled.
+    ///
+    /// WHY: with `cookie_secure: true` and a plain-HTTP bind (the default
+    /// `0.0.0.0:8080`), browsers and cookie-aware HTTP clients (e.g. curl
+    /// with a cookie jar) will not send the `Secure` cookie back, causing
+    /// `/api/v1/auth/me` to return 401. For local dev without TLS, set
+    /// `cookie_secure: false`.
     #[serde(default = "default_cookie_secure")]
     pub cookie_secure: bool,
 

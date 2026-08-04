@@ -62,7 +62,7 @@ deve-sub serve
 - CLI: `deve-sub user init-admin` subcommand.
 - Migration 0003: `totp_secret` and `recovery_code` tables, users table
   additions for `last_login_at`. Rate limiting is in-memory (no migration
-  needed) — see ADR-0005.
+  needed) — see the module doc on `deve-sub-inmemory::rate_limiter`.
 - Config: `SecurityConfig` with master key path for HMAC and encryption.
 - Session tokens: CSPRNG-generated, stored as HMAC-SHA256 digests, sent as
   `SameSite=Lax` `HttpOnly` cookies. Tokens redacted in logs (SEC-009).

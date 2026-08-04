@@ -11,7 +11,9 @@ use std::sync::Arc;
 
 use axum::Router;
 use deve_sub_application::{DbHealthPort, LoginRateLimiter};
-use deve_sub_domain::{SessionRepository, UserRepository};
+use deve_sub_domain::{
+    RecoveryCodeRepository, SessionRepository, TotpSecretRepository, UserRepository,
+};
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
@@ -24,6 +26,7 @@ use deve_sub_security::MasterKey;
 pub mod auth;
 pub mod csrf;
 pub mod routes;
+pub mod twofa;
 pub mod users;
 
 /// Errors produced by the server.
@@ -41,6 +44,8 @@ pub struct AppState {
     pub master_key: Arc<MasterKey>,
     pub user_repo: Arc<dyn UserRepository>,
     pub session_repo: Arc<dyn SessionRepository>,
+    pub totp_secret_repo: Arc<dyn TotpSecretRepository>,
+    pub recovery_code_repo: Arc<dyn RecoveryCodeRepository>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,
     pub db_health: Arc<dyn DbHealthPort>,
 }

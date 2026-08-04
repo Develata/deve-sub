@@ -24,6 +24,26 @@ pub enum AuthError {
     #[error("rate limited")]
     RateLimited,
 
+    /// 2FA is already enabled for this user.
+    #[error("2FA already enabled")]
+    TwoFactorAlreadyEnabled,
+
+    /// 2FA is not enabled for this user.
+    #[error("2FA not enabled")]
+    TwoFactorNotEnabled,
+
+    /// The TOTP code or recovery code was invalid.
+    #[error("invalid 2FA code")]
+    InvalidTwoFactorCode,
+
+    /// The 2FA challenge token is invalid or expired.
+    #[error("invalid or expired challenge token")]
+    ChallengeTokenInvalid,
+
+    /// No TOTP secret found — 2FA setup was not completed.
+    #[error("TOTP secret not found")]
+    TotpSecretNotFound,
+
     /// A security primitive failed.
     #[error(transparent)]
     Security(#[from] deve_sub_security::SecurityError),

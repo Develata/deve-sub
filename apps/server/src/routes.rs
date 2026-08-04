@@ -48,6 +48,7 @@ fn register_api_routes(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppStat
         .routes(routes!(health_live))
         .routes(routes!(health_ready));
     let router = crate::auth::register(router);
+    let router = crate::twofa::register(router);
     crate::users::register(router)
 }
 

@@ -13,8 +13,8 @@ AUTH-001	初始化管理员	P0	Integration	planned
 AUTH-002	正确登录	P0	E2E	planned
 AUTH-003	错误密码	P0	Integration	planned
 AUTH-004	登录限流	P0	Integration	planned
-AUTH-005	2FA	P0	E2E	planned
-AUTH-006	恢复码	P0	Integration	planned
+AUTH-005	2FA	P0	E2E	pass
+AUTH-006	恢复码	P0	Integration	pass
 AUTH-007	禁用用户	P0	Integration	planned
 AUTH-008	普通用户越权	P0	Security	planned
 AUTH-009	Token 重置	P0	Integration	planned

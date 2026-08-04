@@ -34,6 +34,8 @@ struct UserRow {
     enabled: i64,
     expires_at: Option<String>,
     traffic_quota: i64,
+    two_factor_enabled: i64,
+    last_login_at: Option<String>,
     created_at: String,
 }
 
@@ -51,6 +53,8 @@ impl UserRow {
             expires_at: self.expires_at.as_deref().map(parse_ts).transpose()?,
             traffic_quota: u64::try_from(self.traffic_quota)
                 .map_err(|_| IdentityError::Storage("negative traffic_quota".to_owned()))?,
+            two_factor_enabled: self.two_factor_enabled != 0,
+            last_login_at: self.last_login_at.as_deref().map(parse_ts).transpose()?,
             created_at: parse_ts(&self.created_at)?,
         })
     }
@@ -60,11 +64,12 @@ impl UserRow {
 impl UserRepository for SqliteUserRepository {
     async fn create(&self, user: &User) -> Result<(), IdentityError> {
         let expires_at = user.expires_at.map(format_ts).transpose()?;
+        let last_login_at = user.last_login_at.map(format_ts).transpose()?;
         let created_at = format_ts(user.created_at)?;
 
         sqlx::query(
-            "INSERT INTO users (id, username, password_hash, role, enabled, expires_at, traffic_quota, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO users (id, username, password_hash, role, enabled, expires_at, traffic_quota, two_factor_enabled, last_login_at, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(user.id.to_string())
         .bind(&user.username)
@@ -73,6 +78,8 @@ impl UserRepository for SqliteUserRepository {
         .bind(user.enabled as i64)
         .bind(expires_at)
         .bind(user.traffic_quota as i64)
+        .bind(user.two_factor_enabled as i64)
+        .bind(last_login_at)
         .bind(created_at)
         .execute(&self.pool)
         .await
@@ -89,7 +96,7 @@ impl UserRepository for SqliteUserRepository {
 
     async fn find_by_id(&self, id: UserId) -> Result<Option<User>, IdentityError> {
         let row: Option<UserRow> =
-            sqlx::query_as("SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, created_at FROM users WHERE id = ?")
+            sqlx::query_as("SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, two_factor_enabled, last_login_at, created_at FROM users WHERE id = ?")
                 .bind(id.to_string())
                 .fetch_optional(&self.pool)
                 .await
@@ -99,7 +106,7 @@ impl UserRepository for SqliteUserRepository {
 
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, IdentityError> {
         let row: Option<UserRow> =
-            sqlx::query_as("SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, created_at FROM users WHERE username = ?")
+            sqlx::query_as("SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, two_factor_enabled, last_login_at, created_at FROM users WHERE username = ?")
                 .bind(username)
                 .fetch_optional(&self.pool)
                 .await
@@ -122,7 +129,7 @@ impl UserRepository for SqliteUserRepository {
         let rows: Vec<UserRow> = match cursor {
             Some(c) => {
                 sqlx::query_as(
-                    "SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, created_at \
+                    "SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, two_factor_enabled, last_login_at, created_at \
                      FROM users WHERE id > ? ORDER BY id LIMIT ?",
                 )
                 .bind(c.to_string())
@@ -133,7 +140,7 @@ impl UserRepository for SqliteUserRepository {
             }
             None => {
                 sqlx::query_as(
-                    "SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, created_at \
+                    "SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, two_factor_enabled, last_login_at, created_at \
                      FROM users ORDER BY id LIMIT ?",
                 )
                 .bind(limit)
@@ -147,11 +154,12 @@ impl UserRepository for SqliteUserRepository {
 
     async fn create_if_empty(&self, user: &User) -> Result<(), IdentityError> {
         let expires_at = user.expires_at.map(format_ts).transpose()?;
+        let last_login_at = user.last_login_at.map(format_ts).transpose()?;
         let created_at = format_ts(user.created_at)?;
 
         let result = sqlx::query(
-            "INSERT INTO users (id, username, password_hash, role, enabled, expires_at, traffic_quota, created_at) \
-             SELECT ?, ?, ?, ?, ?, ?, ?, ? \
+            "INSERT INTO users (id, username, password_hash, role, enabled, expires_at, traffic_quota, two_factor_enabled, last_login_at, created_at) \
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? \
              WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1)",
         )
         .bind(user.id.to_string())
@@ -161,6 +169,8 @@ impl UserRepository for SqliteUserRepository {
         .bind(user.enabled as i64)
         .bind(expires_at)
         .bind(user.traffic_quota as i64)
+        .bind(user.two_factor_enabled as i64)
+        .bind(last_login_at)
         .bind(created_at)
         .execute(&self.pool)
         .await
@@ -175,6 +185,37 @@ impl UserRepository for SqliteUserRepository {
     async fn set_enabled(&self, id: UserId, enabled: bool) -> Result<(), IdentityError> {
         let result = sqlx::query("UPDATE users SET enabled = ? WHERE id = ?")
             .bind(enabled as i64)
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| IdentityError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(IdentityError::UserNotFound);
+        }
+        Ok(())
+    }
+
+    async fn set_two_factor_enabled(&self, id: UserId, enabled: bool) -> Result<(), IdentityError> {
+        let result = sqlx::query("UPDATE users SET two_factor_enabled = ? WHERE id = ?")
+            .bind(enabled as i64)
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| IdentityError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(IdentityError::UserNotFound);
+        }
+        Ok(())
+    }
+
+    async fn update_last_login(
+        &self,
+        id: UserId,
+        at: deve_sub_kernel::Timestamp,
+    ) -> Result<(), IdentityError> {
+        let ts = format_ts(at)?;
+        let result = sqlx::query("UPDATE users SET last_login_at = ? WHERE id = ?")
+            .bind(ts)
             .bind(id.to_string())
             .execute(&self.pool)
             .await

@@ -8,7 +8,9 @@ use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 
 use deve_sub_application::{AppConfig, DbHealthPort, LoginRateLimiter};
-use deve_sub_domain::{SessionRepository, UserRepository};
+use deve_sub_domain::{
+    RecoveryCodeRepository, SessionRepository, TotpSecretRepository, UserRepository,
+};
 use deve_sub_server::{AppState, build_router};
 
 /// Start the HTTP server.
@@ -160,6 +162,12 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let session_repo: Arc<dyn SessionRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteSessionRepository::new(db.clone()),
     );
+    let totp_secret_repo: Arc<dyn TotpSecretRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteTotpSecretRepository::new(db.clone()),
+    );
+    let recovery_code_repo: Arc<dyn RecoveryCodeRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteRecoveryCodeRepository::new(db.clone()),
+    );
 
     let rate_limiter: Arc<dyn LoginRateLimiter> =
         Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(
@@ -175,6 +183,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         master_key,
         user_repo,
         session_repo,
+        totp_secret_repo,
+        recovery_code_repo,
         rate_limiter,
         db_health,
     };

@@ -57,12 +57,16 @@ pub struct User {
     pub expires_at: Option<Timestamp>,
     /// Traffic quota in bytes (0 = unlimited). Enforced in M6.
     pub traffic_quota: u64,
+    /// Whether two-factor authentication is enabled.
+    pub two_factor_enabled: bool,
+    /// Timestamp of the last successful login. `None` if never logged in.
+    pub last_login_at: Option<Timestamp>,
     /// Account creation time.
     pub created_at: Timestamp,
 }
 
 impl User {
-    /// Create a new enabled user with no expiry and zero quota.
+    /// Create a new enabled user with no expiry, zero quota, and 2FA disabled.
     #[must_use]
     pub fn new(username: &str, password_hash: String, role: Role) -> Self {
         Self {
@@ -73,6 +77,8 @@ impl User {
             enabled: true,
             expires_at: None,
             traffic_quota: 0,
+            two_factor_enabled: false,
+            last_login_at: None,
             created_at: Timestamp::now(),
         }
     }

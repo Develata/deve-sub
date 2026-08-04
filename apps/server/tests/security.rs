@@ -10,9 +10,14 @@ use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
 use deve_sub_application::{DbHealthPort, LoginRateLimiter};
-use deve_sub_domain::{SessionRepository, UserRepository};
+use deve_sub_domain::{
+    RecoveryCodeRepository, SessionRepository, TotpSecretRepository, UserRepository,
+};
 use deve_sub_security::MasterKey;
-use deve_sub_storage_sqlite::{SqliteHealthCheck, SqliteSessionRepository, SqliteUserRepository};
+use deve_sub_storage_sqlite::{
+    SqliteHealthCheck, SqliteRecoveryCodeRepository, SqliteSessionRepository,
+    SqliteTotpSecretRepository, SqliteUserRepository,
+};
 
 struct TestApp {
     state: deve_sub_server::AppState,
@@ -59,8 +64,12 @@ impl TestApp {
                 master_key,
                 user_repo: Arc::new(SqliteUserRepository::new(pool.clone()))
                     as Arc<dyn UserRepository>,
-                session_repo: Arc::new(SqliteSessionRepository::new(pool))
+                session_repo: Arc::new(SqliteSessionRepository::new(pool.clone()))
                     as Arc<dyn SessionRepository>,
+                totp_secret_repo: Arc::new(SqliteTotpSecretRepository::new(pool.clone()))
+                    as Arc<dyn TotpSecretRepository>,
+                recovery_code_repo: Arc::new(SqliteRecoveryCodeRepository::new(pool))
+                    as Arc<dyn RecoveryCodeRepository>,
                 rate_limiter,
                 db_health,
             },

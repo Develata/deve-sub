@@ -160,7 +160,7 @@ cases:
     steps: []
     assertions: ["开启、登录、关闭完整通过"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-006
     title: 恢复码
     priority: P0
@@ -170,7 +170,7 @@ cases:
     steps: []
     assertions: ["单次使用后立即失效"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-007
     title: 禁用用户
     priority: P0

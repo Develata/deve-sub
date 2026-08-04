@@ -34,6 +34,10 @@ pub struct UserDto {
     pub expires_at: Option<String>,
     /// Traffic quota in bytes (0 = unlimited).
     pub traffic_quota: u64,
+    /// Whether two-factor authentication is enabled.
+    pub two_factor_enabled: bool,
+    /// Last successful login time (ISO 8601 UTC). `None` if never logged in.
+    pub last_login_at: Option<String>,
     /// Account creation time (ISO 8601 UTC).
     pub created_at: String,
 }
@@ -48,10 +52,19 @@ pub struct LoginRequest {
 }
 
 /// Response body for `POST /api/v1/auth/login`.
+///
+/// When `requires_2fa` is `true`, the client must complete the 2FA flow
+/// using the `challenge_token` via `POST /api/v1/auth/login/2fa`. The
+/// session cookie is NOT set in this case.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct LoginResponse {
     /// The authenticated user.
     pub user: UserDto,
+    /// Whether 2FA verification is required to complete login.
+    pub requires_2fa: bool,
+    /// Challenge token for the 2FA login endpoint. Present only when
+    /// `requires_2fa` is `true`.
+    pub challenge_token: Option<String>,
 }
 
 /// Request body for `POST /api/v1/auth/setup` (initial admin creation).
@@ -111,4 +124,67 @@ pub struct ListUsersResponse {
     pub users: Vec<UserDto>,
     /// Cursor for the next page (`None` if no more results).
     pub next_cursor: Option<String>,
+}
+
+/// Response body for `POST /api/v1/auth/2fa/setup`.
+///
+/// Returns the TOTP secret (Base32) for manual entry and an `otpauth://` URI
+/// for QR code generation. The secret is not yet active until verified.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TwoFactorSetupResponse {
+    /// Base32-encoded TOTP secret (e.g. `JBSWY3DPEHPK3PXP`).
+    pub secret: String,
+    /// `otpauth://` URI for QR code generation.
+    pub otpauth_uri: String,
+}
+
+/// Request body for `POST /api/v1/auth/2fa/verify`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TwoFactorVerifyRequest {
+    /// 6-digit TOTP code from the user's authenticator app.
+    pub code: String,
+}
+
+/// Response body for `POST /api/v1/auth/2fa/verify`.
+///
+/// Recovery codes are shown once. The user must store them securely.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TwoFactorVerifyResponse {
+    /// Single-use recovery codes.
+    pub recovery_codes: Vec<String>,
+}
+
+/// Request body for `POST /api/v1/auth/2fa/disable`.
+///
+/// Requires the current password to prevent unauthorized disabling from a
+/// hijacked session.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TwoFactorDisableRequest {
+    /// Current password for re-authentication.
+    pub password: String,
+}
+
+/// Request body for `POST /api/v1/auth/2fa/recovery-codes`.
+///
+/// Requires the current password to prevent unauthorized regeneration.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RegenerateRecoveryCodesRequest {
+    /// Current password for re-authentication.
+    pub password: String,
+}
+
+/// Response body for `POST /api/v1/auth/2fa/recovery-codes`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RegenerateRecoveryCodesResponse {
+    /// New single-use recovery codes (old codes are invalidated).
+    pub recovery_codes: Vec<String>,
+}
+
+/// Request body for `POST /api/v1/auth/login/2fa`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LoginTwoFactorRequest {
+    /// Challenge token from the login response.
+    pub challenge_token: String,
+    /// 6-digit TOTP code or a recovery code.
+    pub code: String,
 }

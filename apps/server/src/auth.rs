@@ -139,7 +139,7 @@ fn extract_session_token(headers: &HeaderMap) -> Option<String> {
 /// but username-based rate limiting remains effective. A
 /// `trusted_proxies` config option for multi-layer proxy chains is a
 /// future improvement.
-fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
     if let Some(ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
         return Some(ip.trim().to_owned());
     }
@@ -152,7 +152,7 @@ fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-fn set_cookie_header(token: &str, max_age_secs: u64, secure: bool) -> String {
+pub(crate) fn set_cookie_header(token: &str, max_age_secs: u64, secure: bool) -> String {
     let secure_attr = if secure { "; Secure" } else { "" };
     format!(
         "{SESSION_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={max_age_secs}{secure_attr}"
@@ -199,6 +199,8 @@ pub(crate) fn user_to_dto(user: &User) -> UserDto {
         enabled: user.enabled,
         expires_at: user.expires_at.map(ts_to_iso8601),
         traffic_quota: user.traffic_quota,
+        two_factor_enabled: user.two_factor_enabled,
+        last_login_at: user.last_login_at.map(ts_to_iso8601),
         created_at: ts_to_iso8601(user.created_at),
     }
 }
@@ -271,7 +273,7 @@ async fn login(
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let ip = extract_client_ip(&headers);
     let ttl = time::Duration::seconds(state.config.security.session_ttl_secs as i64);
-    let (user, _session, token) = auth::login(auth::LoginParams {
+    let outcome = auth::login(auth::LoginParams {
         user_repo: state.user_repo.as_ref(),
         session_repo: state.session_repo.as_ref(),
         rate_limiter: state.rate_limiter.as_ref(),
@@ -303,19 +305,37 @@ async fn login(
         }
     })?;
 
-    let cookie = set_cookie_header(
-        &token,
-        state.config.security.session_ttl_secs,
-        state.config.security.cookie_secure,
-    );
-
-    Ok((
-        StatusCode::OK,
-        AppendHeaders([(axum::http::header::SET_COOKIE, cookie)]),
-        Json(LoginResponse {
-            user: user_to_dto(&user),
-        }),
-    ))
+    match outcome {
+        auth::LoginOutcome::Success { user, token, .. } => {
+            let cookie = set_cookie_header(
+                &token,
+                state.config.security.session_ttl_secs,
+                state.config.security.cookie_secure,
+            );
+            Ok((
+                StatusCode::OK,
+                AppendHeaders([(axum::http::header::SET_COOKIE, cookie)]),
+                Json(LoginResponse {
+                    user: user_to_dto(&user),
+                    requires_2fa: false,
+                    challenge_token: None,
+                }),
+            )
+                .into_response())
+        }
+        auth::LoginOutcome::TwoFactorRequired {
+            user,
+            challenge_token,
+        } => Ok((
+            StatusCode::OK,
+            Json(LoginResponse {
+                user: user_to_dto(&user),
+                requires_2fa: true,
+                challenge_token: Some(challenge_token),
+            }),
+        )
+            .into_response()),
+    }
 }
 
 /// `POST /api/v1/auth/logout` — revoke the current session.

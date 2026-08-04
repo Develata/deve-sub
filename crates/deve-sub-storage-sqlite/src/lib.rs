@@ -6,8 +6,10 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod recovery_code_repository;
 pub mod session_repository;
 pub mod timestamp;
+pub mod totp_repository;
 pub mod user_repository;
 
 use std::path::Path;
@@ -18,7 +20,9 @@ use deve_sub_application::{DbHealthPort, HealthError};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use thiserror::Error;
 
+pub use recovery_code_repository::SqliteRecoveryCodeRepository;
 pub use session_repository::SqliteSessionRepository;
+pub use totp_repository::SqliteTotpSecretRepository;
 pub use user_repository::SqliteUserRepository;
 
 /// SQLite configuration from `docs/plan/13-storage.md`.

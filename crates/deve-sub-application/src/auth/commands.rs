@@ -10,6 +10,7 @@ use deve_sub_security::{
     MasterKey, generate_session_token, hash_password, hash_session_token, verify_password,
 };
 
+use super::challenge::generate_challenge_token;
 use super::error::AuthError;
 use super::rate_limiter::LoginRateLimiter;
 
@@ -77,25 +78,35 @@ pub async fn setup_admin(
     Ok(user)
 }
 
-/// Authenticate a user and create a session.
-///
-/// Returns the session and the raw token string. The raw token is given to
-/// the client as a cookie; only the HMAC digest is persisted.
-///
-/// Returns [`AuthError::InvalidCredentials`] for unknown username, wrong
-/// password, or disabled account — the same error for all three to avoid
-/// leaking user existence (AUTH-003).
-///
-/// # Errors
-/// - [`AuthError::InvalidCredentials`] — bad credentials or disabled account.
-/// - [`AuthError::RateLimited`] — too many failed attempts (AUTH-004).
-/// - [`AuthError::Security`] — token generation or hashing failed.
-/// - [`AuthError::Identity`] — storage error.
 // A dummy argon2id PHC hash used to equalize login timing when the
 // username does not exist. Without this, the `None` branch returns
 // immediately while the `Some` branch spends ~20-50ms in `verify_password`,
 // leaking username existence via timing (AUTH-003).
 const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+/// The outcome of a [`login`] attempt.
+///
+/// When 2FA is enabled, login returns [`LoginOutcome::TwoFactorRequired`]
+/// instead of creating a session. The client must complete the 2FA flow
+/// using the challenge token.
+pub enum LoginOutcome {
+    /// Login succeeded — session created.
+    Success {
+        /// The authenticated user.
+        user: User,
+        /// The created session.
+        session: Session,
+        /// The raw session token (for the cookie).
+        token: String,
+    },
+    /// 2FA verification required.
+    TwoFactorRequired {
+        /// The authenticated user (password verified).
+        user: User,
+        /// Stateless challenge token for the `POST /login/2fa` endpoint.
+        challenge_token: String,
+    },
+}
 
 /// Parameters for the [`login`] command.
 ///
@@ -113,7 +124,21 @@ pub struct LoginParams<'a> {
     pub session_ttl: time::Duration,
 }
 
-pub async fn login(params: LoginParams<'_>) -> Result<(User, Session, String), AuthError> {
+/// Authenticate a user and create a session.
+///
+/// Returns the session and the raw token string. The raw token is given to
+/// the client as a cookie; only the HMAC digest is persisted.
+///
+/// Returns [`AuthError::InvalidCredentials`] for unknown username, wrong
+/// password, or disabled account — the same error for all three to avoid
+/// leaking user existence (AUTH-003).
+///
+/// # Errors
+/// - [`AuthError::InvalidCredentials`] — bad credentials or disabled account.
+/// - [`AuthError::RateLimited`] — too many failed attempts (AUTH-004).
+/// - [`AuthError::Security`] — token generation or hashing failed.
+/// - [`AuthError::Identity`] — storage error.
+pub async fn login(params: LoginParams<'_>) -> Result<LoginOutcome, AuthError> {
     let LoginParams {
         user_repo,
         session_repo,
@@ -155,15 +180,38 @@ pub async fn login(params: LoginParams<'_>) -> Result<(User, Session, String), A
         }
     };
 
+    // WHY: if 2FA is enabled, do NOT create a session or record rate-limiter
+    // success. The login is not complete until the TOTP code is verified.
+    // TOTP failures accumulate in the same rate-limiter counter as password
+    // failures, preventing unlimited TOTP brute-force attempts.
+    if user.two_factor_enabled {
+        let challenge_token = generate_challenge_token(user.id, master_key)?;
+        return Ok(LoginOutcome::TwoFactorRequired {
+            user,
+            challenge_token,
+        });
+    }
+
+    let now = Timestamp::now();
     let token = generate_session_token()?;
     let token_hash = hash_session_token(&token, master_key.as_bytes())?;
-    let expires_at = Timestamp::now() + session_ttl;
+    let expires_at = now + session_ttl;
     let session = Session::new(user.id, token_hash, expires_at);
     session_repo.create(&session).await?;
 
+    // WHY: update last_login_at on every successful non-2FA login, matching
+    // the login_2fa path. `let _ =` ignores storage failure — the login
+    // already succeeded; last_login_at is a cosmetic field, not a security
+    // invariant.
+    let _ = user_repo.update_last_login(user.id, now).await;
+
     rate_limiter.record_success(username, ip);
 
-    Ok((user, session, token))
+    Ok(LoginOutcome::Success {
+        user,
+        session,
+        token,
+    })
 }
 
 /// Revoke a session by ID.

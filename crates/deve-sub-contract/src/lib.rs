@@ -11,6 +11,9 @@ pub mod health;
 
 pub use auth::{
     CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse, ListUsersResponse,
-    LoginRequest, LoginResponse, RoleDto, SetupAdminRequest, SetupAdminResponse, UserDto,
+    LoginRequest, LoginResponse, LoginTwoFactorRequest, RegenerateRecoveryCodesRequest,
+    RegenerateRecoveryCodesResponse, RoleDto, SetupAdminRequest, SetupAdminResponse,
+    TwoFactorDisableRequest, TwoFactorSetupResponse, TwoFactorVerifyRequest,
+    TwoFactorVerifyResponse, UserDto,
 };
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};

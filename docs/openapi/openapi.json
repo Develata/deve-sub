@@ -6,6 +6,195 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/auth/2fa/disable": {
+      "post": {
+        "summary": "`POST /api/v1/auth/2fa/disable` — disable 2FA.",
+        "description": "Requires the current password for re-authentication.",
+        "operationId": "disable",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorDisableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA disabled"
+          },
+          "400": {
+            "description": "2FA not enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/2fa/recovery-codes": {
+      "post": {
+        "summary": "`POST /api/v1/auth/2fa/recovery-codes` — regenerate recovery codes.",
+        "description": "Requires the current password. Old recovery codes are invalidated.",
+        "operationId": "recovery_codes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegenerateRecoveryCodesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "New recovery codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegenerateRecoveryCodesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "2FA not enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/2fa/setup": {
+      "post": {
+        "summary": "`POST /api/v1/auth/2fa/setup` — generate a TOTP secret.",
+        "description": "Returns the Base32 secret and `otpauth://` URI. The secret is not yet\nactive until verified via `POST /api/v1/auth/2fa/verify`.",
+        "operationId": "setup",
+        "responses": {
+          "200": {
+            "description": "TOTP secret generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorSetupResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "2FA already enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/2fa/verify": {
+      "post": {
+        "summary": "`POST /api/v1/auth/2fa/verify` — verify a TOTP code and enable 2FA.",
+        "description": "Returns recovery codes (shown once).",
+        "operationId": "verify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorVerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No TOTP secret found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid TOTP code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "2FA already enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "summary": "`POST /api/v1/auth/login` — authenticate and create a session.",
@@ -34,6 +223,55 @@
           },
           "401": {
             "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login/2fa": {
+      "post": {
+        "summary": "`POST /api/v1/auth/login/2fa` — complete a 2FA login.",
+        "description": "Takes the challenge token from the login response and a TOTP code or\nrecovery code. On success, creates a session and sets the session cookie.",
+        "operationId": "login_2fa",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginTwoFactorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid 2FA code or challenge token",
             "content": {
               "application/json": {
                 "schema": {
@@ -640,14 +878,73 @@
       },
       "LoginResponse": {
         "type": "object",
-        "description": "Response body for `POST /api/v1/auth/login`.",
+        "description": "Response body for `POST /api/v1/auth/login`.\n\nWhen `requires_2fa` is `true`, the client must complete the 2FA flow\nusing the `challenge_token` via `POST /api/v1/auth/login/2fa`. The\nsession cookie is NOT set in this case.",
         "required": [
-          "user"
+          "user",
+          "requires_2fa"
         ],
         "properties": {
+          "challenge_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Challenge token for the 2FA login endpoint. Present only when\n`requires_2fa` is `true`."
+          },
+          "requires_2fa": {
+            "type": "boolean",
+            "description": "Whether 2FA verification is required to complete login."
+          },
           "user": {
             "$ref": "#/components/schemas/UserDto",
             "description": "The authenticated user."
+          }
+        }
+      },
+      "LoginTwoFactorRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/auth/login/2fa`.",
+        "required": [
+          "challenge_token",
+          "code"
+        ],
+        "properties": {
+          "challenge_token": {
+            "type": "string",
+            "description": "Challenge token from the login response."
+          },
+          "code": {
+            "type": "string",
+            "description": "6-digit TOTP code or a recovery code."
+          }
+        }
+      },
+      "RegenerateRecoveryCodesRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/auth/2fa/recovery-codes`.\n\nRequires the current password to prevent unauthorized regeneration.",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Current password for re-authentication."
+          }
+        }
+      },
+      "RegenerateRecoveryCodesResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/auth/2fa/recovery-codes`.",
+        "required": [
+          "recovery_codes"
+        ],
+        "properties": {
+          "recovery_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "New single-use recovery codes (old codes are invalidated)."
           }
         }
       },
@@ -690,6 +987,66 @@
           }
         }
       },
+      "TwoFactorDisableRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/auth/2fa/disable`.\n\nRequires the current password to prevent unauthorized disabling from a\nhijacked session.",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Current password for re-authentication."
+          }
+        }
+      },
+      "TwoFactorSetupResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/auth/2fa/setup`.\n\nReturns the TOTP secret (Base32) for manual entry and an `otpauth://` URI\nfor QR code generation. The secret is not yet active until verified.",
+        "required": [
+          "secret",
+          "otpauth_uri"
+        ],
+        "properties": {
+          "otpauth_uri": {
+            "type": "string",
+            "description": "`otpauth://` URI for QR code generation."
+          },
+          "secret": {
+            "type": "string",
+            "description": "Base32-encoded TOTP secret (e.g. `JBSWY3DPEHPK3PXP`)."
+          }
+        }
+      },
+      "TwoFactorVerifyRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/auth/2fa/verify`.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "6-digit TOTP code from the user's authenticator app."
+          }
+        }
+      },
+      "TwoFactorVerifyResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/auth/2fa/verify`.\n\nRecovery codes are shown once. The user must store them securely.",
+        "required": [
+          "recovery_codes"
+        ],
+        "properties": {
+          "recovery_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Single-use recovery codes."
+          }
+        }
+      },
       "UserDto": {
         "type": "object",
         "description": "User information returned by auth and user management endpoints.\n\nNever includes `password_hash` or other secrets.",
@@ -699,6 +1056,7 @@
           "role",
           "enabled",
           "traffic_quota",
+          "two_factor_enabled",
           "created_at"
         ],
         "properties": {
@@ -721,6 +1079,13 @@
             "type": "string",
             "description": "ULID identifier."
           },
+          "last_login_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last successful login time (ISO 8601 UTC). `None` if never logged in."
+          },
           "role": {
             "$ref": "#/components/schemas/RoleDto",
             "description": "Authorization role."
@@ -730,6 +1095,10 @@
             "format": "int64",
             "description": "Traffic quota in bytes (0 = unlimited).",
             "minimum": 0
+          },
+          "two_factor_enabled": {
+            "type": "boolean",
+            "description": "Whether two-factor authentication is enabled."
           },
           "username": {
             "type": "string",

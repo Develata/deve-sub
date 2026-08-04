@@ -116,6 +116,13 @@ entity_id!(
     "Strong-typed identifier for an outbox event."
 );
 
+entity_id!(
+    RecoveryCodeId,
+    "recovery code",
+    "Strong-typed identifier for a 2FA recovery code. \
+     Identifies the row only; the code value itself is a secret stored as a hash."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

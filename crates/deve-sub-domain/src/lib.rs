@@ -19,7 +19,10 @@ pub mod transport;
 
 pub use endpoint::{DomainName, Endpoint, Host};
 pub use error::DomainError;
-pub use identity::{IdentityError, Role, Session, SessionRepository, User, UserRepository};
+pub use identity::{
+    IdentityError, RecoveryCode, RecoveryCodeRepository, Role, Session, SessionRepository,
+    TotpSecret, TotpSecretRepository, User, UserRepository,
+};
 pub use node::{Authentication, ChainTarget, Node, NodeSource, RegionAssignment, RegionMethod};
 pub use protocol::{ProtocolConfig, ProtocolKind, UnsupportedNode};
 pub use protocol_config::{

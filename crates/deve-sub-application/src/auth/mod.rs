@@ -7,9 +7,11 @@
 
 pub mod commands;
 pub mod error;
+pub mod rate_limiter;
 
 pub use commands::{
-    AuthPrincipal, authenticate_session, create_user, disable_user, find_user, force_logout,
-    list_users, login, logout, setup_admin, user_count, verify_session,
+    AuthPrincipal, LoginParams, authenticate_session, create_user, disable_user, find_user,
+    force_logout, list_users, login, logout, setup_admin, user_count, verify_session,
 };
 pub use error::AuthError;
+pub use rate_limiter::LoginRateLimiter;

@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
+use deve_sub_application::LoginRateLimiter;
 use deve_sub_domain::{SessionRepository, UserRepository};
 use sqlx::sqlite::SqlitePool;
 use thiserror::Error;
@@ -22,6 +23,8 @@ use utoipa_scalar::{Scalar, Servable};
 use deve_sub_security::MasterKey;
 
 pub mod auth;
+pub mod csrf;
+pub mod rate_limiter;
 pub mod routes;
 pub mod users;
 
@@ -41,6 +44,7 @@ pub struct AppState {
     pub master_key: Arc<MasterKey>,
     pub user_repo: Arc<dyn UserRepository>,
     pub session_repo: Arc<dyn SessionRepository>,
+    pub rate_limiter: Arc<dyn LoginRateLimiter>,
 }
 
 /// Build the complete Axum router with all routes and middleware.
@@ -51,11 +55,14 @@ pub struct AppState {
 /// 3. `PropagateRequestIdLayer` — copy `x-request-id` to response
 /// 4. `CorsLayer` — permissive CORS for development
 /// 5. `CompressionLayer` — gzip compression
+///
+/// CSRF protection (`Origin` header validation) is applied to the API router
+/// only, not to the Scalar docs endpoint.
 pub fn build_router(state: AppState) -> Router {
     let (api_router, openapi) = routes::build_api_router(state);
 
     Router::new()
-        .merge(api_router)
+        .merge(api_router.layer(axum::middleware::from_fn(crate::csrf::csrf_guard)))
         .merge(Scalar::with_url("/docs", openapi))
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
@@ -80,9 +87,12 @@ pub async fn serve(
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!("HTTP server listening on {bind}");
 
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown)
-        .await?;
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await?;
 
     Ok(())
 }

@@ -11,6 +11,6 @@ pub mod auth;
 pub mod config;
 pub mod health;
 
-pub use auth::AuthError;
+pub use auth::{AuthError, LoginRateLimiter};
 pub use config::AppConfig;
 pub use health::{HealthStatus, HealthView};

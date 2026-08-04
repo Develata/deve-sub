@@ -11,6 +11,7 @@ use deve_sub_security::{
 };
 
 use super::error::AuthError;
+use super::rate_limiter::LoginRateLimiter;
 
 /// Minimum password length. Accounts created with shorter passwords are
 /// rejected at the application boundary.
@@ -87,6 +88,7 @@ pub async fn setup_admin(
 ///
 /// # Errors
 /// - [`AuthError::InvalidCredentials`] — bad credentials or disabled account.
+/// - [`AuthError::RateLimited`] — too many failed attempts (AUTH-004).
 /// - [`AuthError::Security`] — token generation or hashing failed.
 /// - [`AuthError::Identity`] — storage error.
 // A dummy argon2id PHC hash used to equalize login timing when the
@@ -95,14 +97,38 @@ pub async fn setup_admin(
 // leaking username existence via timing (AUTH-003).
 const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-pub async fn login(
-    user_repo: &dyn UserRepository,
-    session_repo: &dyn SessionRepository,
-    master_key: &MasterKey,
-    username: &str,
-    password: &str,
-    session_ttl: time::Duration,
-) -> Result<(User, Session, String), AuthError> {
+/// Parameters for the [`login`] command.
+///
+/// Bundling the repositories, rate limiter, and master key into a struct
+/// avoids a clippy `too_many_arguments` warning and makes future additions
+/// non-breaking.
+pub struct LoginParams<'a> {
+    pub user_repo: &'a dyn UserRepository,
+    pub session_repo: &'a dyn SessionRepository,
+    pub rate_limiter: &'a dyn LoginRateLimiter,
+    pub master_key: &'a MasterKey,
+    pub username: &'a str,
+    pub password: &'a str,
+    pub ip: Option<&'a str>,
+    pub session_ttl: time::Duration,
+}
+
+pub async fn login(params: LoginParams<'_>) -> Result<(User, Session, String), AuthError> {
+    let LoginParams {
+        user_repo,
+        session_repo,
+        rate_limiter,
+        master_key,
+        username,
+        password,
+        ip,
+        session_ttl,
+    } = params;
+    // WHY: check the rate limiter BEFORE looking up the user so that
+    // non-existent usernames also get rate-limited. This prevents username
+    // enumeration via rate-limiting behavior differences (AUTH-003).
+    rate_limiter.check(username, ip)?;
+
     let user = user_repo.find_by_username(username).await?;
 
     // Timing side-channel mitigation: always run verify_password, even when
@@ -113,15 +139,18 @@ pub async fn login(
                 // WHY: still verify against the real hash to keep timing
                 // uniform across disabled vs wrong-password vs unknown-user.
                 let _ = verify_password(password, &u.password_hash);
+                rate_limiter.record_failure(username, ip);
                 return Err(AuthError::InvalidCredentials);
             }
             if !verify_password(password, &u.password_hash)? {
+                rate_limiter.record_failure(username, ip);
                 return Err(AuthError::InvalidCredentials);
             }
             u
         }
         None => {
             let _ = verify_password(password, DUMMY_PASSWORD_HASH);
+            rate_limiter.record_failure(username, ip);
             return Err(AuthError::InvalidCredentials);
         }
     };
@@ -131,6 +160,8 @@ pub async fn login(
     let expires_at = Timestamp::now() + session_ttl;
     let session = Session::new(user.id, token_hash, expires_at);
     session_repo.create(&session).await?;
+
+    rate_limiter.record_success(username, ip);
 
     Ok((user, session, token))
 }

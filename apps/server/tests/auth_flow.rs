@@ -11,6 +11,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
+use deve_sub_application::LoginRateLimiter;
 use deve_sub_domain::{SessionRepository, UserRepository};
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{SqliteSessionRepository, SqliteUserRepository};
@@ -39,6 +40,13 @@ impl TestApp {
 
         let config = deve_sub_application::AppConfig::default();
 
+        let rate_limiter: Arc<dyn LoginRateLimiter> = Arc::new(
+            deve_sub_server::rate_limiter::InMemoryLoginRateLimiter::new(
+                config.security.max_login_attempts,
+                std::time::Duration::from_secs(config.security.lockout_duration_secs),
+            ),
+        );
+
         Self {
             state: deve_sub_server::AppState {
                 config,
@@ -48,6 +56,7 @@ impl TestApp {
                     as Arc<dyn UserRepository>,
                 session_repo: Arc::new(SqliteSessionRepository::new(pool))
                     as Arc<dyn SessionRepository>,
+                rate_limiter,
             },
             _dir: dir,
         }

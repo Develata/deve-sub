@@ -117,6 +117,32 @@ fn extract_session_token(headers: &HeaderMap) -> Option<String> {
     None
 }
 
+/// Extract the client IP address from the `X-Real-IP` header (preferred) or
+/// the last hop of `X-Forwarded-For`. Returns `None` if neither is present.
+///
+/// WHY: we prefer `X-Real-IP` because reverse proxies (Caddy, nginx) set
+/// it to the actual client IP, overwriting any client-sent value. We take
+/// the LAST hop of `X-Forwarded-For` because the proxy appends the real
+/// client IP at the end — the first hop is client-controlled and spoofable.
+///
+/// This assumes a single trusted reverse proxy layer. Without a proxy,
+/// clients can still send these headers to evade IP-based rate limiting,
+/// but username-based rate limiting remains effective. A
+/// `trusted_proxies` config option for multi-layer proxy chains is a
+/// future improvement.
+fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
+    if let Some(ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        return Some(ip.trim().to_owned());
+    }
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        // WHY: take the LAST hop, not the first. The reverse proxy appends
+        // the real client IP at the end; earlier entries may be forged by
+        // the client.
+        return xff.split(',').next_back().map(|s| s.trim().to_owned());
+    }
+    None
+}
+
 fn set_cookie_header(token: &str, max_age_secs: u64, secure: bool) -> String {
     let secure_attr = if secure { "; Secure" } else { "" };
     format!(
@@ -218,6 +244,7 @@ async fn setup(
 ///
 /// Returns 401 for unknown user, wrong password, or disabled account — the
 /// same error for all three to avoid leaking user existence (AUTH-003).
+/// Returns 429 if the account or IP is temporarily locked (AUTH-004).
 #[utoipa::path(
     post,
     path = "/api/v1/auth/login",
@@ -225,27 +252,37 @@ async fn setup(
     responses(
         (status = 200, description = "Login successful", body = LoginResponse),
         (status = 401, description = "Invalid credentials", body = ErrorResponse),
+        (status = 429, description = "Rate limited", body = ErrorResponse),
     )
 )]
 async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let ip = extract_client_ip(&headers);
     let ttl = time::Duration::seconds(state.config.security.session_ttl_secs as i64);
-    let (user, _session, token) = auth::login(
-        state.user_repo.as_ref(),
-        state.session_repo.as_ref(),
-        &state.master_key,
-        &req.username,
-        &req.password,
-        ttl,
-    )
+    let (user, _session, token) = auth::login(auth::LoginParams {
+        user_repo: state.user_repo.as_ref(),
+        session_repo: state.session_repo.as_ref(),
+        rate_limiter: state.rate_limiter.as_ref(),
+        master_key: &state.master_key,
+        username: &req.username,
+        password: &req.password,
+        ip: ip.as_deref(),
+        session_ttl: ttl,
+    })
     .await
     .map_err(|e| match e {
         auth::AuthError::InvalidCredentials => err(
             StatusCode::UNAUTHORIZED,
             "invalid_credentials",
             "invalid username or password",
+        ),
+        auth::AuthError::RateLimited => err(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "too many failed attempts, try again later",
         ),
         _ => {
             tracing::warn!(error = %e, "login failed");

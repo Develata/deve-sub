@@ -9,7 +9,7 @@
     "/api/v1/auth/login": {
       "post": {
         "summary": "`POST /api/v1/auth/login` — authenticate and create a session.",
-        "description": "Returns 401 for unknown user, wrong password, or disabled account — the\nsame error for all three to avoid leaking user existence (AUTH-003).",
+        "description": "Returns 401 for unknown user, wrong password, or disabled account — the\nsame error for all three to avoid leaking user existence (AUTH-003).\nReturns 429 if the account or IP is temporarily locked (AUTH-004).",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -34,6 +34,16 @@
           },
           "401": {
             "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {

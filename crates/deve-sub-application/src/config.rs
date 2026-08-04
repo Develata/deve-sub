@@ -66,6 +66,15 @@ pub struct SecurityConfig {
     /// must keep this enabled.
     #[serde(default = "default_cookie_secure")]
     pub cookie_secure: bool,
+
+    /// Maximum failed login attempts before temporary lockout (AUTH-004).
+    #[serde(default = "default_max_login_attempts")]
+    pub max_login_attempts: u32,
+
+    /// Lockout duration in seconds after exceeding `max_login_attempts`
+    /// (AUTH-004).
+    #[serde(default = "default_lockout_duration_secs")]
+    pub lockout_duration_secs: u64,
 }
 
 impl Default for AppConfig {
@@ -102,6 +111,8 @@ impl Default for SecurityConfig {
             master_key_path: default_master_key_path(),
             session_ttl_secs: default_session_ttl_secs(),
             cookie_secure: default_cookie_secure(),
+            max_login_attempts: default_max_login_attempts(),
+            lockout_duration_secs: default_lockout_duration_secs(),
         }
     }
 }
@@ -132,4 +143,12 @@ fn default_session_ttl_secs() -> u64 {
 
 fn default_cookie_secure() -> bool {
     true
+}
+
+fn default_max_login_attempts() -> u32 {
+    5
+}
+
+fn default_lockout_duration_secs() -> u64 {
+    300
 }

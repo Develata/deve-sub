@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 
 use deve_sub_application::AppConfig;
+use deve_sub_application::LoginRateLimiter;
 use deve_sub_domain::{SessionRepository, UserRepository};
 use deve_sub_server::{AppState, build_router};
 
@@ -154,12 +155,20 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         deve_sub_storage_sqlite::SqliteSessionRepository::new(db.clone()),
     );
 
+    let rate_limiter: Arc<dyn LoginRateLimiter> = Arc::new(
+        deve_sub_server::rate_limiter::InMemoryLoginRateLimiter::new(
+            config.security.max_login_attempts,
+            std::time::Duration::from_secs(config.security.lockout_duration_secs),
+        ),
+    );
+
     let state = AppState {
         config: config.clone(),
         db,
         master_key,
         user_repo,
         session_repo,
+        rate_limiter,
     };
     let router = build_router(state);
 

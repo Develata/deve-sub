@@ -15,6 +15,10 @@ pub enum AuthError {
     #[error("invalid credentials")]
     InvalidCredentials,
 
+    /// Input validation failed (empty username, password too short, etc.).
+    #[error("invalid input: {0}")]
+    InvalidInput(&'static str),
+
     /// A security primitive failed.
     #[error(transparent)]
     Security(#[from] deve_sub_security::SecurityError),

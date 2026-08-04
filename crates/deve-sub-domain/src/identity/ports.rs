@@ -27,6 +27,14 @@ pub trait UserRepository: Send + Sync {
     /// Count all users.
     async fn count(&self) -> Result<i64, IdentityError>;
 
+    /// List users with cursor pagination.
+    ///
+    /// Returns up to `limit` users whose ULID is strictly greater than
+    /// `cursor` (or all users if `cursor` is `None`), ordered by `id`.
+    /// ULIDs are lexically sortable by creation time, so the cursor is the
+    /// last user's ID from the previous page.
+    async fn list(&self, cursor: Option<UserId>, limit: u32) -> Result<Vec<User>, IdentityError>;
+
     /// Create a user only if no users exist yet.
     ///
     /// This is the atomic "first admin" gate: the check and insert happen

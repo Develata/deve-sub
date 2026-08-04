@@ -9,7 +9,7 @@ pub mod commands;
 pub mod error;
 
 pub use commands::{
-    AuthPrincipal, authenticate_session, disable_user, find_user, login, logout, setup_admin,
-    user_count, verify_session,
+    AuthPrincipal, authenticate_session, create_user, disable_user, find_user, force_logout,
+    list_users, login, logout, setup_admin, user_count, verify_session,
 };
 pub use error::AuthError;

@@ -12,6 +12,43 @@ use deve_sub_security::{
 
 use super::error::AuthError;
 
+/// Minimum password length. Accounts created with shorter passwords are
+/// rejected at the application boundary.
+const MIN_PASSWORD_LEN: usize = 8;
+
+/// Maximum password length. Defends against argon2 memory-exhaustion via
+/// oversized inputs.
+const MAX_PASSWORD_LEN: usize = 1024;
+
+/// Maximum username length.
+const MAX_USERNAME_LEN: usize = 64;
+
+/// Validate username and password at the application boundary.
+///
+/// Returns [`AuthError::InvalidInput`] with a static message describing the
+/// first violation. Does not allocate.
+fn validate_credentials(username: &str, password: &str) -> Result<(), AuthError> {
+    if username.is_empty() {
+        return Err(AuthError::InvalidInput("username must not be empty"));
+    }
+    if username.len() > MAX_USERNAME_LEN {
+        return Err(AuthError::InvalidInput(
+            "username must not exceed 64 characters",
+        ));
+    }
+    if password.len() < MIN_PASSWORD_LEN {
+        return Err(AuthError::InvalidInput(
+            "password must be at least 8 characters",
+        ));
+    }
+    if password.len() > MAX_PASSWORD_LEN {
+        return Err(AuthError::InvalidInput(
+            "password must not exceed 1024 characters",
+        ));
+    }
+    Ok(())
+}
+
 /// Create the first admin user.
 ///
 /// Returns [`AuthError::AlreadyInitialized`] if any users already exist.
@@ -26,6 +63,7 @@ pub async fn setup_admin(
     username: &str,
     password: &str,
 ) -> Result<User, AuthError> {
+    validate_credentials(username, password)?;
     let password_hash = hash_password(password)?;
     let user = User::new(username, password_hash, Role::Admin);
     user_repo
@@ -118,6 +156,14 @@ pub async fn disable_user(
     session_repo: &dyn SessionRepository,
     user_id: UserId,
 ) -> Result<(), AuthError> {
+    // WHY: `set_enabled` and `revoke_all_for_user` are two separate SQL
+    // statements with no shared transaction. If `revoke_all_for_user` fails
+    // after `set_enabled` succeeds, the user is disabled but stale session
+    // rows may remain `revoked = 0`. This is safe because
+    // `authenticate_session` re-checks `user.is_active()` on every request,
+    // so disabled-user sessions cannot authenticate regardless of the
+    // `revoked` flag. The stale rows are a storage-level cosmetic issue, not
+    // a security gap.
     user_repo.set_enabled(user_id, false).await?;
     session_repo.revoke_all_for_user(user_id).await?;
     Ok(())
@@ -199,4 +245,55 @@ pub async fn find_user(
 /// - [`AuthError::Identity`] — storage error.
 pub async fn user_count(user_repo: &dyn UserRepository) -> Result<i64, AuthError> {
     user_repo.count().await.map_err(Into::into)
+}
+
+/// Create a new user (admin-only operation).
+///
+/// Hashes the password and stores the user. Returns
+/// [`AuthError::Identity`] with [`IdentityError::UsernameExists`] if the
+/// username is already taken.
+///
+/// # Errors
+/// - [`AuthError::Security`] — password hashing failed.
+/// - [`AuthError::Identity`] — storage error or username collision.
+pub async fn create_user(
+    user_repo: &dyn UserRepository,
+    username: &str,
+    password: &str,
+    role: Role,
+) -> Result<User, AuthError> {
+    validate_credentials(username, password)?;
+    let password_hash = hash_password(password)?;
+    let user = User::new(username, password_hash, role);
+    user_repo.create(&user).await?;
+    Ok(user)
+}
+
+/// List users with cursor pagination.
+///
+/// Returns up to `limit` users whose ULID is greater than `cursor` (or all
+/// if `cursor` is `None`). The caller is responsible for deriving the next
+/// cursor from the last element's ID.
+///
+/// # Errors
+/// - [`AuthError::Identity`] — storage error.
+pub async fn list_users(
+    user_repo: &dyn UserRepository,
+    cursor: Option<UserId>,
+    limit: u32,
+) -> Result<Vec<User>, AuthError> {
+    user_repo.list(cursor, limit).await.map_err(Into::into)
+}
+
+/// Force logout: revoke all sessions for a user without disabling the
+/// account. The user may log in again immediately (AUTH-010).
+///
+/// # Errors
+/// - [`AuthError::Identity`] — storage error.
+pub async fn force_logout(
+    session_repo: &dyn SessionRepository,
+    user_id: UserId,
+) -> Result<(), AuthError> {
+    session_repo.revoke_all_for_user(user_id).await?;
+    Ok(())
 }

@@ -127,6 +127,36 @@ impl UserRepository for SqliteUserRepository {
         Ok(count)
     }
 
+    async fn list(&self, cursor: Option<UserId>, limit: u32) -> Result<Vec<User>, IdentityError> {
+        // WHY: cap at 100 to prevent unbounded result sets from a malicious
+        // or accidental large `limit` query parameter.
+        let limit = limit.min(100) as i64;
+        let rows: Vec<UserRow> = match cursor {
+            Some(c) => {
+                sqlx::query_as(
+                    "SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, created_at \
+                     FROM users WHERE id > ? ORDER BY id LIMIT ?",
+                )
+                .bind(c.to_string())
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| IdentityError::Storage(e.to_string()))?
+            }
+            None => {
+                sqlx::query_as(
+                    "SELECT id, username, password_hash, role, enabled, expires_at, traffic_quota, created_at \
+                     FROM users ORDER BY id LIMIT ?",
+                )
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| IdentityError::Storage(e.to_string()))?
+            }
+        };
+        rows.iter().map(|r| r.to_domain()).collect()
+    }
+
     async fn create_if_empty(&self, user: &User) -> Result<(), IdentityError> {
         let expires_at = user.expires_at.map(format_ts).transpose()?;
         let created_at = format_ts(user.created_at)?;

@@ -592,6 +592,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "ulid",
  "utoipa",
  "utoipa-axum",
  "utoipa-scalar",

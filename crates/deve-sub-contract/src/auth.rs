@@ -85,3 +85,30 @@ pub struct ErrorResponse {
     /// Human-readable error message.
     pub message: String,
 }
+
+/// Request body for `POST /api/v1/users` (admin-only user creation).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateUserRequest {
+    /// Username.
+    pub username: String,
+    /// Plaintext password.
+    pub password: String,
+    /// Authorization role.
+    pub role: RoleDto,
+}
+
+/// Response body for `POST /api/v1/users`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateUserResponse {
+    /// The created user.
+    pub user: UserDto,
+}
+
+/// Response body for `GET /api/v1/users` (cursor-paginated user list).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ListUsersResponse {
+    /// Users in the current page.
+    pub users: Vec<UserDto>,
+    /// Cursor for the next page (`None` if no more results).
+    pub next_cursor: Option<String>,
+}

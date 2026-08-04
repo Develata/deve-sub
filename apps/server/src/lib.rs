@@ -23,6 +23,7 @@ use deve_sub_security::MasterKey;
 
 pub mod auth;
 pub mod routes;
+pub mod users;
 
 /// Errors produced by the server.
 #[derive(Debug, Error)]

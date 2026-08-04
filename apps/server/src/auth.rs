@@ -71,6 +71,41 @@ impl FromRequestParts<AppState> for AuthSession {
     }
 }
 
+/// Admin-only guard. Wraps [`AuthSession`] and rejects non-admin users with
+/// 403 Forbidden (AUTH-008).
+///
+/// Handlers that require admin access use this as an Axum extractor instead
+/// of [`AuthSession`]. The extractor first authenticates the session (same
+/// as `AuthSession`), then checks the user's role.
+pub struct AdminUser {
+    /// The authenticated admin user.
+    pub user: User,
+    /// The active session.
+    pub session: Session,
+}
+
+impl FromRequestParts<AppState> for AdminUser {
+    type Rejection = (StatusCode, Json<ErrorResponse>);
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let auth_session = AuthSession::from_request_parts(parts, state).await?;
+        if auth_session.user.role != Role::Admin {
+            return Err(err(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "admin access required",
+            ));
+        }
+        Ok(Self {
+            user: auth_session.user,
+            session: auth_session.session,
+        })
+    }
+}
+
 fn extract_session_token(headers: &HeaderMap) -> Option<String> {
     let header = headers.get("cookie")?.to_str().ok()?;
     for cookie in header.split(';') {
@@ -94,7 +129,11 @@ fn clear_cookie_header(secure: bool) -> String {
     format!("{SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{secure_attr}")
 }
 
-fn err(status: StatusCode, error: &str, message: &str) -> (StatusCode, Json<ErrorResponse>) {
+pub(crate) fn err(
+    status: StatusCode,
+    error: &str,
+    message: &str,
+) -> (StatusCode, Json<ErrorResponse>) {
     (
         status,
         Json(ErrorResponse {
@@ -104,20 +143,20 @@ fn err(status: StatusCode, error: &str, message: &str) -> (StatusCode, Json<Erro
     )
 }
 
-fn ts_to_iso8601(ts: Timestamp) -> String {
+pub(crate) fn ts_to_iso8601(ts: Timestamp) -> String {
     ts.as_offset_date_time()
         .format(&Rfc3339)
         .unwrap_or_else(|_| ts.as_offset_date_time().to_string())
 }
 
-fn role_to_dto(role: Role) -> RoleDto {
+pub(crate) fn role_to_dto(role: Role) -> RoleDto {
     match role {
         Role::Admin => RoleDto::Admin,
         Role::User => RoleDto::User,
     }
 }
 
-fn user_to_dto(user: &User) -> UserDto {
+pub(crate) fn user_to_dto(user: &User) -> UserDto {
     UserDto {
         id: user.id.to_string(),
         username: user.username.clone(),
@@ -131,6 +170,7 @@ fn user_to_dto(user: &User) -> UserDto {
 
 /// `POST /api/v1/auth/setup` — create the first admin user.
 ///
+/// Returns 400 for invalid input (empty username, password too short).
 /// Returns 409 if any users already exist (AUTH-001).
 #[utoipa::path(
     post,
@@ -138,6 +178,7 @@ fn user_to_dto(user: &User) -> UserDto {
     request_body = SetupAdminRequest,
     responses(
         (status = 201, description = "Admin created", body = SetupAdminResponse),
+        (status = 400, description = "Invalid input", body = ErrorResponse),
         (status = 409, description = "Already initialized", body = ErrorResponse),
     )
 )]
@@ -148,16 +189,22 @@ async fn setup(
     let user = auth::setup_admin(state.user_repo.as_ref(), &req.username, &req.password)
         .await
         .map_err(|e| match e {
+            auth::AuthError::InvalidInput(msg) => {
+                err(StatusCode::BAD_REQUEST, "invalid_input", msg)
+            }
             auth::AuthError::AlreadyInitialized => err(
                 StatusCode::CONFLICT,
                 "already_initialized",
                 "admin already exists",
             ),
-            _ => err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                "setup failed",
-            ),
+            other => {
+                tracing::warn!(error = %other, "setup_admin failed");
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal",
+                    "setup failed",
+                )
+            }
         })?;
     Ok((
         StatusCode::CREATED,
@@ -200,11 +247,14 @@ async fn login(
             "invalid_credentials",
             "invalid username or password",
         ),
-        _ => err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal",
-            "login failed",
-        ),
+        _ => {
+            tracing::warn!(error = %e, "login failed");
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal",
+                "login failed",
+            )
+        }
     })?;
 
     let cookie = set_cookie_header(
@@ -237,7 +287,8 @@ async fn logout(
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     auth::logout(state.session_repo.as_ref(), auth_session.session.id)
         .await
-        .map_err(|_| {
+        .map_err(|e| {
+            tracing::warn!(error = %e, "logout failed");
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal",

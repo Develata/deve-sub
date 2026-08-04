@@ -47,7 +47,8 @@ fn register_api_routes(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppStat
     let router = router
         .routes(routes!(health_live))
         .routes(routes!(health_ready));
-    crate::auth::register(router)
+    let router = crate::auth::register(router);
+    crate::users::register(router)
 }
 
 /// Build the complete OpenAPI document with all registered paths.

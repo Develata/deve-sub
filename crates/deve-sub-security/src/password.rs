@@ -17,7 +17,8 @@ use crate::SecurityError;
 ///
 /// # Errors
 /// Returns [`SecurityError::PasswordHash`] if hashing fails (e.g. password
-/// is empty or exceeds the maximum length).
+/// exceeds the maximum length). Input validation (empty password, minimum
+/// length) is enforced at the application layer, not here.
 pub fn hash_password(plain: &str) -> Result<String, SecurityError> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();

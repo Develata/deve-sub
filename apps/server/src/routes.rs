@@ -44,9 +44,10 @@ pub fn build_openapi(product_name: &str) -> OpenApi {
 /// ([`build_api_router`]) and the spec exporter ([`build_openapi_spec`]),
 /// ensuring the exported spec and the served routes cannot drift apart.
 fn register_api_routes(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppState> {
-    router
+    let router = router
         .routes(routes!(health_live))
-        .routes(routes!(health_ready))
+        .routes(routes!(health_ready));
+    crate::auth::register(router)
 }
 
 /// Build the complete OpenAPI document with all registered paths.

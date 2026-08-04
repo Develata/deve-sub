@@ -1,16 +1,22 @@
 //! SQLite storage adapter for Deve Sub.
 //!
-//! Implements the storage Port defined in the application layer using SQLx
+//! Implements the storage Port defined in the domain layer using SQLx
 //! with SQLite in WAL mode. See ADR-0002 for the storage Port decision and
 //! `docs/plan/13-storage.md` for the SQLite configuration policy.
 
 #![cfg_attr(test, allow(clippy::expect_used))]
+
+pub mod session_repository;
+pub mod user_repository;
 
 use std::path::Path;
 use std::str::FromStr;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use thiserror::Error;
+
+pub use session_repository::SqliteSessionRepository;
+pub use user_repository::SqliteUserRepository;
 
 /// SQLite configuration from `docs/plan/13-storage.md`.
 ///

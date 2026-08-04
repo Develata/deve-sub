@@ -6,6 +6,11 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod auth;
 pub mod health;
 
+pub use auth::{
+    CurrentUserResponse, ErrorResponse, LoginRequest, LoginResponse, RoleDto, SetupAdminRequest,
+    SetupAdminResponse, UserDto,
+};
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};

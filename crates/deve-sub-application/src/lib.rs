@@ -7,8 +7,10 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod auth;
 pub mod config;
 pub mod health;
 
+pub use auth::AuthError;
 pub use config::AppConfig;
 pub use health::{HealthStatus, HealthView};

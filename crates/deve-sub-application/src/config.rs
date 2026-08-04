@@ -19,6 +19,10 @@ pub struct AppConfig {
     /// Database configuration.
     #[serde(default)]
     pub database: DatabaseConfig,
+
+    /// Security configuration.
+    #[serde(default)]
+    pub security: SecurityConfig,
 }
 
 /// HTTP server bind configuration.
@@ -41,12 +45,36 @@ pub struct DatabaseConfig {
     pub path: String,
 }
 
+/// Security configuration for auth, HMAC, and encryption.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityConfig {
+    /// Path to the master key file (32 bytes of random data).
+    /// Used for HMAC-SHA256 of session tokens and XChaCha20-Poly1305
+    /// encryption of sensitive fields. See
+    /// `docs/plan/00-engineering-constitution.md` §"Data and security".
+    #[serde(default = "default_master_key_path")]
+    pub master_key_path: String,
+
+    /// Session lifetime in seconds. Default: 86400 (24 hours).
+    #[serde(default = "default_session_ttl_secs")]
+    pub session_ttl_secs: u64,
+
+    /// Whether to set the `Secure` flag on session cookies.
+    ///
+    /// When `true` (the default), cookies are only sent over HTTPS. Disable
+    /// only for local development over plain HTTP. Production deployments
+    /// must keep this enabled.
+    #[serde(default = "default_cookie_secure")]
+    pub cookie_secure: bool,
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             product_name: default_product_name(),
             server: ServerConfig::default(),
             database: DatabaseConfig::default(),
+            security: SecurityConfig::default(),
         }
     }
 }
@@ -68,6 +96,16 @@ impl Default for DatabaseConfig {
     }
 }
 
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            master_key_path: default_master_key_path(),
+            session_ttl_secs: default_session_ttl_secs(),
+            cookie_secure: default_cookie_secure(),
+        }
+    }
+}
+
 fn default_product_name() -> String {
     "Deve Sub".to_owned()
 }
@@ -82,4 +120,16 @@ fn default_serve_web() -> bool {
 
 fn default_db_path() -> String {
     "data/deve-sub.db".to_owned()
+}
+
+fn default_master_key_path() -> String {
+    "data/master.key".to_owned()
+}
+
+fn default_session_ttl_secs() -> u64 {
+    86_400
+}
+
+fn default_cookie_secure() -> bool {
+    true
 }

@@ -14,7 +14,9 @@ path = "src/main.rs"
 
 [dependencies]
 deve-sub-kernel = { workspace = true }
+deve-sub-domain = { workspace = true }
 deve-sub-application = { workspace = true }
+deve-sub-security = { workspace = true }
 deve-sub-server = { workspace = true }
 deve-sub-observability = { workspace = true }
 deve-sub-storage-sqlite = { workspace = true }

@@ -15,6 +15,9 @@ path = "src/lib.rs"
 [dependencies]
 deve-sub-contract = { workspace = true }
 deve-sub-application = { workspace = true }
+deve-sub-domain = { workspace = true }
+deve-sub-security = { workspace = true }
+deve-sub-kernel = { workspace = true }
 deve-sub-storage-sqlite = { workspace = true }
 deve-sub-web = { workspace = true }
 axum = { workspace = true }
@@ -26,6 +29,14 @@ utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
 utoipa-scalar = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tower = { version = "0.5", features = ["util"] }
+serde_json = { workspace = true }

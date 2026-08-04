@@ -7,8 +7,10 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use axum::Router;
+use deve_sub_domain::{SessionRepository, UserRepository};
 use sqlx::sqlite::SqlitePool;
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -17,6 +19,9 @@ use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetReques
 use tower_http::trace::TraceLayer;
 use utoipa_scalar::{Scalar, Servable};
 
+use deve_sub_security::MasterKey;
+
+pub mod auth;
 pub mod routes;
 
 /// Errors produced by the server.
@@ -32,6 +37,9 @@ pub enum ServerError {
 pub struct AppState {
     pub config: deve_sub_application::AppConfig,
     pub db: SqlitePool,
+    pub master_key: Arc<MasterKey>,
+    pub user_repo: Arc<dyn UserRepository>,
+    pub session_repo: Arc<dyn SessionRepository>,
 }
 
 /// Build the complete Axum router with all routes and middleware.

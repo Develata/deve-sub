@@ -39,6 +39,32 @@ impl Timestamp {
         i64::try_from(self.0.unix_timestamp_nanos() / 1_000_000)
             .expect("timestamp in milliseconds fits in i64 for any representable OffsetDateTime")
     }
+
+    /// Return the inner [`time::OffsetDateTime`].
+    #[must_use]
+    pub const fn as_offset_date_time(&self) -> time::OffsetDateTime {
+        self.0
+    }
+
+    /// Create from a raw [`time::OffsetDateTime`].
+    #[must_use]
+    pub const fn from_offset_date_time(dt: time::OffsetDateTime) -> Self {
+        Self(dt)
+    }
+}
+
+impl std::ops::Add<time::Duration> for Timestamp {
+    type Output = Self;
+    fn add(self, rhs: time::Duration) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl std::ops::Sub<time::Duration> for Timestamp {
+    type Output = Self;
+    fn sub(self, rhs: time::Duration) -> Self::Output {
+        Self(self.0 - rhs)
+    }
 }
 
 #[cfg(test)]

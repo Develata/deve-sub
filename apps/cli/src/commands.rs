@@ -2,11 +2,13 @@
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 
 use deve_sub_application::AppConfig;
+use deve_sub_domain::{SessionRepository, UserRepository};
 use deve_sub_server::{AppState, build_router};
 
 /// Start the HTTP server.
@@ -65,6 +67,36 @@ pub struct OpenapiArgs {
     config: Option<PathBuf>,
 }
 
+/// User management command container.
+#[derive(Args)]
+pub struct UserArgs {
+    #[command(subcommand)]
+    pub command: UserSubCommand,
+}
+
+/// User subcommands.
+#[derive(Subcommand)]
+pub enum UserSubCommand {
+    /// Initialize the first admin user.
+    InitAdmin(UserInitAdminArgs),
+}
+
+/// Arguments for `user init-admin`.
+#[derive(Args)]
+pub struct UserInitAdminArgs {
+    /// Admin username.
+    #[arg(long)]
+    pub username: String,
+
+    /// Admin password.
+    #[arg(long)]
+    pub password: String,
+
+    /// Database path.
+    #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
+    pub db_path: String,
+}
+
 /// Config subcommand container.
 #[derive(Args)]
 pub struct ConfigArgs {
@@ -101,15 +133,33 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     );
 
     ensure_db_dir(&config.database.path)?;
+    ensure_db_dir(&config.security.master_key_path)?;
 
     let sqlite_config = deve_sub_storage_sqlite::SqliteConfig::new(&config.database.path);
     let db = deve_sub_storage_sqlite::create_pool(&sqlite_config)
         .await
         .context("failed to create database pool")?;
 
+    let master_key = Arc::new(
+        deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(
+            &config.security.master_key_path,
+        ))
+        .context("failed to load master key")?,
+    );
+
+    let user_repo: Arc<dyn UserRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteUserRepository::new(db.clone()),
+    );
+    let session_repo: Arc<dyn SessionRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteSessionRepository::new(db.clone()),
+    );
+
     let state = AppState {
         config: config.clone(),
         db,
+        master_key,
+        user_repo,
+        session_repo,
     };
     let router = build_router(state);
 
@@ -197,6 +247,40 @@ pub async fn openapi(args: OpenapiArgs) -> Result<()> {
     let json = serde_json::to_string_pretty(&spec).context("failed to serialize OpenAPI spec")?;
     println!("{json}");
     Ok(())
+}
+
+pub async fn user_init_admin(args: UserInitAdminArgs) -> Result<()> {
+    tracing::info!(db_path = %args.db_path, "initializing admin user");
+
+    ensure_db_dir(&args.db_path)?;
+
+    let sqlite_config =
+        deve_sub_storage_sqlite::SqliteConfig::new(&args.db_path).max_connections(1);
+    let pool = deve_sub_storage_sqlite::create_pool(&sqlite_config)
+        .await
+        .context("failed to connect to database")?;
+
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .context("failed to run migrations")?;
+
+    let user_repo = deve_sub_storage_sqlite::SqliteUserRepository::new(pool);
+
+    match deve_sub_application::auth::setup_admin(&user_repo, &args.username, &args.password).await
+    {
+        Ok(user) => {
+            println!("Admin user created successfully:");
+            println!("  id:       {}", user.id);
+            println!("  username: {}", user.username);
+            println!("  role:     {}", user.role);
+            Ok(())
+        }
+        Err(deve_sub_application::AuthError::AlreadyInitialized) => {
+            anyhow::bail!("admin user already exists — use the API or CLI to manage users");
+        }
+        Err(e) => Err(anyhow::anyhow!(e)),
+    }
 }
 
 fn load_config(path: &Option<PathBuf>) -> Result<AppConfig> {

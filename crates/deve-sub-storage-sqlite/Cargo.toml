@@ -10,10 +10,13 @@ homepage.workspace = true
 
 [dependencies]
 deve-sub-kernel = { workspace = true }
+deve-sub-domain = { workspace = true }
 thiserror = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+time = { workspace = true }
+async-trait = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

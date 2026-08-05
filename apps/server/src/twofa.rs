@@ -23,10 +23,12 @@ use crate::auth::{AuthSession, err, set_cookie_header, user_to_dto};
 #[utoipa::path(
     post,
     path = "/api/v1/auth/2fa/setup",
+    security(("cookie_auth" = [])),
     responses(
         (status = 200, description = "TOTP secret generated", body = TwoFactorSetupResponse),
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 409, description = "2FA already enabled", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn setup(
@@ -69,12 +71,14 @@ async fn setup(
 #[utoipa::path(
     post,
     path = "/api/v1/auth/2fa/verify",
+    security(("cookie_auth" = [])),
     request_body = TwoFactorVerifyRequest,
     responses(
         (status = 200, description = "2FA enabled", body = TwoFactorVerifyResponse),
         (status = 400, description = "No TOTP secret found", body = ErrorResponse),
         (status = 401, description = "Invalid TOTP code", body = ErrorResponse),
         (status = 409, description = "2FA already enabled", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn verify(
@@ -136,11 +140,13 @@ async fn verify(
 #[utoipa::path(
     post,
     path = "/api/v1/auth/2fa/disable",
+    security(("cookie_auth" = [])),
     request_body = TwoFactorDisableRequest,
     responses(
         (status = 200, description = "2FA disabled"),
         (status = 400, description = "2FA not enabled", body = ErrorResponse),
         (status = 401, description = "Wrong password", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn disable(
@@ -184,11 +190,13 @@ async fn disable(
 #[utoipa::path(
     post,
     path = "/api/v1/auth/2fa/recovery-codes",
+    security(("cookie_auth" = [])),
     request_body = RegenerateRecoveryCodesRequest,
     responses(
         (status = 200, description = "New recovery codes", body = RegenerateRecoveryCodesResponse),
         (status = 400, description = "2FA not enabled", body = ErrorResponse),
         (status = 401, description = "Wrong password", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn recovery_codes(
@@ -240,6 +248,7 @@ async fn recovery_codes(
         (status = 200, description = "Login successful", body = LoginResponse),
         (status = 401, description = "Invalid 2FA code or challenge token", body = ErrorResponse),
         (status = 429, description = "Rate limited", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn login_2fa(

@@ -39,6 +39,7 @@ fn default_page_size() -> u32 {
 #[utoipa::path(
     post,
     path = "/api/v1/users",
+    security(("cookie_auth" = [])),
     request_body = CreateUserRequest,
     responses(
         (status = 201, description = "User created", body = CreateUserResponse),
@@ -46,6 +47,7 @@ fn default_page_size() -> u32 {
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 409, description = "Username already exists", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn create_user(
@@ -91,6 +93,7 @@ async fn create_user(
 #[utoipa::path(
     get,
     path = "/api/v1/users",
+    security(("cookie_auth" = [])),
     params(
         ("limit" = Option<u32>, Query, description = "Max users per page (1-100, default 20)"),
         ("cursor" = Option<String>, Query, description = "Pagination cursor (last user ULID)"),
@@ -100,6 +103,7 @@ async fn create_user(
         (status = 400, description = "Invalid cursor", body = ErrorResponse),
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn list_users(
@@ -154,6 +158,7 @@ async fn list_users(
 #[utoipa::path(
     post,
     path = "/api/v1/users/{id}/disable",
+    security(("cookie_auth" = [])),
     params(("id" = String, Path, description = "Target user ULID")),
     responses(
         (status = 200, description = "User disabled"),
@@ -162,6 +167,7 @@ async fn list_users(
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "User not found", body = ErrorResponse),
         (status = 409, description = "Cannot disable yourself", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn disable_user(
@@ -218,6 +224,7 @@ async fn disable_user(
 #[utoipa::path(
     post,
     path = "/api/v1/users/{id}/force-logout",
+    security(("cookie_auth" = [])),
     params(("id" = String, Path, description = "Target user ULID")),
     responses(
         (status = 200, description = "Sessions revoked"),
@@ -225,6 +232,7 @@ async fn disable_user(
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "User not found", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn force_logout(

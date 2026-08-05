@@ -217,6 +217,7 @@ pub(crate) fn user_to_dto(user: &User) -> UserDto {
         (status = 201, description = "Admin created", body = SetupAdminResponse),
         (status = 400, description = "Invalid input", body = ErrorResponse),
         (status = 409, description = "Already initialized", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn setup(
@@ -264,6 +265,7 @@ async fn setup(
         (status = 200, description = "Login successful", body = LoginResponse),
         (status = 401, description = "Invalid credentials", body = ErrorResponse),
         (status = 429, description = "Rate limited", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn login(
@@ -342,9 +344,11 @@ async fn login(
 #[utoipa::path(
     post,
     path = "/api/v1/auth/logout",
+    security(("cookie_auth" = [])),
     responses(
         (status = 200, description = "Logged out"),
         (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 async fn logout(
@@ -375,6 +379,7 @@ async fn logout(
 #[utoipa::path(
     get,
     path = "/api/v1/auth/me",
+    security(("cookie_auth" = [])),
     responses(
         (status = 200, description = "Current user", body = CurrentUserResponse),
         (status = 401, description = "Not authenticated", body = ErrorResponse),

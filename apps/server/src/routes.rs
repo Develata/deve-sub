@@ -20,10 +20,14 @@ use crate::AppState;
 /// Build the OpenAPI document with info from the application config.
 ///
 /// The product name and version are injected at runtime to avoid hardcoded
-/// scattering (AGENTS.md §"Naming").
+/// scattering (AGENTS.md §"Naming"). A cookie-based security scheme is
+/// declared so that protected endpoints can annotate their security
+/// requirement (OA1).
 #[must_use]
 pub fn build_openapi(product_name: &str) -> OpenApi {
     use utoipa::openapi::InfoBuilder;
+    use utoipa::openapi::schema::ComponentsBuilder;
+    use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 
     OpenApi::builder()
         .info(
@@ -35,6 +39,14 @@ pub fn build_openapi(product_name: &str) -> OpenApi {
                 ))
                 .build(),
         )
+        .components(Some(
+            ComponentsBuilder::new()
+                .security_scheme(
+                    "cookie_auth",
+                    SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new("deve_sub_session"))),
+                )
+                .build(),
+        ))
         .build()
 }
 

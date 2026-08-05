@@ -44,8 +44,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/auth/2fa/recovery-codes": {
@@ -93,8 +108,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/auth/2fa/setup": {
@@ -132,8 +162,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/auth/2fa/verify": {
@@ -191,8 +236,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/auth/login": {
@@ -233,6 +293,16 @@
           },
           "429": {
             "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
             "content": {
               "application/json": {
                 "schema": {
@@ -289,6 +359,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -310,8 +390,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/auth/me": {
@@ -339,7 +434,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/auth/setup": {
@@ -380,6 +480,16 @@
           },
           "409": {
             "description": "Already initialized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
             "content": {
               "application/json": {
                 "schema": {
@@ -457,8 +567,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       },
       "post": {
         "summary": "`POST /api/v1/users` — create a new user (admin only).",
@@ -524,8 +649,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/users/{id}/disable": {
@@ -597,8 +737,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/users/{id}/force-logout": {
@@ -659,8 +814,23 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/health/live": {
@@ -1105,6 +1275,13 @@
             "description": "Login name."
           }
         }
+      }
+    },
+    "securitySchemes": {
+      "cookie_auth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "deve_sub_session"
       }
     }
   }

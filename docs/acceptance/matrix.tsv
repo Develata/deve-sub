@@ -9,16 +9,16 @@ UI-007	减少动画	P0	E2E	planned
 UI-008	10,000 节点	P0	Performance	planned
 UI-009	移动端	P0	E2E	planned
 UI-010	键盘导航	P0	E2E	planned
-AUTH-001	初始化管理员	P0	Integration	planned
-AUTH-002	正确登录	P0	E2E	planned
-AUTH-003	错误密码	P0	Integration	planned
-AUTH-004	登录限流	P0	Integration	planned
+AUTH-001	初始化管理员	P0	Integration	pass
+AUTH-002	正确登录	P0	E2E	pass
+AUTH-003	错误密码	P0	Integration	pass
+AUTH-004	登录限流	P0	Integration	pass
 AUTH-005	2FA	P0	E2E	pass
 AUTH-006	恢复码	P0	Integration	pass
-AUTH-007	禁用用户	P0	Integration	planned
-AUTH-008	普通用户越权	P0	Security	planned
+AUTH-007	禁用用户	P0	Integration	pass
+AUTH-008	普通用户越权	P0	Security	pass
 AUTH-009	Token 重置	P0	Integration	planned
-AUTH-010	强制注销	P0	E2E	planned
+AUTH-010	强制注销	P0	E2E	pass
 SRC-001	新建 HTTP 源	P0	E2E	planned
 SRC-002	手动刷新	P0	E2E	planned
 SRC-003	自动刷新	P0	Integration	planned
@@ -123,8 +123,8 @@ SEC-005	YAML Bomb	P0	Security	planned
 SEC-006	路径穿越	P0	Security	planned
 SEC-007	真实 IP 伪造	P0	Security	planned
 SEC-008	SPA 路由	P0	Regression	planned
-SEC-009	Token 日志	P0	Security	planned
-SEC-010	CSRF	P0	Security	planned
+SEC-009	Token 日志	P0	Security	pass
+SEC-010	CSRF	P0	Security	pass
 PERF-001	10k 节点解析	P1	Benchmark	planned
 PERF-002	10k 节点列表	P1	Browser Perf	planned
 PERF-003	缓存订阅	P1	Load	planned

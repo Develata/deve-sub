@@ -120,7 +120,7 @@ cases:
     steps: []
     assertions: ["成功创建且只能执行一次"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-002
     title: 正确登录
     priority: P0
@@ -130,7 +130,7 @@ cases:
     steps: []
     assertions: ["创建安全 Session"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-003
     title: 错误密码
     priority: P0
@@ -140,7 +140,7 @@ cases:
     steps: []
     assertions: ["不泄露用户名是否存在"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-004
     title: 登录限流
     priority: P0
@@ -150,7 +150,7 @@ cases:
     steps: []
     assertions: ["超阈值后暂时限制"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-005
     title: 2FA
     priority: P0
@@ -180,7 +180,7 @@ cases:
     steps: []
     assertions: ["现有 Session 被撤销"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-008
     title: 普通用户越权
     priority: P0
@@ -190,7 +190,7 @@ cases:
     steps: []
     assertions: ["无法访问管理员资源"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-009
     title: Token 重置
     priority: P0
@@ -210,7 +210,7 @@ cases:
     steps: []
     assertions: ["指定会话立即失效"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-001
     title: 新建 HTTP 源
     priority: P0
@@ -1260,7 +1260,7 @@ cases:
     steps: []
     assertions: ["日志中不可见完整 Token"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-010
     title: CSRF
     priority: P0
@@ -1270,7 +1270,7 @@ cases:
     steps: []
     assertions: ["跨站写请求失败"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PERF-001
     title: 10k 节点解析
     priority: P1

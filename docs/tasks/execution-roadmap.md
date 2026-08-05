@@ -11,7 +11,7 @@ order. It schedules approved contracts; it cannot override plans.
 |---|---|---|---|---|
 | M0 | Tech Spike | done | none | UI spike gate, SQLite spike, Docker build |
 | M1 | Infrastructure | done | M0 | `deve-sub serve` with health, API skeleton, DB, Docker |
-| M2 | Auth and Users | planned | M1 | Login, RBAC, session, 2FA, user management |
+| M2 | Auth and Users | done | M1 | Login, RBAC, session, 2FA, user management |
 | M3 | Protocol Engine | planned | M1 | Canonical model, P0 parsers, P0 emitters, golden + fuzz |
 | M4 | Sources and Node Pool | planned | M3 | Source CRUD, snapshot, refresh, diff, node pool, override |
 | M5 | Generator and V3 Template | planned | M3, M4 | Node selection, proxy groups, V3 template, generation, cache |
@@ -44,7 +44,16 @@ CLI subcommands (serve/doctor/migrate/config validate/openapi), OpenAPI
 spec export, Dockerfile (multi-stage, non-root, healthcheck). Docker image
 build verification pending CI (no local Docker daemon).
 
-M2 (Auth and Users) is next.
+M2 (Auth and Users) is complete — argon2id password hashing, CSPRNG session
+tokens (HMAC-SHA256 digests, HttpOnly SameSite cookies), setup-admin gate,
+login/logout with timing side-channel mitigation, RBAC (AdminUser guard),
+user CRUD with cursor pagination, disable user + force logout, login rate
+limiting (per-username and per-IP), CSRF protection (Origin header validation),
+2FA (TOTP RFC 6238, XChaCha20-Poly1305 encrypted secrets, recovery codes,
+stateless challenge tokens). 110 tests pass; AUTH-001–008, AUTH-010, SEC-009,
+SEC-010 marked pass.
+
+M3 (Protocol Engine) is next.
 
 ## Authority
 

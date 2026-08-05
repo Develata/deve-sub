@@ -54,10 +54,18 @@ jobs:
         run: docker build -t deve-sub:ci .
       - name: Run container and verify health
         run: |
-          docker run -d --name deve-sub-test -p 8080:8080 deve-sub:ci
+          # Create a named volume so the migrate and serve containers share
+          # the same /app/data directory.
+          docker volume create deve-sub-ci-data
 
-          # Run migrations inside the container
-          docker exec deve-sub-test /app/deve-sub migrate --db-path /app/data/deve-sub.db
+          # Run migrations in a one-shot container before starting the
+          # server. The serve command calls verify_schema and exits if
+          # migrations have not been applied, so migrate must run first.
+          docker run --rm -v deve-sub-ci-data:/app/data deve-sub:ci \
+            migrate --db-path /app/data/deve-sub.db
+
+          # Start the server with the shared volume.
+          docker run -d --name deve-sub-test -p 8080:8080 -v deve-sub-ci-data:/app/data deve-sub:ci
 
           # Poll the Docker healthcheck status until healthy
           for i in $(seq 1 30); do
@@ -92,3 +100,4 @@ jobs:
         run: |
           docker stop deve-sub-test 2>/dev/null || true
           docker rm deve-sub-test 2>/dev/null || true
+          docker volume rm deve-sub-ci-data 2>/dev/null || true

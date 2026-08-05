@@ -11,6 +11,8 @@ members = [
     "crates/deve-sub-security",
     "crates/deve-sub-observability",
     "crates/deve-sub-inmemory",
+    "crates/deve-sub-protocol",
+    "crates/deve-sub-emitter",
 ]
 exclude = ["spikes/*"]
 resolver = "3"
@@ -34,6 +36,8 @@ deve-sub-storage-sqlite = { path = "crates/deve-sub-storage-sqlite" }
 deve-sub-security = { path = "crates/deve-sub-security" }
 deve-sub-observability = { path = "crates/deve-sub-observability" }
 deve-sub-inmemory = { path = "crates/deve-sub-inmemory" }
+deve-sub-protocol = { path = "crates/deve-sub-protocol" }
+deve-sub-emitter = { path = "crates/deve-sub-emitter" }
 deve-sub-server = { path = "apps/server" }
 deve-sub-web = { path = "apps/web" }
 
@@ -66,6 +70,8 @@ base64 = "0.22"
 sha1 = "0.11"
 chacha20poly1305 = "0.10"
 data-encoding = "2"
+url = "2"
+percent-encoding = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

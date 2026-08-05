@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Transport layer kind for a node.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TransportKind {
     /// Raw TCP.

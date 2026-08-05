@@ -360,7 +360,7 @@ cases:
     steps: []
     assertions: ["所有 Reality 字段无损"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-002
     title: HY2 URI
     priority: P0
@@ -470,7 +470,7 @@ cases:
     steps: []
     assertions: ["导出地址自动加方括号"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-013
     title: short-id 纯数字
     priority: P0
@@ -480,7 +480,7 @@ cases:
     steps: []
     assertions: ["导出仍是字符串"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-014
     title: allowInsecure=0
     priority: P0
@@ -490,7 +490,7 @@ cases:
     steps: []
     assertions: ["输出证书校验为 false，不反转"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-015
     title: 未提供 allowInsecure
     priority: P0
@@ -500,7 +500,7 @@ cases:
     steps: []
     assertions: ["保持 None，不擅自补值"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-016
     title: 一行一个 URI
     priority: P0

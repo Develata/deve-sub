@@ -1,0 +1,22 @@
+[package]
+name = "deve-sub-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+deve-sub-kernel = { workspace = true }
+deve-sub-domain = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+percent-encoding = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+deve-sub-emitter = { workspace = true }
+
+[lints]
+workspace = true

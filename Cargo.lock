@@ -594,6 +594,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "deve-sub-emitter"
+version = "0.1.0"
+dependencies = [
+ "deve-sub-domain",
+ "percent-encoding",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "deve-sub-inmemory"
 version = "0.1.0"
 dependencies = [
@@ -618,6 +627,19 @@ dependencies = [
  "thiserror 1.0.69",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "deve-sub-protocol"
+version = "0.1.0"
+dependencies = [
+ "deve-sub-domain",
+ "deve-sub-emitter",
+ "deve-sub-kernel",
+ "percent-encoding",
+ "serde_json",
+ "thiserror 1.0.69",
+ "url",
 ]
 
 [[package]]

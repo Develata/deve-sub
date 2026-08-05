@@ -58,6 +58,29 @@ pub enum ProtocolKind {
     Unknown(String),
 }
 
+impl std::fmt::Display for ProtocolKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Vless => write!(f, "VLESS"),
+            Self::VMess => write!(f, "VMess"),
+            Self::Trojan => write!(f, "Trojan"),
+            Self::Shadowsocks => write!(f, "Shadowsocks"),
+            Self::Hysteria2 => write!(f, "Hysteria2"),
+            Self::TuicV5 => write!(f, "TUIC v5"),
+            Self::NaiveProxy => write!(f, "NaiveProxy"),
+            Self::Socks5 => write!(f, "SOCKS5"),
+            Self::Http => write!(f, "HTTP"),
+            Self::HysteriaV1 => write!(f, "Hysteria v1"),
+            Self::AnyTls => write!(f, "AnyTLS"),
+            Self::Snell => write!(f, "Snell"),
+            Self::WireGuard => write!(f, "WireGuard"),
+            Self::ShadowTls => write!(f, "ShadowTLS"),
+            Self::Ssh => write!(f, "SSH"),
+            Self::Unknown(name) => write!(f, "Unknown({name})"),
+        }
+    }
+}
+
 /// Typed configuration payload for a node.
 ///
 /// The seven P0 variants carry fully typed config. The `Unsupported` variant

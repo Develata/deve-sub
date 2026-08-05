@@ -33,7 +33,7 @@ SRC-011	IPv6 URL	P0	Integration	planned
 SRC-012	压缩响应	P0	Integration	planned
 SRC-013	多个刷新	P0	Integration	planned
 SRC-014	Diff	P0	Integration	planned
-PARSE-001	VLESS Reality URI	P0	Golden	planned
+PARSE-001	VLESS Reality URI	P0	Golden	pass
 PARSE-002	HY2 URI	P0	Golden	planned
 PARSE-003	TUIC v5 URI	P0	Golden	planned
 PARSE-004	Naive URI	P0	Golden	planned
@@ -44,10 +44,10 @@ PARSE-008	V2Ray JSON	P0	Golden	planned
 PARSE-009	Shadowrocket	P0	Golden	planned
 PARSE-010	Base64 Padding	P0	Unit	planned
 PARSE-011	URL 编码	P0	Unit	planned
-PARSE-012	IPv6 URI	P0	Golden	planned
-PARSE-013	short-id 纯数字	P0	Regression	planned
-PARSE-014	allowInsecure=0	P0	Regression	planned
-PARSE-015	未提供 allowInsecure	P0	Regression	planned
+PARSE-012	IPv6 URI	P0	Golden	pass
+PARSE-013	short-id 纯数字	P0	Regression	pass
+PARSE-014	allowInsecure=0	P0	Regression	pass
+PARSE-015	未提供 allowInsecure	P0	Regression	pass
 PARSE-016	一行一个 URI	P0	E2E	planned
 PARSE-017	Round-trip	P0	Property	planned
 PARSE-018	非法输入 Fuzz	P0	Fuzz	planned

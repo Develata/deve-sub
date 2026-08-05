@@ -150,3 +150,16 @@ later-milestone action:
   server-side state, reintroducing the coupling that stateless challenges
   were designed to avoid. Accepted as-is; revisit only if the threat model
   changes.
+
+- **IP key collateral blocking (R1)**: Per-IP failure tracking blocks all
+  users behind a shared NAT IP when one attacker triggers the IP-level
+  lockout. `record_success` only clears the username key, not the IP key, to
+  prevent an attacker on a shared IP from resetting the IP counter via a
+  successful self-login. This is an inherent tradeoff of per-IP blocking
+  (AUTH-004); accepted as-is.
+
+- **No sliding failure-count window (R2)**: Failed login counts do not decay
+  over time in the non-locked state. Three failures spread over days
+  eventually trigger lockout, since only lockout expiry, `record_success`,
+  or eviction resets the counter. A sliding time window would harden against
+  slow brute-force; deferred to a future security hardening pass.

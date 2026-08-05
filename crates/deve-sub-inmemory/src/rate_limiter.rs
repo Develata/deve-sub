@@ -62,6 +62,16 @@ impl InMemoryLoginRateLimiter {
     /// Evict entries whose lockout has expired OR whose last failure is
     /// older than `2 × lockout_duration`. Called when the map exceeds
     /// `MAX_ENTRIES` to prevent unbounded memory growth.
+    ///
+    /// WHY: eviction is a memory-boundary mechanism, not a security decay
+    /// policy. When the map is under `MAX_ENTRIES`, stale failure counts may
+    /// persist longer than `2 × lockout_duration` — the security policy is
+    /// enforced by `check` (lockout expiry resets the counter) and
+    /// `record_success` (clears the username key), not by eviction. The
+    /// inconsistency is acceptable: a few hundred stale entries cost
+    /// negligible memory, and their counts only matter if the same key
+    /// accumulates further failures, at which point the existing count
+    /// contributes to a lockout — the desired behavior.
     fn evict_expired(entries: &mut HashMap<String, RateLimitEntry>, lockout_duration: Duration) {
         let now = Instant::now();
         let max_age = lockout_duration * 2;

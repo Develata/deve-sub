@@ -24,6 +24,13 @@ pub enum AuthError {
     #[error("rate limited")]
     RateLimited,
 
+    /// An admin attempted to disable their own account. Self-disable is
+    /// rejected because there is no enable-user endpoint and `setup_admin`
+    /// refuses once users exist, so self-disable would cause an
+    /// unrecoverable lockout.
+    #[error("cannot disable your own account")]
+    SelfDisableForbidden,
+
     /// 2FA is already enabled for this user.
     #[error("2FA already enabled")]
     TwoFactorAlreadyEnabled,

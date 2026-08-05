@@ -183,24 +183,19 @@ async fn disable_user(
         )
     })?;
 
-    // WHY: an admin disabling their own account would lock them out with no
-    // API recovery path (there is no enable-user endpoint, and setup_admin
-    // refuses once users exist). Reject self-disable to prevent this.
-    if user_id == admin.user.id {
-        return Err(err(
-            StatusCode::CONFLICT,
-            "self_disable",
-            "cannot disable your own account",
-        ));
-    }
-
     auth::disable_user(
         state.user_repo.as_ref(),
         state.session_repo.as_ref(),
+        admin.user.id,
         user_id,
     )
     .await
     .map_err(|e| match e {
+        auth::AuthError::SelfDisableForbidden => err(
+            StatusCode::CONFLICT,
+            "self_disable",
+            "cannot disable your own account",
+        ),
         auth::AuthError::Identity(deve_sub_domain::IdentityError::UserNotFound) => err(
             StatusCode::NOT_FOUND,
             "user_not_found",
@@ -248,36 +243,27 @@ async fn force_logout(
         )
     })?;
 
-    // Verify the user exists before revoking sessions, so that a mistyped
-    // ULID is surfaced as 404 rather than a silent 200 no-op.
-    auth::find_user(state.user_repo.as_ref(), user_id)
-        .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "force_logout: user lookup failed");
+    auth::force_logout(
+        state.user_repo.as_ref(),
+        state.session_repo.as_ref(),
+        user_id,
+    )
+    .await
+    .map_err(|e| match e {
+        auth::AuthError::Identity(deve_sub_domain::IdentityError::UserNotFound) => err(
+            StatusCode::NOT_FOUND,
+            "user_not_found",
+            "user does not exist",
+        ),
+        other => {
+            tracing::warn!(error = %other, "force_logout failed");
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal",
                 "force logout failed",
             )
-        })?
-        .ok_or_else(|| {
-            err(
-                StatusCode::NOT_FOUND,
-                "user_not_found",
-                "user does not exist",
-            )
-        })?;
-
-    auth::force_logout(state.session_repo.as_ref(), user_id)
-        .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "force_logout failed");
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                "force logout failed",
-            )
-        })?;
+        }
+    })?;
 
     Ok(StatusCode::OK)
 }

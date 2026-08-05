@@ -237,13 +237,28 @@ pub async fn logout(
 
 /// Disable a user and revoke all their sessions.
 ///
+/// `requester_id` is the admin requesting the action. Self-disable is
+/// rejected with [`AuthError::SelfDisableForbidden`] to prevent an
+/// unrecoverable admin lockout.
+///
 /// # Errors
+/// - [`AuthError::SelfDisableForbidden`] — `target_id == requester_id`.
 /// - [`AuthError::Identity`] — storage error or user not found.
 pub async fn disable_user(
     user_repo: &dyn UserRepository,
     session_repo: &dyn SessionRepository,
-    user_id: UserId,
+    requester_id: UserId,
+    target_id: UserId,
 ) -> Result<(), AuthError> {
+    // WHY: an admin disabling their own account would lock them out with no
+    // API recovery path (there is no enable-user endpoint, and setup_admin
+    // refuses once users exist). Reject self-disable to prevent this. This
+    // check lives in the application layer, not the delivery layer, so that
+    // the business rule is enforced regardless of the entry point.
+    if target_id == requester_id {
+        return Err(AuthError::SelfDisableForbidden);
+    }
+
     // WHY: `set_enabled` and `revoke_all_for_user` are two separate SQL
     // statements with no shared transaction. If `revoke_all_for_user` fails
     // after `set_enabled` succeeds, the user is disabled but stale session
@@ -252,8 +267,8 @@ pub async fn disable_user(
     // so disabled-user sessions cannot authenticate regardless of the
     // `revoked` flag. The stale rows are a storage-level cosmetic issue, not
     // a security gap.
-    user_repo.set_enabled(user_id, false).await?;
-    session_repo.revoke_all_for_user(user_id).await?;
+    user_repo.set_enabled(target_id, false).await?;
+    session_repo.revoke_all_for_user(target_id).await?;
     Ok(())
 }
 
@@ -376,12 +391,21 @@ pub async fn list_users(
 /// Force logout: revoke all sessions for a user without disabling the
 /// account. The user may log in again immediately (AUTH-010).
 ///
+/// Verifies the user exists before revoking so that a mistyped ULID surfaces
+/// as [`IdentityError::UserNotFound`] rather than a silent no-op
+/// (`revoke_all_for_user` does not report whether any sessions existed).
+///
 /// # Errors
-/// - [`AuthError::Identity`] — storage error.
+/// - [`AuthError::Identity`] — storage error or user not found.
 pub async fn force_logout(
+    user_repo: &dyn UserRepository,
     session_repo: &dyn SessionRepository,
     user_id: UserId,
 ) -> Result<(), AuthError> {
+    user_repo
+        .find_by_id(user_id)
+        .await?
+        .ok_or(AuthError::Identity(IdentityError::UserNotFound))?;
     session_repo.revoke_all_for_user(user_id).await?;
     Ok(())
 }

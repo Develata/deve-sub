@@ -7,7 +7,7 @@
 use deve_sub_domain::{IdentityError, Role, Session, SessionRepository, User, UserRepository};
 use deve_sub_kernel::{SessionId, Timestamp, UserId};
 use deve_sub_security::{
-    MasterKey, generate_session_token, hash_password, hash_session_token, verify_password,
+    MasterKey, PURPOSE_SESSION, generate_session_token, hash_password, hmac_digest, verify_password,
 };
 
 use super::challenge::generate_challenge_token;
@@ -194,7 +194,7 @@ pub async fn login(params: LoginParams<'_>) -> Result<LoginOutcome, AuthError> {
 
     let now = Timestamp::now();
     let token = generate_session_token()?;
-    let token_hash = hash_session_token(&token, master_key.as_bytes())?;
+    let token_hash = hmac_digest(PURPOSE_SESSION, &token, master_key.as_bytes())?;
     let expires_at = now + session_ttl;
     let session = Session::new(user.id, token_hash, expires_at);
     session_repo.create(&session).await?;
@@ -271,7 +271,7 @@ pub async fn verify_session(
     master_key: &MasterKey,
     token: &str,
 ) -> Result<Option<Session>, AuthError> {
-    let token_hash = hash_session_token(token, master_key.as_bytes())?;
+    let token_hash = hmac_digest(PURPOSE_SESSION, token, master_key.as_bytes())?;
     let session = session_repo.find_by_token_hash(&token_hash).await?;
     Ok(session.filter(Session::is_valid))
 }

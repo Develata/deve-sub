@@ -13,7 +13,7 @@
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use deve_sub_kernel::{Timestamp, UserId};
-use deve_sub_security::{MasterKey, hash_session_token};
+use deve_sub_security::{MasterKey, PURPOSE_CHALLENGE, hmac_digest};
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 
@@ -49,7 +49,7 @@ pub fn generate_challenge_token(
         AuthError::Security(deve_sub_security::SecurityError::Crypto(e.to_string()))
     })?;
     let payload_b64 = URL_SAFE_NO_PAD.encode(payload_json.as_bytes());
-    let signature = hash_session_token(&payload_b64, master_key.as_bytes())?;
+    let signature = hmac_digest(PURPOSE_CHALLENGE, &payload_b64, master_key.as_bytes())?;
     Ok(format!("{payload_b64}.{signature}"))
 }
 
@@ -72,7 +72,7 @@ pub fn verify_challenge_token(
 
     // WHY: recompute the signature and compare in constant time to prevent
     // timing side-channel attacks on the signature verification.
-    let expected_signature = hash_session_token(payload_b64, master_key.as_bytes())?;
+    let expected_signature = hmac_digest(PURPOSE_CHALLENGE, payload_b64, master_key.as_bytes())?;
     let sig_bytes = signature.as_bytes();
     let expected_bytes = expected_signature.as_bytes();
     if sig_bytes.len() != expected_bytes.len() || !bool::from(sig_bytes.ct_eq(expected_bytes)) {

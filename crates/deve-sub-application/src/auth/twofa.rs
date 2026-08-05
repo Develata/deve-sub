@@ -11,9 +11,9 @@ use deve_sub_domain::{
 };
 use deve_sub_kernel::{Timestamp, UserId};
 use deve_sub_security::{
-    MasterKey, decrypt, encrypt, generate_recovery_codes, generate_session_token,
-    hash_session_token, normalize_recovery_code, totp_generate_secret, totp_otpauth_uri,
-    totp_verify_code, verify_password,
+    MasterKey, PURPOSE_RECOVERY, PURPOSE_SESSION, decrypt, encrypt, generate_recovery_codes,
+    generate_session_token, hmac_digest, normalize_recovery_code, totp_generate_secret,
+    totp_otpauth_uri, totp_verify_code, verify_password,
 };
 
 use super::challenge::verify_challenge_token;
@@ -129,7 +129,7 @@ pub async fn verify_2fa(
     let mut code_entities = Vec::with_capacity(recovery_codes.len());
     for code in &recovery_codes {
         let normalized = normalize_recovery_code(code);
-        let hash = hash_session_token(&normalized, master_key.as_bytes())?;
+        let hash = hmac_digest(PURPOSE_RECOVERY, &normalized, master_key.as_bytes())?;
         code_entities.push(RecoveryCode::new(user_id, hash));
     }
     recovery_code_repo
@@ -227,7 +227,7 @@ pub async fn regenerate_recovery_codes(
     let mut code_entities = Vec::with_capacity(recovery_codes.len());
     for code in &recovery_codes {
         let normalized = normalize_recovery_code(code);
-        let hash = hash_session_token(&normalized, master_key.as_bytes())?;
+        let hash = hmac_digest(PURPOSE_RECOVERY, &normalized, master_key.as_bytes())?;
         code_entities.push(RecoveryCode::new(user_id, hash));
     }
     // WHY: replace_all_for_user atomically deletes old codes and inserts new
@@ -318,7 +318,7 @@ pub async fn login_2fa(
     } else {
         // Recovery code path
         let normalized = normalize_recovery_code(code);
-        let hash = hash_session_token(&normalized, master_key.as_bytes())?;
+        let hash = hmac_digest(PURPOSE_RECOVERY, &normalized, master_key.as_bytes())?;
 
         match recovery_code_repo
             .find_unused_by_hash(user_id, &hash)
@@ -345,7 +345,7 @@ pub async fn login_2fa(
 
     let now = Timestamp::now();
     let token = generate_session_token()?;
-    let token_hash = hash_session_token(&token, master_key.as_bytes())?;
+    let token_hash = hmac_digest(PURPOSE_SESSION, &token, master_key.as_bytes())?;
     let expires_at = now + session_ttl;
     let session = Session::new(user.id, token_hash, expires_at);
     session_repo.create(&session).await?;

@@ -55,6 +55,23 @@ pub struct SecurityConfig {
     #[serde(default = "default_master_key_path")]
     pub master_key_path: String,
 
+    /// Whether to auto-generate the master key if the file is missing.
+    ///
+    /// When `true` (the default), a missing key file is silently generated
+    /// with a warning — convenient for local development. When `false`, the
+    /// server refuses to start if the key file does not exist, preventing
+    /// silent key loss in production (which would invalidate all sessions,
+    /// recovery codes, and encrypted TOTP secrets).
+    ///
+    /// WHY: `load_or_generate` on a missing key file creates a new key with
+    /// only a `tracing::warn`. If the path is misconfigured or the mount is
+    /// lost, the server starts with a fresh key and all existing
+    /// HMAC-derived data (sessions, recovery codes) and encrypted data
+    /// (TOTP secrets) become unrecoverable. Setting this to `false` in
+    /// production makes such misconfiguration a hard failure.
+    #[serde(default = "default_allow_master_key_generation")]
+    pub allow_master_key_generation: bool,
+
     /// Session lifetime in seconds. Default: 86400 (24 hours).
     #[serde(default = "default_session_ttl_secs")]
     pub session_ttl_secs: u64,
@@ -116,6 +133,7 @@ impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
             master_key_path: default_master_key_path(),
+            allow_master_key_generation: default_allow_master_key_generation(),
             session_ttl_secs: default_session_ttl_secs(),
             cookie_secure: default_cookie_secure(),
             max_login_attempts: default_max_login_attempts(),
@@ -142,6 +160,10 @@ fn default_db_path() -> String {
 
 fn default_master_key_path() -> String {
     "data/master.key".to_owned()
+}
+
+fn default_allow_master_key_generation() -> bool {
+    true
 }
 
 fn default_session_ttl_secs() -> u64 {

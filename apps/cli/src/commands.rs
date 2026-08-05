@@ -150,9 +150,15 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         .context("database schema check failed — run `deve-sub migrate` first")?;
 
     let master_key = Arc::new(
-        deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(
-            &config.security.master_key_path,
-        ))
+        if config.security.allow_master_key_generation {
+            deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(
+                &config.security.master_key_path,
+            ))
+        } else {
+            deve_sub_security::MasterKey::load(std::path::Path::new(
+                &config.security.master_key_path,
+            ))
+        }
         .context("failed to load master key")?,
     );
 

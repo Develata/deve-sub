@@ -9,6 +9,7 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 pub mod cipher;
+pub mod hmac;
 pub mod master_key;
 pub mod password;
 pub mod recovery;
@@ -16,12 +17,13 @@ pub mod token;
 pub mod totp;
 
 pub use cipher::{decrypt, decrypt_from_b64, encrypt, encrypt_to_b64};
+pub use hmac::{PURPOSE_CHALLENGE, PURPOSE_RECOVERY, PURPOSE_SESSION, hmac_digest};
 pub use master_key::MasterKey;
 pub use password::{hash_password, verify_password};
 pub use recovery::{
     generate_codes as generate_recovery_codes, normalize_code as normalize_recovery_code,
 };
-pub use token::{generate_session_token, hash_session_token};
+pub use token::generate_session_token;
 pub use totp::{
     DIGITS as TOTP_DIGITS, PERIOD as TOTP_PERIOD, base32_decode, base32_secret,
     generate_code as totp_generate_code, generate_code_string as totp_generate_code_string,

@@ -140,3 +140,13 @@ later-milestone action:
   would invalidate all sessions, recovery codes, and encrypted TOTP secrets
   simultaneously with no key-ID decoupling. Deferred to M8 (Deployment and
   Hardening) when key management and rotation are formally specified.
+
+- **Challenge token replay window (CH1)**: The 2FA challenge token is
+  stateless (HMAC-signed `{uid, exp}`) and can be replayed within its 5-minute
+  TTL. It does not bind to a one-time nonce, password version, or session
+  state. This is a defensible design tradeoff: statelessness avoids a DB
+  write on every login attempt, and the rate limiter (per-username + per-IP)
+  bounds brute-force attempts. Adding one-time binding would require
+  server-side state, reintroducing the coupling that stateless challenges
+  were designed to avoid. Accepted as-is; revisit only if the threat model
+  changes.

@@ -3,7 +3,7 @@
 //! Recovery codes are high-entropy one-time codes that allow users to regain
 //! access if they lose their TOTP device. Each code is 10 characters from a
 //! 32-character alphabet (no ambiguous characters), formatted as `XXXXX-XXXXX`.
-//! Codes are stored as HMAC-SHA256 hashes (via [`crate::hash_session_token`])
+//! Codes are stored as HMAC-SHA256 hashes (via [`crate::hmac_digest`] with
 //! and are single-use.
 
 use rand::RngCore;

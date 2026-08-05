@@ -25,7 +25,7 @@ conceptual registry; when they disagree, migrations prevail.
 | Entity | Description |
 |---|---|
 | RecoveryCode | Single-use 2FA recovery code, stored as hash. |
-| TotpSecret | TOTP shared secret, encrypted at rest, with enabled flag. |
+| TotpSecret | TOTP shared secret, encrypted at rest (XChaCha20-Poly1305). |
 | SubscriptionToken | CSPRNG subscription access token, stored as HMAC-SHA256 digest. |
 
 ## M3 — Protocol Engine

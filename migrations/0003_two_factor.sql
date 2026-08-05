@@ -15,8 +15,9 @@ CREATE TABLE totp_secrets (
 );
 
 -- Recovery codes: single-use, stored as HMAC-SHA256 hashes.
--- The code_hash column is UNIQUE to enforce that each hash maps to at most
--- one row, preventing duplicate codes within a user's set.
+-- The code_hash column has a global UNIQUE constraint: each hash maps to at
+-- most one row across the entire table. This is a stronger guarantee than
+-- per-user uniqueness and is harmless given the 2^160 hash space.
 CREATE TABLE recovery_codes (
     id          TEXT    PRIMARY KEY,
     user_id     TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,

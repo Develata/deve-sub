@@ -113,3 +113,30 @@ AUTH-009 (Token 重置 — "旧订阅 Token 失效") depends on subscription tok
 - Session tokens are redacted in logs.
 - Cross-site write requests are rejected by CSRF protection.
 - Acceptance: `AUTH-001` through `AUTH-008`, `AUTH-010`, `SEC-009`, `SEC-010`.
+
+## Deferred items
+
+The following items are acknowledged limitations from M2, registered for
+later-milestone action:
+
+- **Cross-repository 2FA orchestration (D3)**: 2FA enable/disable spans the
+  user repository and the 2FA repository (TOTP secrets + recovery codes)
+  without a cross-repository transaction. Reliability is maintained via
+  compensating actions (eager delete on failure, tolerant queries that only
+  read when `two_factor_enabled` is set) and documented with WHY comments.
+  This is an architectural constraint of the modular monolith; deferred to a
+  future transactional outbox or saga pattern if reliability requirements
+  escalate.
+
+- **Application-layer `is_active` guard (D4)**: 2FA commands
+  (`setup_2fa`, `disable_2fa`, `regenerate_recovery_codes`) rely on the
+  delivery-layer `AdminUser` guard for authorization and do not re-check
+  `user.is_active()` in the application layer. Defense-in-depth would add
+  this check; deferred until the command layer gains a uniform guard policy.
+
+- **Master key rotation (D5)**: The master key has no version or rotation
+  mechanism. A single 32-byte key serves session token HMAC, recovery code
+  HMAC, and TOTP/field encryption (XChaCha20-Poly1305). Rotating the key
+  would invalidate all sessions, recovery codes, and encrypted TOTP secrets
+  simultaneously with no key-ID decoupling. Deferred to M8 (Deployment and
+  Hardening) when key management and rotation are formally specified.

@@ -75,7 +75,9 @@ erDiagram
         string password_hash
         string role
         bool enabled
+        bool two_factor_enabled
         datetime expires_at
+        datetime last_login_at
         int traffic_quota
         datetime created_at
     }
@@ -93,14 +95,15 @@ erDiagram
         ulid id PK
         ulid user_id FK
         string code_hash
-        datetime used_at
+        bool used
+        datetime created_at
     }
 
     TOTP_SECRET {
-        ulid id PK
-        ulid user_id FK
-        string secret_encrypted
-        bool enabled
+        ulid user_id PK,FK
+        blob secret_ciphertext
+        blob nonce
+        datetime created_at
     }
 
     SOURCE {

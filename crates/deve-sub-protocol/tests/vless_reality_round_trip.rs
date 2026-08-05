@@ -294,9 +294,9 @@ fn missing_pbk_returns_error() {
 /// Unknown scheme returns `UnknownScheme`.
 #[test]
 fn unknown_scheme_returns_error() {
-    let uri = "ss://00000000-0000-4000-8000-000000000001@example.com:443#Test";
+    let uri = "unknown://00000000-0000-4000-8000-000000000001@example.com:443#Test";
     let err = deve_sub_protocol::parse_uri(uri).expect_err("should fail");
-    assert!(matches!(err, deve_sub_protocol::ParseError::UnknownScheme(s) if s == "ss"));
+    assert!(matches!(err, deve_sub_protocol::ParseError::UnknownScheme(s) if s == "unknown"));
 }
 
 /// Invalid transport type returns `InvalidField`.
@@ -323,7 +323,7 @@ fn invalid_allow_insecure_returns_error() {
     assert!(matches!(
         err,
         deve_sub_protocol::ParseError::InvalidField {
-            field: "allowInsecure",
+            field: "insecure",
             ..
         }
     ));

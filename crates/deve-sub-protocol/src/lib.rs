@@ -12,8 +12,15 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 pub mod error;
+mod hysteria2;
+mod naive;
+mod shadowsocks;
+mod transport;
+mod trojan;
+mod tuic_v5;
 mod uri;
 mod vless_reality;
+mod vmess;
 
 pub use error::ParseError;
 

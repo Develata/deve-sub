@@ -597,9 +597,12 @@ dependencies = [
 name = "deve-sub-emitter"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "deve-sub-domain",
  "percent-encoding",
+ "serde_json",
  "thiserror 1.0.69",
+ "time",
 ]
 
 [[package]]
@@ -633,12 +636,15 @@ dependencies = [
 name = "deve-sub-protocol"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "deve-sub-domain",
  "deve-sub-emitter",
  "deve-sub-kernel",
  "percent-encoding",
+ "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "time",
  "url",
 ]
 

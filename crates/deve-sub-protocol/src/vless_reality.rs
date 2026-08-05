@@ -21,7 +21,10 @@ use deve_sub_domain::{
 };
 
 use crate::error::ParseError;
-use crate::uri::{node_shell, parse_bool, parse_host};
+use crate::transport::map_transport_kind;
+use crate::uri::{
+    collect_query, decode_fragment, node_shell, parse_alpn, parse_bool, parse_host, query_insecure,
+};
 
 /// Parse a parsed `vless://` URL into a canonical [`Node`].
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
@@ -37,22 +40,9 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
 
     let port = url.port().ok_or(ParseError::MissingField("port"))?;
 
-    // WHY: url::Url::fragment() returns the percent-encoded fragment. Decode
-    // it here so the canonical Node stores the raw display name; the emitter
-    // re-encodes it, avoiding double-encoding on round-trip.
-    let display_name = url
-        .fragment()
-        .map(|f| {
-            percent_encoding::percent_decode_str(f)
-                .decode_utf8_lossy()
-                .into_owned()
-        })
-        .unwrap_or_default();
+    let display_name = decode_fragment(url);
 
-    let query: HashMap<String, String> = url
-        .query_pairs()
-        .map(|(k, v)| (k.into_owned(), v.into_owned()))
-        .collect();
+    let query: HashMap<String, String> = collect_query(url);
 
     let security = query.get("security").map(String::as_str).unwrap_or("");
     let is_reality = security == "reality";
@@ -103,24 +93,6 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
     Ok(node)
 }
 
-/// Map the `type` query parameter to a [`TransportKind`].
-fn map_transport_kind(value: &str) -> Result<TransportKind, ParseError> {
-    match value {
-        "tcp" => Ok(TransportKind::Tcp),
-        "ws" => Ok(TransportKind::Ws),
-        "grpc" => Ok(TransportKind::Grpc),
-        "h2" => Ok(TransportKind::H2),
-        "kcp" => Ok(TransportKind::Kcp),
-        "quic" => Ok(TransportKind::Quic),
-        "httpupgrade" => Ok(TransportKind::HttpUpgrade),
-        "xtls" => Ok(TransportKind::Xtls),
-        _ => Err(ParseError::InvalidField {
-            field: "type (transport)",
-            value: value.to_owned(),
-        }),
-    }
-}
-
 /// Build the [`TlsConfig`] from query parameters.
 ///
 /// For Reality, the `reality` field is populated with `pbk`, `sid`, and
@@ -140,17 +112,7 @@ fn build_tls(
         return Ok(None);
     }
 
-    let skip_cert_verify = match query.get("allowInsecure").map(String::as_str) {
-        None => None,
-        Some("0") => Some(false),
-        Some("1") => Some(true),
-        Some(v) => {
-            return Err(ParseError::InvalidField {
-                field: "allowInsecure",
-                value: v.to_owned(),
-            });
-        }
-    };
+    let skip_cert_verify = query_insecure(query, &["allowInsecure"])?;
 
     let reality = if is_reality {
         let pbk = query
@@ -168,16 +130,7 @@ fn build_tls(
         None
     };
 
-    let alpn = query
-        .get("alpn")
-        .map(|v| {
-            if v.is_empty() {
-                vec![]
-            } else {
-                v.split(',').map(String::from).collect()
-            }
-        })
-        .unwrap_or_default();
+    let alpn = query.get("alpn").map(|v| parse_alpn(v)).unwrap_or_default();
 
     Ok(Some(TlsConfig {
         enabled: true,

@@ -12,39 +12,11 @@
 //! `encryption`, `packetEncoding`, `udp`, `xudp`, `spx`, `path`, `host`,
 //! `alpn`.
 
-use percent_encoding::{AsciiSet, CONTROLS};
-
 use deve_sub_domain::{Authentication, Node, ProtocolConfig, TransportKind, VlessRealityConfig};
 
+use crate::common::{format_fragment, format_query};
 use crate::error::EmitError;
-
-/// Percent-encode set for URI fragments: control chars plus characters that
-/// would break the URI structure.
-const FRAGMENT_ENCODE: &AsciiSet = &CONTROLS
-    .add(b' ')
-    .add(b'"')
-    .add(b'<')
-    .add(b'>')
-    .add(b'`')
-    .add(b'#')
-    .add(b'&')
-    .add(b'?')
-    .add(b'%');
-
-/// Percent-encode set for query parameter values. Encodes delimiters and
-/// structural characters that would break query parsing, but leaves path-safe
-/// characters like `/` unencoded for readability and golden-test stability.
-const QUERY_VALUE_ENCODE: &AsciiSet = &CONTROLS
-    .add(b' ')
-    .add(b'"')
-    .add(b'<')
-    .add(b'>')
-    .add(b'`')
-    .add(b'#')
-    .add(b'&')
-    .add(b'+')
-    .add(b'=')
-    .add(b'%');
+use crate::transport::transport_kind_str;
 
 /// Emit a VLESS Reality [`Node`] as a `vless://` share URI.
 pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
@@ -155,36 +127,16 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
         params.push(("alpn".to_owned(), tls.alpn.join(",")));
     }
 
-    let query = params
-        .iter()
-        .map(|(k, v)| {
-            format!(
-                "{k}={v}",
-                v = percent_encoding::utf8_percent_encode(v, QUERY_VALUE_ENCODE)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("&");
+    let query = format_query(&params);
 
-    let fragment = percent_encoding::utf8_percent_encode(&node.display_name, FRAGMENT_ENCODE);
-
-    Ok(format!(
-        "vless://{uuid}@{host}:{port}?{query}#{fragment}",
+    let mut result = format!(
+        "vless://{uuid}@{host}:{port}?{query}",
         host = node.endpoint.host.uri_host(),
         port = node.endpoint.port,
-    ))
-}
-
-/// Map a [`TransportKind`] to the `type` query parameter string.
-fn transport_kind_str(kind: TransportKind) -> &'static str {
-    match kind {
-        TransportKind::Tcp => "tcp",
-        TransportKind::Kcp => "kcp",
-        TransportKind::Ws => "ws",
-        TransportKind::H2 => "h2",
-        TransportKind::Quic => "quic",
-        TransportKind::Grpc => "grpc",
-        TransportKind::HttpUpgrade => "httpupgrade",
-        TransportKind::Xtls => "xtls",
+    );
+    if !node.display_name.is_empty() {
+        result.push('#');
+        result.push_str(&format_fragment(&node.display_name));
     }
+    Ok(result)
 }

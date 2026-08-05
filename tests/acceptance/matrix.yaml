@@ -370,7 +370,7 @@ cases:
     steps: []
     assertions: ["obfs、端口跳跃和证书字段无损"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-003
     title: TUIC v5 URI
     priority: P0
@@ -380,7 +380,7 @@ cases:
     steps: []
     assertions: ["心跳和拥塞字段无损"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-004
     title: Naive URI
     priority: P0
@@ -390,7 +390,7 @@ cases:
     steps: []
     assertions: ["不降级为 HTTP"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-005
     title: Mihomo YAML
     priority: P0
@@ -450,7 +450,7 @@ cases:
     steps: []
     assertions: ["有无 Padding 都正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-011
     title: URL 编码
     priority: P0
@@ -460,7 +460,7 @@ cases:
     steps: []
     assertions: ["中文名称和特殊符号无损"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-012
     title: IPv6 URI
     priority: P0

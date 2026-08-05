@@ -37,4 +37,16 @@ pub enum ParseError {
     /// The port is missing or out of range.
     #[error("invalid port: {0}")]
     InvalidPort(String),
+
+    /// Base64 decoding failed (Shadowsocks userinfo, VMess body).
+    #[error("invalid base64: {0}")]
+    InvalidBase64(String),
+
+    /// JSON parsing failed (VMess body).
+    #[error("invalid JSON: {0}")]
+    InvalidJson(String),
+
+    /// A bandwidth value (e.g. Hysteria2 `up`/`down`) could not be parsed.
+    #[error("invalid bandwidth: {0}")]
+    InvalidBandwidth(String),
 }

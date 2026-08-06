@@ -69,7 +69,7 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
 
     let config = ProtocolConfig::NaiveProxy(NaiveProxyConfig { quic, http2, http3 });
 
-    let mut node = node_shell(raw_uri);
+    let mut node = node_shell(Some(raw_uri));
     node.display_name = display_name;
     node.protocol = ProtocolKind::NaiveProxy;
     node.config = config;

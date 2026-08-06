@@ -100,7 +100,7 @@ pub(crate) fn parse(uri: &str) -> Result<Node, ParseError> {
         plugin_opts,
     });
 
-    let mut node = node_shell(uri);
+    let mut node = node_shell(Some(uri));
     node.display_name = decode_fragment_parts(fragment);
     node.protocol = ProtocolKind::Shadowsocks;
     node.config = config;

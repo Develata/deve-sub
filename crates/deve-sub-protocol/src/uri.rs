@@ -53,11 +53,32 @@ pub(crate) fn parse_host(host_str: &str) -> Result<Host, ParseError> {
     if host_str.is_empty() {
         return Err(ParseError::InvalidHost("empty host".to_owned()));
     }
+    // WHY: strip IPv6 bracket notation `[2001:db8::1]` → `2001:db8::1` so
+    // that `parse_host` accepts both bracketed and bare IPv6 literals.
+    // Container parsers call this with raw `server` fields that may include
+    // brackets (e.g. sing-box `server: "[2001:db8::1]"`).
+    let host_str = host_str
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .unwrap_or(host_str);
     if let Ok(ipv4) = host_str.parse::<std::net::Ipv4Addr>() {
         return Ok(Host::Ipv4(ipv4));
     }
     if let Ok(ipv6) = host_str.parse::<std::net::Ipv6Addr>() {
         return Ok(Host::Ipv6(ipv6));
+    }
+    // WHY: reject domain names containing control characters, whitespace, or
+    // URI structural characters. Container format parsers (Mihomo YAML,
+    // sing-box JSON, Xray/V2Ray JSON) call this function directly with
+    // untrusted input, unlike URI parsers which use `url::Url::parse` first.
+    // A malicious `server` field like "real.com\nvless://attacker.com:443"
+    // would inject additional URI lines when re-emitted via `emit_uri_list`.
+    if host_str.chars().any(|c| {
+        c.is_control() || c.is_whitespace() || matches!(c, '/' | ':' | '@' | '#' | '?' | '[' | ']')
+    }) {
+        return Err(ParseError::InvalidHost(format!(
+            "domain name contains invalid characters: {host_str}"
+        )));
     }
     Ok(Host::Domain(deve_sub_domain::DomainName::new(
         host_str.to_owned(),
@@ -109,8 +130,9 @@ pub(crate) fn parse_bool(value: &str) -> Result<bool, ParseError> {
 /// Create a `Node` with default metadata fields.
 ///
 /// Protocol-specific fields are filled by the caller. The `source.raw_uri`
-/// is set to the original URI string for provenance.
-pub(crate) fn node_shell(raw_uri: &str) -> Node {
+/// is set to the original URI string for provenance. Container format
+/// parsers pass `None` since there is no URI.
+pub(crate) fn node_shell(raw_uri: Option<&str>) -> Node {
     Node {
         id: NodeId::new(),
         display_name: String::new(),
@@ -134,7 +156,7 @@ pub(crate) fn node_shell(raw_uri: &str) -> Node {
         chain: None,
         source: deve_sub_domain::NodeSource {
             source_label: String::new(),
-            raw_uri: Some(raw_uri.to_owned()),
+            raw_uri: raw_uri.map(|s| s.to_owned()),
             imported_at: deve_sub_kernel::Timestamp::now(),
         },
         tags: vec![],

@@ -129,7 +129,7 @@ pub(crate) fn parse(uri: &str) -> Result<Node, ParseError> {
         packet_encoding: vmess.packet_encoding.filter(|s| !s.is_empty()),
     });
 
-    let mut node = node_shell(uri);
+    let mut node = node_shell(Some(uri));
     node.display_name = vmess.ps.unwrap_or_default();
     node.protocol = ProtocolKind::VMess;
     node.config = config;

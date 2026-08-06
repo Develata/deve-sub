@@ -72,6 +72,7 @@ chacha20poly1305 = "0.10"
 data-encoding = "2"
 url = "2"
 percent-encoding = "2"
+serde_yaml = "0.9"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

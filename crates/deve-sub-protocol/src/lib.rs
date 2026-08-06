@@ -11,6 +11,7 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod container;
 pub mod error;
 mod hysteria2;
 mod naive;

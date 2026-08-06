@@ -37,18 +37,18 @@ PARSE-001	VLESS Reality URI	P0	Golden	pass
 PARSE-002	HY2 URI	P0	Golden	pass
 PARSE-003	TUIC v5 URI	P0	Golden	pass
 PARSE-004	Naive URI	P0	Golden	pass
-PARSE-005	Mihomo YAML	P0	Golden	planned
-PARSE-006	sing-box JSON	P0	Golden	planned
-PARSE-007	Xray JSON	P0	Golden	planned
-PARSE-008	V2Ray JSON	P0	Golden	planned
-PARSE-009	Shadowrocket	P0	Golden	planned
+PARSE-005	Mihomo YAML	P0	Golden	pass
+PARSE-006	sing-box JSON	P0	Golden	pass
+PARSE-007	Xray JSON	P0	Golden	pass
+PARSE-008	V2Ray JSON	P0	Golden	pass
+PARSE-009	Shadowrocket	P0	Golden	pass
 PARSE-010	Base64 Padding	P0	Unit	pass
 PARSE-011	URL 编码	P0	Unit	pass
 PARSE-012	IPv6 URI	P0	Golden	pass
 PARSE-013	short-id 纯数字	P0	Regression	pass
 PARSE-014	allowInsecure=0	P0	Regression	pass
 PARSE-015	未提供 allowInsecure	P0	Regression	pass
-PARSE-016	一行一个 URI	P0	E2E	planned
+PARSE-016	一行一个 URI	P0	E2E	pass
 PARSE-017	Round-trip	P0	Property	planned
 PARSE-018	非法输入 Fuzz	P0	Fuzz	planned
 NODE-001	粘贴批量节点	P0	E2E	planned

@@ -49,4 +49,18 @@ pub enum ParseError {
     /// A bandwidth value (e.g. Hysteria2 `up`/`down`) could not be parsed.
     #[error("invalid bandwidth: {0}")]
     InvalidBandwidth(String),
+
+    /// YAML parsing failed (Mihomo YAML container format).
+    #[error("invalid YAML: {0}")]
+    InvalidYaml(String),
+
+    /// A container format entry has an unrecognized or non-P0 proxy type.
+    /// The entry is preserved as `UnsupportedNode` rather than dropped.
+    #[error("unsupported proxy type: {0}")]
+    UnsupportedProxyType(String),
+
+    /// A container format structure is missing a required top-level key
+    /// (e.g. `proxies` in Mihomo YAML, `outbounds` in sing-box JSON).
+    #[error("missing container key: {0}")]
+    MissingContainerKey(&'static str),
 }

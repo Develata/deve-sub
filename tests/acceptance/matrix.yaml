@@ -400,7 +400,7 @@ cases:
     steps: []
     assertions: ["可解析支持协议和 IPv6"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-006
     title: sing-box JSON
     priority: P0
@@ -410,7 +410,7 @@ cases:
     steps: []
     assertions: ["可解析 Outbound"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-007
     title: Xray JSON
     priority: P0
@@ -420,7 +420,7 @@ cases:
     steps: []
     assertions: ["可解析 Outbound"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-008
     title: V2Ray JSON
     priority: P0
@@ -430,7 +430,7 @@ cases:
     steps: []
     assertions: ["可解析 Outbound"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-009
     title: Shadowrocket
     priority: P0
@@ -440,7 +440,7 @@ cases:
     steps: []
     assertions: ["分享列表正确解析"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-010
     title: Base64 Padding
     priority: P0
@@ -510,7 +510,7 @@ cases:
     steps: []
     assertions: ["输出格式和换行正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-017
     title: Round-trip
     priority: P0

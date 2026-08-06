@@ -20,9 +20,11 @@ mod transport;
 mod trojan;
 mod tuic_v5;
 mod uri;
+mod uri_list;
 mod vless_reality;
 mod vmess;
 
 pub use error::EmitError;
 
 pub use uri::emit_uri;
+pub use uri_list::emit_uri_list;

@@ -14,6 +14,7 @@ pub mod identity;
 pub mod node;
 pub mod protocol;
 pub mod protocol_config;
+pub mod source;
 pub mod tls;
 pub mod transport;
 
@@ -28,6 +29,9 @@ pub use protocol::{ProtocolConfig, ProtocolKind, UnsupportedNode};
 pub use protocol_config::{
     Hysteria2Config, NaiveProxyConfig, ShadowsocksConfig, TrojanConfig, TuicV5Config, UdpRelayMode,
     VMessConfig, VlessRealityConfig,
+};
+pub use source::{
+    Source, SourceError, SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
 };
 pub use tls::{CertificatePin, RealityConfig, TlsConfig};
 pub use transport::{

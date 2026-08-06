@@ -42,8 +42,8 @@ impl SessionRow {
             user_id: UserId::parse(&self.user_id)
                 .map_err(|e| IdentityError::Storage(e.to_string()))?,
             token_hash: self.token_hash.clone(),
-            created_at: parse_ts(&self.created_at)?,
-            expires_at: parse_ts(&self.expires_at)?,
+            created_at: parse_ts(&self.created_at).map_err(IdentityError::Storage)?,
+            expires_at: parse_ts(&self.expires_at).map_err(IdentityError::Storage)?,
             revoked: self.revoked != 0,
         })
     }
@@ -52,8 +52,8 @@ impl SessionRow {
 #[async_trait]
 impl SessionRepository for SqliteSessionRepository {
     async fn create(&self, session: &Session) -> Result<(), IdentityError> {
-        let created_at = format_ts(session.created_at)?;
-        let expires_at = format_ts(session.expires_at)?;
+        let created_at = format_ts(session.created_at).map_err(IdentityError::Storage)?;
+        let expires_at = format_ts(session.expires_at).map_err(IdentityError::Storage)?;
 
         sqlx::query(
             "INSERT INTO sessions (id, user_id, token_hash, created_at, expires_at, revoked) \

@@ -1,9 +1,10 @@
 //! Deve Sub CLI entry point.
 //!
 //! Subcommands: `serve`, `serve --headless`, `doctor`, `migrate`,
-//! `config validate`, `openapi`, `user init-admin`. See
-//! `docs/plan/milestones/M1-infrastructure.md` and
-//! `docs/plan/milestones/M2-auth-and-users.md`.
+//! `config validate`, `openapi`, `user init-admin`, `source add`. See
+//! `docs/plan/milestones/M1-infrastructure.md`,
+//! `docs/plan/milestones/M2-auth-and-users.md`, and
+//! `docs/plan/milestones/M4-sources-and-node-pool.md`.
 
 use std::process::ExitCode;
 
@@ -33,6 +34,8 @@ enum Commands {
     Openapi(commands::OpenapiArgs),
     /// User management commands.
     User(commands::UserArgs),
+    /// Source management commands.
+    Source(commands::SourceArgs),
 }
 
 fn main() -> ExitCode {
@@ -58,6 +61,9 @@ fn main() -> ExitCode {
             Commands::Openapi(args) => commands::openapi(args).await,
             Commands::User(args) => match args.command {
                 commands::UserSubCommand::InitAdmin(sub) => commands::user_init_admin(sub).await,
+            },
+            Commands::Source(args) => match args.command {
+                commands::SourceSubCommand::Add(sub) => commands::source_add(sub).await,
             },
         }
     });

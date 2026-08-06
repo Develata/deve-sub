@@ -50,12 +50,22 @@ impl UserRow {
                 .parse::<Role>()
                 .map_err(|e| IdentityError::Storage(e.to_string()))?,
             enabled: self.enabled != 0,
-            expires_at: self.expires_at.as_deref().map(parse_ts).transpose()?,
+            expires_at: self
+                .expires_at
+                .as_deref()
+                .map(parse_ts)
+                .transpose()
+                .map_err(IdentityError::Storage)?,
             traffic_quota: u64::try_from(self.traffic_quota)
                 .map_err(|_| IdentityError::Storage("negative traffic_quota".to_owned()))?,
             two_factor_enabled: self.two_factor_enabled != 0,
-            last_login_at: self.last_login_at.as_deref().map(parse_ts).transpose()?,
-            created_at: parse_ts(&self.created_at)?,
+            last_login_at: self
+                .last_login_at
+                .as_deref()
+                .map(parse_ts)
+                .transpose()
+                .map_err(IdentityError::Storage)?,
+            created_at: parse_ts(&self.created_at).map_err(IdentityError::Storage)?,
         })
     }
 }
@@ -63,9 +73,17 @@ impl UserRow {
 #[async_trait]
 impl UserRepository for SqliteUserRepository {
     async fn create(&self, user: &User) -> Result<(), IdentityError> {
-        let expires_at = user.expires_at.map(format_ts).transpose()?;
-        let last_login_at = user.last_login_at.map(format_ts).transpose()?;
-        let created_at = format_ts(user.created_at)?;
+        let expires_at = user
+            .expires_at
+            .map(format_ts)
+            .transpose()
+            .map_err(IdentityError::Storage)?;
+        let last_login_at = user
+            .last_login_at
+            .map(format_ts)
+            .transpose()
+            .map_err(IdentityError::Storage)?;
+        let created_at = format_ts(user.created_at).map_err(IdentityError::Storage)?;
 
         sqlx::query(
             "INSERT INTO users (id, username, password_hash, role, enabled, expires_at, traffic_quota, two_factor_enabled, last_login_at, created_at) \
@@ -153,9 +171,17 @@ impl UserRepository for SqliteUserRepository {
     }
 
     async fn create_if_empty(&self, user: &User) -> Result<(), IdentityError> {
-        let expires_at = user.expires_at.map(format_ts).transpose()?;
-        let last_login_at = user.last_login_at.map(format_ts).transpose()?;
-        let created_at = format_ts(user.created_at)?;
+        let expires_at = user
+            .expires_at
+            .map(format_ts)
+            .transpose()
+            .map_err(IdentityError::Storage)?;
+        let last_login_at = user
+            .last_login_at
+            .map(format_ts)
+            .transpose()
+            .map_err(IdentityError::Storage)?;
+        let created_at = format_ts(user.created_at).map_err(IdentityError::Storage)?;
 
         let result = sqlx::query(
             "INSERT INTO users (id, username, password_hash, role, enabled, expires_at, traffic_quota, two_factor_enabled, last_login_at, created_at) \
@@ -213,7 +239,7 @@ impl UserRepository for SqliteUserRepository {
         id: UserId,
         at: deve_sub_kernel::Timestamp,
     ) -> Result<(), IdentityError> {
-        let ts = format_ts(at)?;
+        let ts = format_ts(at).map_err(IdentityError::Storage)?;
         let result = sqlx::query("UPDATE users SET last_login_at = ? WHERE id = ?")
             .bind(ts)
             .bind(id.to_string())

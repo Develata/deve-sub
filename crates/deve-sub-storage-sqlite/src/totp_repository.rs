@@ -39,7 +39,8 @@ impl TotpSecretRow {
                 .map_err(|e| IdentityError::Storage(e.to_string()))?,
             secret_ciphertext: self.secret_ciphertext.clone(),
             nonce: self.nonce.clone(),
-            created_at: crate::timestamp::parse_ts(&self.created_at)?,
+            created_at: crate::timestamp::parse_ts(&self.created_at)
+                .map_err(IdentityError::Storage)?,
         })
     }
 }
@@ -47,7 +48,7 @@ impl TotpSecretRow {
 #[async_trait]
 impl TotpSecretRepository for SqliteTotpSecretRepository {
     async fn upsert(&self, secret: &TotpSecret) -> Result<(), IdentityError> {
-        let created_at = format_ts(secret.created_at)?;
+        let created_at = format_ts(secret.created_at).map_err(IdentityError::Storage)?;
         sqlx::query(
             "INSERT INTO totp_secrets (user_id, secret_ciphertext, nonce, created_at) \
              VALUES (?, ?, ?, ?) \

@@ -40,7 +40,8 @@ impl RecoveryCodeRow {
                 .map_err(|e| IdentityError::Storage(e.to_string()))?,
             code_hash: self.code_hash.clone(),
             used: self.used != 0,
-            created_at: crate::timestamp::parse_ts(&self.created_at)?,
+            created_at: crate::timestamp::parse_ts(&self.created_at)
+                .map_err(IdentityError::Storage)?,
         })
     }
 }
@@ -74,7 +75,8 @@ impl RecoveryCodeRepository for SqliteRecoveryCodeRepository {
             // construct codes with the matching user_id, but this assertion
             // catches a future caller that might mismatch.
             debug_assert_eq!(code.user_id, user_id);
-            let created_at = crate::timestamp::format_ts(code.created_at)?;
+            let created_at =
+                crate::timestamp::format_ts(code.created_at).map_err(IdentityError::Storage)?;
             sqlx::query(
                 "INSERT INTO recovery_codes (id, user_id, code_hash, used, created_at) \
                  VALUES (?, ?, ?, ?, ?)",

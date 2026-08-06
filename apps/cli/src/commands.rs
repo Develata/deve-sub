@@ -9,7 +9,8 @@ use clap::{Args, Subcommand};
 
 use deve_sub_application::{AppConfig, DbHealthPort, LoginRateLimiter};
 use deve_sub_domain::{
-    RecoveryCodeRepository, SessionRepository, TotpSecretRepository, UserRepository,
+    RecoveryCodeRepository, SessionRepository, SourceRepository, TotpSecretRepository,
+    UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -128,6 +129,53 @@ pub enum ConfigSubCommand {
     Validate(ConfigValidateArgs),
 }
 
+/// Source management command container.
+#[derive(Args)]
+pub struct SourceArgs {
+    #[command(subcommand)]
+    pub command: SourceSubCommand,
+}
+
+/// Source subcommands.
+#[derive(Subcommand)]
+pub enum SourceSubCommand {
+    /// Add a new subscription source.
+    Add(SourceAddArgs),
+}
+
+/// Arguments for `source add`.
+#[derive(Args)]
+pub struct SourceAddArgs {
+    /// Human-readable source name.
+    #[arg(long)]
+    pub name: String,
+
+    /// Input format. One of: auto, base64, uri_list, mihomo_yaml, singbox_json,
+    /// xray_json, v2ray_json, shadowrocket.
+    #[arg(long, default_value = "auto")]
+    pub source_type: String,
+
+    /// Subscription URL.
+    #[arg(long)]
+    pub url: String,
+
+    /// Enable automatic refresh.
+    #[arg(long)]
+    pub auto_update: bool,
+
+    /// Refresh interval in seconds.
+    #[arg(long, default_value = "3600")]
+    pub update_interval_secs: u64,
+
+    /// Keep existing nodes if a refresh fails.
+    #[arg(long, default_value = "true")]
+    pub keep_on_fail: bool,
+
+    /// Database path.
+    #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
+    pub db_path: String,
+}
+
 pub async fn serve(args: ServeArgs) -> Result<()> {
     let mut config = load_config(&args.config)?;
     args.apply_overrides(&mut config);
@@ -174,6 +222,9 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let recovery_code_repo: Arc<dyn RecoveryCodeRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteRecoveryCodeRepository::new(db.clone()),
     );
+    let source_repo: Arc<dyn SourceRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteSourceRepository::new(db.clone()),
+    );
 
     let rate_limiter: Arc<dyn LoginRateLimiter> =
         Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(
@@ -191,6 +242,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         session_repo,
         totp_secret_repo,
         recovery_code_repo,
+        source_repo,
         rate_limiter,
         db_health,
     };
@@ -295,6 +347,53 @@ pub async fn user_init_admin(args: UserInitAdminArgs) -> Result<()> {
         }
         Err(deve_sub_application::AuthError::AlreadyInitialized) => {
             anyhow::bail!("admin user already exists — use the API or CLI to manage users");
+        }
+        Err(e) => Err(anyhow::anyhow!(e)),
+    }
+}
+
+pub async fn source_add(args: SourceAddArgs) -> Result<()> {
+    tracing::info!(db_path = %args.db_path, name = %args.name, "adding source");
+
+    ensure_db_dir(&args.db_path)?;
+
+    let pool = open_db(&args.db_path, 1).await?;
+    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+
+    let source_repo = deve_sub_storage_sqlite::SqliteSourceRepository::new(pool);
+
+    let source_type = args
+        .source_type
+        .parse::<deve_sub_domain::SourceType>()
+        .map_err(|e| anyhow::anyhow!("invalid --source-type: {e}"))?;
+
+    let params = deve_sub_application::source::CreateSourceParams {
+        name: args.name.clone(),
+        source_type,
+        url: args.url.clone(),
+        auto_update: args.auto_update,
+        update_interval_secs: args.update_interval_secs,
+        keep_on_fail: args.keep_on_fail,
+    };
+
+    match deve_sub_application::source::create_source(&source_repo, params).await {
+        Ok(source) => {
+            println!("Source created successfully:");
+            println!("  id:                {}", source.id);
+            println!("  name:              {}", source.name);
+            println!("  source_type:       {}", source.source_type);
+            println!("  url:               {}", source.url);
+            println!("  auto_update:       {}", source.auto_update);
+            println!("  update_interval:   {}s", source.update_interval_secs);
+            println!("  enabled:           {}", source.enabled);
+            println!("  keep_on_fail:      {}", source.keep_on_fail);
+            Ok(())
+        }
+        Err(deve_sub_application::source::SourceAppError::InvalidInput(msg)) => {
+            anyhow::bail!("invalid input: {msg}");
+        }
+        Err(deve_sub_application::source::SourceAppError::NameExists) => {
+            anyhow::bail!("source name '{}' already exists", args.name);
         }
         Err(e) => Err(anyhow::anyhow!(e)),
     }

@@ -220,7 +220,7 @@ cases:
     steps: []
     assertions: ["保存并脱敏显示凭据"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-002
     title: 手动刷新
     priority: P0

@@ -17,11 +17,35 @@ use sqlx::sqlite::SqlitePool;
 /// Expected tables created by migration 0002.
 const EXPECTED_TABLES: &[&str] = &["users", "sessions", "audit_log", "outbox_event"];
 
+/// Expected tables created by migration 0004.
+const EXPECTED_TABLES_0004: &[&str] = &[
+    "sources",
+    "source_snapshots",
+    "source_items",
+    "nodes",
+    "node_overrides",
+    "node_source_bindings",
+    "tags",
+    "node_tags",
+];
+
 /// Expected indexes created by migration 0002.
 const EXPECTED_INDEXES: &[&str] = &[
     "idx_sessions_user_expires",
     "idx_audit_log_actor_created",
     "idx_outbox_event_unprocessed",
+];
+
+/// Expected indexes created by migration 0004.
+const EXPECTED_INDEXES_0004: &[&str] = &[
+    "idx_snapshots_source_active",
+    "idx_snapshots_source_version",
+    "idx_snapshots_single_active",
+    "idx_source_items_snapshot",
+    "idx_nodes_dedup",
+    "idx_bindings_node",
+    "idx_bindings_source",
+    "idx_node_tags_tag",
 ];
 
 /// Expected columns for each table.
@@ -254,4 +278,221 @@ async fn migration_0002_backup_restore_preserves_schema() {
     let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
     let _ = std::fs::remove_file(backup_path);
+}
+
+/// Recovery test for migration 0004 (constraint #13): sources/node-pool
+/// tables, the partial unique dedup index, cascade deletes, and idempotency.
+/// See docs/plan/milestones/M4-sources-and-node-pool.md.
+#[tokio::test]
+async fn migration_0004_applies_and_schema_is_correct() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    for expected in EXPECTED_TABLES_0004 {
+        assert!(
+            tables.contains(&expected.to_string()),
+            "expected table '{expected}' not found, tables: {tables:?}"
+        );
+    }
+
+    let indexes = get_index_names(&pool).await;
+    for expected in EXPECTED_INDEXES_0004 {
+        assert!(
+            indexes.contains(&expected.to_string()),
+            "expected index '{expected}' not found, indexes: {indexes:?}"
+        );
+    }
+
+    // WHY: idx_nodes_dedup is a partial unique index (WHERE missing_from_source = 0).
+    // Verify it enforces dedup by inserting a duplicate (protocol, host, port)
+    // and asserting a constraint violation, then confirm a "missing" row does
+    // NOT collide (the partial predicate exempts it).
+    sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port) VALUES (?, ?, ?, ?)")
+        .bind("01J0NODE000000000000000001")
+        .bind("vless")
+        .bind("example.com")
+        .bind(443_i64)
+        .execute(&pool)
+        .await
+        .expect("first node insert");
+
+    let dup_result =
+        sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port) VALUES (?, ?, ?, ?)")
+            .bind("01J0NODE000000000000000002")
+            .bind("vless")
+            .bind("example.com")
+            .bind(443_i64)
+            .execute(&pool)
+            .await;
+    assert!(
+        dup_result.is_err(),
+        "duplicate (protocol, host, port) should be rejected by idx_nodes_dedup"
+    );
+
+    // A node marked missing_from_source=1 must NOT collide with the active node.
+    sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port, missing_from_source) \
+         VALUES (?, ?, ?, ?, 1)",
+    )
+    .bind("01J0NODE000000000000000003")
+    .bind("vless")
+    .bind("example.com")
+    .bind(443_i64)
+    .execute(&pool)
+    .await
+    .expect("missing node insert should not collide");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+#[tokio::test]
+async fn migration_0004_is_idempotent() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    for expected in EXPECTED_TABLES_0004 {
+        assert!(tables.contains(&expected.to_string()));
+    }
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+/// Verify ON DELETE CASCADE from sources → source_snapshots → source_items
+/// and sources → node_source_bindings works (constraint #13: recovery).
+#[tokio::test]
+async fn migration_0004_cascade_delete_removes_dependents() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let source_id = "01J0SRC0000000000000000001";
+    let snapshot_id = "01J0SNP0000000000000000001";
+    let item_id = "01J0ITM0000000000000000001";
+    let node_id = "01J0NOD0000000000000000001";
+    let binding_id = "01J0BND0000000000000000001";
+
+    sqlx::query("INSERT INTO sources (id, name, url) VALUES (?, ?, ?)")
+        .bind(source_id)
+        .bind("test-source")
+        .bind("https://example.com/sub")
+        .execute(&pool)
+        .await
+        .expect("insert source");
+
+    sqlx::query(
+        "INSERT INTO source_snapshots (id, source_id, version, is_active) VALUES (?, ?, ?, 1)",
+    )
+    .bind(snapshot_id)
+    .bind(source_id)
+    .bind(1_i64)
+    .execute(&pool)
+    .await
+    .expect("insert snapshot");
+
+    // WHY: the partial unique index idx_snapshots_single_active must reject a
+    // second active snapshot for the same source.
+    let second_active = sqlx::query(
+        "INSERT INTO source_snapshots (id, source_id, version, is_active) VALUES (?, ?, ?, 1)",
+    )
+    .bind("01J0SNP0000000000000000002")
+    .bind(source_id)
+    .bind(2_i64)
+    .execute(&pool)
+    .await;
+    assert!(
+        second_active.is_err(),
+        "a second active snapshot should be rejected by idx_snapshots_single_active"
+    );
+
+    sqlx::query("INSERT INTO source_items (id, snapshot_id, raw_uri) VALUES (?, ?, ?)")
+        .bind(item_id)
+        .bind(snapshot_id)
+        .bind("vless://example.com:443")
+        .execute(&pool)
+        .await
+        .expect("insert item");
+
+    sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port) VALUES (?, ?, ?, ?)")
+        .bind(node_id)
+        .bind("vless")
+        .bind("example.com")
+        .bind(443_i64)
+        .execute(&pool)
+        .await
+        .expect("insert node");
+
+    sqlx::query("INSERT INTO node_source_bindings (id, node_id, source_id) VALUES (?, ?, ?)")
+        .bind(binding_id)
+        .bind(node_id)
+        .bind(source_id)
+        .execute(&pool)
+        .await
+        .expect("insert binding");
+
+    sqlx::query("DELETE FROM sources WHERE id = ?")
+        .bind(source_id)
+        .execute(&pool)
+        .await
+        .expect("delete source");
+
+    let (snap_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM source_snapshots WHERE source_id = ?")
+            .bind(source_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count snapshots");
+    assert_eq!(snap_count, 0, "snapshots should be cascade-deleted");
+
+    let (item_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM source_items WHERE snapshot_id = ?")
+            .bind(snapshot_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count items");
+    assert_eq!(item_count, 0, "items should be cascade-deleted");
+
+    let (binding_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM node_source_bindings WHERE source_id = ?")
+            .bind(source_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count bindings");
+    assert_eq!(binding_count, 0, "bindings should be cascade-deleted");
+
+    // The node itself survives — it is not cascade-deleted (nodes are owned
+    // by the pool, not by sources).
+    let (node_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM nodes WHERE id = ?")
+        .bind(node_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count nodes");
+    assert_eq!(node_count, 1, "node should survive source deletion");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }

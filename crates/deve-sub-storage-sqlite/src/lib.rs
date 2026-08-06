@@ -8,6 +8,8 @@
 
 pub mod recovery_code_repository;
 pub mod session_repository;
+pub mod source_repository;
+pub mod source_snapshot_repository;
 pub mod timestamp;
 pub mod totp_repository;
 pub mod user_repository;
@@ -22,6 +24,8 @@ use thiserror::Error;
 
 pub use recovery_code_repository::SqliteRecoveryCodeRepository;
 pub use session_repository::SqliteSessionRepository;
+pub use source_repository::SqliteSourceRepository;
+pub use source_snapshot_repository::SqliteSourceSnapshotRepository;
 pub use totp_repository::SqliteTotpSecretRepository;
 pub use user_repository::SqliteUserRepository;
 

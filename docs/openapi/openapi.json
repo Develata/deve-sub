@@ -501,6 +501,433 @@
         }
       }
     },
+    "/api/v1/sources": {
+      "get": {
+        "summary": "`GET /api/v1/sources` — list sources with cursor pagination (admin only).",
+        "operationId": "list_sources",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max sources per page (1-100, default 20)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pagination cursor (last source ULID)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Source list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListSourcesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "`POST /api/v1/sources` — create a new subscription source (admin only).",
+        "operationId": "create_source",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Source created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sources/{id}": {
+      "get": {
+        "summary": "`GET /api/v1/sources/{id}` — get a source by ID (admin only).",
+        "operationId": "get_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Source found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid source id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "`PUT /api/v1/sources/{id}` — update an existing source (admin only).",
+        "operationId": "update_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Source updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "`DELETE /api/v1/sources/{id}` — delete a source (admin only).",
+        "operationId": "delete_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Source deleted"
+          },
+          "400": {
+            "description": "Invalid source id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/users": {
       "get": {
         "summary": "`GET /api/v1/users` — list users with cursor pagination (admin only).",
@@ -883,6 +1310,43 @@
   },
   "components": {
     "schemas": {
+      "CreateSourceRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/sources`.",
+        "required": [
+          "name",
+          "source_type",
+          "url"
+        ],
+        "properties": {
+          "auto_update": {
+            "type": "boolean",
+            "description": "Whether automatic refresh is enabled."
+          },
+          "keep_on_fail": {
+            "type": "boolean",
+            "description": "Whether to keep existing nodes if a refresh fails."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name."
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceTypeDto",
+            "description": "Input format. `auto` lets the fetcher detect."
+          },
+          "update_interval_secs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Refresh interval in seconds.",
+            "minimum": 0
+          },
+          "url": {
+            "type": "string",
+            "description": "Subscription URL."
+          }
+        }
+      },
       "CreateUserRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/users` (admin-only user creation).",
@@ -1004,6 +1468,29 @@
           "degraded",
           "unhealthy"
         ]
+      },
+      "ListSourcesResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/sources` (cursor-paginated source list).",
+        "required": [
+          "sources"
+        ],
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cursor for the next page (`None` if no more results)."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceDto"
+            },
+            "description": "Sources in the current page."
+          }
+        }
       },
       "ListUsersResponse": {
         "type": "object",
@@ -1157,6 +1644,88 @@
           }
         }
       },
+      "SourceDto": {
+        "type": "object",
+        "description": "Source information returned by source management endpoints.\n\nNever includes encrypted headers ciphertext in responses.",
+        "required": [
+          "id",
+          "name",
+          "source_type",
+          "url",
+          "auto_update",
+          "update_interval_secs",
+          "enabled",
+          "keep_on_fail",
+          "created_at"
+        ],
+        "properties": {
+          "auto_update": {
+            "type": "boolean",
+            "description": "Whether automatic refresh is enabled."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Account creation time (ISO 8601 UTC)."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the source is active."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "keep_on_fail": {
+            "type": "boolean",
+            "description": "Whether to keep existing nodes if a refresh fails."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name."
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceTypeDto",
+            "description": "Input format."
+          },
+          "update_interval_secs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Refresh interval in seconds.",
+            "minimum": 0
+          },
+          "url": {
+            "type": "string",
+            "description": "Subscription URL."
+          }
+        }
+      },
+      "SourceResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/sources` and `PUT /api/v1/sources/{id}`.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SourceDto",
+            "description": "The source."
+          }
+        }
+      },
+      "SourceTypeDto": {
+        "type": "string",
+        "description": "Input format of a subscription source.",
+        "enum": [
+          "auto",
+          "base64",
+          "uri_list",
+          "mihomo_yaml",
+          "singbox_json",
+          "xray_json",
+          "v2ray_json",
+          "shadowrocket"
+        ]
+      },
       "TwoFactorDisableRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/auth/2fa/disable`.\n\nRequires the current password to prevent unauthorized disabling from a\nhijacked session.",
@@ -1214,6 +1783,51 @@
               "type": "string"
             },
             "description": "Single-use recovery codes."
+          }
+        }
+      },
+      "UpdateSourceRequest": {
+        "type": "object",
+        "description": "Request body for `PUT /api/v1/sources/{id}`.",
+        "required": [
+          "name",
+          "source_type",
+          "url",
+          "auto_update",
+          "update_interval_secs",
+          "enabled",
+          "keep_on_fail"
+        ],
+        "properties": {
+          "auto_update": {
+            "type": "boolean",
+            "description": "Whether automatic refresh is enabled."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the source is active."
+          },
+          "keep_on_fail": {
+            "type": "boolean",
+            "description": "Whether to keep existing nodes if a refresh fails."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name."
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceTypeDto",
+            "description": "Input format."
+          },
+          "update_interval_secs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Refresh interval in seconds.",
+            "minimum": 0
+          },
+          "url": {
+            "type": "string",
+            "description": "Subscription URL."
           }
         }
       },

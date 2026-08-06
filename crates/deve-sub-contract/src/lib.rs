@@ -8,6 +8,7 @@
 
 pub mod auth;
 pub mod health;
+pub mod source;
 
 pub use auth::{
     CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse, ListUsersResponse,
@@ -17,3 +18,7 @@ pub use auth::{
     TwoFactorVerifyResponse, UserDto,
 };
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};
+pub use source::{
+    CreateSourceRequest, ListSourcesResponse, SourceDto, SourceResponse, SourceTypeDto,
+    UpdateSourceRequest,
+};

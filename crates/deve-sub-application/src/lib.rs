@@ -10,7 +10,9 @@
 pub mod auth;
 pub mod config;
 pub mod health;
+pub mod source;
 
 pub use auth::{AuthError, LoginRateLimiter};
 pub use config::AppConfig;
 pub use health::{DbHealthPort, HealthError, HealthStatus, HealthView};
+pub use source::SourceAppError;

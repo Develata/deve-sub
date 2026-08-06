@@ -11,12 +11,13 @@ use tower::ServiceExt;
 
 use deve_sub_application::{DbHealthPort, LoginRateLimiter};
 use deve_sub_domain::{
-    RecoveryCodeRepository, SessionRepository, TotpSecretRepository, UserRepository,
+    RecoveryCodeRepository, SessionRepository, SourceRepository, TotpSecretRepository,
+    UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
     SqliteHealthCheck, SqliteRecoveryCodeRepository, SqliteSessionRepository,
-    SqliteTotpSecretRepository, SqliteUserRepository,
+    SqliteSourceRepository, SqliteTotpSecretRepository, SqliteUserRepository,
 };
 
 struct TestApp {
@@ -68,8 +69,10 @@ impl TestApp {
                     as Arc<dyn SessionRepository>,
                 totp_secret_repo: Arc::new(SqliteTotpSecretRepository::new(pool.clone()))
                     as Arc<dyn TotpSecretRepository>,
-                recovery_code_repo: Arc::new(SqliteRecoveryCodeRepository::new(pool))
+                recovery_code_repo: Arc::new(SqliteRecoveryCodeRepository::new(pool.clone()))
                     as Arc<dyn RecoveryCodeRepository>,
+                source_repo: Arc::new(SqliteSourceRepository::new(pool.clone()))
+                    as Arc<dyn SourceRepository>,
                 rate_limiter,
                 db_health,
             },

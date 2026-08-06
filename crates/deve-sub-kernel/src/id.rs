@@ -123,6 +123,36 @@ entity_id!(
      Identifies the row only; the code value itself is a secret stored as a hash."
 );
 
+entity_id!(
+    SourceId,
+    "source",
+    "Strong-typed identifier for a subscription source."
+);
+
+entity_id!(
+    SourceSnapshotId,
+    "source snapshot",
+    "Strong-typed identifier for a source refresh snapshot."
+);
+
+entity_id!(
+    SourceItemId,
+    "source item",
+    "Strong-typed identifier for a raw item within a source snapshot."
+);
+
+entity_id!(
+    NodeOverrideId,
+    "node override",
+    "Strong-typed identifier for a manual node override."
+);
+
+entity_id!(
+    NodeSourceBindingId,
+    "node source binding",
+    "Strong-typed identifier for a binding between a node and its source."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,8 +9,13 @@ pub mod entity;
 pub mod error;
 pub mod ports;
 pub mod snapshot;
+pub mod source_item;
 
 pub use entity::{Source, SourceType};
 pub use error::SourceError;
-pub use ports::{SourceRepository, SourceSnapshotRepository};
+pub use ports::{
+    NodePoolRepository, ReconcileEntry, ReconcileInput, ReconcileResult, SourceRepository,
+    SourceSnapshotRepository,
+};
 pub use snapshot::SourceSnapshot;
+pub use source_item::{ItemParseStatus, SourceItem};

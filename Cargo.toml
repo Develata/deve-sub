@@ -13,6 +13,7 @@ members = [
     "crates/deve-sub-inmemory",
     "crates/deve-sub-protocol",
     "crates/deve-sub-emitter",
+    "crates/deve-sub-adapters",
 ]
 exclude = ["spikes/*"]
 resolver = "3"
@@ -38,6 +39,7 @@ deve-sub-observability = { path = "crates/deve-sub-observability" }
 deve-sub-inmemory = { path = "crates/deve-sub-inmemory" }
 deve-sub-protocol = { path = "crates/deve-sub-protocol" }
 deve-sub-emitter = { path = "crates/deve-sub-emitter" }
+deve-sub-adapters = { path = "crates/deve-sub-adapters" }
 deve-sub-server = { path = "apps/server" }
 deve-sub-web = { path = "apps/web" }
 
@@ -73,6 +75,7 @@ data-encoding = "2"
 url = "2"
 percent-encoding = "2"
 serde_yaml = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["gzip", "deflate", "stream", "rustls-tls"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

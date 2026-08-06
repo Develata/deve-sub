@@ -2,6 +2,9 @@
 
 use thiserror::Error;
 
+use super::fetcher::FetchError;
+use super::parse::ParseContentError;
+
 /// Errors produced by source application commands and queries.
 #[derive(Debug, Error)]
 pub enum SourceAppError {
@@ -20,4 +23,12 @@ pub enum SourceAppError {
     /// A source storage operation failed.
     #[error(transparent)]
     Source(#[from] deve_sub_domain::SourceError),
+
+    /// A fetch operation failed (SSRF, timeout, HTTP error, etc.).
+    #[error(transparent)]
+    Fetch(#[from] FetchError),
+
+    /// Content parsing failed.
+    #[error(transparent)]
+    Parse(#[from] ParseContentError),
 }

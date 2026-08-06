@@ -7,9 +7,15 @@
 
 pub mod commands;
 pub mod error;
+pub mod fetcher;
+pub mod parse;
+pub mod scheduler;
 
 pub use commands::{
-    CreateSourceParams, UpdateSourceParams, create_source, delete_source, get_source, list_sources,
-    update_source,
+    CreateSourceParams, RefreshResult, UpdateSourceParams, create_source, delete_source,
+    get_source, list_sources, refresh_source, update_source,
 };
 pub use error::SourceAppError;
+pub use fetcher::{FetchError, FetchResult, SubscriptionFetcher};
+pub use parse::{ParseContentError, parse_content};
+pub use scheduler::RefreshScheduler;

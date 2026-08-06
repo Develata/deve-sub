@@ -109,6 +109,34 @@ pub struct ListSourcesResponse {
     pub next_cursor: Option<String>,
 }
 
+/// Response body for `POST /api/v1/sources/{id}/refresh`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RefreshSourceResponse {
+    /// ULID of the snapshot created (or the previously active one on 304).
+    pub snapshot_id: String,
+    /// Snapshot version number.
+    pub version: u64,
+    /// Whether the server returned 304 Not Modified.
+    pub not_modified: bool,
+    /// Number of nodes in the snapshot.
+    pub node_count: u64,
+    /// Reconciliation counts.
+    pub reconcile: ReconcileCountsDto,
+}
+
+/// Reconciliation counts returned by a source refresh.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ReconcileCountsDto {
+    /// Nodes newly inserted into the pool.
+    pub new_nodes: u64,
+    /// Nodes already in the pool (duplicate of an existing active node).
+    pub duplicate_nodes: u64,
+    /// Nodes that were missing and have been reactivated.
+    pub reactivated_nodes: u64,
+    /// Nodes previously bound to this source that are no longer present.
+    pub missing_nodes: u64,
+}
+
 fn default_update_interval() -> u64 {
     3600
 }

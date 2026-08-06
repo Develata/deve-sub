@@ -21,6 +21,7 @@ deve-sub-server = { workspace = true }
 deve-sub-observability = { workspace = true }
 deve-sub-storage-sqlite = { workspace = true }
 deve-sub-inmemory = { workspace = true }
+deve-sub-adapters = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

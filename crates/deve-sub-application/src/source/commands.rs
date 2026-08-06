@@ -4,10 +4,15 @@
 //! not execute SQL directly. One API operation maps to one command. See
 //! `docs/plan/03-architecture.md` §"Lightweight CQRS".
 
-use deve_sub_domain::{Source, SourceError, SourceRepository, SourceType};
-use deve_sub_kernel::SourceId;
+use deve_sub_domain::{
+    NodePoolRepository, ReconcileInput, ReconcileResult, Source, SourceError, SourceRepository,
+    SourceSnapshot, SourceSnapshotRepository, SourceType,
+};
+use deve_sub_kernel::{SourceId, SourceSnapshotId, Timestamp};
 
 use super::error::SourceAppError;
+use super::fetcher::{FetchResult, SubscriptionFetcher};
+use super::parse::parse_content;
 
 /// Maximum source name length.
 const MAX_NAME_LEN: usize = 128;
@@ -210,6 +215,143 @@ pub async fn list_sources(
     limit: u32,
 ) -> Result<Vec<Source>, SourceAppError> {
     repo.list(cursor, limit).await.map_err(map_source_error)
+}
+
+/// Result of a successful source refresh.
+#[derive(Debug, Clone)]
+pub struct RefreshResult {
+    /// The snapshot created by this refresh.
+    pub snapshot: SourceSnapshot,
+    /// Reconciliation counts from the node pool update.
+    pub reconcile: ReconcileResult,
+    /// Whether the fetch returned 304 Not Modified. When `true`, no new
+    /// snapshot was created and `snapshot` refers to the previously active
+    /// one.
+    pub not_modified: bool,
+}
+
+/// Refresh a source: fetch → parse → reconcile.
+///
+/// Fetches the subscription URL (SSRF-checked by the fetcher), parses the
+/// content, and reconciles the parsed nodes into the pool in a single
+/// transaction. On fetch or parse failure, the last successful snapshot
+/// remains active (constraint #19). When `source.keep_on_fail` is `false`,
+/// a fetch or parse failure also disables the source (sets `enabled = false`)
+/// per plan M4 §"Failure/recovery"; the admin can re-enable it after fixing
+/// the URL.
+///
+/// # Errors
+/// - [`SourceAppError::SourceNotFound`] — source does not exist.
+/// - [`SourceAppError::Fetch`] — the fetch failed (SSRF, timeout, HTTP error).
+/// - [`SourceAppError::Parse`] — the content could not be parsed.
+/// - [`SourceAppError::Source`] — storage or reconciliation error.
+pub async fn refresh_source(
+    source_repo: &dyn SourceRepository,
+    snapshot_repo: &dyn SourceSnapshotRepository,
+    pool_repo: &dyn NodePoolRepository,
+    fetcher: &dyn SubscriptionFetcher,
+    source_id: SourceId,
+) -> Result<RefreshResult, SourceAppError> {
+    let source = source_repo
+        .find_by_id(source_id)
+        .await
+        .map_err(map_source_error)?
+        .ok_or(SourceAppError::SourceNotFound)?;
+
+    let active = snapshot_repo
+        .find_active(source_id)
+        .await
+        .map_err(map_source_error)?;
+    let etag = active.as_ref().and_then(|s| s.etag.clone());
+
+    let fetch = match fetcher.fetch(&source.url, etag.as_deref()).await {
+        Ok(f) => f,
+        Err(e) => {
+            disable_on_failure(source_repo, &source).await;
+            return Err(e.into());
+        }
+    };
+
+    if let FetchResult::NotModified = fetch {
+        let snapshot = active.ok_or(SourceAppError::Source(SourceError::Storage(
+            "server returned 304 but no active snapshot exists".to_owned(),
+        )))?;
+        return Ok(RefreshResult {
+            snapshot,
+            reconcile: ReconcileResult::default(),
+            not_modified: true,
+        });
+    }
+
+    let (body, resp_etag, content_type) = match fetch {
+        FetchResult::Ok {
+            body,
+            etag,
+            content_type,
+        } => (body, etag, content_type),
+        FetchResult::NotModified => {
+            // WHY: the NotModified arm above returns early; this arm exists
+            // only to satisfy the exhaustive match and can never execute.
+            return Err(SourceAppError::Source(SourceError::Storage(
+                "unreachable: NotModified after 304 check".to_owned(),
+            )));
+        }
+    };
+
+    let entries = match parse_content(source.source_type, content_type.as_deref(), &body) {
+        Ok(e) => e,
+        Err(e) => {
+            disable_on_failure(source_repo, &source).await;
+            return Err(e.into());
+        }
+    };
+
+    let new_version = active.as_ref().map(|s| s.version + 1).unwrap_or(1);
+    let node_count =
+        u64::try_from(entries.iter().filter(|e| e.node.is_some()).count()).map_err(|_| {
+            SourceAppError::Source(SourceError::Storage("node count overflow".to_owned()))
+        })?;
+
+    let snapshot = SourceSnapshot {
+        id: SourceSnapshotId::new(),
+        source_id,
+        version: new_version,
+        fetched_at: Timestamp::now(),
+        etag: resp_etag,
+        node_count,
+        is_active: true,
+    };
+
+    let input = ReconcileInput {
+        source_id,
+        snapshot: &snapshot,
+        entries: &entries,
+    };
+    let reconcile = pool_repo.reconcile(input).await.map_err(map_source_error)?;
+
+    Ok(RefreshResult {
+        snapshot,
+        reconcile,
+        not_modified: false,
+    })
+}
+
+/// Best-effort disable a source after a refresh failure when `keep_on_fail`
+/// is false.
+///
+/// WHY: plan M4 §"Failure/recovery" requires that when `keep_on_fail` is
+/// false, a failed refresh marks the source as errored. We map "errored" to
+/// `enabled = false` because the `jobs` table (for detailed error recording)
+/// is not yet built; a proper `errored` status is deferred to the
+/// jobs-table milestone.
+async fn disable_on_failure(repo: &dyn SourceRepository, source: &Source) {
+    if !source.keep_on_fail && source.enabled {
+        let mut disabled = source.clone();
+        disabled.enabled = false;
+        if let Err(e) = repo.update(&disabled).await {
+            tracing::warn!(error = %e, "failed to disable source after refresh failure");
+        }
+    }
 }
 
 /// Map storage errors to application errors for non-delete operations.

@@ -19,6 +19,6 @@ pub use auth::{
 };
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};
 pub use source::{
-    CreateSourceRequest, ListSourcesResponse, SourceDto, SourceResponse, SourceTypeDto,
-    UpdateSourceRequest,
+    CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,
+    SourceResponse, SourceTypeDto, UpdateSourceRequest,
 };

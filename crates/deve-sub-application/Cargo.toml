@@ -13,13 +13,23 @@ deve-sub-contract = { workspace = true }
 deve-sub-domain = { workspace = true }
 deve-sub-security = { workspace = true }
 deve-sub-kernel = { workspace = true }
+deve-sub-protocol = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 subtle = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true }
+sqlx = { workspace = true }
+deve-sub-storage-sqlite = { workspace = true }
+deve-sub-protocol = { workspace = true }

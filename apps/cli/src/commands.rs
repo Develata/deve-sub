@@ -7,10 +7,12 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 
-use deve_sub_application::{AppConfig, DbHealthPort, LoginRateLimiter};
+use deve_sub_application::{
+    AppConfig, DbHealthPort, LoginRateLimiter, RefreshScheduler, SubscriptionFetcher,
+};
 use deve_sub_domain::{
-    RecoveryCodeRepository, SessionRepository, SourceRepository, TotpSecretRepository,
-    UserRepository,
+    NodePoolRepository, RecoveryCodeRepository, SessionRepository, SourceRepository,
+    SourceSnapshotRepository, TotpSecretRepository, UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -225,6 +227,12 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let source_repo: Arc<dyn SourceRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteSourceRepository::new(db.clone()),
     );
+    let snapshot_repo: Arc<dyn SourceSnapshotRepository> =
+        Arc::new(deve_sub_storage_sqlite::SqliteSourceSnapshotRepository::new(db.clone()));
+    let pool_repo: Arc<dyn NodePoolRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteNodePoolRepository::new(db.clone()),
+    );
+    let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
 
     let rate_limiter: Arc<dyn LoginRateLimiter> =
         Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(
@@ -242,17 +250,44 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         session_repo,
         totp_secret_repo,
         recovery_code_repo,
-        source_repo,
+        source_repo: source_repo.clone(),
+        snapshot_repo: snapshot_repo.clone(),
+        pool_repo: pool_repo.clone(),
+        fetcher: fetcher.clone(),
         rate_limiter,
         db_health,
     };
+
+    let scheduler = RefreshScheduler::new(source_repo, snapshot_repo, pool_repo, fetcher);
+    let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+    let scheduler_rx = shutdown_tx.subscribe();
+    let scheduler_handle = tokio::spawn(async move {
+        scheduler
+            .run(async move {
+                let mut rx = scheduler_rx;
+                let _ = rx.recv().await;
+            })
+            .await;
+    });
+
     let router = build_router(state);
 
-    let shutdown = create_shutdown_signal();
+    let signal_tx = shutdown_tx.clone();
+    tokio::spawn(async move {
+        create_shutdown_signal().await;
+        let _ = signal_tx.send(());
+    });
 
-    deve_sub_server::serve(router, bind, shutdown)
-        .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+    let server_rx = shutdown_tx.subscribe();
+    deve_sub_server::serve(router, bind, async move {
+        let mut rx = server_rx;
+        let _ = rx.recv().await;
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+    let _ = scheduler_handle.await;
+    tracing::info!("refresh scheduler stopped, server exiting");
 
     Ok(())
 }

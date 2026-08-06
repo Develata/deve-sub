@@ -31,7 +31,9 @@ pub use protocol_config::{
     VMessConfig, VlessRealityConfig,
 };
 pub use source::{
-    Source, SourceError, SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
+    ItemParseStatus, NodePoolRepository, ReconcileEntry, ReconcileInput, ReconcileResult, Source,
+    SourceError, SourceItem, SourceRepository, SourceSnapshot, SourceSnapshotRepository,
+    SourceType,
 };
 pub use tls::{CertificatePin, RealityConfig, TlsConfig};
 pub use transport::{

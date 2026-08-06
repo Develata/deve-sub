@@ -1,5 +1,5 @@
 [package]
-name = "deve-sub-storage-sqlite"
+name = "deve-sub-adapters"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,22 +9,16 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-deve-sub-kernel = { workspace = true }
-deve-sub-domain = { workspace = true }
 deve-sub-application = { workspace = true }
-thiserror = { workspace = true }
-sqlx = { workspace = true }
+deve-sub-security = { workspace = true }
+reqwest = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true }
-time = { workspace = true }
+url = { workspace = true }
 async-trait = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
 tokio = { workspace = true }
-deve-sub-protocol = { workspace = true }
 
 [lints]
 workspace = true

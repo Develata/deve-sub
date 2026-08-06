@@ -10,10 +10,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
-use deve_sub_application::{DbHealthPort, LoginRateLimiter};
+use deve_sub_application::{DbHealthPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    RecoveryCodeRepository, SessionRepository, SourceRepository, TotpSecretRepository,
-    UserRepository,
+    NodePoolRepository, RecoveryCodeRepository, SessionRepository, SourceRepository,
+    SourceSnapshotRepository, TotpSecretRepository, UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -49,6 +49,9 @@ pub struct AppState {
     pub totp_secret_repo: Arc<dyn TotpSecretRepository>,
     pub recovery_code_repo: Arc<dyn RecoveryCodeRepository>,
     pub source_repo: Arc<dyn SourceRepository>,
+    pub snapshot_repo: Arc<dyn SourceSnapshotRepository>,
+    pub pool_repo: Arc<dyn NodePoolRepository>,
+    pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,
     pub db_health: Arc<dyn DbHealthPort>,
 }

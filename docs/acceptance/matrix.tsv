@@ -20,10 +20,10 @@ AUTH-008	普通用户越权	P0	Security	pass
 AUTH-009	Token 重置	P0	Integration	planned
 AUTH-010	强制注销	P0	E2E	pass
 SRC-001	新建 HTTP 源	P0	E2E	pass
-SRC-002	手动刷新	P0	E2E	planned
+SRC-002	手动刷新	P0	E2E	pass
 SRC-003	自动刷新	P0	Integration	planned
-SRC-004	ETag	P0	Integration	planned
-SRC-005	抓取失败	P0	Integration	planned
+SRC-004	ETag	P0	Integration	pass
+SRC-005	抓取失败	P0	Integration	pass
 SRC-006	解析为零节点	P0	Integration	planned
 SRC-007	响应过大	P0	Security	planned
 SRC-008	请求超时	P0	Integration	planned
@@ -32,7 +32,7 @@ SRC-010	条件过滤	P0	Unit/E2E	planned
 SRC-011	IPv6 URL	P0	Integration	planned
 SRC-012	压缩响应	P0	Integration	planned
 SRC-013	多个刷新	P0	Integration	planned
-SRC-014	Diff	P0	Integration	planned
+SRC-014	Diff	P0	Integration	pass
 PARSE-001	VLESS Reality URI	P0	Golden	pass
 PARSE-002	HY2 URI	P0	Golden	pass
 PARSE-003	TUIC v5 URI	P0	Golden	pass
@@ -115,8 +115,8 @@ DEPLOY-003	amd64 镜像	P1	CI	planned
 DEPLOY-004	arm64 镜像	P1	CI	planned
 UPDATE-001	签名更新	P1	VM Test	planned
 UPDATE-002	更新失败	P1	VM Test	planned
-SEC-001	localhost SSRF	P0	Security	planned
-SEC-002	私网 SSRF	P0	Security	planned
+SEC-001	localhost SSRF	P0	Security	pass
+SEC-002	私网 SSRF	P0	Security	pass
 SEC-003	DNS 重绑定	P0	Security	planned
 SEC-004	重定向到内网	P0	Security	planned
 SEC-005	YAML Bomb	P0	Security	planned

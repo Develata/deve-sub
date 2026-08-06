@@ -928,6 +928,101 @@
         ]
       }
     },
+    "/api/v1/sources/{id}/refresh": {
+      "post": {
+        "summary": "`POST /api/v1/sources/{id}/refresh` — refresh a source (admin only).",
+        "description": "Fetches the subscription URL, parses the content, and reconciles the\nparsed nodes into the pool. On fetch or parse failure, the last\nsuccessful snapshot remains active (constraint #19).",
+        "operationId": "refresh_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Source refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshSourceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid source id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fetch or parse failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/users": {
       "get": {
         "summary": "`GET /api/v1/users` — list users with cursor pagination (admin only).",
@@ -1573,6 +1668,79 @@
           "code": {
             "type": "string",
             "description": "6-digit TOTP code or a recovery code."
+          }
+        }
+      },
+      "ReconcileCountsDto": {
+        "type": "object",
+        "description": "Reconciliation counts returned by a source refresh.",
+        "required": [
+          "new_nodes",
+          "duplicate_nodes",
+          "reactivated_nodes",
+          "missing_nodes"
+        ],
+        "properties": {
+          "duplicate_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Nodes already in the pool (duplicate of an existing active node).",
+            "minimum": 0
+          },
+          "missing_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Nodes previously bound to this source that are no longer present.",
+            "minimum": 0
+          },
+          "new_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Nodes newly inserted into the pool.",
+            "minimum": 0
+          },
+          "reactivated_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Nodes that were missing and have been reactivated.",
+            "minimum": 0
+          }
+        }
+      },
+      "RefreshSourceResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/sources/{id}/refresh`.",
+        "required": [
+          "snapshot_id",
+          "version",
+          "not_modified",
+          "node_count",
+          "reconcile"
+        ],
+        "properties": {
+          "node_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of nodes in the snapshot.",
+            "minimum": 0
+          },
+          "not_modified": {
+            "type": "boolean",
+            "description": "Whether the server returned 304 Not Modified."
+          },
+          "reconcile": {
+            "$ref": "#/components/schemas/ReconcileCountsDto",
+            "description": "Reconciliation counts."
+          },
+          "snapshot_id": {
+            "type": "string",
+            "description": "ULID of the snapshot created (or the previously active one on 304)."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Snapshot version number.",
+            "minimum": 0
           }
         }
       },

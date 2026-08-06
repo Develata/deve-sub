@@ -1,0 +1,356 @@
+#![allow(clippy::expect_used)]
+
+//! Integration tests for `POST /api/v1/sources/{id}/refresh` (SRC-002).
+//!
+//! Covers admin auth, 404 on non-existent source, 400 on invalid ULID, 502 on
+//! fetch failure, and successful refresh returning reconcile counts.
+
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
+
+use async_trait::async_trait;
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use tower::ServiceExt;
+
+use deve_sub_application::{
+    DbHealthPort, FetchError, FetchResult, LoginRateLimiter, SubscriptionFetcher,
+};
+use deve_sub_domain::{
+    NodePoolRepository, RecoveryCodeRepository, SessionRepository, SourceRepository,
+    SourceSnapshotRepository, TotpSecretRepository, UserRepository,
+};
+use deve_sub_security::MasterKey;
+use deve_sub_storage_sqlite::{
+    SqliteHealthCheck, SqliteNodePoolRepository, SqliteRecoveryCodeRepository,
+    SqliteSessionRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
+    SqliteTotpSecretRepository, SqliteUserRepository,
+};
+
+struct MockFetcher {
+    response: Mutex<Option<MockResp>>,
+}
+
+enum MockResp {
+    Ok {
+        body: Vec<u8>,
+        etag: Option<String>,
+        content_type: Option<String>,
+    },
+    Error(FetchError),
+}
+
+impl MockFetcher {
+    fn ok(body: &str) -> Self {
+        Self {
+            response: Mutex::new(Some(MockResp::Ok {
+                body: body.as_bytes().to_vec(),
+                etag: None,
+                content_type: Some("text/plain".to_owned()),
+            })),
+        }
+    }
+    fn error() -> Self {
+        Self {
+            response: Mutex::new(Some(MockResp::Error(FetchError::Timeout(30)))),
+        }
+    }
+}
+
+#[async_trait]
+impl SubscriptionFetcher for MockFetcher {
+    async fn fetch(&self, _url: &str, _etag: Option<&str>) -> Result<FetchResult, FetchError> {
+        let resp = self.response.lock().expect("mutex").take();
+        match resp {
+            Some(MockResp::Ok {
+                body,
+                etag,
+                content_type,
+            }) => Ok(FetchResult::Ok {
+                body,
+                etag,
+                content_type,
+            }),
+            Some(MockResp::Error(e)) => Err(e),
+            None => Err(FetchError::Connection("no mock response".to_owned())),
+        }
+    }
+}
+
+struct TestApp {
+    state: deve_sub_server::AppState,
+    _dir: tempfile::TempDir,
+}
+
+impl TestApp {
+    async fn new_with_fetcher(fetcher: MockFetcher) -> Self {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db_path = dir.path().join("test.db");
+        let key_path = dir.path().join("master.key");
+
+        let pool =
+            sqlx::sqlite::SqlitePool::connect(&format!("sqlite://{}?mode=rwc", db_path.display()))
+                .await
+                .expect("pool");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrations");
+
+        let master_key = Arc::new(MasterKey::load_or_generate(&key_path).expect("master key"));
+        let config = deve_sub_application::AppConfig::default();
+
+        let rate_limiter: Arc<dyn LoginRateLimiter> =
+            Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(
+                config.security.max_login_attempts,
+                std::time::Duration::from_secs(config.security.lockout_duration_secs),
+            ));
+        let db_health: Arc<dyn DbHealthPort> = Arc::new(SqliteHealthCheck::new(pool.clone()));
+
+        Self {
+            state: deve_sub_server::AppState {
+                config,
+                master_key,
+                user_repo: Arc::new(SqliteUserRepository::new(pool.clone()))
+                    as Arc<dyn UserRepository>,
+                session_repo: Arc::new(SqliteSessionRepository::new(pool.clone()))
+                    as Arc<dyn SessionRepository>,
+                totp_secret_repo: Arc::new(SqliteTotpSecretRepository::new(pool.clone()))
+                    as Arc<dyn TotpSecretRepository>,
+                recovery_code_repo: Arc::new(SqliteRecoveryCodeRepository::new(pool.clone()))
+                    as Arc<dyn RecoveryCodeRepository>,
+                source_repo: Arc::new(SqliteSourceRepository::new(pool.clone()))
+                    as Arc<dyn SourceRepository>,
+                snapshot_repo: Arc::new(SqliteSourceSnapshotRepository::new(pool.clone()))
+                    as Arc<dyn SourceSnapshotRepository>,
+                pool_repo: Arc::new(SqliteNodePoolRepository::new(pool.clone()))
+                    as Arc<dyn NodePoolRepository>,
+                fetcher: Arc::new(fetcher) as Arc<dyn SubscriptionFetcher>,
+                rate_limiter,
+                db_health,
+            },
+            _dir: dir,
+        }
+    }
+
+    fn router(&self) -> axum::Router {
+        deve_sub_server::build_router(self.state.clone())
+    }
+}
+
+fn post(uri: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(uri)
+        .body(Body::empty())
+        .expect("request")
+}
+
+fn post_json(uri: &str, body: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_owned()))
+        .expect("request")
+}
+
+trait RequestExt {
+    fn with_header(self, key: &str, value: String) -> Self;
+}
+
+impl RequestExt for Request<Body> {
+    fn with_header(mut self, key: &str, value: String) -> Self {
+        let name = axum::http::HeaderName::from_str(key).expect("header name");
+        self.headers_mut()
+            .insert(name, value.parse().expect("header"));
+        self
+    }
+}
+
+fn with_cookie(req: Request<Body>, cookie: &str) -> Request<Body> {
+    req.with_header("cookie", cookie.to_owned())
+}
+
+fn extract_cookie(response: &axum::response::Response) -> Option<String> {
+    let cookies = response.headers().get("set-cookie")?.to_str().ok()?;
+    let part = cookies
+        .split(';')
+        .find(|s| s.trim().starts_with("deve_sub_session="))?;
+    Some(part.trim().to_owned())
+}
+
+async fn setup_and_login(router: &axum::Router) -> String {
+    let _ = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/setup",
+            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
+        ))
+        .await
+        .expect("setup");
+
+    let response = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/login",
+            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
+        ))
+        .await
+        .expect("login");
+    assert_eq!(response.status(), StatusCode::OK);
+    extract_cookie(&response).expect("cookie")
+}
+
+async fn create_source(router: &axum::Router, cookie: &str) -> String {
+    let body = r#"{"name":"my-sub","source_type":"uri_list","url":"https://example.com/sub","auto_update":false,"update_interval_secs":3600,"keep_on_fail":true}"#;
+    let response = router
+        .clone()
+        .oneshot(with_cookie(post_json("/api/v1/sources", body), cookie))
+        .await
+        .expect("create");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    json["source"]["id"].as_str().expect("id").to_owned()
+}
+
+async fn body_to_json(response: axum::response::Response) -> serde_json::Value {
+    let body = axum::body::to_bytes(response.into_body(), 8192)
+        .await
+        .expect("body");
+    serde_json::from_slice(&body).expect("json")
+}
+
+const TROJAN_LIST: &str = "trojan://TEST_PASSWORD@example.com:443?sni=example.com&type=tcp#NodeA";
+
+/// SRC-002: Admin can refresh a source and get reconcile counts.
+#[tokio::test]
+async fn admin_can_refresh_source() {
+    let app = TestApp::new_with_fetcher(MockFetcher::ok(TROJAN_LIST)).await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let source_id = create_source(&router, &cookie).await;
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post(&format!("/api/v1/sources/{source_id}/refresh")),
+            &cookie,
+        ))
+        .await
+        .expect("refresh");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_to_json(response).await;
+    assert_eq!(json["not_modified"], false);
+    assert_eq!(json["version"], 1);
+    assert_eq!(json["node_count"], 1);
+    assert_eq!(json["reconcile"]["new_nodes"], 1);
+    assert_eq!(json["reconcile"]["duplicate_nodes"], 0);
+    assert!(json["snapshot_id"].as_str().is_some_and(|s| !s.is_empty()));
+}
+
+/// SRC-002: Unauthenticated refresh returns 401.
+#[tokio::test]
+async fn unauthenticated_refresh_rejected() {
+    let app = TestApp::new_with_fetcher(MockFetcher::ok(TROJAN_LIST)).await;
+    let router = app.router();
+
+    let response = router
+        .clone()
+        .oneshot(post("/api/v1/sources/01J0ZZZZZZZZZZZZZZZZZZZZZX/refresh"))
+        .await
+        .expect("refresh");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// SRC-002: Non-admin user gets 403.
+#[tokio::test]
+async fn non_admin_forbidden() {
+    let app = TestApp::new_with_fetcher(MockFetcher::ok(TROJAN_LIST)).await;
+    let router = app.router();
+    let admin_cookie = setup_and_login(&router).await;
+
+    let create_user = r#"{"username":"bob","password":"user-pwd!","role":"user"}"#;
+    let _ = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/users", create_user),
+            &admin_cookie,
+        ))
+        .await
+        .expect("create user");
+
+    let login = r#"{"username":"bob","password":"user-pwd!"}"#;
+    let response = router
+        .clone()
+        .oneshot(post_json("/api/v1/auth/login", login))
+        .await
+        .expect("login user");
+    let user_cookie = extract_cookie(&response).expect("cookie");
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post("/api/v1/sources/01J0ZZZZZZZZZZZZZZZZZZZZZX/refresh"),
+            &user_cookie,
+        ))
+        .await
+        .expect("refresh");
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+/// SRC-002: Refreshing a non-existent source returns 404.
+#[tokio::test]
+async fn refresh_nonexistent_returns_404() {
+    let app = TestApp::new_with_fetcher(MockFetcher::ok(TROJAN_LIST)).await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post("/api/v1/sources/01J0ZZZZZZZZZZZZZZZZZZZZZX/refresh"),
+            &cookie,
+        ))
+        .await
+        .expect("refresh");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+/// SRC-002: Invalid ULID returns 400.
+#[tokio::test]
+async fn refresh_invalid_id_returns_400() {
+    let app = TestApp::new_with_fetcher(MockFetcher::ok(TROJAN_LIST)).await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post("/api/v1/sources/not-a-ulid/refresh"),
+            &cookie,
+        ))
+        .await
+        .expect("refresh");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// SRC-002: Fetch failure returns 502.
+#[tokio::test]
+async fn refresh_fetch_failure_returns_502() {
+    let app = TestApp::new_with_fetcher(MockFetcher::error()).await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let source_id = create_source(&router, &cookie).await;
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post(&format!("/api/v1/sources/{source_id}/refresh")),
+            &cookie,
+        ))
+        .await
+        .expect("refresh");
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+}

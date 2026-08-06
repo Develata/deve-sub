@@ -11,15 +11,16 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-use deve_sub_application::{DbHealthPort, LoginRateLimiter};
+use deve_sub_application::{DbHealthPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    RecoveryCodeRepository, SessionRepository, SourceRepository, TotpSecretRepository,
-    UserRepository,
+    NodePoolRepository, RecoveryCodeRepository, SessionRepository, SourceRepository,
+    SourceSnapshotRepository, TotpSecretRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
-    SqliteHealthCheck, SqliteRecoveryCodeRepository, SqliteSessionRepository,
-    SqliteSourceRepository, SqliteTotpSecretRepository, SqliteUserRepository,
+    SqliteHealthCheck, SqliteNodePoolRepository, SqliteRecoveryCodeRepository,
+    SqliteSessionRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
+    SqliteTotpSecretRepository, SqliteUserRepository,
 };
 
 struct TestApp {
@@ -68,6 +69,12 @@ impl TestApp {
                     as Arc<dyn RecoveryCodeRepository>,
                 source_repo: Arc::new(SqliteSourceRepository::new(pool.clone()))
                     as Arc<dyn SourceRepository>,
+                snapshot_repo: Arc::new(SqliteSourceSnapshotRepository::new(pool.clone()))
+                    as Arc<dyn SourceSnapshotRepository>,
+                pool_repo: Arc::new(SqliteNodePoolRepository::new(pool.clone()))
+                    as Arc<dyn NodePoolRepository>,
+                fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
+                    as Arc<dyn SubscriptionFetcher>,
                 rate_limiter,
                 db_health,
             },

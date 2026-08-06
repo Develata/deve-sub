@@ -515,12 +515,12 @@ cases:
     title: Round-trip
     priority: P0
     layer: Property
-    dimensions: ["input:URI", "input:Base64", "input:Mihomo YAML", "input:sing-box JSON", "input:Xray JSON", "input:V2Ray JSON", "input:Shadowrocket", "protocol:VLESS Reality", "protocol:Hysteria2", "protocol:TUIC v5", "protocol:Naive", "protocol:VMess", "protocol:Trojan", "protocol:Shadowsocks"]
+    dimensions: ["input:URI", "protocol:VLESS Reality", "protocol:Hysteria2", "protocol:TUIC v5", "protocol:Naive", "protocol:VMess", "protocol:Trojan", "protocol:Shadowsocks"]
     preconditions: []
     steps: []
     assertions: ["输入→模型→同格式输出语义一致"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-018
     title: 非法输入 Fuzz
     priority: P0
@@ -530,7 +530,7 @@ cases:
     steps: []
     assertions: ["不崩溃、不无限分配"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-001
     title: 粘贴批量节点
     priority: P0

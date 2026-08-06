@@ -49,8 +49,8 @@ PARSE-013	short-id 纯数字	P0	Regression	pass
 PARSE-014	allowInsecure=0	P0	Regression	pass
 PARSE-015	未提供 allowInsecure	P0	Regression	pass
 PARSE-016	一行一个 URI	P0	E2E	pass
-PARSE-017	Round-trip	P0	Property	planned
-PARSE-018	非法输入 Fuzz	P0	Fuzz	planned
+PARSE-017	Round-trip	P0	Property	pass
+PARSE-018	非法输入 Fuzz	P0	Fuzz	pass
 NODE-001	粘贴批量节点	P0	E2E	planned
 NODE-002	文件导入	P0	Integration	planned
 NODE-003	自动去重	P0	Regression	planned

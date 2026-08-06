@@ -69,9 +69,13 @@ M3 is delivered in four slices:
 3. **Container format parsers**: Base64 subscription decoder, Mihomo YAML,
    sing-box JSON, Xray JSON, V2Ray JSON, Shadowrocket. Acceptance: PARSE-005
    through PARSE-009.
-4. **Fuzz + property tests**: Illegal-input fuzz (PARSE-018), comprehensive
-   round-trip property test across all P0 protocols and input formats
-   (PARSE-017 completion).
+4. **Fuzz + property tests**: Illegal-input fuzz (PARSE-018),
+   comprehensive round-trip property test across all P0 protocols
+   (PARSE-017 completion). Container formats (Base64, Mihomo YAML,
+   sing-box JSON, Xray/V2Ray JSON, Shadowrocket) are covered by golden
+   suites (PARSE-005 through PARSE-009); M3 ships URI emitters only, so
+   same-format container round-trip is not architecturally possible in
+   this milestone.
 
 ## Architecture
 

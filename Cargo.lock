@@ -641,6 +641,7 @@ dependencies = [
  "deve-sub-emitter",
  "deve-sub-kernel",
  "percent-encoding",
+ "proptest",
  "serde",
  "serde_json",
  "serde_yaml",

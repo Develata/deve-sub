@@ -34,8 +34,8 @@ pub use protocol_config::{
 };
 pub use source::{
     ImportOutcome, ImportResult, ItemParseStatus, NodeFilter, NodePoolEntry, NodePoolRepository,
-    ReconcileEntry, ReconcileInput, ReconcileResult, Source, SourceError, SourceItem,
-    SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
+    ReconcileEntry, ReconcileInput, ReconcileResult, Source, SourceError, SourceFilterRules,
+    SourceItem, SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
 };
 pub use tls::{CertificatePin, RealityConfig, TlsConfig};
 pub use transport::{

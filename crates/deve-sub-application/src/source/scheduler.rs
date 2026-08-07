@@ -82,48 +82,62 @@ impl RefreshScheduler {
         }
     }
 
-    /// One scheduler tick: scan all sources, refresh those that are due.
+    /// One scheduler tick: scan all sources, refresh those that are due
+    /// concurrently (SRC-013). Each refresh is independent — separate
+    /// source_id, separate snapshot, separate reconcile transaction — so
+    /// concurrent execution cannot cross-pollute.
     async fn tick(&self) {
         let due = self.collect_due_sources().await;
         if due.is_empty() {
             return;
         }
-        tracing::info!(count = due.len(), "refreshing due sources");
+        tracing::info!(count = due.len(), "refreshing due sources concurrently");
+
+        let mut set = tokio::task::JoinSet::new();
         for source_id in due {
-            let result = refresh_source(
-                self.source_repo.as_ref(),
-                self.snapshot_repo.as_ref(),
-                self.pool_repo.as_ref(),
-                self.fetcher.as_ref(),
-                self.geoip.as_ref(),
-                source_id,
-            )
-            .await;
-            match &result {
-                Ok(r) => {
-                    if r.not_modified {
-                        tracing::info!(
-                            source = %source_id,
-                            "auto-refresh: not modified"
-                        );
-                    } else {
-                        tracing::info!(
-                            source = %source_id,
-                            version = r.snapshot.version,
-                            new = r.reconcile.new_nodes,
-                            dup = r.reconcile.duplicate_nodes,
-                            reactivated = r.reconcile.reactivated_nodes,
-                            missing = r.reconcile.missing_nodes,
-                            "auto-refresh: completed"
-                        );
+            let source_repo = self.source_repo.clone();
+            let snapshot_repo = self.snapshot_repo.clone();
+            let pool_repo = self.pool_repo.clone();
+            let fetcher = self.fetcher.clone();
+            let geoip = self.geoip.clone();
+            set.spawn(async move {
+                let result = refresh_source(
+                    source_repo.as_ref(),
+                    snapshot_repo.as_ref(),
+                    pool_repo.as_ref(),
+                    fetcher.as_ref(),
+                    geoip.as_ref(),
+                    source_id,
+                )
+                .await;
+                (source_id, result)
+            });
+        }
+
+        while let Some(join_result) = set.join_next().await {
+            match join_result {
+                Ok((source_id, result)) => match &result {
+                    Ok(r) => {
+                        if r.not_modified {
+                            tracing::info!(source = %source_id, "auto-refresh: not modified");
+                        } else {
+                            tracing::info!(
+                                source = %source_id,
+                                version = r.snapshot.version,
+                                new = r.reconcile.new_nodes,
+                                dup = r.reconcile.duplicate_nodes,
+                                reactivated = r.reconcile.reactivated_nodes,
+                                missing = r.reconcile.missing_nodes,
+                                "auto-refresh: completed"
+                            );
+                        }
                     }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        source = %source_id,
-                        error = %e,
-                        "auto-refresh: failed"
-                    );
+                    Err(e) => {
+                        tracing::warn!(source = %source_id, error = %e, "auto-refresh: failed");
+                    }
+                },
+                Err(join_err) => {
+                    tracing::warn!(error = %join_err, "refresh task panicked");
                 }
             }
         }

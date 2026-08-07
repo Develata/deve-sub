@@ -109,6 +109,7 @@ async fn create_source(repo: &SqliteSourceRepository, name: &str) -> deve_sub_do
             auto_update: false,
             update_interval_secs: 3600,
             keep_on_fail: true,
+            filter_rules: None,
         },
     )
     .await

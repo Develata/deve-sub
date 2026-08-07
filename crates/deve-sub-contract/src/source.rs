@@ -29,6 +29,24 @@ pub enum SourceTypeDto {
     Shadowrocket,
 }
 
+/// Include/exclude filter rules applied to parsed nodes before reconcile
+/// (SRC-010).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct SourceFilterRulesDto {
+    /// Protocols to keep; empty means keep all.
+    #[serde(default)]
+    pub include_protocols: Vec<String>,
+    /// Protocols to drop; takes precedence over `include_protocols`.
+    #[serde(default)]
+    pub exclude_protocols: Vec<String>,
+    /// Regions to keep; empty means keep all.
+    #[serde(default)]
+    pub include_regions: Vec<String>,
+    /// Regions to drop; takes precedence over `include_regions`.
+    #[serde(default)]
+    pub exclude_regions: Vec<String>,
+}
+
 /// Source information returned by source management endpoints.
 ///
 /// Never includes encrypted headers ciphertext in responses.
@@ -50,6 +68,9 @@ pub struct SourceDto {
     pub enabled: bool,
     /// Whether to keep existing nodes if a refresh fails.
     pub keep_on_fail: bool,
+    /// Include/exclude filter rules (SRC-010). `None` means no filtering.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter_rules: Option<SourceFilterRulesDto>,
     /// Account creation time (ISO 8601 UTC).
     pub created_at: String,
 }
@@ -72,6 +93,9 @@ pub struct CreateSourceRequest {
     /// Whether to keep existing nodes if a refresh fails.
     #[serde(default = "default_keep_on_fail")]
     pub keep_on_fail: bool,
+    /// Include/exclude filter rules (SRC-010). `None` means no filtering.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter_rules: Option<SourceFilterRulesDto>,
 }
 
 /// Request body for `PUT /api/v1/sources/{id}`.
@@ -91,6 +115,9 @@ pub struct UpdateSourceRequest {
     pub enabled: bool,
     /// Whether to keep existing nodes if a refresh fails.
     pub keep_on_fail: bool,
+    /// Include/exclude filter rules (SRC-010). `None` means no filtering.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter_rules: Option<SourceFilterRulesDto>,
 }
 
 /// Response body for `POST /api/v1/sources` and `PUT /api/v1/sources/{id}`.

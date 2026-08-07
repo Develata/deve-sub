@@ -11,7 +11,7 @@ pub mod ports;
 pub mod snapshot;
 pub mod source_item;
 
-pub use entity::{Source, SourceType};
+pub use entity::{Source, SourceFilterRules, SourceType};
 pub use error::SourceError;
 pub use ports::{
     ImportOutcome, ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, ReconcileEntry,

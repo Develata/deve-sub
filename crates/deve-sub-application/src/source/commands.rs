@@ -6,13 +6,14 @@
 
 use deve_sub_domain::{
     ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, ProtocolKind, ReconcileInput,
-    ReconcileResult, Source, SourceError, SourceRepository, SourceSnapshot,
+    ReconcileResult, Source, SourceError, SourceFilterRules, SourceRepository, SourceSnapshot,
     SourceSnapshotRepository, SourceType,
 };
 use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
 
 use super::error::SourceAppError;
 use super::fetcher::{FetchResult, SubscriptionFetcher};
+use super::filter::apply_source_filter;
 use super::geoip::{GeoIpPort, enrich_regions};
 use super::parse::parse_content;
 
@@ -73,6 +74,8 @@ pub struct CreateSourceParams {
     pub update_interval_secs: u64,
     /// Whether to keep existing nodes if a refresh fails.
     pub keep_on_fail: bool,
+    /// Include/exclude filter rules applied to parsed nodes (SRC-010).
+    pub filter_rules: Option<SourceFilterRules>,
 }
 
 /// Create a new subscription source.
@@ -105,6 +108,7 @@ pub async fn create_source(
     source.auto_update = params.auto_update;
     source.update_interval_secs = params.update_interval_secs;
     source.keep_on_fail = params.keep_on_fail;
+    source.filter_rules = params.filter_rules;
 
     repo.create(&source).await.map_err(map_source_error)?;
     Ok(source)
@@ -128,6 +132,8 @@ pub struct UpdateSourceParams {
     pub enabled: bool,
     /// Whether to keep existing nodes if a refresh fails.
     pub keep_on_fail: bool,
+    /// Include/exclude filter rules applied to parsed nodes (SRC-010).
+    pub filter_rules: Option<SourceFilterRules>,
 }
 
 /// Update an existing source.
@@ -170,6 +176,7 @@ pub async fn update_source(
     source.update_interval_secs = params.update_interval_secs;
     source.enabled = params.enabled;
     source.keep_on_fail = params.keep_on_fail;
+    source.filter_rules = params.filter_rules;
 
     repo.update(&source).await.map_err(map_source_error)?;
     Ok(source)
@@ -308,6 +315,13 @@ pub async fn refresh_source(
             return Err(e.into());
         }
     };
+
+    // WHY: apply source-level include/exclude filter (SRC-010) before region
+    // enrichment so filtered nodes do not consume GeoIP lookups, and before
+    // reconcile so they are recorded as `Filtered` rather than `Parsed`.
+    if let Some(ref rules) = source.filter_rules {
+        apply_source_filter(&mut entries, rules);
+    }
 
     // WHY: auto-detect regions via GeoIP before reconcile. Manual overrides
     // in `node_overrides` take precedence at read time (NODE-006/010), so

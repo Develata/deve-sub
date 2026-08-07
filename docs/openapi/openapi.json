@@ -2428,6 +2428,17 @@
             "type": "boolean",
             "description": "Whether automatic refresh is enabled."
           },
+          "filter_rules": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SourceFilterRulesDto",
+                "description": "Include/exclude filter rules (SRC-010). `None` means no filtering."
+              }
+            ]
+          },
           "keep_on_fail": {
             "type": "boolean",
             "description": "Whether to keep existing nodes if a refresh fails."
@@ -3266,6 +3277,17 @@
             "type": "boolean",
             "description": "Whether the source is active."
           },
+          "filter_rules": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SourceFilterRulesDto",
+                "description": "Include/exclude filter rules (SRC-010). `None` means no filtering."
+              }
+            ]
+          },
           "id": {
             "type": "string",
             "description": "ULID identifier."
@@ -3291,6 +3313,40 @@
           "url": {
             "type": "string",
             "description": "Subscription URL."
+          }
+        }
+      },
+      "SourceFilterRulesDto": {
+        "type": "object",
+        "description": "Include/exclude filter rules applied to parsed nodes before reconcile\n(SRC-010).",
+        "properties": {
+          "exclude_protocols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Protocols to drop; takes precedence over `include_protocols`."
+          },
+          "exclude_regions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Regions to drop; takes precedence over `include_regions`."
+          },
+          "include_protocols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Protocols to keep; empty means keep all."
+          },
+          "include_regions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Regions to keep; empty means keep all."
           }
         }
       },
@@ -3485,6 +3541,17 @@
           "enabled": {
             "type": "boolean",
             "description": "Whether the source is active."
+          },
+          "filter_rules": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SourceFilterRulesDto",
+                "description": "Include/exclude filter rules (SRC-010). `None` means no filtering."
+              }
+            ]
           },
           "keep_on_fail": {
             "type": "boolean",

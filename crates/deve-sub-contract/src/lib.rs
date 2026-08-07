@@ -28,5 +28,5 @@ pub use node::{
 };
 pub use source::{
     CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,
-    SourceResponse, SourceTypeDto, UpdateSourceRequest,
+    SourceFilterRulesDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
 };

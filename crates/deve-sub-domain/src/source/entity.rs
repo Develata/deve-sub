@@ -63,6 +63,23 @@ impl std::str::FromStr for SourceType {
     }
 }
 
+/// Include/exclude filter rules applied to parsed nodes before reconcile
+/// (SRC-010). Entries that do not match an include rule, or that match an
+/// exclude rule, are dropped (`node = None`, status = `Filtered`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceFilterRules {
+    /// Protocols to keep; empty means keep all. Compared case-insensitively
+    /// against `ProtocolKind`'s `Display` output.
+    pub include_protocols: Vec<String>,
+    /// Protocols to drop; takes precedence over `include_protocols`.
+    pub exclude_protocols: Vec<String>,
+    /// Regions to keep; empty means keep all. Compared case-insensitively
+    /// against the node's region value.
+    pub include_regions: Vec<String>,
+    /// Regions to drop; takes precedence over `include_regions`.
+    pub exclude_regions: Vec<String>,
+}
+
 /// The source aggregate root.
 ///
 /// Represents a subscription source: a URL that is periodically fetched and
@@ -93,6 +110,9 @@ pub struct Source {
     /// Whether to keep existing nodes if a refresh fails. When `false`, a
     /// failed refresh marks the source as errored.
     pub keep_on_fail: bool,
+    /// Include/exclude filter rules applied to parsed nodes before reconcile
+    /// (SRC-010). `None` means no filtering.
+    pub filter_rules: Option<SourceFilterRules>,
     /// Creation time.
     pub created_at: Timestamp,
 }
@@ -112,6 +132,7 @@ impl Source {
             update_interval_secs: 3600,
             enabled: true,
             keep_on_fail: true,
+            filter_rules: None,
             created_at: Timestamp::now(),
         }
     }

@@ -300,7 +300,7 @@ cases:
     steps: []
     assertions: ["取消后不发布半成品"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-010
     title: 条件过滤
     priority: P0
@@ -310,7 +310,7 @@ cases:
     steps: []
     assertions: ["包含和排除规则正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-011
     title: IPv6 URL
     priority: P0
@@ -320,7 +320,7 @@ cases:
     steps: []
     assertions: ["能抓取 IPv6 literal 源"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-012
     title: 压缩响应
     priority: P0
@@ -340,7 +340,7 @@ cases:
     steps: []
     assertions: ["并发受控且互不污染"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-014
     title: Diff
     priority: P0

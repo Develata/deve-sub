@@ -10,9 +10,10 @@ use axum::response::{IntoResponse, Json};
 use deve_sub_application::source::{self, CreateSourceParams, UpdateSourceParams};
 use deve_sub_contract::{
     CreateSourceRequest, ErrorResponse, ListSourcesResponse, ReconcileCountsDto,
-    RefreshSourceResponse, SourceDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
+    RefreshSourceResponse, SourceDto, SourceFilterRulesDto, SourceResponse, SourceTypeDto,
+    UpdateSourceRequest,
 };
-use deve_sub_domain::{Source, SourceType};
+use deve_sub_domain::{Source, SourceFilterRules, SourceType};
 use deve_sub_kernel::SourceId;
 
 use crate::AppState;
@@ -60,6 +61,26 @@ pub(crate) fn source_type_from_dto(t: SourceTypeDto) -> SourceType {
     }
 }
 
+/// Convert a DTO [`SourceFilterRulesDto`] to the domain type.
+pub(crate) fn filter_rules_from_dto(dto: SourceFilterRulesDto) -> SourceFilterRules {
+    SourceFilterRules {
+        include_protocols: dto.include_protocols,
+        exclude_protocols: dto.exclude_protocols,
+        include_regions: dto.include_regions,
+        exclude_regions: dto.exclude_regions,
+    }
+}
+
+/// Convert a domain [`SourceFilterRules`] to the DTO type.
+pub(crate) fn filter_rules_to_dto(rules: &SourceFilterRules) -> SourceFilterRulesDto {
+    SourceFilterRulesDto {
+        include_protocols: rules.include_protocols.clone(),
+        exclude_protocols: rules.exclude_protocols.clone(),
+        include_regions: rules.include_regions.clone(),
+        exclude_regions: rules.exclude_regions.clone(),
+    }
+}
+
 /// Convert a domain [`Source`] to the DTO representation.
 fn source_to_dto(source: &Source) -> SourceDto {
     SourceDto {
@@ -71,6 +92,7 @@ fn source_to_dto(source: &Source) -> SourceDto {
         update_interval_secs: source.update_interval_secs,
         enabled: source.enabled,
         keep_on_fail: source.keep_on_fail,
+        filter_rules: source.filter_rules.as_ref().map(filter_rules_to_dto),
         created_at: ts_to_iso8601(source.created_at),
     }
 }
@@ -104,6 +126,7 @@ async fn create_source(
             auto_update: req.auto_update,
             update_interval_secs: req.update_interval_secs,
             keep_on_fail: req.keep_on_fail,
+            filter_rules: req.filter_rules.map(filter_rules_from_dto),
         },
     )
     .await
@@ -288,6 +311,7 @@ async fn update_source(
             update_interval_secs: req.update_interval_secs,
             enabled: req.enabled,
             keep_on_fail: req.keep_on_fail,
+            filter_rules: req.filter_rules.map(filter_rules_from_dto),
         },
     )
     .await

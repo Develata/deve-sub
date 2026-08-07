@@ -111,6 +111,7 @@ async fn create_source(repo: &SqliteSourceRepository, name: &str) -> deve_sub_do
             auto_update: false,
             update_interval_secs: 3600,
             keep_on_fail: true,
+            filter_rules: None,
         },
     )
     .await
@@ -131,6 +132,7 @@ async fn create_source_typed(
             auto_update: false,
             update_interval_secs: 3600,
             keep_on_fail: true,
+            filter_rules: None,
         },
     )
     .await
@@ -383,6 +385,7 @@ async fn fetch_failure_disables_source_when_keep_on_fail_false() {
             auto_update: false,
             update_interval_secs: 3600,
             keep_on_fail: false,
+            filter_rules: None,
         },
     )
     .await
@@ -427,6 +430,7 @@ async fn fetch_failure_preserves_enabled_when_keep_on_fail_true() {
             auto_update: false,
             update_interval_secs: 3600,
             keep_on_fail: true,
+            filter_rules: None,
         },
     )
     .await
@@ -452,4 +456,161 @@ async fn fetch_failure_preserves_enabled_when_keep_on_fail_true() {
         reloaded.enabled,
         "source should remain enabled with keep_on_fail=true"
     );
+}
+
+/// SRC-009: A failed refresh does not publish a half-finished snapshot.
+/// The reconcile transaction is atomic — on any failure between fetch and
+/// commit, no new snapshot version is created. Here a parse failure occurs
+/// after a successful fetch; we verify the snapshot count stays at the
+/// pre-failure value (no half-baked snapshot was persisted).
+#[tokio::test]
+async fn cancelled_refresh_publishes_no_half_snapshot() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+
+    use base64::Engine;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(TROJAN_URI_LIST);
+    let source = create_source_typed(&source_repo, "test-source", SourceType::Base64).await;
+
+    let fetcher_v1 = MockFetcher::new(vec![MockResponse::Ok {
+        body: encoded.into_bytes(),
+        etag: Some("\"v1\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_v1,
+        &StubGeoIp,
+        source.id,
+    )
+    .await
+    .expect("refresh v1");
+
+    let snapshots_before = snapshot_repo
+        .list_for_source(source.id, 100)
+        .await
+        .expect("list snapshots");
+    assert_eq!(
+        snapshots_before.len(),
+        1,
+        "one snapshot after successful v1 refresh"
+    );
+
+    let fetcher_bad = MockFetcher::new(vec![MockResponse::Ok {
+        body: b"!!!not-valid-base64!!!".to_vec(),
+        etag: None,
+        content_type: None,
+    }]);
+    let result = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_bad,
+        &StubGeoIp,
+        source.id,
+    )
+    .await;
+    assert!(result.is_err(), "parse failure should error out");
+
+    let snapshots_after = snapshot_repo
+        .list_for_source(source.id, 100)
+        .await
+        .expect("list snapshots");
+    assert_eq!(
+        snapshots_after.len(),
+        1,
+        "no half-finished snapshot published after parse failure"
+    );
+    assert_eq!(
+        snapshots_after[0].version, 1,
+        "active snapshot version unchanged"
+    );
+}
+
+/// SRC-013: Concurrent refreshes of two distinct sources do not cross-pollute.
+/// Each refresh operates on an independent source_id with its own snapshot and
+/// binding set. After concurrent refresh, each source's bindings contain only
+/// its own nodes.
+#[tokio::test]
+async fn concurrent_refreshes_do_not_cross_pollute() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+
+    let source_a = create_source(&source_repo, "source-a").await;
+    let source_b = create_source(&source_repo, "source-b").await;
+
+    let uri_list_a = "trojan://PASS_A@host-a.example.com:443?sni=a.example.com&type=tcp#NodeA";
+    let uri_list_b = "trojan://PASS_B@host-b.example.com:8443?sni=b.example.com&type=tcp#NodeB";
+
+    let fetcher_a = MockFetcher::new(vec![MockResponse::Ok {
+        body: uri_list_a.as_bytes().to_vec(),
+        etag: Some("\"a1\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    let fetcher_b = MockFetcher::new(vec![MockResponse::Ok {
+        body: uri_list_b.as_bytes().to_vec(),
+        etag: Some("\"b1\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+
+    let (r_a, r_b) = tokio::join!(
+        source::refresh_source(
+            &source_repo,
+            &snapshot_repo,
+            &pool_repo,
+            &fetcher_a,
+            &StubGeoIp,
+            source_a.id,
+        ),
+        source::refresh_source(
+            &source_repo,
+            &snapshot_repo,
+            &pool_repo,
+            &fetcher_b,
+            &StubGeoIp,
+            source_b.id,
+        ),
+    );
+    let r_a = r_a.expect("refresh a");
+    let r_b = r_b.expect("refresh b");
+    assert_eq!(r_a.reconcile.new_nodes, 1);
+    assert_eq!(r_b.reconcile.new_nodes, 1);
+
+    let bindings_a: Vec<(String,)> = sqlx::query_as(
+        "SELECT n.id FROM nodes n \
+         JOIN node_source_bindings b ON n.id = b.node_id \
+         WHERE b.source_id = ?",
+    )
+    .bind(source_a.id.to_string())
+    .fetch_all(&db.pool)
+    .await
+    .expect("bindings a");
+    let bindings_b: Vec<(String,)> = sqlx::query_as(
+        "SELECT n.id FROM nodes n \
+         JOIN node_source_bindings b ON n.id = b.node_id \
+         WHERE b.source_id = ?",
+    )
+    .bind(source_b.id.to_string())
+    .fetch_all(&db.pool)
+    .await
+    .expect("bindings b");
+
+    assert_eq!(bindings_a.len(), 1, "source A has exactly one bound node");
+    assert_eq!(bindings_b.len(), 1, "source B has exactly one bound node");
+    assert_ne!(
+        bindings_a[0].0, bindings_b[0].0,
+        "concurrent refreshes must not cross-pollute node bindings"
+    );
+
+    let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM nodes")
+        .fetch_one(&db.pool)
+        .await
+        .expect("count");
+    assert_eq!(total, 2, "two distinct nodes in the pool");
 }

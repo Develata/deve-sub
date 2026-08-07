@@ -42,6 +42,9 @@ pub enum ItemParseStatus {
     Unsupported,
     /// The entry could not be parsed at all.
     Failed,
+    /// The node was dropped by source-level include/exclude filter rules
+    /// (SRC-010) before reconcile.
+    Filtered,
 }
 
 impl Display for ItemParseStatus {
@@ -51,6 +54,7 @@ impl Display for ItemParseStatus {
             Self::Duplicate => write!(f, "duplicate"),
             Self::Unsupported => write!(f, "unsupported"),
             Self::Failed => write!(f, "failed"),
+            Self::Filtered => write!(f, "filtered"),
         }
     }
 }
@@ -63,6 +67,7 @@ impl FromStr for ItemParseStatus {
             "duplicate" => Ok(Self::Duplicate),
             "unsupported" => Ok(Self::Unsupported),
             "failed" => Ok(Self::Failed),
+            "filtered" => Ok(Self::Filtered),
             other => Err(format!("invalid parse status: {other}")),
         }
     }

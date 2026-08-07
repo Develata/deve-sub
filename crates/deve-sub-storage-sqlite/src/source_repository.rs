@@ -38,6 +38,7 @@ struct SourceRow {
     update_interval_secs: i64,
     enabled: i64,
     keep_on_fail: i64,
+    filter_rules_json: Option<String>,
     created_at: String,
 }
 
@@ -55,6 +56,13 @@ impl SourceRow {
                 .map_err(|_| SourceError::Storage("negative update_interval_secs".to_owned()))?,
             enabled: self.enabled != 0,
             keep_on_fail: self.keep_on_fail != 0,
+            filter_rules: self
+                .filter_rules_json
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|e| SourceError::Storage(format!("invalid filter_rules_json: {e}")))?,
             created_at: parse_ts(&self.created_at).map_err(SourceError::Storage)?,
         })
     }
@@ -66,8 +74,8 @@ impl SourceRepository for SqliteSourceRepository {
         let created_at = format_ts(source.created_at).map_err(SourceError::Storage)?;
 
         sqlx::query(
-            "INSERT INTO sources (id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO sources (id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, filter_rules_json, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(source.id.to_string())
         .bind(&source.name)
@@ -79,6 +87,7 @@ impl SourceRepository for SqliteSourceRepository {
         .bind(source.update_interval_secs as i64)
         .bind(source.enabled as i64)
         .bind(source.keep_on_fail as i64)
+        .bind(source.filter_rules.as_ref().map(serde_json::to_string).transpose().map_err(|e| SourceError::Storage(e.to_string()))?)
         .bind(created_at)
         .execute(&self.pool)
         .await
@@ -95,7 +104,7 @@ impl SourceRepository for SqliteSourceRepository {
 
     async fn find_by_id(&self, id: SourceId) -> Result<Option<Source>, SourceError> {
         let row: Option<SourceRow> = sqlx::query_as(
-            "SELECT id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, created_at \
+            "SELECT id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, filter_rules_json, created_at \
              FROM sources WHERE id = ?",
         )
         .bind(id.to_string())
@@ -107,7 +116,7 @@ impl SourceRepository for SqliteSourceRepository {
 
     async fn find_by_name(&self, name: &str) -> Result<Option<Source>, SourceError> {
         let row: Option<SourceRow> = sqlx::query_as(
-            "SELECT id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, created_at \
+            "SELECT id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, filter_rules_json, created_at \
              FROM sources WHERE name = ?",
         )
         .bind(name)
@@ -124,7 +133,7 @@ impl SourceRepository for SqliteSourceRepository {
         let rows: Vec<SourceRow> = match cursor {
             Some(c) => {
                 sqlx::query_as(
-                    "SELECT id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, created_at \
+                    "SELECT id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, filter_rules_json, created_at \
                      FROM sources WHERE id > ? ORDER BY id LIMIT ?",
                 )
                 .bind(c.to_string())
@@ -135,7 +144,7 @@ impl SourceRepository for SqliteSourceRepository {
             }
             None => {
                 sqlx::query_as(
-                    "SELECT id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, created_at \
+                    "SELECT id, name, source_type, url, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, filter_rules_json, created_at \
                      FROM sources ORDER BY id LIMIT ?",
                 )
                 .bind(limit)
@@ -158,7 +167,8 @@ impl SourceRepository for SqliteSourceRepository {
                auto_update = ?, \
                update_interval_secs = ?, \
                enabled = ?, \
-               keep_on_fail = ? \
+               keep_on_fail = ?, \
+               filter_rules_json = ? \
              WHERE id = ?",
         )
         .bind(&source.name)
@@ -170,6 +180,14 @@ impl SourceRepository for SqliteSourceRepository {
         .bind(source.update_interval_secs as i64)
         .bind(source.enabled as i64)
         .bind(source.keep_on_fail as i64)
+        .bind(
+            source
+                .filter_rules
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(|e| SourceError::Storage(e.to_string()))?,
+        )
         .bind(source.id.to_string())
         .execute(&self.pool)
         .await

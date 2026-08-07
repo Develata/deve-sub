@@ -8,6 +8,7 @@
 pub mod commands;
 pub mod error;
 pub mod fetcher;
+pub mod filter;
 pub mod geoip;
 pub mod node_commands;
 pub mod parse;
@@ -20,6 +21,7 @@ pub use commands::{
 };
 pub use error::SourceAppError;
 pub use fetcher::{FetchError, FetchResult, SubscriptionFetcher};
+pub use filter::apply_source_filter;
 pub use geoip::{GeoIpPort, RegionDetection, enrich_regions};
 pub use node_commands::{
     UpdateOverrideParams, batch_set_enabled, batch_set_tags, create_tag, delete_override,

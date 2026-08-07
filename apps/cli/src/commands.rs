@@ -288,6 +288,7 @@ pub async fn source_add(args: SourceAddArgs) -> Result<()> {
         auto_update: args.auto_update,
         update_interval_secs: args.update_interval_secs,
         keep_on_fail: args.keep_on_fail,
+        filter_rules: None,
     };
 
     match deve_sub_application::source::create_source(&source_repo, params).await {

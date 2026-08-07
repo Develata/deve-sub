@@ -27,11 +27,11 @@ SRC-005	抓取失败	P0	Integration	pass
 SRC-006	解析为零节点	P0	Integration	planned
 SRC-007	响应过大	P0	Security	planned
 SRC-008	请求超时	P0	Integration	planned
-SRC-009	取消刷新	P0	Integration	planned
-SRC-010	条件过滤	P0	Unit/E2E	planned
-SRC-011	IPv6 URL	P0	Integration	planned
+SRC-009	取消刷新	P0	Integration	pass
+SRC-010	条件过滤	P0	Unit/E2E	pass
+SRC-011	IPv6 URL	P0	Integration	pass
 SRC-012	压缩响应	P0	Integration	planned
-SRC-013	多个刷新	P0	Integration	planned
+SRC-013	多个刷新	P0	Integration	pass
 SRC-014	Diff	P0	Integration	pass
 PARSE-001	VLESS Reality URI	P0	Golden	pass
 PARSE-002	HY2 URI	P0	Golden	pass

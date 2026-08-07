@@ -309,6 +309,24 @@ mod tests {
         assert_eq!(ips[0], IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)));
     }
 
+    /// SRC-011: A public IPv6 literal URL passes the SSRF guard and returns
+    /// the parsed IP, enabling fetch of IPv6-literal subscription sources.
+    #[tokio::test]
+    async fn check_ip_literal_ipv6_public() {
+        let result = SsrfGuard::check("https://[2606:4700:4700::1111]:443/sub").await;
+        assert!(result.is_ok(), "public IPv6 literal should pass SSRF");
+        let ips = result.expect("public IPv6 check succeeded");
+        assert_eq!(ips.len(), 1);
+        assert_eq!(
+            ips[0],
+            IpAddr::V6(
+                "2606:4700:4700::1111"
+                    .parse::<Ipv6Addr>()
+                    .expect("valid IPv6")
+            )
+        );
+    }
+
     #[tokio::test]
     async fn check_invalid_url() {
         assert!(matches!(

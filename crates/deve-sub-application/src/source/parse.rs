@@ -85,6 +85,59 @@ pub fn parse_content(
     Ok(entries)
 }
 
+/// Parse a manual import payload into fully-formed nodes ready for
+/// [`deve_sub_domain::NodePoolRepository::import_nodes`] (NODE-001/002).
+///
+/// Each non-blank, non-comment line is parsed independently. Successfully
+/// parsed nodes get a fresh `NodeId` and `imported_at = now`. Failed lines
+/// are recorded in the returned [`ImportParseResult`] so the caller can
+/// report per-line outcomes without a second pass.
+///
+/// WHY: manual import reuses the same protocol parsers as source refresh
+/// (no parallel parsing path), but assigns identity here rather than in the
+/// reconciler because there is no source binding to anchor provenance. The
+/// `source_label` is set to `"manual"` so list views can distinguish
+/// manually-imported nodes from source-bound ones.
+///
+/// # Errors
+/// - [`ParseContentError::InvalidUtf8`] — the body is not valid UTF-8.
+/// - [`ParseContentError::Parse`] — a container format failed to parse.
+/// - [`ParseContentError::TooManyNodes`] — node count exceeded the limit.
+pub fn parse_for_import(
+    source_type: SourceType,
+    content_type: Option<&str>,
+    body: &[u8],
+) -> Result<ImportParseResult, ParseContentError> {
+    let entries = parse_content(source_type, content_type, body)?;
+    let mut nodes = Vec::with_capacity(entries.len());
+    let mut failed = Vec::new();
+
+    for entry in entries {
+        match entry.node {
+            Some(mut node) => {
+                node.id = deve_sub_kernel::NodeId::new();
+                node.source.imported_at = deve_sub_kernel::Timestamp::now();
+                if node.source.source_label.is_empty() {
+                    node.source.source_label = "manual".to_owned();
+                }
+                nodes.push(node);
+            }
+            None => failed.push(entry.raw_uri),
+        }
+    }
+
+    Ok(ImportParseResult { nodes, failed })
+}
+
+/// Outcome of parsing a manual import payload.
+#[derive(Debug, Clone)]
+pub struct ImportParseResult {
+    /// Successfully parsed nodes with fresh IDs, ready for `import_nodes`.
+    pub nodes: Vec<deve_sub_domain::Node>,
+    /// Raw text of lines that could not be parsed.
+    pub failed: Vec<String>,
+}
+
 /// Parse a URI list: one URI per line, skipping blanks and comments.
 fn parse_uri_list_text(text: &str) -> Vec<ReconcileEntry> {
     text.lines()

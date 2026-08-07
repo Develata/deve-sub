@@ -2,12 +2,12 @@
 
 use async_trait::async_trait;
 
-use deve_sub_kernel::{SourceId, SourceSnapshotId};
+use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
 
 use super::error::SourceError;
 use super::source_item::ItemParseStatus;
 use super::{Source, SourceSnapshot};
-use crate::Node;
+use crate::{Node, ProtocolKind};
 
 /// Storage boundary for source aggregates.
 #[async_trait]
@@ -100,6 +100,105 @@ pub struct ReconcileResult {
     pub missing_nodes: u64,
 }
 
+/// A node plus its pool-side metadata, returned by node pool queries.
+///
+/// The [`Node`] aggregate carries protocol/endpoint/config but no
+/// pool metadata. This wrapper adds the columns the `nodes` table tracks
+/// separately: `missing_from_source`, `is_active`, `revision`, and
+/// `created_at`. See migration 0004 and `docs/data-model/core-er.md`.
+#[derive(Debug, Clone)]
+pub struct NodePoolEntry {
+    /// The canonical node aggregate.
+    pub node: Node,
+    /// Whether the node was marked missing after its last source removed it.
+    /// Missing nodes stay in the pool for diagnostics; they are excluded
+    /// from generation. See NODE-011.
+    pub missing_from_source: bool,
+    /// Whether the node is active (eligible for generation). Defaults to
+    /// `true` on insert. Manual disable lands with NODE-004.
+    pub is_active: bool,
+    /// Optimistic-concurrency revision counter, bumped on each update.
+    pub revision: u64,
+    /// Row creation time (distinct from the ULID's embedded time and from
+    /// `Node::source.imported_at`).
+    pub created_at: Timestamp,
+}
+
+/// Filters applied to node pool queries.
+///
+/// All fields optional; `None` means no filter on that dimension. Used by
+/// [`NodePoolRepository::list_nodes`] and the `/api/v1/nodes` route.
+#[derive(Debug, Clone, Default)]
+pub struct NodeFilter {
+    /// Only nodes with this protocol kind.
+    pub protocol: Option<ProtocolKind>,
+    /// Only nodes whose region equals this value (case-sensitive).
+    pub region: Option<String>,
+    /// Only nodes whose `missing_from_source` matches.
+    pub include_missing: bool,
+    /// Only nodes whose `is_active` matches.
+    pub include_inactive: bool,
+}
+
+impl NodeFilter {
+    /// A filter matching active, non-missing nodes only — the default view
+    /// for generation.
+    #[must_use]
+    pub fn active_only() -> Self {
+        Self {
+            protocol: None,
+            region: None,
+            include_missing: false,
+            include_inactive: false,
+        }
+    }
+
+    /// A filter matching every node in the pool regardless of state.
+    #[must_use]
+    pub fn all() -> Self {
+        Self {
+            protocol: None,
+            region: None,
+            include_missing: true,
+            include_inactive: true,
+        }
+    }
+}
+
+/// Result of a manual node import (NODE-001 / NODE-002).
+///
+/// Each input URI is classified into one of three outcomes: newly inserted,
+/// duplicate of an existing active node, or failed to parse. The counts
+/// mirror the per-row `ItemParseStatus` used by source refresh so the UI
+/// and CLI can render a single import summary.
+#[derive(Debug, Clone, Default)]
+pub struct ImportResult {
+    /// Nodes newly inserted into the pool.
+    pub new_nodes: u64,
+    /// Nodes already present (same protocol + host + port, active and
+    /// non-missing). Not re-inserted; credentials are NOT overwritten
+    /// (NODE-003: do not drop nodes with different credentials).
+    pub duplicate_nodes: u64,
+    /// Input lines that could not be parsed at all.
+    pub failed: u64,
+    /// Per-line outcomes for diagnostics. Length equals the input line
+    /// count; order preserved. Failed lines carry the raw URI; successful
+    /// lines carry the resulting `NodeId`.
+    pub outcomes: Vec<ImportOutcome>,
+}
+
+/// Per-line outcome of a manual import.
+#[derive(Debug, Clone)]
+pub enum ImportOutcome {
+    /// A new node was inserted; carries its `NodeId`.
+    Inserted(NodeId),
+    /// The node was a duplicate of an existing active pool entry; carries
+    /// the existing node's `NodeId`.
+    Duplicate(NodeId),
+    /// The line could not be parsed; carries the raw input text.
+    Failed(String),
+}
+
 /// Storage boundary for the node pool and source reconciliation.
 ///
 /// The [`reconcile`] method performs the entire refresh transaction:
@@ -107,10 +206,42 @@ pub struct ReconcileResult {
 /// items, dedup and upsert nodes, create source bindings, and mark missing
 /// nodes. All in a single database transaction (constraint #19: on failure,
 /// preserve the last successful subscription version).
+///
+/// Query methods ([`list_nodes`], [`get_node`]) return [`NodePoolEntry`]
+/// including pool metadata. [`import_nodes`] inserts manually-provided
+/// nodes with dedup but no source binding (NODE-001/002/003).
 #[async_trait]
 pub trait NodePoolRepository: Send + Sync {
     /// Reconcile a source refresh: create snapshot, insert items, upsert
     /// nodes, mark missing. Atomic — either the entire refresh commits or
     /// nothing changes.
     async fn reconcile(&self, input: ReconcileInput<'_>) -> Result<ReconcileResult, SourceError>;
+
+    /// List nodes from the pool, optionally filtered, with cursor
+    /// pagination by `NodeId`.
+    ///
+    /// Returns up to `limit` entries whose `NodeId` is strictly greater
+    /// than `cursor` (or all if `cursor` is `None`), ordered by `id`.
+    /// `filter` selects protocol/region/active/missing subsets.
+    async fn list_nodes(
+        &self,
+        filter: &NodeFilter,
+        cursor: Option<NodeId>,
+        limit: u32,
+    ) -> Result<Vec<NodePoolEntry>, SourceError>;
+
+    /// Get a single node by ID, including pool metadata.
+    ///
+    /// Returns `None` if no node with the given ID exists.
+    async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError>;
+
+    /// Import a batch of pre-parsed nodes manually (NODE-001/002/003).
+    ///
+    /// Each node is deduplicated against the active pool by
+    /// `(protocol_kind, host, port)`: new nodes are inserted, duplicates
+    /// are counted but not overwritten (the existing node's credentials
+    /// are preserved — NODE-003). No source binding is created; manual
+    /// nodes exist in the pool without a `node_source_bindings` row.
+    /// The entire batch is committed atomically.
+    async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError>;
 }

@@ -62,7 +62,8 @@ fn register_api_routes(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppStat
     let router = crate::auth::register(router);
     let router = crate::twofa::register(router);
     let router = crate::users::register(router);
-    crate::sources::register(router)
+    let router = crate::sources::register(router);
+    crate::nodes::register(router)
 }
 
 /// Build the complete OpenAPI document with all registered paths.

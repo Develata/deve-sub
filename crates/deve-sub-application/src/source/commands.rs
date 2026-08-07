@@ -5,10 +5,11 @@
 //! `docs/plan/03-architecture.md` §"Lightweight CQRS".
 
 use deve_sub_domain::{
-    NodePoolRepository, ReconcileInput, ReconcileResult, Source, SourceError, SourceRepository,
-    SourceSnapshot, SourceSnapshotRepository, SourceType,
+    ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, ProtocolKind, ReconcileInput,
+    ReconcileResult, Source, SourceError, SourceRepository, SourceSnapshot,
+    SourceSnapshotRepository, SourceType,
 };
-use deve_sub_kernel::{SourceId, SourceSnapshotId, Timestamp};
+use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
 
 use super::error::SourceAppError;
 use super::fetcher::{FetchResult, SubscriptionFetcher};
@@ -371,4 +372,75 @@ fn map_delete_error(e: SourceError) -> SourceAppError {
         SourceError::NameExists => SourceAppError::NameExists,
         other => SourceAppError::Source(other),
     }
+}
+
+/// Filter parameters for [`list_nodes`], mirroring [`NodeFilter`] plus
+/// pagination.
+#[derive(Debug, Clone, Default)]
+pub struct ListNodesParams {
+    /// Filter by protocol kind.
+    pub protocol: Option<ProtocolKind>,
+    /// Filter by region (case-sensitive exact match).
+    pub region: Option<String>,
+    /// Include nodes marked missing from their source.
+    pub include_missing: bool,
+    /// Include inactive (disabled) nodes.
+    pub include_inactive: bool,
+    /// Pagination cursor — the ULID of the last node from the previous page.
+    pub cursor: Option<NodeId>,
+    /// Maximum number of nodes to return.
+    pub limit: u32,
+}
+
+impl ListNodesParams {
+    fn to_filter(&self) -> NodeFilter {
+        NodeFilter {
+            protocol: self.protocol.clone(),
+            region: self.region.clone(),
+            include_missing: self.include_missing,
+            include_inactive: self.include_inactive,
+        }
+    }
+}
+
+/// List nodes from the pool with optional filters and cursor pagination.
+///
+/// # Errors
+/// - [`SourceAppError::Source`] — storage error.
+pub async fn list_nodes(
+    pool_repo: &dyn NodePoolRepository,
+    params: ListNodesParams,
+) -> Result<Vec<NodePoolEntry>, SourceAppError> {
+    pool_repo
+        .list_nodes(&params.to_filter(), params.cursor, params.limit)
+        .await
+        .map_err(map_source_error)
+}
+
+/// Get a single node by ID, including pool metadata.
+///
+/// # Errors
+/// - [`SourceAppError::Source`] — storage error.
+pub async fn get_node(
+    pool_repo: &dyn NodePoolRepository,
+    id: NodeId,
+) -> Result<Option<NodePoolEntry>, SourceAppError> {
+    pool_repo.get_node(id).await.map_err(map_source_error)
+}
+
+/// Import a batch of pre-parsed nodes into the pool (NODE-001/002/003).
+///
+/// Deduplicates by `(protocol_kind, host, port)`; duplicates are counted but
+/// not overwritten. See [`NodePoolRepository::import_nodes`].
+///
+/// # Errors
+/// - [`SourceAppError::Source`] — storage error.
+pub async fn import_nodes(
+    pool_repo: &dyn NodePoolRepository,
+    nodes: Vec<deve_sub_domain::Node>,
+) -> Result<ImportResult, SourceAppError> {
+    pool_repo
+        .import_nodes(nodes)
+        .await
+        .map_err(map_source_error)
 }

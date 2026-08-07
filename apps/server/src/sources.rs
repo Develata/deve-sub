@@ -33,7 +33,7 @@ fn default_page_size() -> u32 {
 }
 
 /// Convert a domain [`SourceType`] to the DTO variant.
-fn source_type_to_dto(t: SourceType) -> SourceTypeDto {
+pub(crate) fn source_type_to_dto(t: SourceType) -> SourceTypeDto {
     match t {
         SourceType::Auto => SourceTypeDto::Auto,
         SourceType::Base64 => SourceTypeDto::Base64,
@@ -47,7 +47,7 @@ fn source_type_to_dto(t: SourceType) -> SourceTypeDto {
 }
 
 /// Convert a DTO [`SourceTypeDto`] to the domain variant.
-fn source_type_from_dto(t: SourceTypeDto) -> SourceType {
+pub(crate) fn source_type_from_dto(t: SourceTypeDto) -> SourceType {
     match t {
         SourceTypeDto::Auto => SourceType::Auto,
         SourceTypeDto::Base64 => SourceType::Base64,

@@ -178,6 +178,8 @@ pub struct SourceAddArgs {
     pub db_path: String,
 }
 
+pub use crate::node_cmds::{NodeArgs, NodeSubCommand, node_import, node_list};
+
 pub async fn serve(args: ServeArgs) -> Result<()> {
     let mut config = load_config(&args.config)?;
     args.apply_overrides(&mut config);
@@ -448,7 +450,7 @@ fn load_config(path: &Option<PathBuf>) -> Result<AppConfig> {
 }
 
 /// Open a SQLite database pool with the given path and connection limit.
-async fn open_db(path: &str, max_connections: u32) -> Result<sqlx::sqlite::SqlitePool> {
+pub(crate) async fn open_db(path: &str, max_connections: u32) -> Result<sqlx::sqlite::SqlitePool> {
     let sqlite_config =
         deve_sub_storage_sqlite::SqliteConfig::new(path).max_connections(max_connections);
     deve_sub_storage_sqlite::create_pool(&sqlite_config)
@@ -457,7 +459,7 @@ async fn open_db(path: &str, max_connections: u32) -> Result<sqlx::sqlite::Sqlit
 }
 
 /// Create the parent directory of the database file if it does not exist.
-fn ensure_db_dir(db_path: &str) -> Result<()> {
+pub(crate) fn ensure_db_dir(db_path: &str) -> Result<()> {
     if let Some(parent) = Path::new(db_path).parent()
         && !parent.as_os_str().is_empty()
     {

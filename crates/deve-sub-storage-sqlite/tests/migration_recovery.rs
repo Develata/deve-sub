@@ -496,3 +496,71 @@ async fn migration_0004_cascade_delete_removes_dependents() {
     let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
+
+/// Recovery test for migration 0005 (constraint #13): the `source_label`
+/// column is added to the `nodes` table with `NOT NULL DEFAULT ''`.
+///
+/// Verifies the column exists, the default is `''` for rows inserted without
+/// specifying it, and an explicit `'manual'` value is persisted and
+/// retrievable. See
+/// `docs/plan/milestones/M4-sources-and-node-pool.md` Slice 3.
+#[tokio::test]
+async fn migration_0005_adds_source_label_column() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    // Verify the source_label column exists on the nodes table.
+    let columns = get_columns(&pool, "nodes").await;
+    assert!(
+        columns.contains(&"source_label".to_string()),
+        "expected column 'source_label' in table 'nodes', columns: {columns:?}"
+    );
+
+    // Insert a row without specifying source_label — should default to ''.
+    sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port) VALUES (?, ?, ?, ?)")
+        .bind("01J0NODE000000000000000005")
+        .bind("vless")
+        .bind("example.com")
+        .bind(443_i64)
+        .execute(&pool)
+        .await
+        .expect("insert node with default source_label");
+
+    let (label,): (String,) = sqlx::query_as("SELECT source_label FROM nodes WHERE id = ?")
+        .bind("01J0NODE000000000000000005")
+        .fetch_one(&pool)
+        .await
+        .expect("query source_label");
+    assert_eq!(label, "", "default source_label should be empty string");
+
+    // Insert a row with an explicit source_label — should persist.
+    sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port, source_label) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind("01J0NODE000000000000000006")
+    .bind("trojan")
+    .bind("other.com")
+    .bind(8443_i64)
+    .bind("manual")
+    .execute(&pool)
+    .await
+    .expect("insert node with manual source_label");
+
+    let (label,): (String,) = sqlx::query_as("SELECT source_label FROM nodes WHERE id = ?")
+        .bind("01J0NODE000000000000000006")
+        .fetch_one(&pool)
+        .await
+        .expect("query manual source_label");
+    assert_eq!(label, "manual", "explicit source_label should be persisted");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}

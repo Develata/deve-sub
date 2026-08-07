@@ -6,16 +6,23 @@
 //! bindings, and mark missing nodes — all in a single database transaction
 //! (constraint #19: on failure, preserve the last successful subscription
 //! version).
+//!
+//! Query methods ([`list_nodes`], [`get_node`]) reconstruct the full
+//! [`Node`] aggregate from the denormalized `nodes` columns plus a subquery
+//! for the first source label. [`import_nodes`] inserts manually-parsed
+//! nodes with dedup but no source binding.
 
 use std::collections::HashSet;
 
 use async_trait::async_trait;
 use deve_sub_domain::{
-    ItemParseStatus, Node, NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
+    ImportOutcome, ImportResult, ItemParseStatus, Node, NodeFilter, NodePoolEntry,
+    NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
 };
-use deve_sub_kernel::{NodeSourceBindingId, SourceItemId};
+use deve_sub_kernel::{NodeId, NodeSourceBindingId, SourceItemId};
 use sqlx::sqlite::SqlitePool;
 
+use crate::node_row::{NODE_COLUMNS, NodeRow};
 use crate::timestamp::format_ts;
 
 /// SQLite-backed node pool repository.
@@ -232,6 +239,153 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(result)
     }
+
+    async fn list_nodes(
+        &self,
+        filter: &NodeFilter,
+        cursor: Option<NodeId>,
+        limit: u32,
+    ) -> Result<Vec<NodePoolEntry>, SourceError> {
+        let limit_i: i64 = limit.into();
+
+        let proto_json = match &filter.protocol {
+            Some(p) => Some(to_json(p)?),
+            None => None,
+        };
+
+        let mut sql = String::from("SELECT ");
+        sql.push_str(NODE_COLUMNS);
+        sql.push_str(" FROM nodes n WHERE 1=1");
+
+        if proto_json.is_some() {
+            sql.push_str(" AND n.protocol_kind = ?");
+        }
+        if filter.region.is_some() {
+            sql.push_str(" AND n.region = ?");
+        }
+        if !filter.include_missing {
+            sql.push_str(" AND n.missing_from_source = 0");
+        }
+        if !filter.include_inactive {
+            sql.push_str(" AND n.status = 'active'");
+        }
+        if cursor.is_some() {
+            sql.push_str(" AND n.id > ?");
+        }
+        sql.push_str(" ORDER BY n.id ASC LIMIT ?");
+
+        let mut q = sqlx::query_as::<_, NodeRow>(&sql);
+        if let Some(p) = &proto_json {
+            q = q.bind(p);
+        }
+        if let Some(region) = &filter.region {
+            q = q.bind(region);
+        }
+        if let Some(c) = cursor {
+            q = q.bind(c.to_string());
+        }
+        q = q.bind(limit_i);
+
+        let rows: Vec<NodeRow> = q
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        rows.iter().map(NodeRow::to_pool_entry).collect()
+    }
+
+    async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError> {
+        let sql = format!("SELECT {NODE_COLUMNS} FROM nodes n WHERE n.id = ?");
+        let row: Option<NodeRow> = sqlx::query_as::<_, NodeRow>(&sql)
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        row.map(|r| r.to_pool_entry()).transpose()
+    }
+
+    async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+
+        let mut result = ImportResult::default();
+
+        for node in nodes {
+            let proto_str = to_json(&node.protocol)?;
+            let host_str = node.endpoint.host.uri_host();
+            let port_i64 = i64::from(node.endpoint.port);
+
+            // WHY: dedup matches reconcile — one active (non-missing) node per
+            // (protocol_kind, host, port). Duplicates are counted but NOT
+            // overwritten; the existing node's credentials are preserved
+            // (NODE-003: do not drop nodes with different credentials).
+            let existing: Option<(String,)> = sqlx::query_as(
+                "SELECT id FROM nodes \
+                 WHERE protocol_kind = ? AND host = ? AND port = ? \
+                 AND missing_from_source = 0 \
+                 LIMIT 1",
+            )
+            .bind(&proto_str)
+            .bind(&host_str)
+            .bind(port_i64)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+
+            if let Some((existing_id,)) = existing {
+                let nid =
+                    NodeId::parse(&existing_id).map_err(|e| SourceError::Storage(e.to_string()))?;
+                result.duplicate_nodes += 1;
+                result.outcomes.push(ImportOutcome::Duplicate(nid));
+            } else {
+                let missing: Option<(String,)> = sqlx::query_as(
+                    "SELECT id FROM nodes \
+                     WHERE protocol_kind = ? AND host = ? AND port = ? \
+                     AND missing_from_source = 1 \
+                     LIMIT 1",
+                )
+                .bind(&proto_str)
+                .bind(&host_str)
+                .bind(port_i64)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| SourceError::Storage(e.to_string()))?;
+
+                if let Some((missing_id,)) = missing {
+                    // WHY: reactivate a previously-missing node with the same
+                    // dedup key rather than creating a duplicate row. The
+                    // dedup partial unique index would otherwise reject the
+                    // insert. We keep the existing node's credentials/config
+                    // (NODE-003) and only flip missing_from_source back to 0.
+                    sqlx::query(
+                        "UPDATE nodes SET missing_from_source = 0, revision = revision + 1 \
+                         WHERE id = ?",
+                    )
+                    .bind(&missing_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| SourceError::Storage(e.to_string()))?;
+                    let nid = NodeId::parse(&missing_id)
+                        .map_err(|e| SourceError::Storage(e.to_string()))?;
+                    result.new_nodes += 1;
+                    result.outcomes.push(ImportOutcome::Inserted(nid));
+                } else {
+                    let new_id = insert_node(&mut tx, &node, &proto_str, &host_str).await?;
+                    let nid =
+                        NodeId::parse(&new_id).map_err(|e| SourceError::Storage(e.to_string()))?;
+                    result.new_nodes += 1;
+                    result.outcomes.push(ImportOutcome::Inserted(nid));
+                }
+            }
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        Ok(result)
+    }
 }
 
 /// Insert a new node into the `nodes` table.
@@ -261,8 +415,8 @@ async fn insert_node(
          (id, display_name, protocol_kind, host, port, protocol_config_json, \
          authentication_json, tls_json, transport_json, udp_capability, \
          multiplex_json, obfuscation_json, congestion_json, region, extras_json, \
-         imported_at, revision, status, missing_from_source) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0)",
+         imported_at, revision, status, missing_from_source, source_label) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?)",
     )
     .bind(&node_id)
     .bind(&node.display_name)
@@ -280,6 +434,7 @@ async fn insert_node(
     .bind(&node.region.value)
     .bind(&extras_json)
     .bind(&imported_at)
+    .bind(&node.source.source_label)
     .execute(&mut **tx)
     .await
     .map_err(|e| SourceError::Storage(e.to_string()))?;

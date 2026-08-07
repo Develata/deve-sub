@@ -8,6 +8,7 @@
 
 pub mod auth;
 pub mod health;
+pub mod node;
 pub mod source;
 
 pub use auth::{
@@ -18,6 +19,10 @@ pub use auth::{
     TwoFactorVerifyResponse, UserDto,
 };
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};
+pub use node::{
+    ImportNodesRequest, ImportNodesResponse, ImportOutcomeDto, ListNodesResponse, NodeDto,
+    NodeResponse,
+};
 pub use source::{
     CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,
     SourceResponse, SourceTypeDto, UpdateSourceRequest,

@@ -7,6 +7,7 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 pub mod node_pool_repository;
+mod node_row;
 pub mod recovery_code_repository;
 pub mod session_repository;
 pub mod source_repository;

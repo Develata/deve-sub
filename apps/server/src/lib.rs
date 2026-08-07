@@ -26,6 +26,7 @@ use deve_sub_security::MasterKey;
 
 pub mod auth;
 pub mod csrf;
+pub mod nodes;
 pub mod routes;
 pub mod sources;
 pub mod twofa;

@@ -11,6 +11,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 mod commands;
+mod node_cmds;
 
 /// Deve Sub — self-hosted proxy subscription infrastructure manager.
 #[derive(Parser)]
@@ -36,6 +37,8 @@ enum Commands {
     User(commands::UserArgs),
     /// Source management commands.
     Source(commands::SourceArgs),
+    /// Node pool commands.
+    Node(commands::NodeArgs),
 }
 
 fn main() -> ExitCode {
@@ -64,6 +67,10 @@ fn main() -> ExitCode {
             },
             Commands::Source(args) => match args.command {
                 commands::SourceSubCommand::Add(sub) => commands::source_add(sub).await,
+            },
+            Commands::Node(args) => match args.command {
+                commands::NodeSubCommand::Import(sub) => commands::node_import(sub).await,
+                commands::NodeSubCommand::List(sub) => commands::node_list(sub).await,
             },
         }
     });

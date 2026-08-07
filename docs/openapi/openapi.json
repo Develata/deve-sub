@@ -501,6 +501,285 @@
         }
       }
     },
+    "/api/v1/nodes": {
+      "get": {
+        "summary": "`GET /api/v1/nodes` — list nodes with filters and cursor pagination\n(admin only).",
+        "operationId": "list_nodes",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max nodes per page (1-100, default 20)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pagination cursor (last node ULID)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "description": "Filter by protocol kind",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "description": "Filter by region",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "include_missing",
+            "in": "query",
+            "description": "Include missing-from-source nodes",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "description": "Include inactive nodes",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Node list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListNodesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor or protocol",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/nodes/import": {
+      "post": {
+        "summary": "`POST /api/v1/nodes/import` — manually import a batch of nodes (admin\nonly). NODE-001 / NODE-002 / NODE-003.",
+        "description": "Parses the request body content with the same protocol parsers used for\nsource refresh and imports the resulting nodes into the pool with\ndedup by `(protocol_kind, host, port)`. Duplicates are counted but not\noverwritten.",
+        "operationId": "import_nodes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportNodesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Import completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportNodesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or unparseable content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/nodes/{id}": {
+      "get": {
+        "summary": "`GET /api/v1/nodes/{id}` — get a node by ID (admin only).",
+        "operationId": "get_node",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Node ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Node found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid node id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Node not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/sources": {
       "get": {
         "summary": "`GET /api/v1/sources` — list sources with cursor pagination (admin only).",
@@ -1564,6 +1843,148 @@
           "unhealthy"
         ]
       },
+      "ImportNodesRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/nodes/import` (NODE-001/002).\n\nThe `content` is a raw subscription payload (URI list, Base64, YAML, or\nJSON). The server parses it with the same protocol parsers used for\nsource refresh and imports the resulting nodes into the pool with\ndedup. `source_type` controls format detection; `auto` lets the server\ndetect from the content.",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Raw subscription content to parse and import."
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceTypeDto",
+            "description": "Input format. `auto` lets the server detect."
+          }
+        }
+      },
+      "ImportNodesResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/nodes/import`.",
+        "required": [
+          "new_nodes",
+          "duplicate_nodes",
+          "failed",
+          "outcomes"
+        ],
+        "properties": {
+          "duplicate_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Nodes already present (duplicate of an existing active node).",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Input lines that could not be parsed.",
+            "minimum": 0
+          },
+          "new_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Nodes newly inserted into the pool.",
+            "minimum": 0
+          },
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportOutcomeDto"
+            },
+            "description": "Per-line outcomes for diagnostics. Length equals the input line count."
+          }
+        }
+      },
+      "ImportOutcomeDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "A new node was inserted; `data` is the node ULID.",
+            "required": [
+              "data",
+              "status"
+            ],
+            "properties": {
+              "data": {
+                "type": "string",
+                "description": "A new node was inserted; `data` is the node ULID."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "inserted"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The node was a duplicate; `data` is the existing node ULID.",
+            "required": [
+              "data",
+              "status"
+            ],
+            "properties": {
+              "data": {
+                "type": "string",
+                "description": "The node was a duplicate; `data` is the existing node ULID."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "duplicate"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The line could not be parsed; `data` is the raw input text.",
+            "required": [
+              "data",
+              "status"
+            ],
+            "properties": {
+              "data": {
+                "type": "string",
+                "description": "The line could not be parsed; `data` is the raw input text."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Per-line outcome of a manual import."
+      },
+      "ListNodesResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/nodes` (cursor-paginated node list).",
+        "required": [
+          "nodes"
+        ],
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cursor for the next page (`None` if no more results)."
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NodeDto"
+            },
+            "description": "Nodes in the current page."
+          }
+        }
+      },
       "ListSourcesResponse": {
         "type": "object",
         "description": "Response body for `GET /api/v1/sources` (cursor-paginated source list).",
@@ -1668,6 +2089,93 @@
           "code": {
             "type": "string",
             "description": "6-digit TOTP code or a recovery code."
+          }
+        }
+      },
+      "NodeDto": {
+        "type": "object",
+        "description": "A node in the unified pool, as returned by list/get endpoints.\n\nPool metadata (`missing_from_source`, `is_active`, `revision`) is\nincluded alongside the canonical node fields. Sensitive fields\n(raw URI with embedded credentials) are never serialized.",
+        "required": [
+          "id",
+          "display_name",
+          "protocol",
+          "host",
+          "port",
+          "source_label",
+          "imported_at",
+          "is_active",
+          "missing_from_source",
+          "revision",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "Row creation time (ISO 8601 UTC)."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Human-readable display name."
+          },
+          "host": {
+            "type": "string",
+            "description": "Endpoint host (IPv6 bracketed in URI form)."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "imported_at": {
+            "type": "string",
+            "description": "Import timestamp (ISO 8601 UTC)."
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "Whether the node is active (eligible for generation)."
+          },
+          "missing_from_source": {
+            "type": "boolean",
+            "description": "Whether the node was marked missing after its source removed it."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Endpoint port.",
+            "minimum": 0
+          },
+          "protocol": {
+            "type": "string",
+            "description": "Wire-level protocol kind (e.g. `Vless`, `Trojan`)."
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Region label, if assigned."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Optimistic-concurrency revision counter.",
+            "minimum": 0
+          },
+          "source_label": {
+            "type": "string",
+            "description": "Source label (the source name, or `\"manual\"` for pasted nodes)."
+          }
+        }
+      },
+      "NodeResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/nodes/{id}`.",
+        "required": [
+          "node"
+        ],
+        "properties": {
+          "node": {
+            "$ref": "#/components/schemas/NodeDto",
+            "description": "The node."
           }
         }
       },

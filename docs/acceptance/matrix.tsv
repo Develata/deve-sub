@@ -51,9 +51,9 @@ PARSE-015	未提供 allowInsecure	P0	Regression	pass
 PARSE-016	一行一个 URI	P0	E2E	pass
 PARSE-017	Round-trip	P0	Property	pass
 PARSE-018	非法输入 Fuzz	P0	Fuzz	pass
-NODE-001	粘贴批量节点	P0	E2E	planned
+NODE-001	粘贴批量节点	P0	E2E	pass
 NODE-002	文件导入	P0	Integration	planned
-NODE-003	自动去重	P0	Regression	planned
+NODE-003	自动去重	P0	Regression	pass
 NODE-004	批量启停	P0	E2E	planned
 NODE-005	批量标签	P0	E2E	planned
 NODE-006	人工地区	P0	Integration	planned
@@ -61,7 +61,7 @@ NODE-007	自动地区 IPv4	P0	Integration	planned
 NODE-008	自动地区 IPv6	P0	Integration	planned
 NODE-009	双栈域名	P0	Integration	planned
 NODE-010	人工覆写	P0	Regression	planned
-NODE-011	上游删除	P0	Integration	planned
+NODE-011	上游删除	P0	Integration	pass
 NODE-012	TCP 延迟	P0	Integration	planned
 NODE-013	QUIC 延迟	P0	Integration	planned
 NODE-014	UDP 无响应	P0	Regression	planned

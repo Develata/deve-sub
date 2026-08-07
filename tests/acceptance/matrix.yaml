@@ -540,7 +540,7 @@ cases:
     steps: []
     assertions: ["成功、失败和重复分别统计"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-002
     title: 文件导入
     priority: P0
@@ -560,7 +560,7 @@ cases:
     steps: []
     assertions: ["不误删不同凭据节点"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-004
     title: 批量启停
     priority: P0
@@ -640,7 +640,7 @@ cases:
     steps: []
     assertions: ["节点标记缺失，不直接消失"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-012
     title: TCP 延迟
     priority: P0

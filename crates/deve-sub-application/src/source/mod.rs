@@ -8,6 +8,8 @@
 pub mod commands;
 pub mod error;
 pub mod fetcher;
+pub mod geoip;
+pub mod node_commands;
 pub mod parse;
 pub mod scheduler;
 
@@ -18,5 +20,10 @@ pub use commands::{
 };
 pub use error::SourceAppError;
 pub use fetcher::{FetchError, FetchResult, SubscriptionFetcher};
+pub use geoip::{GeoIpPort, RegionDetection, enrich_regions};
+pub use node_commands::{
+    UpdateOverrideParams, batch_set_enabled, batch_set_tags, create_tag, delete_override,
+    delete_tag, list_tags, set_manual_region, set_node_tags, update_override,
+};
 pub use parse::{ImportParseResult, ParseContentError, parse_content, parse_for_import};
 pub use scheduler::RefreshScheduler;

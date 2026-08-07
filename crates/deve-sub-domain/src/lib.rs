@@ -12,6 +12,7 @@ pub mod endpoint;
 pub mod error;
 pub mod identity;
 pub mod node;
+pub mod node_override;
 pub mod protocol;
 pub mod protocol_config;
 pub mod source;
@@ -25,6 +26,7 @@ pub use identity::{
     TotpSecret, TotpSecretRepository, User, UserRepository,
 };
 pub use node::{Authentication, ChainTarget, Node, NodeSource, RegionAssignment, RegionMethod};
+pub use node_override::{NodeOverride, NodeOverrideRepository, Tag};
 pub use protocol::{ProtocolConfig, ProtocolKind, UnsupportedNode};
 pub use protocol_config::{
     Hysteria2Config, NaiveProxyConfig, ShadowsocksConfig, TrojanConfig, TuicV5Config, UdpRelayMode,

@@ -622,6 +622,145 @@
         ]
       }
     },
+    "/api/v1/nodes/batch-enabled": {
+      "post": {
+        "summary": "`POST /api/v1/nodes/batch-enabled` — batch set enabled flag (NODE-004).",
+        "operationId": "batch_set_enabled",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Batch applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid node ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/nodes/batch-tags": {
+      "post": {
+        "summary": "`POST /api/v1/nodes/batch-tags` — batch replace tags (NODE-005).",
+        "operationId": "batch_set_tags",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Batch tags applied"
+          },
+          "400": {
+            "description": "Invalid ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/nodes/import": {
       "post": {
         "summary": "`POST /api/v1/nodes/import` — manually import a batch of nodes (admin\nonly). NODE-001 / NODE-002 / NODE-003.",
@@ -754,6 +893,336 @@
           },
           "404": {
             "description": "Node not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/nodes/{id}/override": {
+      "delete": {
+        "summary": "`DELETE /api/v1/nodes/{id}/override` — delete a node's override (admin only).",
+        "operationId": "delete_override",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Node ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Override deleted"
+          },
+          "400": {
+            "description": "Invalid node id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "patch": {
+        "summary": "`PATCH /api/v1/nodes/{id}/override` — create or replace a node's manual\noverride (NODE-010, admin only).",
+        "operationId": "update_override",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Node ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOverrideRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Override applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeOverrideResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid node id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Node not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/nodes/{id}/region": {
+      "patch": {
+        "summary": "`PATCH /api/v1/nodes/{id}/region` — set or clear a manual region (NODE-006).",
+        "operationId": "set_region",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Node ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRegionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Region updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid node id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Node not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/nodes/{id}/tags": {
+      "put": {
+        "summary": "`PUT /api/v1/nodes/{id}/tags` — replace tags for a single node (NODE-005).",
+        "operationId": "set_node_tags",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Node ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetNodeTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Tags updated"
+          },
+          "400": {
+            "description": "Invalid ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
             "content": {
               "application/json": {
                 "schema": {
@@ -1302,6 +1771,217 @@
         ]
       }
     },
+    "/api/v1/tags": {
+      "get": {
+        "summary": "`GET /api/v1/tags` — list all tags (admin only).",
+        "operationId": "list_tags",
+        "responses": {
+          "200": {
+            "description": "Tag list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTagsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "`POST /api/v1/tags` — create a new tag (admin only).",
+        "operationId": "create_tag",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Tag created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Tag name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tags/{id}": {
+      "delete": {
+        "summary": "`DELETE /api/v1/tags/{id}` — delete a tag by ID (admin only).",
+        "operationId": "delete_tag",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Tag ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tag deleted"
+          },
+          "400": {
+            "description": "Invalid tag id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tag not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/users": {
       "get": {
         "summary": "`GET /api/v1/users` — list users with cursor pagination (admin only).",
@@ -1684,6 +2364,57 @@
   },
   "components": {
     "schemas": {
+      "BatchEnabledRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/nodes/batch-enabled` (NODE-004).",
+        "required": [
+          "node_ids",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "`true` to enable, `false` to disable."
+          },
+          "node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Node ULIDs to update."
+          }
+        }
+      },
+      "BatchResultDto": {
+        "type": "object",
+        "description": "Response body for batch operations.",
+        "required": [
+          "updated"
+        ],
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of rows affected.",
+            "minimum": 0
+          }
+        }
+      },
+      "BatchTagsRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/nodes/batch-tags` (NODE-005).",
+        "required": [
+          "assignments"
+        ],
+        "properties": {
+          "assignments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NodeTagAssignmentDto"
+            }
+          }
+        }
+      },
       "CreateSourceRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/sources`.",
@@ -1718,6 +2449,24 @@
           "url": {
             "type": "string",
             "description": "Subscription URL."
+          }
+        }
+      },
+      "CreateTagRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/tags`.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -2008,6 +2757,21 @@
           }
         }
       },
+      "ListTagsResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/tags`.",
+        "required": [
+          "tags"
+        ],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagDto"
+            }
+          }
+        }
+      },
       "ListUsersResponse": {
         "type": "object",
         "description": "Response body for `GET /api/v1/users` (cursor-paginated user list).",
@@ -2106,7 +2870,9 @@
           "is_active",
           "missing_from_source",
           "revision",
-          "created_at"
+          "created_at",
+          "region_method",
+          "tags"
         ],
         "properties": {
           "created_at": {
@@ -2154,6 +2920,10 @@
             ],
             "description": "Region label, if assigned."
           },
+          "region_method": {
+            "$ref": "#/components/schemas/RegionMethodDto",
+            "description": "How the region was assigned (auto-detected or manual override)."
+          },
           "revision": {
             "type": "integer",
             "format": "int64",
@@ -2163,6 +2933,81 @@
           "source_label": {
             "type": "string",
             "description": "Source label (the source name, or `\"manual\"` for pasted nodes)."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagDto"
+            },
+            "description": "Tags assigned to this node."
+          }
+        }
+      },
+      "NodeOverrideDto": {
+        "type": "object",
+        "description": "Manual override applied to a node, as seen in API responses.",
+        "required": [
+          "sort_order"
+        ],
+        "properties": {
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Override display name; `None` keeps the parsed name."
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Override enabled flag; `None` keeps natural status."
+          },
+          "fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Override TLS fingerprint."
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Override region; `None` keeps the auto-detected region."
+          },
+          "skip_cert_verify": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Override skip-cert-verify."
+          },
+          "sni": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Override SNI."
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sort order for generation."
+          }
+        }
+      },
+      "NodeOverrideResponse": {
+        "type": "object",
+        "description": "Response body for override endpoints.",
+        "required": [
+          "override"
+        ],
+        "properties": {
+          "override": {
+            "$ref": "#/components/schemas/NodeOverrideDto"
           }
         }
       },
@@ -2176,6 +3021,25 @@
           "node": {
             "$ref": "#/components/schemas/NodeDto",
             "description": "The node."
+          }
+        }
+      },
+      "NodeTagAssignmentDto": {
+        "type": "object",
+        "description": "One node's tag assignment in a batch tags request.",
+        "required": [
+          "node_id",
+          "tag_ids"
+        ],
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -2281,6 +3145,32 @@
           }
         }
       },
+      "RegionMethodDto": {
+        "type": "string",
+        "description": "How a node's region was assigned.",
+        "enum": [
+          "auto",
+          "manual"
+        ]
+      },
+      "RegionResponse": {
+        "type": "object",
+        "description": "Response body for region endpoints.",
+        "required": [
+          "method"
+        ],
+        "properties": {
+          "method": {
+            "$ref": "#/components/schemas/RegionMethodDto"
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "RoleDto": {
         "type": "string",
         "description": "User role for authorization.",
@@ -2288,6 +3178,35 @@
           "admin",
           "user"
         ]
+      },
+      "SetNodeTagsRequest": {
+        "type": "object",
+        "description": "Request body for `PUT /api/v1/nodes/{id}/tags`.",
+        "required": [
+          "tag_ids"
+        ],
+        "properties": {
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tag IDs to assign to this node (replaces existing assignments)."
+          }
+        }
+      },
+      "SetRegionRequest": {
+        "type": "object",
+        "description": "Request body for `PATCH /api/v1/nodes/{id}/region` (NODE-006).",
+        "properties": {
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`Some(\"US\")` sets a manual region; `None` clears it."
+          }
+        }
       },
       "SetupAdminRequest": {
         "type": "object",
@@ -2402,6 +3321,43 @@
           "shadowrocket"
         ]
       },
+      "TagDto": {
+        "type": "object",
+        "description": "A user-defined tag.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional color for UI display."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Tag name (unique)."
+          }
+        }
+      },
+      "TagResponse": {
+        "type": "object",
+        "description": "Response body for tag creation.",
+        "required": [
+          "tag"
+        ],
+        "properties": {
+          "tag": {
+            "$ref": "#/components/schemas/TagDto"
+          }
+        }
+      },
       "TwoFactorDisableRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/auth/2fa/disable`.\n\nRequires the current password to prevent unauthorized disabling from a\nhijacked session.",
@@ -2459,6 +3415,53 @@
               "type": "string"
             },
             "description": "Single-use recovery codes."
+          }
+        }
+      },
+      "UpdateOverrideRequest": {
+        "type": "object",
+        "description": "Request body for `PATCH /api/v1/nodes/{id}/override` (NODE-010).",
+        "properties": {
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Override display name; `None` clears the override."
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skip_cert_verify": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "sni": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

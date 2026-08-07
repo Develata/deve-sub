@@ -13,6 +13,7 @@ use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
 
 use super::error::SourceAppError;
 use super::fetcher::{FetchResult, SubscriptionFetcher};
+use super::geoip::{GeoIpPort, enrich_regions};
 use super::parse::parse_content;
 
 /// Maximum source name length.
@@ -251,6 +252,7 @@ pub async fn refresh_source(
     snapshot_repo: &dyn SourceSnapshotRepository,
     pool_repo: &dyn NodePoolRepository,
     fetcher: &dyn SubscriptionFetcher,
+    geoip: &dyn GeoIpPort,
     source_id: SourceId,
 ) -> Result<RefreshResult, SourceAppError> {
     let source = source_repo
@@ -299,13 +301,18 @@ pub async fn refresh_source(
         }
     };
 
-    let entries = match parse_content(source.source_type, content_type.as_deref(), &body) {
+    let mut entries = match parse_content(source.source_type, content_type.as_deref(), &body) {
         Ok(e) => e,
         Err(e) => {
             disable_on_failure(source_repo, &source).await;
             return Err(e.into());
         }
     };
+
+    // WHY: auto-detect regions via GeoIP before reconcile. Manual overrides
+    // in `node_overrides` take precedence at read time (NODE-006/010), so
+    // this only sets the parsed node's stored region, not the effective one.
+    enrich_regions(&mut entries, geoip).await;
 
     let new_version = active.as_ref().map(|s| s.version + 1).unwrap_or(1);
     let node_count =

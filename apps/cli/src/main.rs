@@ -12,6 +12,7 @@ use clap::{Parser, Subcommand};
 
 mod commands;
 mod node_cmds;
+mod serve;
 
 /// Deve Sub — self-hosted proxy subscription infrastructure manager.
 #[derive(Parser)]
@@ -55,7 +56,7 @@ fn main() -> ExitCode {
     let result = runtime.block_on(async {
         deve_sub_observability::init_tracing()?;
         match cli.command {
-            Commands::Serve(args) => commands::serve(args).await,
+            Commands::Serve(args) => serve::serve(args).await,
             Commands::Doctor(args) => commands::doctor(args).await,
             Commands::Migrate(args) => commands::migrate(args).await,
             Commands::Config(args) => match args.command {

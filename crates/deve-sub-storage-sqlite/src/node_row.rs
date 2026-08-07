@@ -7,9 +7,10 @@
 //! `source_label` column is empty.
 
 use deve_sub_domain::{
-    Host, Node, NodePoolEntry, NodeSource, RegionAssignment, RegionMethod, SourceError,
+    Host, Node, NodeOverride, NodePoolEntry, NodeSource, RegionAssignment, RegionMethod,
+    SourceError, Tag,
 };
-use deve_sub_kernel::NodeId;
+use deve_sub_kernel::{NodeId, NodeOverrideId};
 
 use crate::timestamp::parse_ts;
 
@@ -49,14 +50,68 @@ pub(crate) struct NodeRow {
     missing_from_source: i64,
     created_at: String,
     source_label: Option<String>,
+    override_id: Option<String>,
+    override_display_name: Option<String>,
+    override_region: Option<String>,
+    override_enabled: Option<i64>,
+    override_sni: Option<String>,
+    override_skip_cert_verify: Option<i64>,
+    override_fingerprint: Option<String>,
+    override_sort_order: Option<i64>,
+    tags_json: Option<String>,
 }
 
 impl NodeRow {
     /// Reconstruct a full [`NodePoolEntry`] from the denormalized row.
+    ///
+    /// Effective field resolution applies the [`NodeOverride`] (if present)
+    /// on top of the parsed node: `display_name` and `region` fall back to
+    /// the override value when set, and `is_active` is forced by
+    /// `override_enabled` when `Some` (NODE-004). Tags are parsed from the
+    /// `tags_json` JSON array produced by the `json_group_array` subquery.
     pub(crate) fn to_pool_entry(&self) -> Result<NodePoolEntry, SourceError> {
+        let node_id = NodeId::parse(&self.id).map_err(|e| SourceError::Storage(e.to_string()))?;
+
+        let override_info = match &self.override_id {
+            Some(id_str) => Some(NodeOverride {
+                id: NodeOverrideId::parse(id_str)
+                    .map_err(|e| SourceError::Storage(e.to_string()))?,
+                node_id,
+                display_name: self.override_display_name.clone(),
+                region: self.override_region.clone(),
+                enabled: self.override_enabled.map(|e| e != 0),
+                sni: self.override_sni.clone(),
+                skip_cert_verify: self.override_skip_cert_verify.map(|e| e != 0),
+                fingerprint: self.override_fingerprint.clone(),
+                sort_order: self.override_sort_order.unwrap_or(0),
+            }),
+            None => None,
+        };
+
+        let effective_display_name = self
+            .override_display_name
+            .clone()
+            .unwrap_or_else(|| self.display_name.clone());
+
+        // WHY: an override region switches the method to Manual (NODE-006);
+        // absent an override, the method stays Auto with the persisted value.
+        let region = if self.override_region.is_some() {
+            RegionAssignment {
+                method: RegionMethod::Manual,
+                value: self.override_region.clone(),
+            }
+        } else {
+            RegionAssignment {
+                method: RegionMethod::Auto,
+                value: self.region.clone(),
+            }
+        };
+
+        let tags: Vec<Tag> = from_json_opt(self.tags_json.as_deref())?.unwrap_or_default();
+
         let node = Node {
-            id: NodeId::parse(&self.id).map_err(|e| SourceError::Storage(e.to_string()))?,
-            display_name: self.display_name.clone(),
+            id: node_id,
+            display_name: effective_display_name,
             protocol: from_json(&self.protocol_kind)?,
             config: from_json(&self.protocol_config_json)?,
             endpoint: deve_sub_domain::Endpoint {
@@ -83,23 +138,25 @@ impl NodeRow {
                 imported_at: parse_ts(&self.imported_at).map_err(SourceError::Storage)?,
             },
             tags: Vec::new(),
-            // WHY: RegionMethod::Auto is hardcoded because the method is not
-            // persisted in the nodes table (Slice 4 will add manual region
-            // override via node_overrides). The region VALUE is persisted.
-            region: RegionAssignment {
-                method: RegionMethod::Auto,
-                value: self.region.clone(),
-            },
+            region,
             extras: from_json(&self.extras_json)?,
         };
+
+        // WHY: override_enabled=Some forces active/inactive; None keeps the
+        // node's natural status (NODE-004).
+        let is_active = self
+            .override_enabled
+            .map_or(self.status == "active", |e| e != 0);
 
         Ok(NodePoolEntry {
             node,
             missing_from_source: self.missing_from_source != 0,
-            is_active: self.status == "active",
+            is_active,
             revision: u64::try_from(self.revision)
                 .map_err(|_| SourceError::Storage("revision out of range".to_owned()))?,
             created_at: parse_ts(&self.created_at).map_err(SourceError::Storage)?,
+            override_info,
+            tags,
         })
     }
 }
@@ -119,4 +176,9 @@ pub(crate) const NODE_COLUMNS: &str = "n.id, n.display_name, n.protocol_kind, n.
      COALESCE(NULLIF(n.source_label, ''), \
       (SELECT s.name FROM node_source_bindings b \
        JOIN sources s ON s.id = b.source_id \
-       WHERE b.node_id = n.id LIMIT 1)) AS source_label";
+       WHERE b.node_id = n.id LIMIT 1)) AS source_label, \
+     o.id AS override_id, o.display_name AS override_display_name, o.region AS override_region, \
+     o.enabled AS override_enabled, o.sni AS override_sni, o.skip_cert_verify AS override_skip_cert_verify, \
+     o.fingerprint AS override_fingerprint, o.sort_order AS override_sort_order, \
+     (SELECT json_group_array(json_object('id', t.id, 'name', t.name, 'color', t.color)) \
+      FROM node_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.node_id = n.id) AS tags_json";

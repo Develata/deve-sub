@@ -12,6 +12,7 @@ use deve_sub_domain::{NodePoolRepository, SourceRepository, SourceSnapshotReposi
 
 use super::commands::refresh_source;
 use super::fetcher::SubscriptionFetcher;
+use super::geoip::GeoIpPort;
 
 /// Default tick interval: check for due sources every 60 seconds.
 const DEFAULT_TICK_SECS: u64 = 60;
@@ -22,6 +23,7 @@ pub struct RefreshScheduler {
     snapshot_repo: std::sync::Arc<dyn SourceSnapshotRepository>,
     pool_repo: std::sync::Arc<dyn NodePoolRepository>,
     fetcher: std::sync::Arc<dyn SubscriptionFetcher>,
+    geoip: std::sync::Arc<dyn GeoIpPort>,
     tick_interval: Duration,
 }
 
@@ -33,12 +35,14 @@ impl RefreshScheduler {
         snapshot_repo: std::sync::Arc<dyn SourceSnapshotRepository>,
         pool_repo: std::sync::Arc<dyn NodePoolRepository>,
         fetcher: std::sync::Arc<dyn SubscriptionFetcher>,
+        geoip: std::sync::Arc<dyn GeoIpPort>,
     ) -> Self {
         Self {
             source_repo,
             snapshot_repo,
             pool_repo,
             fetcher,
+            geoip,
             tick_interval: Duration::from_secs(DEFAULT_TICK_SECS),
         }
     }
@@ -91,6 +95,7 @@ impl RefreshScheduler {
                 self.snapshot_repo.as_ref(),
                 self.pool_repo.as_ref(),
                 self.fetcher.as_ref(),
+                self.geoip.as_ref(),
                 source_id,
             )
             .await;

@@ -11,16 +11,16 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-use deve_sub_application::{DbHealthPort, LoginRateLimiter, SubscriptionFetcher};
+use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    NodePoolRepository, RecoveryCodeRepository, SessionRepository, SourceRepository,
-    SourceSnapshotRepository, TotpSecretRepository, UserRepository,
+    NodeOverrideRepository, NodePoolRepository, RecoveryCodeRepository, SessionRepository,
+    SourceRepository, SourceSnapshotRepository, TotpSecretRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
-    SqliteHealthCheck, SqliteNodePoolRepository, SqliteRecoveryCodeRepository,
-    SqliteSessionRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
-    SqliteTotpSecretRepository, SqliteUserRepository,
+    SqliteHealthCheck, SqliteNodeOverrideRepository, SqliteNodePoolRepository,
+    SqliteRecoveryCodeRepository, SqliteSessionRepository, SqliteSourceRepository,
+    SqliteSourceSnapshotRepository, SqliteTotpSecretRepository, SqliteUserRepository,
 };
 
 struct TestApp {
@@ -73,6 +73,9 @@ impl TestApp {
                     as Arc<dyn SourceSnapshotRepository>,
                 pool_repo: Arc::new(SqliteNodePoolRepository::new(pool.clone()))
                     as Arc<dyn NodePoolRepository>,
+                override_repo: Arc::new(SqliteNodeOverrideRepository::new(pool.clone()))
+                    as Arc<dyn NodeOverrideRepository>,
+                geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,
                 rate_limiter,

@@ -63,6 +63,7 @@ fn register_api_routes(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppStat
     let router = crate::twofa::register(router);
     let router = crate::users::register(router);
     let router = crate::sources::register(router);
+    let router = crate::node_overrides::register(router);
     crate::nodes::register(router)
 }
 

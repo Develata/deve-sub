@@ -16,6 +16,6 @@ pub use auth::{AuthError, LoginRateLimiter};
 pub use config::AppConfig;
 pub use health::{DbHealthPort, HealthError, HealthStatus, HealthView};
 pub use source::{
-    FetchError, FetchResult, ImportParseResult, ParseContentError, RefreshScheduler,
+    FetchError, FetchResult, GeoIpPort, ImportParseResult, ParseContentError, RefreshScheduler,
     SourceAppError, SubscriptionFetcher, parse_content, parse_for_import,
 };

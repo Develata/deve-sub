@@ -23,6 +23,10 @@ pub struct AppConfig {
     /// Security configuration.
     #[serde(default)]
     pub security: SecurityConfig,
+
+    /// GeoIP configuration for auto-region detection.
+    #[serde(default)]
+    pub geoip: GeoIpConfig,
 }
 
 /// HTTP server bind configuration.
@@ -108,6 +112,7 @@ impl Default for AppConfig {
             server: ServerConfig::default(),
             database: DatabaseConfig::default(),
             security: SecurityConfig::default(),
+            geoip: GeoIpConfig::default(),
         }
     }
 }
@@ -180,4 +185,12 @@ fn default_max_login_attempts() -> u32 {
 
 fn default_lockout_duration_secs() -> u64 {
     300
+}
+
+/// GeoIP configuration for auto-region detection (NODE-007/008/009).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GeoIpConfig {
+    /// Path to the MaxMind `.mmdb` database file. `None` or missing file
+    /// disables auto-region (graceful degradation).
+    pub mmdb_path: Option<String>,
 }

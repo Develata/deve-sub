@@ -48,4 +48,12 @@ pub enum SourceError {
     /// A storage operation failed.
     #[error("storage error: {0}")]
     Storage(String),
+
+    /// A tag was not found.
+    #[error("tag not found")]
+    TagNotFound,
+
+    /// A tag name is already taken.
+    #[error("tag name already exists")]
+    TagExists,
 }

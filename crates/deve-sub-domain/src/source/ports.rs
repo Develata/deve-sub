@@ -7,6 +7,7 @@ use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
 use super::error::SourceError;
 use super::source_item::ItemParseStatus;
 use super::{Source, SourceSnapshot};
+use crate::node_override::{NodeOverride, Tag};
 use crate::{Node, ProtocolKind};
 
 /// Storage boundary for source aggregates.
@@ -122,6 +123,14 @@ pub struct NodePoolEntry {
     /// Row creation time (distinct from the ULID's embedded time and from
     /// `Node::source.imported_at`).
     pub created_at: Timestamp,
+
+    /// Manual override applied to this node, if any. `None` when no
+    /// `node_overrides` row exists. The effective node is
+    /// `parsed_node.apply_override(override)`. See NODE-010.
+    pub override_info: Option<NodeOverride>,
+
+    /// Tags assigned to this node, resolved from the `node_tags` junction.
+    pub tags: Vec<Tag>,
 }
 
 /// Filters applied to node pool queries.

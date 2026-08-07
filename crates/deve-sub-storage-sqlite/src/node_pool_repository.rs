@@ -255,7 +255,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
 
         let mut sql = String::from("SELECT ");
         sql.push_str(NODE_COLUMNS);
-        sql.push_str(" FROM nodes n WHERE 1=1");
+        sql.push_str(" FROM nodes n LEFT JOIN node_overrides o ON o.node_id = n.id WHERE 1=1");
 
         if proto_json.is_some() {
             sql.push_str(" AND n.protocol_kind = ?");
@@ -294,7 +294,10 @@ impl NodePoolRepository for SqliteNodePoolRepository {
     }
 
     async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError> {
-        let sql = format!("SELECT {NODE_COLUMNS} FROM nodes n WHERE n.id = ?");
+        let sql = format!(
+            "SELECT {NODE_COLUMNS} FROM nodes n \
+             LEFT JOIN node_overrides o ON o.node_id = n.id WHERE n.id = ?"
+        );
         let row: Option<NodeRow> = sqlx::query_as::<_, NodeRow>(&sql)
             .bind(id.to_string())
             .fetch_optional(&self.pool)

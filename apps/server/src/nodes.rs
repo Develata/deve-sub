@@ -10,9 +10,9 @@ use axum::response::Json;
 use deve_sub_application::source::{self, ListNodesParams};
 use deve_sub_contract::{
     ErrorResponse, ImportNodesRequest, ImportNodesResponse, ImportOutcomeDto, ListNodesResponse,
-    NodeDto, NodeResponse,
+    NodeDto, NodeResponse, RegionMethodDto, TagDto,
 };
-use deve_sub_domain::{ImportOutcome, NodePoolEntry};
+use deve_sub_domain::{ImportOutcome, NodePoolEntry, RegionMethod, Tag};
 use deve_sub_kernel::NodeId;
 
 use crate::AppState;
@@ -52,12 +52,26 @@ fn node_to_dto(entry: &NodePoolEntry) -> NodeDto {
         host: entry.node.endpoint.host.uri_host(),
         port: entry.node.endpoint.port,
         region: entry.node.region.value.clone(),
+        region_method: match entry.node.region.method {
+            RegionMethod::Auto => RegionMethodDto::Auto,
+            RegionMethod::Manual => RegionMethodDto::Manual,
+        },
         source_label: entry.node.source.source_label.clone(),
         imported_at: ts_to_iso8601(entry.node.source.imported_at),
         is_active: entry.is_active,
         missing_from_source: entry.missing_from_source,
         revision: entry.revision,
         created_at: ts_to_iso8601(entry.created_at),
+        tags: entry.tags.iter().map(tag_to_dto).collect(),
+    }
+}
+
+/// Convert a domain [`Tag`] to the DTO representation.
+pub(crate) fn tag_to_dto(tag: &Tag) -> TagDto {
+    TagDto {
+        id: tag.id.to_string(),
+        name: tag.name.clone(),
+        color: tag.color.clone(),
     }
 }
 

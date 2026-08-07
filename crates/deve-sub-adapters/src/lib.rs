@@ -7,6 +7,8 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod geoip;
 pub mod http_fetcher;
 
+pub use geoip::MaxMindGeoIp;
 pub use http_fetcher::HttpFetcher;

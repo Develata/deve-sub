@@ -407,6 +407,7 @@ async fn refresh_source(
         state.snapshot_repo.as_ref(),
         state.pool_repo.as_ref(),
         state.fetcher.as_ref(),
+        state.geoip.as_ref(),
         source_id,
     )
     .await

@@ -20,8 +20,11 @@ pub use auth::{
 };
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};
 pub use node::{
-    ImportNodesRequest, ImportNodesResponse, ImportOutcomeDto, ListNodesResponse, NodeDto,
-    NodeResponse,
+    BatchEnabledRequest, BatchResultDto, BatchTagsRequest, CreateTagRequest, ImportNodesRequest,
+    ImportNodesResponse, ImportOutcomeDto, ListNodesResponse, ListTagsResponse, NodeDto,
+    NodeOverrideDto, NodeOverrideResponse, NodeResponse, NodeTagAssignmentDto, RegionMethodDto,
+    RegionResponse, SetNodeTagsRequest, SetRegionRequest, TagDto, TagResponse,
+    UpdateOverrideRequest,
 };
 pub use source::{
     CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,

@@ -14,7 +14,8 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use deve_sub_application::source::{
-    self, CreateSourceParams, FetchError, FetchResult, SubscriptionFetcher,
+    self, CreateSourceParams, FetchError, FetchResult, GeoIpPort, RegionDetection,
+    SubscriptionFetcher,
 };
 use deve_sub_domain::{SourceSnapshotRepository, SourceType};
 use deve_sub_storage_sqlite::{
@@ -63,6 +64,18 @@ impl SubscriptionFetcher for MockFetcher {
             }),
             MockResponse::NotModified => Ok(FetchResult::NotModified),
             MockResponse::Error(e) => Err(e),
+        }
+    }
+}
+
+struct StubGeoIp;
+
+#[async_trait]
+impl GeoIpPort for StubGeoIp {
+    async fn detect_region(&self, _host: &str) -> RegionDetection {
+        RegionDetection {
+            region: None,
+            candidate_ips: vec![],
         }
     }
 }
@@ -147,6 +160,7 @@ async fn refresh_inserts_nodes_and_creates_snapshot() {
         &snapshot_repo,
         &pool_repo,
         &fetcher,
+        &StubGeoIp,
         source.id,
     )
     .await
@@ -186,6 +200,7 @@ async fn refresh_304_not_modified_preserves_old_snapshot() {
         &snapshot_repo,
         &pool_repo,
         &fetcher_v1,
+        &StubGeoIp,
         source.id,
     )
     .await
@@ -199,6 +214,7 @@ async fn refresh_304_not_modified_preserves_old_snapshot() {
         &snapshot_repo,
         &pool_repo,
         &fetcher_304,
+        &StubGeoIp,
         source.id,
     )
     .await
@@ -229,6 +245,7 @@ async fn fetch_failure_preserves_old_snapshot() {
         &snapshot_repo,
         &pool_repo,
         &fetcher_v1,
+        &StubGeoIp,
         source.id,
     )
     .await
@@ -240,6 +257,7 @@ async fn fetch_failure_preserves_old_snapshot() {
         &snapshot_repo,
         &pool_repo,
         &fetcher_fail,
+        &StubGeoIp,
         source.id,
     )
     .await;
@@ -285,6 +303,7 @@ async fn parse_failure_preserves_old_snapshot() {
         &snapshot_repo,
         &pool_repo,
         &fetcher_v1,
+        &StubGeoIp,
         source.id,
     )
     .await
@@ -300,6 +319,7 @@ async fn parse_failure_preserves_old_snapshot() {
         &snapshot_repo,
         &pool_repo,
         &fetcher_bad,
+        &StubGeoIp,
         source.id,
     )
     .await;
@@ -330,8 +350,15 @@ async fn refresh_nonexistent_source_returns_not_found() {
     let fetcher = MockFetcher::new(vec![]);
 
     let fake_id = deve_sub_kernel::SourceId::new();
-    let result =
-        source::refresh_source(&source_repo, &snapshot_repo, &pool_repo, &fetcher, fake_id).await;
+    let result = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher,
+        &StubGeoIp,
+        fake_id,
+    )
+    .await;
 
     match result {
         Err(source::SourceAppError::SourceNotFound) => {}
@@ -367,6 +394,7 @@ async fn fetch_failure_disables_source_when_keep_on_fail_false() {
         &snapshot_repo,
         &pool_repo,
         &fetcher,
+        &StubGeoIp,
         source.id,
     )
     .await;
@@ -410,6 +438,7 @@ async fn fetch_failure_preserves_enabled_when_keep_on_fail_true() {
         &snapshot_repo,
         &pool_repo,
         &fetcher,
+        &StubGeoIp,
         source.id,
     )
     .await;

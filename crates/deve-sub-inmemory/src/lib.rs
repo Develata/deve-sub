@@ -6,6 +6,8 @@
 //! depend on Port traits defined in `crates/application`, not the other way
 //! around.
 
+pub mod geoip;
 pub mod rate_limiter;
 
+pub use geoip::InMemoryGeoIp;
 pub use rate_limiter::InMemoryLoginRateLimiter;

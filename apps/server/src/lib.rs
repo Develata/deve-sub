@@ -10,10 +10,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
-use deve_sub_application::{DbHealthPort, LoginRateLimiter, SubscriptionFetcher};
+use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    NodePoolRepository, RecoveryCodeRepository, SessionRepository, SourceRepository,
-    SourceSnapshotRepository, TotpSecretRepository, UserRepository,
+    NodeOverrideRepository, NodePoolRepository, RecoveryCodeRepository, SessionRepository,
+    SourceRepository, SourceSnapshotRepository, TotpSecretRepository, UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -26,6 +26,7 @@ use deve_sub_security::MasterKey;
 
 pub mod auth;
 pub mod csrf;
+pub mod node_overrides;
 pub mod nodes;
 pub mod routes;
 pub mod sources;
@@ -52,7 +53,9 @@ pub struct AppState {
     pub source_repo: Arc<dyn SourceRepository>,
     pub snapshot_repo: Arc<dyn SourceSnapshotRepository>,
     pub pool_repo: Arc<dyn NodePoolRepository>,
+    pub override_repo: Arc<dyn NodeOverrideRepository>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
+    pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,
     pub db_health: Arc<dyn DbHealthPort>,
 }

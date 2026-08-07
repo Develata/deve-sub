@@ -38,6 +38,10 @@ pub struct NodeDto {
     pub revision: u64,
     /// Row creation time (ISO 8601 UTC).
     pub created_at: String,
+    /// How the region was assigned (auto-detected or manual override).
+    pub region_method: RegionMethodDto,
+    /// Tags assigned to this node.
+    pub tags: Vec<TagDto>,
 }
 
 /// Response body for `GET /api/v1/nodes` (cursor-paginated node list).
@@ -99,4 +103,134 @@ pub enum ImportOutcomeDto {
     Duplicate(String),
     /// The line could not be parsed; `data` is the raw input text.
     Failed(String),
+}
+
+/// How a node's region was assigned.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RegionMethodDto {
+    /// GeoIP-derived.
+    Auto,
+    /// Admin-authored override.
+    Manual,
+}
+
+/// A user-defined tag.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TagDto {
+    /// ULID identifier.
+    pub id: String,
+    /// Tag name (unique).
+    pub name: String,
+    /// Optional color for UI display.
+    pub color: Option<String>,
+}
+
+/// Manual override applied to a node, as seen in API responses.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NodeOverrideDto {
+    /// Override display name; `None` keeps the parsed name.
+    pub display_name: Option<String>,
+    /// Override region; `None` keeps the auto-detected region.
+    pub region: Option<String>,
+    /// Override enabled flag; `None` keeps natural status.
+    pub enabled: Option<bool>,
+    /// Override SNI.
+    pub sni: Option<String>,
+    /// Override skip-cert-verify.
+    pub skip_cert_verify: Option<bool>,
+    /// Override TLS fingerprint.
+    pub fingerprint: Option<String>,
+    /// Sort order for generation.
+    pub sort_order: i64,
+}
+
+/// Request body for `PATCH /api/v1/nodes/{id}/override` (NODE-010).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateOverrideRequest {
+    /// Override display name; `None` clears the override.
+    pub display_name: Option<String>,
+    pub region: Option<String>,
+    pub enabled: Option<bool>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: Option<bool>,
+    pub fingerprint: Option<String>,
+    #[serde(default)]
+    pub sort_order: i64,
+}
+
+/// Response body for override endpoints.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NodeOverrideResponse {
+    #[serde(rename = "override")]
+    pub override_: NodeOverrideDto,
+}
+
+/// Request body for `POST /api/v1/nodes/batch-enabled` (NODE-004).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BatchEnabledRequest {
+    /// Node ULIDs to update.
+    pub node_ids: Vec<String>,
+    /// `true` to enable, `false` to disable.
+    pub enabled: bool,
+}
+
+/// Response body for batch operations.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BatchResultDto {
+    /// Number of rows affected.
+    pub updated: u64,
+}
+
+/// One node's tag assignment in a batch tags request.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NodeTagAssignmentDto {
+    pub node_id: String,
+    pub tag_ids: Vec<String>,
+}
+
+/// Request body for `POST /api/v1/nodes/batch-tags` (NODE-005).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BatchTagsRequest {
+    pub assignments: Vec<NodeTagAssignmentDto>,
+}
+
+/// Request body for `PATCH /api/v1/nodes/{id}/region` (NODE-006).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SetRegionRequest {
+    /// `Some("US")` sets a manual region; `None` clears it.
+    pub region: Option<String>,
+}
+
+/// Response body for region endpoints.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RegionResponse {
+    pub region: Option<String>,
+    pub method: RegionMethodDto,
+}
+
+/// Request body for `POST /api/v1/tags`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateTagRequest {
+    pub name: String,
+    pub color: Option<String>,
+}
+
+/// Response body for tag creation.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TagResponse {
+    pub tag: TagDto,
+}
+
+/// Response body for `GET /api/v1/tags`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ListTagsResponse {
+    pub tags: Vec<TagDto>,
+}
+
+/// Request body for `PUT /api/v1/nodes/{id}/tags`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SetNodeTagsRequest {
+    /// Tag IDs to assign to this node (replaces existing assignments).
+    pub tag_ids: Vec<String>,
 }

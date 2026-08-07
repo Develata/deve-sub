@@ -570,7 +570,7 @@ cases:
     steps: []
     assertions: ["状态全部正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-005
     title: 批量标签
     priority: P0
@@ -580,7 +580,7 @@ cases:
     steps: []
     assertions: ["标签查询即时更新"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-006
     title: 人工地区
     priority: P0
@@ -590,7 +590,7 @@ cases:
     steps: []
     assertions: ["不被后续自动识别覆盖"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-007
     title: 自动地区 IPv4
     priority: P0
@@ -600,7 +600,7 @@ cases:
     steps: []
     assertions: ["本地 GeoIP 正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-008
     title: 自动地区 IPv6
     priority: P0
@@ -610,7 +610,7 @@ cases:
     steps: []
     assertions: ["IPv6 GeoIP 正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-009
     title: 双栈域名
     priority: P0
@@ -620,7 +620,7 @@ cases:
     steps: []
     assertions: ["候选 IP 均被记录"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-010
     title: 人工覆写
     priority: P0
@@ -630,7 +630,7 @@ cases:
     steps: []
     assertions: ["上游刷新后仍生效"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-011
     title: 上游删除
     priority: P0

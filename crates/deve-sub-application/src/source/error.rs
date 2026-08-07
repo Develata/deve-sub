@@ -16,6 +16,10 @@ pub enum SourceAppError {
     #[error("source not found")]
     SourceNotFound,
 
+    /// A node was not found.
+    #[error("node not found")]
+    NodeNotFound,
+
     /// A source name is already taken.
     #[error("source name already exists")]
     NameExists,

@@ -611,6 +611,106 @@ async fn gen004_rollback_restores_prior_version() {
     assert_eq!(v2_entry["is_active"], false);
 }
 
+/// Rollback with a path `template_id` that does not own the body `version_id`
+/// must fail with 409 `version_template_mismatch` and must not mutate either
+/// template's active version (F8.2).
+#[tokio::test]
+async fn gen004b_rollback_rejects_version_owned_by_other_template() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    // Create template A — version 1.
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                "/api/v1/templates",
+                &create_body("rollback-owner-a", "a v1", VALID_SPEC_YAML),
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("create A");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    let template_a_id = json["template"]["id"].as_str().expect("A id").to_owned();
+    let a_v1_id = json["version"]["id"].as_str().expect("A v1 id").to_owned();
+
+    // Create template B — version 1.
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                "/api/v1/templates",
+                &create_body("rollback-owner-b", "b v1", VALID_SPEC_YAML),
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("create B");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    let template_b_id = json["template"]["id"].as_str().expect("B id").to_owned();
+    let b_v1_id = json["version"]["id"].as_str().expect("B v1 id").to_owned();
+
+    // Attempt rollback on template A's path using template B's version_id.
+    let rollback_body = format!(r#"{{"version_id":"{b_v1_id}"}}"#);
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/templates/{template_a_id}/rollback"),
+                &rollback_body,
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("rollback mismatch");
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let json = body_to_json(response).await;
+    assert_eq!(json["error"], "version_template_mismatch");
+
+    // Neither template's active version should have changed.
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/templates/{template_a_id}")),
+            &cookie,
+        ))
+        .await
+        .expect("get A after mismatch");
+    let json = body_to_json(response).await;
+    assert_eq!(json["template"]["active_version"], 1);
+    assert_eq!(json["template"]["active_version_id"], a_v1_id);
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/templates/{template_b_id}")),
+            &cookie,
+        ))
+        .await
+        .expect("get B after mismatch");
+    let json = body_to_json(response).await;
+    assert_eq!(json["template"]["active_version"], 1);
+    assert_eq!(json["template"]["active_version_id"], b_v1_id);
+
+    // B's version must still be active (activate must not have been called).
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/templates/{template_b_id}/versions")),
+            &cookie,
+        ))
+        .await
+        .expect("B versions after mismatch");
+    let json = body_to_json(response).await;
+    let b_versions = json["versions"].as_array().expect("B versions array");
+    assert_eq!(b_versions.len(), 1);
+    assert_eq!(b_versions[0]["is_active"], true);
+}
+
 /// Unauthenticated requests are rejected with 401.
 #[tokio::test]
 async fn unauthenticated_rejected() {

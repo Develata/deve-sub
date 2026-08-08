@@ -19,6 +19,13 @@ pub enum TemplateAppError {
     #[error("template version not found")]
     VersionNotFound,
 
+    /// A rollback target version exists but belongs to a different template.
+    /// The path `template_id` and the version's `template_id` must match;
+    /// rejecting the mismatch prevents silently activating another template's
+    /// version (F8.2).
+    #[error("version does not belong to the specified template")]
+    VersionTemplateMismatch,
+
     /// A template name is already taken.
     #[error("template name already exists")]
     NameExists,

@@ -290,13 +290,35 @@ pub async fn list_versions(
 /// reflect the rollback. The version history is preserved — no versions are
 /// deleted (GEN-004).
 ///
+/// The `template_id` parameter must match the version's owning template;
+/// rejecting mismatches prevents a caller from silently activating another
+/// template's version via a path/version pair that does not belong together
+/// (F8.2).
+///
 /// # Errors
 /// - [`TemplateAppError::VersionNotFound`] — the version ID does not exist.
+/// - [`TemplateAppError::VersionTemplateMismatch`] — the version exists but
+///   belongs to a different template than `template_id`.
 /// - [`TemplateAppError::Template`] — storage error.
 pub async fn rollback_template(
     version_repo: &dyn TemplateVersionRepository,
+    template_id: TemplateId,
     version_id: TemplateVersionId,
 ) -> Result<TemplateVersion, TemplateAppError> {
+    let version = version_repo
+        .find_by_id(version_id)
+        .await
+        .map_err(map_template_error)?
+        .ok_or(TemplateAppError::VersionNotFound)?;
+
+    // WHY: `activate` only takes a version_id and operates blindly. Without
+    // this check, a path template_id and a body version_id pointing at
+    // different templates would silently activate the wrong template's
+    // version, corrupting the caller template's active pointer.
+    if version.template_id != template_id {
+        return Err(TemplateAppError::VersionTemplateMismatch);
+    }
+
     version_repo
         .activate(version_id)
         .await

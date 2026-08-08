@@ -342,6 +342,7 @@ async fn list_versions(
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "Version not found", body = ErrorResponse),
+        (status = 409, description = "Version belongs to a different template", body = ErrorResponse),
         (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
@@ -351,7 +352,7 @@ async fn rollback_template(
     Path(id): Path<String>,
     Json(req): Json<RollbackRequest>,
 ) -> Result<Json<RollbackTemplateResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let _template_id = TemplateId::parse(&id).map_err(|_| {
+    let template_id = TemplateId::parse(&id).map_err(|_| {
         err(
             StatusCode::BAD_REQUEST,
             "invalid_id",
@@ -367,7 +368,7 @@ async fn rollback_template(
         )
     })?;
 
-    let version = template::rollback_template(state.version_repo.as_ref(), version_id)
+    let version = template::rollback_template(state.version_repo.as_ref(), template_id, version_id)
         .await
         .map_err(|e| map_template_app_error(e, "rollback_template"))?;
 
@@ -701,6 +702,11 @@ fn map_template_app_error(
             StatusCode::NOT_FOUND,
             "version_not_found",
             "template version does not exist",
+        ),
+        TemplateAppError::VersionTemplateMismatch => err(
+            StatusCode::CONFLICT,
+            "version_template_mismatch",
+            "version does not belong to the specified template",
         ),
         TemplateAppError::NameExists => err(
             StatusCode::CONFLICT,

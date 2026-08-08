@@ -138,6 +138,10 @@ pub struct TemplateVersionsArgs {
 /// Arguments for `template rollback`.
 #[derive(Args)]
 pub struct TemplateRollbackArgs {
+    /// Template ID (ULID) whose version to activate. Must own the version.
+    #[arg(long)]
+    pub template_id: String,
+
     /// Version ID (ULID) to activate.
     #[arg(long)]
     pub version_id: String,
@@ -381,7 +385,12 @@ pub async fn template_versions(args: TemplateVersionsArgs) -> Result<()> {
 }
 
 pub async fn template_rollback(args: TemplateRollbackArgs) -> Result<()> {
-    tracing::info!(db_path = %args.db_path, version_id = %args.version_id, "rolling back template");
+    tracing::info!(
+        db_path = %args.db_path,
+        template_id = %args.template_id,
+        version_id = %args.version_id,
+        "rolling back template",
+    );
 
     ensure_db_dir(&args.db_path)?;
     let pool = open_db(&args.db_path, 1).await?;
@@ -389,12 +398,15 @@ pub async fn template_rollback(args: TemplateRollbackArgs) -> Result<()> {
 
     let version_repo = deve_sub_storage_sqlite::SqliteTemplateVersionRepository::new(pool);
 
+    let template_id = deve_sub_kernel::TemplateId::parse(&args.template_id)
+        .context("invalid template id (expected ULID)")?;
     let version_id = deve_sub_kernel::TemplateVersionId::parse(&args.version_id)
         .context("invalid version id (expected ULID)")?;
 
-    let version = deve_sub_application::template::rollback_template(&version_repo, version_id)
-        .await
-        .map_err(|e| anyhow::anyhow!("rollback failed: {e}"))?;
+    let version =
+        deve_sub_application::template::rollback_template(&version_repo, template_id, version_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("rollback failed: {e}"))?;
 
     println!("Rollback successful:");
     println!("  version_id: {}", version.id);

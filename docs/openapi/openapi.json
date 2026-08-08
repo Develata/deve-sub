@@ -2979,6 +2979,16 @@
               }
             }
           },
+          "409": {
+            "description": "Version belongs to a different template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal error",
             "content": {

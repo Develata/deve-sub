@@ -1,0 +1,45 @@
+//! Template application errors.
+
+use thiserror::Error;
+
+use deve_sub_domain::TemplateError;
+
+/// Errors produced by template application commands and queries.
+#[derive(Debug, Error)]
+pub enum TemplateAppError {
+    /// Input validation failed (empty name, invalid spec, etc.).
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+
+    /// A template was not found.
+    #[error("template not found")]
+    TemplateNotFound,
+
+    /// A template version was not found.
+    #[error("template version not found")]
+    VersionNotFound,
+
+    /// A template name is already taken.
+    #[error("template name already exists")]
+    NameExists,
+
+    /// The template spec YAML could not be deserialized.
+    #[error("spec YAML parse error: {0}")]
+    SpecYamlParse(String),
+
+    /// The template spec YAML exceeds the size limit.
+    #[error("spec exceeds size limit: {0} bytes (max {1})")]
+    SpecTooLarge(usize, usize),
+
+    /// The template spec YAML alias nesting exceeds the depth limit.
+    #[error("spec alias depth {0} exceeds limit {1}")]
+    AliasDepthExceeded(u32, u32),
+
+    /// The template spec contains a forbidden script tag.
+    #[error("spec contains forbidden script tag: {0}")]
+    ForbiddenScript(String),
+
+    /// A template domain or storage operation failed.
+    #[error(transparent)]
+    Template(#[from] TemplateError),
+}

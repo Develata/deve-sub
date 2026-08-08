@@ -13,6 +13,8 @@ pub mod recovery_code_repository;
 pub mod session_repository;
 pub mod source_repository;
 pub mod source_snapshot_repository;
+pub mod template_repository;
+pub mod template_version_repository;
 pub mod timestamp;
 pub mod totp_repository;
 pub mod user_repository;
@@ -31,6 +33,8 @@ pub use recovery_code_repository::SqliteRecoveryCodeRepository;
 pub use session_repository::SqliteSessionRepository;
 pub use source_repository::SqliteSourceRepository;
 pub use source_snapshot_repository::SqliteSourceSnapshotRepository;
+pub use template_repository::SqliteTemplateRepository;
+pub use template_version_repository::SqliteTemplateVersionRepository;
 pub use totp_repository::SqliteTotpSecretRepository;
 pub use user_repository::SqliteUserRepository;
 

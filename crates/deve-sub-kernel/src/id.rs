@@ -153,6 +153,18 @@ entity_id!(
     "Strong-typed identifier for a binding between a node and its source."
 );
 
+entity_id!(
+    TemplateId,
+    "template",
+    "Strong-typed identifier for a V3 subscription template."
+);
+
+entity_id!(
+    TemplateVersionId,
+    "template version",
+    "Strong-typed identifier for a versioned snapshot of a template's spec."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

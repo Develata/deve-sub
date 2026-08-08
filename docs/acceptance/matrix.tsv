@@ -69,10 +69,10 @@ NODE-015	真实代理测速	P0	Integration	planned
 NODE-016	批量取消测速	P0	E2E	planned
 NODE-017	链式代理	P0	Integration	planned
 NODE-018	代理环	P0	Regression	planned
-GEN-001	新建 V3 模板	P0	E2E	planned
-GEN-002	非法模板	P0	Integration	planned
-GEN-003	模板版本	P0	Integration	planned
-GEN-004	模板回滚	P0	E2E	planned
+GEN-001	新建 V3 模板	P0	E2E	pass
+GEN-002	非法模板	P0	Integration	pass
+GEN-003	模板版本	P0	Integration	pass
+GEN-004	模板回滚	P0	E2E	pass
 GEN-005	动态选择	P0	Integration	planned
 GEN-006	固定快照	P0	Integration	planned
 GEN-007	按地区分组	P0	E2E	planned

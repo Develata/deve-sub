@@ -638,3 +638,211 @@ async fn migration_0006_adds_filter_rules_json_column() {
     let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
+
+/// Recovery test for migration 0007 (constraint #13): templates,
+/// template_versions, generation_cache tables, the partial unique active-version
+/// index, cascade deletes, and idempotency. See
+/// `docs/plan/milestones/M5-generator-and-v3-template.md`.
+#[tokio::test]
+async fn migration_0007_applies_and_schema_is_correct() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let expected_tables_0007 = ["templates", "template_versions", "generation_cache"];
+    let tables = get_table_names(&pool).await;
+    for expected in expected_tables_0007 {
+        assert!(
+            tables.contains(&expected.to_string()),
+            "expected table '{expected}' not found, tables: {tables:?}"
+        );
+    }
+
+    let expected_indexes_0007 = [
+        "idx_template_versions_template",
+        "idx_template_versions_active",
+        "idx_template_versions_single_active",
+        "idx_generation_cache_lookup",
+    ];
+    let indexes = get_index_names(&pool).await;
+    for expected in expected_indexes_0007 {
+        assert!(
+            indexes.contains(&expected.to_string()),
+            "expected index '{expected}' not found, indexes: {indexes:?}"
+        );
+    }
+
+    // Verify columns on templates table.
+    let tmpl_cols = get_columns(&pool, "templates").await;
+    for col in [
+        "id",
+        "name",
+        "description",
+        "active_version_id",
+        "active_version",
+        "created_at",
+        "updated_at",
+    ] {
+        assert!(
+            tmpl_cols.contains(&col.to_string()),
+            "expected column '{col}' in templates, got {tmpl_cols:?}"
+        );
+    }
+
+    // Verify columns on template_versions table.
+    let ver_cols = get_columns(&pool, "template_versions").await;
+    for col in [
+        "id",
+        "template_id",
+        "version",
+        "spec_json",
+        "spec_yaml",
+        "is_active",
+        "created_at",
+    ] {
+        assert!(
+            ver_cols.contains(&col.to_string()),
+            "expected column '{col}' in template_versions, got {ver_cols:?}"
+        );
+    }
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+#[tokio::test]
+async fn migration_0007_is_idempotent() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    for expected in ["templates", "template_versions", "generation_cache"] {
+        assert!(tables.contains(&expected.to_string()));
+    }
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+/// Verify ON DELETE CASCADE from templates → template_versions and
+/// templates → generation_cache works (constraint #13: recovery). Also
+/// verifies the partial unique index `idx_template_versions_single_active`
+/// rejects a second active version for the same template.
+#[tokio::test]
+async fn migration_0007_cascade_delete_and_single_active() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let template_id = "01J0TMPL000000000000000001";
+    let version_id = "01J0VER0000000000000000001";
+    let cache_id = "01J0CACHE000000000000000001";
+
+    sqlx::query(
+        "INSERT INTO templates (id, name, description, active_version_id, active_version) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(template_id)
+    .bind("test-template")
+    .bind("test")
+    .bind(version_id)
+    .bind(1_i64)
+    .execute(&pool)
+    .await
+    .expect("insert template");
+
+    sqlx::query(
+        "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active) \
+         VALUES (?, ?, ?, ?, ?, 1)",
+    )
+    .bind(version_id)
+    .bind(template_id)
+    .bind(1_i64)
+    .bind("{}")
+    .bind("")
+    .execute(&pool)
+    .await
+    .expect("insert version");
+
+    // WHY: the partial unique index idx_template_versions_single_active must
+    // reject a second active version for the same template.
+    let second_active = sqlx::query(
+        "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active) \
+         VALUES (?, ?, ?, ?, ?, 1)",
+    )
+    .bind("01J0VER0000000000000000002")
+    .bind(template_id)
+    .bind(2_i64)
+    .bind("{}")
+    .bind("")
+    .execute(&pool)
+    .await;
+    assert!(
+        second_active.is_err(),
+        "a second active version should be rejected by idx_template_versions_single_active"
+    );
+
+    sqlx::query(
+        "INSERT INTO generation_cache \
+         (id, template_id, template_version, profile, selection_mode, selection_payload, \
+          pool_revision, cache_key, content) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(cache_id)
+    .bind(template_id)
+    .bind(1_i64)
+    .bind("mihomo")
+    .bind("dynamic")
+    .bind("{}")
+    .bind(0_i64)
+    .bind("test-key")
+    .bind("content")
+    .execute(&pool)
+    .await
+    .expect("insert cache");
+
+    sqlx::query("DELETE FROM templates WHERE id = ?")
+        .bind(template_id)
+        .execute(&pool)
+        .await
+        .expect("delete template");
+
+    let (ver_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM template_versions WHERE template_id = ?")
+            .bind(template_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count versions");
+    assert_eq!(ver_count, 0, "versions should be cascade-deleted");
+
+    let (cache_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM generation_cache WHERE template_id = ?")
+            .bind(template_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count cache");
+    assert_eq!(cache_count, 0, "cache entries should be cascade-deleted");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}

@@ -10,6 +10,7 @@ pub mod auth;
 pub mod health;
 pub mod node;
 pub mod source;
+pub mod template;
 
 pub use auth::{
     CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse, ListUsersResponse,
@@ -29,4 +30,9 @@ pub use node::{
 pub use source::{
     CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,
     SourceFilterRulesDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
+};
+pub use template::{
+    CreateTemplateRequest, GetTemplateResponse, ListTemplatesQuery, ListTemplatesResponse,
+    ListVersionsResponse, RollbackTemplateResponse, TemplateDto, TemplateResponse,
+    TemplateVersionDto, UpdateTemplateRequest,
 };

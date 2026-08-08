@@ -28,8 +28,9 @@ This matrix keeps the live documentation layers aligned:
 | `milestones/M0-tech-spike` | — | — | `UI-008`, `PERF-001`, `PERF-002` |
 | `milestones/M1-infrastructure` | — | `contracts/module-boundaries.md` | — |
 | `milestones/M2-auth-and-users` | `contracts/module-boundaries.md` | — | `AUTH-*`, `SEC-009`, `SEC-010` |
-
-Milestones M3–M8 blueprints are added as each milestone begins.
+| `milestones/M3-protocol-engine` | `contracts/data-models.md` | — | `PARSE-*`, `NODE-*` |
+| `milestones/M4-sources-and-node-pool` | `contracts/module-boundaries.md` | — | `SRC-*`, `NODE-*` |
+| `milestones/M5-generator-and-v3-template` | `contracts/module-boundaries.md` | — | `GEN-001`–`GEN-016` |
 
 ## Test coverage notes
 

@@ -1982,6 +1982,601 @@
         ]
       }
     },
+    "/api/v1/templates": {
+      "get": {
+        "summary": "`GET /api/v1/templates` — list templates with cursor pagination (admin).",
+        "operationId": "list_templates",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pagination cursor (last template ULID)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max templates per page (default 50, max 100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Template list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTemplatesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "`POST /api/v1/templates` — create a new V3 subscription template (admin).",
+        "operationId": "create_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Template created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/templates/{id}": {
+      "get": {
+        "summary": "`GET /api/v1/templates/{id}` — get a template by ID (admin).",
+        "operationId": "get_template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Template found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTemplateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid template id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "`PUT /api/v1/templates/{id}` — update an existing template (admin).",
+        "operationId": "update_template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Template updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "`DELETE /api/v1/templates/{id}` — delete a template (admin).",
+        "operationId": "delete_template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Template deleted"
+          },
+          "400": {
+            "description": "Invalid template id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/templates/{id}/rollback": {
+      "post": {
+        "summary": "`POST /api/v1/templates/{id}/rollback` — rollback to a specific version\n(admin).",
+        "operationId": "rollback_template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Rollback successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RollbackTemplateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Version not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/templates/{id}/versions": {
+      "get": {
+        "summary": "`GET /api/v1/templates/{id}/versions` — list version history (admin).",
+        "operationId": "list_versions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListVersionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid template id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/users": {
       "get": {
         "summary": "`GET /api/v1/users` — list users with cursor pagination (admin only).",
@@ -2481,6 +3076,28 @@
           }
         }
       },
+      "CreateTemplateRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/templates`.\n\nThe `spec_yaml` field is the full V3 template document (apiVersion,\nkind, metadata, spec) as a YAML string. The server validates it against\nthe M5 schema constraints before persistence (GEN-002).",
+        "required": [
+          "name",
+          "spec_yaml"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Optional description."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable template name."
+          },
+          "spec_yaml": {
+            "type": "string",
+            "description": "The full V3 template YAML document."
+          }
+        }
+      },
       "CreateUserRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/users` (admin-only user creation).",
@@ -2545,6 +3162,19 @@
           "message": {
             "type": "string",
             "description": "Human-readable error message."
+          }
+        }
+      },
+      "GetTemplateResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/templates/{id}`.",
+        "required": [
+          "template"
+        ],
+        "properties": {
+          "template": {
+            "$ref": "#/components/schemas/TemplateDto",
+            "description": "The template aggregate."
           }
         }
       },
@@ -2783,6 +3413,29 @@
           }
         }
       },
+      "ListTemplatesResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/templates` (cursor-paginated).",
+        "required": [
+          "templates"
+        ],
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cursor for the next page (`None` if no more results)."
+          },
+          "templates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateDto"
+            },
+            "description": "Templates in the current page."
+          }
+        }
+      },
       "ListUsersResponse": {
         "type": "object",
         "description": "Response body for `GET /api/v1/users` (cursor-paginated user list).",
@@ -2803,6 +3456,22 @@
               "$ref": "#/components/schemas/UserDto"
             },
             "description": "Users in the current page."
+          }
+        }
+      },
+      "ListVersionsResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/templates/{id}/versions`.",
+        "required": [
+          "versions"
+        ],
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateVersionDto"
+            },
+            "description": "Versions, newest first."
           }
         }
       },
@@ -3190,6 +3859,32 @@
           "user"
         ]
       },
+      "RollbackRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/templates/{id}/rollback`.",
+        "required": [
+          "version_id"
+        ],
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "description": "The version ULID to activate."
+          }
+        }
+      },
+      "RollbackTemplateResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/templates/{id}/rollback`.",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "$ref": "#/components/schemas/TemplateVersionDto",
+            "description": "The activated version."
+          }
+        }
+      },
       "SetNodeTagsRequest": {
         "type": "object",
         "description": "Request body for `PUT /api/v1/nodes/{id}/tags`.",
@@ -3414,6 +4109,111 @@
           }
         }
       },
+      "TemplateDto": {
+        "type": "object",
+        "description": "Template information returned by template management endpoints.",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "active_version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "active_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The active version number. `0` before the first version is committed.",
+            "minimum": 0
+          },
+          "active_version_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The active version's ULID, if any."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation time (ISO 8601 UTC)."
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Last update time (ISO 8601 UTC)."
+          }
+        }
+      },
+      "TemplateResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/templates` and `PUT /api/v1/templates/{id}`.",
+        "required": [
+          "template",
+          "version"
+        ],
+        "properties": {
+          "template": {
+            "$ref": "#/components/schemas/TemplateDto",
+            "description": "The template aggregate."
+          },
+          "version": {
+            "$ref": "#/components/schemas/TemplateVersionDto",
+            "description": "The version created by this operation."
+          }
+        }
+      },
+      "TemplateVersionDto": {
+        "type": "object",
+        "description": "Template version information.",
+        "required": [
+          "id",
+          "template_id",
+          "version",
+          "spec_yaml",
+          "is_active",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "Creation time (ISO 8601 UTC)."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "Whether this is the active version."
+          },
+          "spec_yaml": {
+            "type": "string",
+            "description": "The spec YAML document."
+          },
+          "template_id": {
+            "type": "string",
+            "description": "The template this version belongs to."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Monotonic version number.",
+            "minimum": 0
+          }
+        }
+      },
       "TwoFactorDisableRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/auth/2fa/disable`.\n\nRequires the current password to prevent unauthorized disabling from a\nhijacked session.",
@@ -3574,6 +4374,29 @@
           "url": {
             "type": "string",
             "description": "Subscription URL."
+          }
+        }
+      },
+      "UpdateTemplateRequest": {
+        "type": "object",
+        "description": "Request body for `PUT /api/v1/templates/{id}`.",
+        "required": [
+          "name",
+          "description",
+          "spec_yaml"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Optional description."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable template name."
+          },
+          "spec_yaml": {
+            "type": "string",
+            "description": "The full V3 template YAML document."
           }
         }
       },

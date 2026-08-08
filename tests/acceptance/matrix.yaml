@@ -720,7 +720,7 @@ cases:
     steps: []
     assertions: ["Schema 验证通过"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-002
     title: 非法模板
     priority: P0
@@ -730,7 +730,7 @@ cases:
     steps: []
     assertions: ["返回字段级错误"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-003
     title: 模板版本
     priority: P0
@@ -740,7 +740,7 @@ cases:
     steps: []
     assertions: ["编辑创建新版本"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-004
     title: 模板回滚
     priority: P0
@@ -750,7 +750,7 @@ cases:
     steps: []
     assertions: ["恢复后生成内容一致"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-005
     title: 动态选择
     priority: P0

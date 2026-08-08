@@ -15,7 +15,8 @@ use deve_sub_application::{
 };
 use deve_sub_domain::{
     NodeOverrideRepository, NodePoolRepository, RecoveryCodeRepository, SessionRepository,
-    SourceRepository, SourceSnapshotRepository, TotpSecretRepository, UserRepository,
+    SourceRepository, SourceSnapshotRepository, TemplateRepository, TemplateVersionRepository,
+    TotpSecretRepository, UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -79,6 +80,11 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let override_repo: Arc<dyn NodeOverrideRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteNodeOverrideRepository::new(db.clone()),
     );
+    let template_repo: Arc<dyn TemplateRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteTemplateRepository::new(db.clone()),
+    );
+    let version_repo: Arc<dyn TemplateVersionRepository> =
+        Arc::new(deve_sub_storage_sqlite::SqliteTemplateVersionRepository::new(db.clone()));
     let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
     let geoip: Arc<dyn GeoIpPort> = Arc::new(deve_sub_adapters::MaxMindGeoIp::new(
         config.geoip.mmdb_path.as_deref(),
@@ -104,6 +110,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         snapshot_repo: snapshot_repo.clone(),
         pool_repo: pool_repo.clone(),
         override_repo,
+        template_repo,
+        version_repo,
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
         rate_limiter,

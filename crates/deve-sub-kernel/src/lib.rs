@@ -15,7 +15,8 @@ pub mod time;
 pub use error::{KernelError, Result};
 pub use id::{
     AuditLogId, NodeId, NodeOverrideId, NodeSourceBindingId, OutboxEventId, RecoveryCodeId,
-    SessionId, SourceId, SourceItemId, SourceSnapshotId, TagId, UserId,
+    SessionId, SourceId, SourceItemId, SourceSnapshotId, TagId, TemplateId, TemplateVersionId,
+    UserId,
 };
 pub use revision::Revision;
 pub use time::Timestamp;

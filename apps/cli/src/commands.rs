@@ -170,6 +170,10 @@ pub struct SourceAddArgs {
 }
 
 pub use crate::node_cmds::{NodeArgs, NodeSubCommand, node_import, node_list};
+pub use crate::template_cmds::{
+    TemplateArgs, TemplateSubCommand, template_add, template_delete, template_get, template_list,
+    template_rollback, template_update, template_versions,
+};
 
 pub async fn doctor(args: DoctorArgs) -> Result<()> {
     let config = load_config(&args.config)?;

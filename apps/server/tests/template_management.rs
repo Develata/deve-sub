@@ -1992,3 +1992,240 @@ async fn gen015_failed_generation_preserves_old_active() {
         .expect("bad profile");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+/// GEN-016: Preview consistency — preview output equals the published output.
+/// After a successful `generate`, `preview` for the same inputs must return
+/// identical content (cache hit). Preview on a fresh state (no prior
+/// generate) must produce the same content a subsequent `generate` would
+/// publish.
+#[tokio::test]
+async fn gen016_preview_matches_published_output() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let ids = import_nodes(
+        &router,
+        &cookie,
+        "trojan://pw@host-a.example.com:443#NodeA\ntrojan://pw@host-b.example.com:443#NodeB",
+    )
+    .await;
+    let id_a = &ids[0];
+    let id_b = &ids[1];
+
+    let yaml = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen016-preview\n",
+            "  description: Preview consistency test\n",
+            "  version: 1\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - xray\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: fixed\n",
+            "    nodeRevision: 0\n",
+            "    nodeIds:\n",
+            "      - {a}\n",
+            "      - {b}\n",
+            "  proxyGroups: []\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+        b = id_b,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/templates", &create_body("gen016", "test", &yaml)),
+            &cookie,
+        ))
+        .await
+        .expect("create");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    let template_id = json["template"]["id"].as_str().expect("id").to_owned();
+
+    // Phase 1: preview before any generate — fresh state, cache miss.
+    // The preview runs the full pipeline without publishing.
+    let preview_uri_1 =
+        format!("/api/v1/templates/{template_id}/preview?profile=xray&mode=lenient");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&preview_uri_1)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("preview 1");
+    assert_eq!(response.status(), StatusCode::OK);
+    let preview_result_1 = body_to_json(response).await;
+    let preview_content_1 = preview_result_1["content"]
+        .as_str()
+        .expect("preview content")
+        .to_owned();
+    assert!(!preview_content_1.is_empty());
+
+    // Active endpoint must return 404 — preview did NOT publish.
+    let active_uri = format!("/api/v1/templates/{template_id}/generations/active?profile=xray");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&active_uri), &cookie))
+        .await
+        .expect("active after preview");
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "preview must not publish"
+    );
+
+    // Phase 2: generate — publishes content.
+    let gen_uri = format!("/api/v1/templates/{template_id}/generate?profile=xray&mode=lenient");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&gen_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("generate");
+    assert_eq!(response.status(), StatusCode::OK);
+    let gen_result = body_to_json(response).await;
+    let gen_content = gen_result["content"]
+        .as_str()
+        .expect("generate content")
+        .to_owned();
+    assert!(!gen_content.is_empty());
+
+    // Phase 3: preview again — now cache hit, must return the published content.
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&preview_uri_1)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("preview 2");
+    assert_eq!(response.status(), StatusCode::OK);
+    let preview_result_2 = body_to_json(response).await;
+    let preview_content_2 = preview_result_2["content"]
+        .as_str()
+        .expect("preview content 2")
+        .to_owned();
+
+    // GEN-016 core assertion: preview content == published content.
+    assert_eq!(
+        preview_content_2, gen_content,
+        "preview after generate must return the published content (GEN-016)"
+    );
+
+    // Phase 4: strict-mode preview with incompatible node must fail with 422
+    // (same as strict generate), proving preview shares the pipeline.
+    let ids2 = import_nodes(
+        &router,
+        &cookie,
+        "hysteria2://pw@host-c.example.com:443?sni=host-c.example.com#NodeC",
+    )
+    .await;
+    let id_c = &ids2[0];
+
+    let yaml_v2 = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen016-preview\n",
+            "  description: Preview consistency v2\n",
+            "  version: 2\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - xray\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: fixed\n",
+            "    nodeRevision: 0\n",
+            "    nodeIds:\n",
+            "      - {a}\n",
+            "      - {b}\n",
+            "      - {c}\n",
+            "  proxyGroups: []\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+        b = id_b,
+        c = id_c,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(
+                &format!("/api/v1/templates/{template_id}"),
+                &update_body("gen016", "Preview v2", &yaml_v2),
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("update to v2");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let strict_preview_uri =
+        format!("/api/v1/templates/{template_id}/preview?profile=xray&mode=strict");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&strict_preview_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("strict preview");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "strict-mode preview must fail with 422 when incompatible nodes are present"
+    );
+
+    // Strict preview must not publish — active still returns the v1 content.
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&active_uri), &cookie))
+        .await
+        .expect("active after strict preview");
+    assert_eq!(response.status(), StatusCode::OK);
+    let active = body_to_json(response).await;
+    assert_eq!(
+        active["content"].as_str(),
+        Some(gen_content.as_str()),
+        "strict preview must not replace the active generation"
+    );
+}

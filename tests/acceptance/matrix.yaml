@@ -870,7 +870,7 @@ cases:
     steps: []
     assertions: ["预览内容等于发布版本"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-001
     title: Mihomo
     priority: P0

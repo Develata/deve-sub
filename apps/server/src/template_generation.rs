@@ -259,10 +259,84 @@ async fn get_active_template_generation(
     }))
 }
 
+/// `POST /api/v1/templates/{id}/preview?profile=&mode=` — preview the
+/// generation output for a template + profile without publishing (GEN-016).
+/// On cache hit, returns the cached (active) content. On cache miss, runs the
+/// full pipeline but does NOT store or activate. The returned content is
+/// identical to what `generate` would produce (preview consistency, GEN-016).
+#[utoipa::path(
+    post,
+    path = "/api/v1/templates/{id}/preview",
+    security(("cookie_auth" = [])),
+    params(
+        ("id" = String, Path, description = "Template ULID"),
+        ("profile" = String, Query, description = "Target profile: mihomo, sing-box, xray, v2ray, shadowrocket, uri_list"),
+        ("mode" = Option<String>, Query, description = "Generation mode: strict or lenient (default lenient)"),
+    ),
+    responses(
+        (status = 200, description = "Preview result", body = GenerationResultDto),
+        (status = 400, description = "Invalid template id or profile", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Not an admin", body = ErrorResponse),
+        (status = 404, description = "Template or active version not found", body = ErrorResponse),
+        (status = 422, description = "Strict mode: incompatible nodes excluded", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
+    )
+)]
+async fn preview_template(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+    Query(q): Query<GenerateQuery>,
+) -> Result<Json<GenerationResultDto>, (StatusCode, Json<ErrorResponse>)> {
+    let template_id = TemplateId::parse(&id).map_err(|_| {
+        err(
+            StatusCode::BAD_REQUEST,
+            "invalid_id",
+            "template id is not a valid ULID",
+        )
+    })?;
+
+    let mode = match q.mode.as_deref() {
+        None | Some("") => deve_sub_domain::GenerationMode::Lenient,
+        Some("strict") => deve_sub_domain::GenerationMode::Strict,
+        Some("lenient") => deve_sub_domain::GenerationMode::Lenient,
+        Some(other) => {
+            return Err(err(
+                StatusCode::BAD_REQUEST,
+                "invalid_mode",
+                &format!("mode must be 'strict' or 'lenient', got '{other}'"),
+            ));
+        }
+    };
+
+    let request = deve_sub_domain::GenerationRequest {
+        template_id,
+        profile: q.profile,
+        mode,
+    };
+
+    let result = template::preview(
+        state.template_repo.as_ref(),
+        state.version_repo.as_ref(),
+        state.pool_repo.as_ref(),
+        state.cache_repo.as_ref(),
+        state.pool_meta_repo.as_ref(),
+        request,
+    )
+    .await
+    .map_err(map_generation_error)?;
+
+    Ok(Json(generation_result_to_dto(&result)))
+}
+
 /// Register the template generation routes on the given `OpenApiRouter`.
 pub fn register(
     router: utoipa_axum::router::OpenApiRouter<AppState>,
 ) -> utoipa_axum::router::OpenApiRouter<AppState> {
     use utoipa_axum::routes;
-    router.routes(routes!(generate_template, get_active_template_generation))
+    router
+        .routes(routes!(generate_template))
+        .routes(routes!(get_active_template_generation))
+        .routes(routes!(preview_template))
 }

@@ -1,12 +1,16 @@
 //! Generation pipeline: resolve → compat → strict check → emit → validate,
 //! with cache lookup and atomic publish.
 //!
-//! This is the core generation command (M5 Slice 5a + 5b). It orchestrates
-//! the existing building blocks (`resolve_template`, `check_compatibility`,
-//! container emitters) into a single pipeline. Cache lookup skips
-//! regeneration when inputs are unchanged; on miss, the result is stored and
-//! atomically published. On any error, no store or activate occurs — the
+//! This is the core generation command (M5 Slice 5a + 5b + 5c). It
+//! orchestrates the existing building blocks (`resolve_template`,
+//! `check_compatibility`, container emitters) into a single pipeline. Cache
+//! lookup skips regeneration when inputs are unchanged; on miss, `generate`
+//! stores and atomically publishes the result while `preview` returns it
+//! without side effects. On any error, no store or activate occurs — the
 //! previous active generation remains served (constraint #19, GEN-015).
+//!
+//! Preview consistency (GEN-016): `preview` and `generate` share the same
+//! pipeline and cache lookup, so preview output equals the published output.
 //!
 //! See `docs/plan/milestones/M5-generator-and-v3-template.md` §"Generation
 //! pipeline" and §"Generation cache".
@@ -19,16 +23,27 @@ use deve_sub_domain::template::{TemplateRepository, TemplateVersionRepository};
 use deve_sub_domain::{
     CacheKeyParams, GenerationCacheEntry, GenerationCacheRepository, GenerationError,
     GenerationMode, GenerationRequest, GenerationResult, Node, PoolMetaRepository, SelectionMode,
+    TemplateVersion,
 };
 use deve_sub_emitter::{
     emit_mihomo, emit_shadowrocket, emit_singbox, emit_uri_list, emit_v2ray, emit_xray,
 };
-use deve_sub_kernel::{GenerationCacheId, NodeId, TemplateId};
+use deve_sub_kernel::{GenerationCacheId, NodeId, Revision, TemplateId};
 
 use super::compatibility::check_compatibility;
 use super::error::TemplateAppError;
 use super::selection::resolve_template;
 use super::validation::parse_template_document;
+
+/// Resolved inputs shared by [`generate`] and [`preview`].
+struct GenerationContext {
+    version: TemplateVersion,
+    profile: ProfileKind,
+    pool_revision: Revision,
+    cache_key: String,
+    selection_mode: &'static str,
+    selection_payload: String,
+}
 
 /// Run the generation pipeline for a template + profile + mode.
 ///
@@ -51,6 +66,82 @@ pub async fn generate(
     pool_meta_repo: &dyn PoolMetaRepository,
     request: GenerationRequest,
 ) -> Result<GenerationResult, TemplateAppError> {
+    let ctx = resolve_context(template_repo, version_repo, pool_meta_repo, &request).await?;
+
+    if let Some(cached) = cache_repo.find_by_key(&ctx.cache_key).await? {
+        return Ok(cached_result(&cached));
+    }
+
+    let result = run_pipeline(&ctx.version, pool_repo, ctx.profile, request.mode).await?;
+
+    let entry = GenerationCacheEntry {
+        id: GenerationCacheId::new(),
+        template_id: request.template_id,
+        template_version: ctx.version.version,
+        profile: request.profile.clone(),
+        selection_mode: ctx.selection_mode.to_owned(),
+        selection_payload: ctx.selection_payload,
+        pool_revision: ctx.pool_revision.value(),
+        cache_key: ctx.cache_key,
+        content: result.content.clone(),
+        is_active: false,
+    };
+
+    cache_repo.store(&entry).await?;
+    cache_repo
+        .activate(entry.template_id, &entry.profile, entry.id)
+        .await?;
+
+    Ok(result)
+}
+
+/// Preview the generation output for a template + profile + mode without
+/// publishing (GEN-016).
+///
+/// Shares the same cache lookup and pipeline as [`generate`]. On cache hit,
+/// returns the cached (active) content. On cache miss, runs the full
+/// pipeline but does NOT store or activate — the active generation is
+/// unchanged. The returned content is identical to what [`generate`] would
+/// produce for the same inputs, ensuring preview consistency (GEN-016).
+///
+/// In strict mode, returns [`GenerationError::IncompatibleNodes`] if any node
+/// is excluded (GEN-014).
+pub async fn preview(
+    template_repo: &dyn TemplateRepository,
+    version_repo: &dyn TemplateVersionRepository,
+    pool_repo: &dyn NodePoolRepository,
+    cache_repo: &dyn GenerationCacheRepository,
+    pool_meta_repo: &dyn PoolMetaRepository,
+    request: GenerationRequest,
+) -> Result<GenerationResult, TemplateAppError> {
+    let ctx = resolve_context(template_repo, version_repo, pool_meta_repo, &request).await?;
+
+    if let Some(cached) = cache_repo.find_by_key(&ctx.cache_key).await? {
+        return Ok(cached_result(&cached));
+    }
+
+    run_pipeline(&ctx.version, pool_repo, ctx.profile, request.mode).await
+}
+
+/// Get the currently active generation for a template + profile.
+///
+/// Returns `None` if no active generation exists (first generation or after
+/// manual clear). The active entry is the last successfully generated and
+/// published content (GEN-015, constraint #19).
+pub async fn get_active_generation(
+    cache_repo: &dyn GenerationCacheRepository,
+    template_id: TemplateId,
+    profile: &str,
+) -> Result<Option<GenerationCacheEntry>, TemplateAppError> {
+    Ok(cache_repo.find_active(template_id, profile).await?)
+}
+
+async fn resolve_context(
+    template_repo: &dyn TemplateRepository,
+    version_repo: &dyn TemplateVersionRepository,
+    pool_meta_repo: &dyn PoolMetaRepository,
+    request: &GenerationRequest,
+) -> Result<GenerationContext, TemplateAppError> {
     if super::get_template(template_repo, request.template_id)
         .await?
         .is_none()
@@ -89,15 +180,23 @@ pub async fn generate(
     }
     .compute_key();
 
-    if let Some(cached) = cache_repo.find_by_key(&cache_key).await? {
-        return Ok(GenerationResult {
-            content: cached.content,
-            profile: cached.profile,
-            included_node_ids: Vec::new(),
-            excluded: Vec::new(),
-            warnings: vec!["served from cache".to_owned()],
-        });
-    }
+    Ok(GenerationContext {
+        version,
+        profile,
+        pool_revision,
+        cache_key,
+        selection_mode,
+        selection_payload,
+    })
+}
+
+async fn run_pipeline(
+    version: &TemplateVersion,
+    pool_repo: &dyn NodePoolRepository,
+    profile: ProfileKind,
+    mode: GenerationMode,
+) -> Result<GenerationResult, TemplateAppError> {
+    let doc = parse_template_document(&version.spec_yaml)?;
 
     let resolution = resolve_template(&doc, pool_repo).await?;
 
@@ -111,7 +210,7 @@ pub async fn generate(
 
     let report = check_compatibility(&all_ids, profile, pool_repo).await?;
 
-    if request.mode == GenerationMode::Strict && !report.excluded.is_empty() {
+    if mode == GenerationMode::Strict && !report.excluded.is_empty() {
         return Err(TemplateAppError::Generation(
             GenerationError::IncompatibleNodes(report),
         ));
@@ -159,46 +258,23 @@ pub async fn generate(
 
     validate_output(&content, profile)?;
 
-    let entry = GenerationCacheEntry {
-        id: GenerationCacheId::new(),
-        template_id: request.template_id,
-        template_version: version.version,
-        profile: request.profile.clone(),
-        selection_mode: selection_mode.to_owned(),
-        selection_payload,
-        pool_revision: pool_revision.value(),
-        cache_key,
-        content: content.clone(),
-        is_active: false,
-    };
-
-    let result = GenerationResult {
+    Ok(GenerationResult {
         content,
-        profile: request.profile,
+        profile: profile.as_kebab().to_owned(),
         included_node_ids: report.included_node_ids,
         excluded: report.excluded,
         warnings,
-    };
-
-    cache_repo.store(&entry).await?;
-    cache_repo
-        .activate(entry.template_id, &entry.profile, entry.id)
-        .await?;
-
-    Ok(result)
+    })
 }
 
-/// Get the currently active generation for a template + profile.
-///
-/// Returns `None` if no active generation exists (first generation or after
-/// manual clear). The active entry is the last successfully generated and
-/// published content (GEN-015, constraint #19).
-pub async fn get_active_generation(
-    cache_repo: &dyn GenerationCacheRepository,
-    template_id: TemplateId,
-    profile: &str,
-) -> Result<Option<GenerationCacheEntry>, TemplateAppError> {
-    Ok(cache_repo.find_active(template_id, profile).await?)
+fn cached_result(cached: &GenerationCacheEntry) -> GenerationResult {
+    GenerationResult {
+        content: cached.content.clone(),
+        profile: cached.profile.clone(),
+        included_node_ids: Vec::new(),
+        excluded: Vec::new(),
+        warnings: vec!["served from cache".to_owned()],
+    }
 }
 
 fn sort_and_dedup(nodes: &mut Vec<(Node, i64)>) {

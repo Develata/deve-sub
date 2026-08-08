@@ -2707,6 +2707,118 @@
         ]
       }
     },
+    "/api/v1/templates/{id}/preview": {
+      "post": {
+        "summary": "`POST /api/v1/templates/{id}/preview?profile=&mode=` — preview the\ngeneration output for a template + profile without publishing (GEN-016).\nOn cache hit, returns the cached (active) content. On cache miss, runs the\nfull pipeline but does NOT store or activate. The returned content is\nidentical to what `generate` would produce (preview consistency, GEN-016).",
+        "operationId": "preview_template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "description": "Target profile: mihomo, sing-box, xray, v2ray, shadowrocket, uri_list",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "Generation mode: strict or lenient (default lenient)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid template id or profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template or active version not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Strict mode: incompatible nodes excluded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/templates/{id}/resolve": {
       "get": {
         "summary": "`GET /api/v1/templates/{id}/resolve` — resolve the template's nodeSelector\nand proxyGroups against the live node pool (admin). Read-only: no\ngeneration, no caching, no state change.",

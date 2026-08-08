@@ -23,6 +23,6 @@ pub use source::{
 pub use template::{
     CreateTemplateParams, CreateTemplateResult, TemplateAppError, UpdateTemplateParams,
     UpdateTemplateResult, create_template, delete_template, generate, get_active_generation,
-    get_active_version, get_template, get_template_by_name, list_templates, list_versions,
+    get_active_version, get_template, get_template_by_name, list_templates, list_versions, preview,
     rollback_template, update_template,
 };

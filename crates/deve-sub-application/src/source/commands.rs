@@ -316,6 +316,15 @@ pub async fn refresh_source(
         }
     };
 
+    // WHY: SRC-006 — if parse yielded zero valid nodes and an active snapshot
+    // already exists, preserve it rather than creating a new zero-node snapshot
+    // that would mark all existing nodes as missing. A transient empty response
+    // (server error page, format change) must not wipe the node pool.
+    let valid_after_parse = entries.iter().filter(|e| e.node.is_some()).count();
+    if valid_after_parse == 0 && active.is_some() {
+        return Err(SourceAppError::ZeroNodes);
+    }
+
     // WHY: apply protocol filter (SRC-010 phase 1) before region enrichment
     // so filtered nodes do not consume GeoIP lookups. Protocol is known at
     // parse time, so this phase is safe to run before enrich_regions.

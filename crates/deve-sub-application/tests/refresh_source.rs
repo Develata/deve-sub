@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used)]
 
-//! Integration tests for `refresh_source` (SRC-002, SRC-005, SRC-006, SRC-008,
-//! SRC-012, SRC-019).
+//! Integration tests for `refresh_source` (SRC-002, SRC-005, SRC-006, SRC-007,
+//! SRC-008, SRC-009, SRC-013, SRC-019).
 //!
 //! Uses a real SQLite storage layer (source + snapshot + node pool repos) and
 //! a mock fetcher to control the fetched content. Covers:
@@ -9,6 +9,9 @@
 //! - 304 Not Modified (no new snapshot).
 //! - Fetch failure preserves the last successful snapshot (constraint #19).
 //! - Parse failure (YAML bomb / too many nodes) preserves old snapshot.
+//! - Zero-node response preserves old snapshot (SRC-006).
+//! - Oversized response body rejected (SRC-007).
+//! - Request timeout then retry succeeds (SRC-008).
 
 use std::sync::Mutex;
 
@@ -613,4 +616,181 @@ async fn concurrent_refreshes_do_not_cross_pollute() {
         .await
         .expect("count");
     assert_eq!(total, 2, "two distinct nodes in the pool");
+}
+
+/// SRC-006: A refresh that parses to zero nodes preserves the old snapshot.
+/// The old nodes remain in the pool; no new zero-node snapshot is created.
+#[tokio::test]
+async fn zero_node_refresh_preserves_old_snapshot() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+
+    let source = create_source(&source_repo, "test-source").await;
+
+    let fetcher_v1 = MockFetcher::new(vec![MockResponse::Ok {
+        body: TROJAN_URI_LIST.as_bytes().to_vec(),
+        etag: Some("\"v1\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_v1,
+        &StubGeoIp,
+        source.id,
+    )
+    .await
+    .expect("refresh v1");
+
+    let fetcher_empty = MockFetcher::new(vec![MockResponse::Ok {
+        body: b"# just a comment, no nodes\n\n".to_vec(),
+        etag: None,
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    let result = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_empty,
+        &StubGeoIp,
+        source.id,
+    )
+    .await;
+    assert!(
+        matches!(result, Err(source::SourceAppError::ZeroNodes)),
+        "zero-node refresh should return ZeroNodes error, got {result:?}"
+    );
+
+    let active = snapshot_repo
+        .find_active(source.id)
+        .await
+        .expect("find active");
+    assert!(active.is_some(), "old snapshot still exists");
+    assert_eq!(
+        active.as_ref().expect("active snapshot").version,
+        1,
+        "old snapshot v1 still active"
+    );
+    assert_eq!(
+        active.as_ref().expect("active snapshot").node_count,
+        2,
+        "old snapshot node_count unchanged"
+    );
+
+    let (node_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM nodes")
+        .fetch_one(&db.pool)
+        .await
+        .expect("count");
+    assert_eq!(node_count, 2, "pool unchanged after zero-node refresh");
+}
+
+/// SRC-007: An oversized response body is rejected with TooLarge, and the
+/// old snapshot is preserved.
+#[tokio::test]
+async fn oversized_response_rejected_preserves_old_snapshot() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+
+    let source = create_source(&source_repo, "test-source").await;
+
+    let fetcher_v1 = MockFetcher::new(vec![MockResponse::Ok {
+        body: TROJAN_URI_LIST.as_bytes().to_vec(),
+        etag: Some("\"v1\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_v1,
+        &StubGeoIp,
+        source.id,
+    )
+    .await
+    .expect("refresh v1");
+
+    let fetcher_oversized =
+        MockFetcher::new(vec![MockResponse::Error(FetchError::TooLarge(11_000_000))]);
+    let result = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_oversized,
+        &StubGeoIp,
+        source.id,
+    )
+    .await;
+    assert!(
+        matches!(
+            result,
+            Err(source::SourceAppError::Fetch(FetchError::TooLarge(_)))
+        ),
+        "oversized response should return TooLarge, got {result:?}"
+    );
+
+    let active = snapshot_repo
+        .find_active(source.id)
+        .await
+        .expect("find active");
+    assert!(active.is_some(), "old snapshot preserved");
+    assert_eq!(
+        active.expect("active snapshot").version,
+        1,
+        "old snapshot v1 still active after oversized response"
+    );
+}
+
+/// SRC-008: A request timeout returns a Timeout error. A subsequent retry
+/// succeeds, proving the source is retryable after a transient timeout.
+#[tokio::test]
+async fn timeout_then_retry_succeeds() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+
+    let source = create_source(&source_repo, "test-source").await;
+
+    let fetcher_timeout = MockFetcher::new(vec![MockResponse::Error(FetchError::Timeout(30))]);
+    let result = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_timeout,
+        &StubGeoIp,
+        source.id,
+    )
+    .await;
+    assert!(
+        matches!(
+            result,
+            Err(source::SourceAppError::Fetch(FetchError::Timeout(30)))
+        ),
+        "timeout should return Timeout error, got {result:?}"
+    );
+
+    let fetcher_retry = MockFetcher::new(vec![MockResponse::Ok {
+        body: TROJAN_URI_LIST.as_bytes().to_vec(),
+        etag: None,
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    let result = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_retry,
+        &StubGeoIp,
+        source.id,
+    )
+    .await;
+    assert!(result.is_ok(), "retry after timeout should succeed");
+    let r = result.expect("retry succeeded");
+    assert!(!r.not_modified);
+    assert_eq!(r.snapshot.version, 1, "first successful snapshot is v1");
+    assert_eq!(r.reconcile.new_nodes, 2);
 }

@@ -11,4 +11,4 @@ pub mod geoip;
 pub mod http_fetcher;
 
 pub use geoip::MaxMindGeoIp;
-pub use http_fetcher::HttpFetcher;
+pub use http_fetcher::{HttpFetcher, ProductionSsrfChecker, SsrfChecker};

@@ -35,4 +35,9 @@ pub enum SourceAppError {
     /// Content parsing failed.
     #[error(transparent)]
     Parse(#[from] ParseContentError),
+
+    /// The refresh yielded zero nodes. The old snapshot is preserved
+    /// (SRC-006).
+    #[error("refresh yielded zero nodes; old snapshot preserved")]
+    ZeroNodes,
 }

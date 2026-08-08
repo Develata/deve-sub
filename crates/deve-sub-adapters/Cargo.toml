@@ -20,6 +20,10 @@ maxminddb = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+async-trait = { workspace = true }
+flate2 = "1"
+brotli = "7"
+zstd = "0.13"
 
 [lints]
 workspace = true

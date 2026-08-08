@@ -240,7 +240,7 @@ cases:
     steps: []
     assertions: ["按间隔执行且不重复并发"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-004
     title: ETag
     priority: P0
@@ -270,7 +270,7 @@ cases:
     steps: []
     assertions: ["不覆盖旧 Snapshot"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-007
     title: 响应过大
     priority: P0
@@ -280,7 +280,7 @@ cases:
     steps: []
     assertions: ["中止并记录明确错误"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-008
     title: 请求超时
     priority: P0
@@ -290,7 +290,7 @@ cases:
     steps: []
     assertions: ["任务超时且可重试"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-009
     title: 取消刷新
     priority: P0
@@ -330,7 +330,7 @@ cases:
     steps: []
     assertions: ["gzip、br、zstd 正确处理"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-013
     title: 多个刷新
     priority: P0
@@ -1200,7 +1200,7 @@ cases:
     steps: []
     assertions: ["解析与连接目标均校验"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-004
     title: 重定向到内网
     priority: P0
@@ -1210,7 +1210,7 @@ cases:
     steps: []
     assertions: ["每一跳重新阻止"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-005
     title: YAML Bomb
     priority: P0
@@ -1220,7 +1220,7 @@ cases:
     steps: []
     assertions: ["限制资源并拒绝"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-006
     title: 路径穿越
     priority: P0

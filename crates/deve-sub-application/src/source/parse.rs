@@ -253,3 +253,42 @@ fn try_json_formats(text: &str) -> Result<Vec<ReconcileEntry>, ParseContentError
     }
     parse_container(text, deve_sub_protocol::container::parse_v2ray_json)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SEC-005: A URI list exceeding the node limit is rejected with
+    /// `TooManyNodes`, preventing a YAML/JSON bomb from exhausting memory.
+    #[test]
+    fn too_many_nodes_rejected() {
+        let mut lines = Vec::new();
+        for i in 0..(MAX_NODES + 1) {
+            lines.push(format!(
+                "trojan://PASS@example.com:{i}?sni=example.com&type=tcp#Node{i}"
+            ));
+        }
+        let body = lines.join("\n");
+        let result = parse_content(SourceType::UriList, None, body.as_bytes());
+        match result {
+            Err(ParseContentError::TooManyNodes(n)) => {
+                assert_eq!(n, MAX_NODES + 1);
+            }
+            other => panic!("expected TooManyNodes, got {other:?}"),
+        }
+    }
+
+    /// SEC-005: A URI list at exactly the limit is accepted.
+    #[test]
+    fn max_nodes_accepted() {
+        let mut lines = Vec::new();
+        for i in 0..MAX_NODES {
+            lines.push(format!(
+                "trojan://PASS@example.com:{i}?sni=example.com&type=tcp#Node{i}"
+            ));
+        }
+        let body = lines.join("\n");
+        let result = parse_content(SourceType::UriList, None, body.as_bytes());
+        assert!(result.is_ok(), "exactly MAX_NODES should be accepted");
+    }
+}

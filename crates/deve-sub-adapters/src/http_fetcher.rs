@@ -10,7 +10,7 @@
 //! - Body size limit: rejects responses exceeding `max_body_size`
 //!   (SRC-007, SEC-005).
 //! - Timeout: rejects slow responses (SRC-008).
-//! - gzip/deflate: automatic decompression (SRC-012).
+//! - gzip/deflate/brotli/zstd: automatic decompression (SRC-012).
 //! - ETag/If-None-Match: conditional fetch, 304 → NotModified.
 
 use std::net::{IpAddr, SocketAddr};
@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use deve_sub_application::{FetchError, FetchResult, SubscriptionFetcher};
-use deve_sub_security::SsrfGuard;
+use deve_sub_security::{SsrfError, SsrfGuard};
 use url::Url;
 
 /// Default response body size limit: 10 MiB.
@@ -39,19 +39,69 @@ const DEFAULT_MAX_REDIRECTS: usize = 3;
 /// logged at `warn` level, so a short prefix suffices and limits info-leak.
 const ERROR_BODY_CAP: usize = 1024;
 
+/// SSRF checker abstraction.
+///
+/// Production code uses [`ProductionSsrfChecker`] which delegates to
+/// [`SsrfGuard::check`] and performs real DNS resolution. Tests inject a
+/// custom implementation to simulate blocked IPs, DNS rebinding, and
+/// redirect-to-internal scenarios without real network DNS.
+pub trait SsrfChecker: Send + Sync {
+    /// Validate `url`, returning the resolved safe IPs to pin.
+    ///
+    /// # Errors
+    /// - [`SsrfError::Blocked`] — a resolved IP is in a blocked range.
+    /// - [`SsrfError::DnsResolutionFailed`] — the hostname has no DNS records.
+    /// - [`SsrfError::DnsLookup`] — a DNS I/O error occurred.
+    fn check(
+        &self,
+        url: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<IpAddr>, SsrfError>> + Send>>;
+}
+
+/// Production SSRF checker delegating to [`SsrfGuard::check`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ProductionSsrfChecker;
+
+impl SsrfChecker for ProductionSsrfChecker {
+    fn check(
+        &self,
+        url: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<IpAddr>, SsrfError>> + Send>>
+    {
+        let url = url.to_owned();
+        Box::pin(async move { SsrfGuard::check(&url).await })
+    }
+}
+
 /// HTTP fetcher with SSRF protection, DNS pinning, and body size limits.
-pub struct HttpFetcher {
+pub struct HttpFetcher<C: SsrfChecker = ProductionSsrfChecker> {
+    ssrf: C,
     timeout: Duration,
     max_body_size: usize,
     max_redirects: usize,
     user_agent: String,
 }
 
-impl HttpFetcher {
-    /// Create a new fetcher with default settings.
+impl HttpFetcher<ProductionSsrfChecker> {
+    /// Create a new fetcher with default settings and production SSRF.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_checker(ProductionSsrfChecker)
+    }
+}
+
+impl Default for HttpFetcher<ProductionSsrfChecker> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<C: SsrfChecker> HttpFetcher<C> {
+    /// Create a new fetcher with a custom SSRF checker (for testing).
+    #[must_use]
+    pub fn with_checker(ssrf: C) -> Self {
         Self {
+            ssrf,
             timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECS),
             max_body_size: DEFAULT_MAX_BODY_SIZE,
             max_redirects: DEFAULT_MAX_REDIRECTS,
@@ -100,7 +150,9 @@ impl HttpFetcher {
             .host_str()
             .ok_or_else(|| FetchError::Connection("URL has no hostname".to_owned()))?;
 
-        let safe_ips = SsrfGuard::check(url)
+        let safe_ips = self
+            .ssrf
+            .check(url)
             .await
             .map_err(|e| FetchError::Ssrf(e.to_string()))?;
 
@@ -109,10 +161,12 @@ impl HttpFetcher {
             .redirect(reqwest::redirect::Policy::none())
             .gzip(true)
             .deflate(true)
+            .brotli(true)
+            .zstd(true)
             .user_agent(self.user_agent.clone());
 
         // WHY: pin DNS only for domain names. IP literals connect directly
-        // and have already been validated by SsrfGuard::check.
+        // and have already been validated by the SSRF checker.
         if host.parse::<IpAddr>().is_err() {
             let socket_addrs: Vec<SocketAddr> =
                 safe_ips.iter().map(|ip| SocketAddr::new(*ip, 0)).collect();
@@ -169,14 +223,8 @@ impl HttpFetcher {
     }
 }
 
-impl Default for HttpFetcher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[async_trait]
-impl SubscriptionFetcher for HttpFetcher {
+impl<C: SsrfChecker> SubscriptionFetcher for HttpFetcher<C> {
     async fn fetch(&self, url: &str, etag: Option<&str>) -> Result<FetchResult, FetchError> {
         let mut current_url = url.to_owned();
         let mut current_etag = etag.map(str::to_owned);

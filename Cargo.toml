@@ -75,7 +75,7 @@ data-encoding = "2"
 url = "2"
 percent-encoding = "2"
 serde_yaml = "0.9"
-reqwest = { version = "0.12", default-features = false, features = ["gzip", "deflate", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["gzip", "deflate", "brotli", "zstd", "stream", "rustls-tls"] }
 maxminddb = "0.30"
 
 [workspace.lints.rust]

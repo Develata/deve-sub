@@ -117,6 +117,7 @@ erDiagram
         int update_interval_secs
         bool enabled
         bool keep_on_fail
+        string filter_rules_json
         datetime created_at
     }
 

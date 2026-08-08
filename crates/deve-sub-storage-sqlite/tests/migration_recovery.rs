@@ -564,3 +564,77 @@ async fn migration_0005_adds_source_label_column() {
     let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
+
+/// Migration 0006 adds the `filter_rules_json` TEXT column to the `sources`
+/// table (SRC-010). The column is nullable; existing rows get NULL (no
+/// filter rules). See constraint #13.
+#[tokio::test]
+async fn migration_0006_adds_filter_rules_json_column() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let columns = get_columns(&pool, "sources").await;
+    assert!(
+        columns.contains(&"filter_rules_json".to_string()),
+        "expected column 'filter_rules_json' in table 'sources', columns: {columns:?}"
+    );
+
+    sqlx::query(
+        "INSERT INTO sources (id, name, source_type, url, http_method, auto_update, \
+         update_interval_secs, enabled, keep_on_fail) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind("01J0SOURCE0000000000000006")
+    .bind("test-source")
+    .bind("uri_list")
+    .bind("https://example.com/sub")
+    .bind("GET")
+    .bind(0_i64)
+    .bind(3600_i64)
+    .bind(1_i64)
+    .bind(1_i64)
+    .execute(&pool)
+    .await
+    .expect("insert source without filter_rules_json");
+
+    let (rules,): (Option<String>,) =
+        sqlx::query_as("SELECT filter_rules_json FROM sources WHERE id = ?")
+            .bind("01J0SOURCE0000000000000006")
+            .fetch_one(&pool)
+            .await
+            .expect("query filter_rules_json");
+    assert!(
+        rules.is_none(),
+        "default filter_rules_json should be NULL (no rules)"
+    );
+
+    let filter_json = r#"{"include_protocols":["trojan"],"exclude_protocols":[],"include_regions":["US"],"exclude_regions":[]}"#;
+    sqlx::query("UPDATE sources SET filter_rules_json = ? WHERE id = ?")
+        .bind(filter_json)
+        .bind("01J0SOURCE0000000000000006")
+        .execute(&pool)
+        .await
+        .expect("update filter_rules_json");
+
+    let (rules,): (Option<String>,) =
+        sqlx::query_as("SELECT filter_rules_json FROM sources WHERE id = ?")
+            .bind("01J0SOURCE0000000000000006")
+            .fetch_one(&pool)
+            .await
+            .expect("query filter_rules_json after update");
+    assert_eq!(
+        rules.as_deref(),
+        Some(filter_json),
+        "filter_rules_json should round-trip"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}

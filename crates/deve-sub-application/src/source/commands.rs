@@ -13,7 +13,7 @@ use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
 
 use super::error::SourceAppError;
 use super::fetcher::{FetchResult, SubscriptionFetcher};
-use super::filter::apply_source_filter;
+use super::filter::{apply_protocol_filter, apply_region_filter};
 use super::geoip::{GeoIpPort, enrich_regions};
 use super::parse::parse_content;
 
@@ -316,17 +316,25 @@ pub async fn refresh_source(
         }
     };
 
-    // WHY: apply source-level include/exclude filter (SRC-010) before region
-    // enrichment so filtered nodes do not consume GeoIP lookups, and before
-    // reconcile so they are recorded as `Filtered` rather than `Parsed`.
+    // WHY: apply protocol filter (SRC-010 phase 1) before region enrichment
+    // so filtered nodes do not consume GeoIP lookups. Protocol is known at
+    // parse time, so this phase is safe to run before enrich_regions.
     if let Some(ref rules) = source.filter_rules {
-        apply_source_filter(&mut entries, rules);
+        apply_protocol_filter(&mut entries, rules);
     }
 
     // WHY: auto-detect regions via GeoIP before reconcile. Manual overrides
     // in `node_overrides` take precedence at read time (NODE-006/010), so
     // this only sets the parsed node's stored region, not the effective one.
     enrich_regions(&mut entries, geoip).await;
+
+    // WHY: apply region filter (SRC-010 phase 2) after region enrichment so
+    // region rules match against the GeoIP-detected region. Running before
+    // enrichment would see region=None for all nodes, making region rules
+    // non-functional.
+    if let Some(ref rules) = source.filter_rules {
+        apply_region_filter(&mut entries, rules);
+    }
 
     let new_version = active.as_ref().map(|s| s.version + 1).unwrap_or(1);
     let node_count =

@@ -165,6 +165,14 @@ fn check_ipv6(ip: &Ipv6Addr) -> Result<(), String> {
     if let Some(v4) = ip.to_ipv4_mapped() {
         return check_ipv4(&v4);
     }
+    // WHY: IPv4-compatible IPv6 addresses (::a.b.c.d, RFC 4291, deprecated)
+    // are not caught by to_ipv4_mapped (which only matches ::ffff:0:0/96).
+    // Modern OSes generally don't route them, but a malicious DNS AAAA
+    // record could return ::7f00:1 to reach loopback. to_ipv4() catches
+    // both mapped and compatible forms; guard against it here.
+    if let Some(v4) = ip.to_ipv4() {
+        return check_ipv4(&v4);
+    }
     Ok(())
 }
 
@@ -262,6 +270,20 @@ mod tests {
         // as a "safe" IPv6 address.
         let mapped = "::ffff:127.0.0.1".parse::<Ipv6Addr>().expect("valid IPv6");
         assert!(check_ipv6(&mapped).is_err());
+    }
+
+    #[test]
+    fn ipv6_ipv4_compatible_loopback_blocked() {
+        // WHY: ::127.0.0.1 (IPv4-compatible, deprecated) must be blocked.
+        // to_ipv4_mapped() does NOT catch this form; to_ipv4() does.
+        let compatible = "::127.0.0.1".parse::<Ipv6Addr>().expect("valid IPv6");
+        assert!(check_ipv6(&compatible).is_err());
+    }
+
+    #[test]
+    fn ipv6_ipv4_compatible_private_blocked() {
+        let compatible = "::10.0.0.1".parse::<Ipv6Addr>().expect("valid IPv6");
+        assert!(check_ipv6(&compatible).is_err());
     }
 
     #[test]

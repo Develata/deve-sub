@@ -17,6 +17,9 @@ use super::geoip::GeoIpPort;
 /// Default tick interval: check for due sources every 60 seconds.
 const DEFAULT_TICK_SECS: u64 = 60;
 
+/// Default max concurrent refreshes per tick (SRC-013: "并发受控").
+const DEFAULT_MAX_CONCURRENCY: usize = 4;
+
 /// Background scheduler that auto-refreshes eligible sources.
 pub struct RefreshScheduler {
     source_repo: std::sync::Arc<dyn SourceRepository>,
@@ -25,6 +28,7 @@ pub struct RefreshScheduler {
     fetcher: std::sync::Arc<dyn SubscriptionFetcher>,
     geoip: std::sync::Arc<dyn GeoIpPort>,
     tick_interval: Duration,
+    max_concurrency: usize,
 }
 
 impl RefreshScheduler {
@@ -44,6 +48,7 @@ impl RefreshScheduler {
             fetcher,
             geoip,
             tick_interval: Duration::from_secs(DEFAULT_TICK_SECS),
+            max_concurrency: DEFAULT_MAX_CONCURRENCY,
         }
     }
 
@@ -51,6 +56,13 @@ impl RefreshScheduler {
     #[must_use]
     pub fn tick_interval(mut self, interval: Duration) -> Self {
         self.tick_interval = interval;
+        self
+    }
+
+    /// Set the max concurrent refreshes per tick (SRC-013: "并发受控").
+    #[must_use]
+    pub fn max_concurrency(mut self, max: usize) -> Self {
+        self.max_concurrency = max.max(1);
         self
     }
 
@@ -85,14 +97,20 @@ impl RefreshScheduler {
     /// One scheduler tick: scan all sources, refresh those that are due
     /// concurrently (SRC-013). Each refresh is independent — separate
     /// source_id, separate snapshot, separate reconcile transaction — so
-    /// concurrent execution cannot cross-pollute.
+    /// concurrent execution cannot cross-pollute. Concurrency is capped by
+    /// `max_concurrency` via a semaphore to bound resource usage.
     async fn tick(&self) {
         let due = self.collect_due_sources().await;
         if due.is_empty() {
             return;
         }
-        tracing::info!(count = due.len(), "refreshing due sources concurrently");
+        tracing::info!(
+            count = due.len(),
+            max_concurrency = self.max_concurrency,
+            "refreshing due sources concurrently"
+        );
 
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(self.max_concurrency));
         let mut set = tokio::task::JoinSet::new();
         for source_id in due {
             let source_repo = self.source_repo.clone();
@@ -100,7 +118,16 @@ impl RefreshScheduler {
             let pool_repo = self.pool_repo.clone();
             let fetcher = self.fetcher.clone();
             let geoip = self.geoip.clone();
+            let permit = semaphore.clone();
             set.spawn(async move {
+                // WHY: Semaphore::acquire_owned errors only if the semaphore
+                // is closed, which never happens here (we own it). This is
+                // infallible in this context.
+                #[allow(clippy::expect_used, reason = "semaphore is never closed by us")]
+                let _permit = permit
+                    .acquire_owned()
+                    .await
+                    .expect("scheduler semaphore is never closed");
                 let result = refresh_source(
                     source_repo.as_ref(),
                     snapshot_repo.as_ref(),

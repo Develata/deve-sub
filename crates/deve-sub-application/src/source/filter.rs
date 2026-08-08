@@ -18,9 +18,9 @@ pub fn apply_source_filter(entries: &mut [ReconcileEntry], rules: &SourceFilterR
         let Some(node) = entry.node.as_ref() else {
             continue;
         };
-        let protocol = node.protocol.to_string().to_lowercase();
-        let region = node.region.value.as_deref().unwrap_or("").to_lowercase();
-        if is_filtered(&protocol, &region, rules) {
+        let protocol = node.protocol.as_filter_key();
+        let region = node.region.value.as_deref().unwrap_or("");
+        if is_filtered(protocol, region, rules) {
             entry.node = None;
             entry.initial_status = ItemParseStatus::Filtered;
         }

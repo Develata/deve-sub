@@ -69,7 +69,7 @@ impl std::str::FromStr for SourceType {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceFilterRules {
     /// Protocols to keep; empty means keep all. Compared case-insensitively
-    /// against `ProtocolKind`'s `Display` output.
+    /// against [`ProtocolKind::as_filter_key`](crate::ProtocolKind::as_filter_key).
     pub include_protocols: Vec<String>,
     /// Protocols to drop; takes precedence over `include_protocols`.
     pub exclude_protocols: Vec<String>,

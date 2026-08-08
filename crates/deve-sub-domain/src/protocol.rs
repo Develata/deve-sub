@@ -81,6 +81,39 @@ impl std::fmt::Display for ProtocolKind {
     }
 }
 
+impl ProtocolKind {
+    /// Stable, machine-friendly key used for source filter matching (SRC-010).
+    ///
+    /// WHY: [`Display`](std::fmt::Display) output is tuned for human-readable
+    /// UI labels (e.g. `"TUIC v5"`, `"Hysteria v1"`). Source filter rules need
+    /// a key whose match semantics do not shift when the Display label is
+    /// reworded for aesthetics. This method returns a lowercase, hyphenated
+    /// identifier that is independent of Display and stable across UI changes.
+    /// Comparison in the filter is case-insensitive, so `"VLESS"` and `"vless"`
+    /// both match.
+    #[must_use]
+    pub fn as_filter_key(&self) -> &str {
+        match self {
+            Self::Vless => "vless",
+            Self::VMess => "vmess",
+            Self::Trojan => "trojan",
+            Self::Shadowsocks => "shadowsocks",
+            Self::Hysteria2 => "hysteria2",
+            Self::TuicV5 => "tuic-v5",
+            Self::NaiveProxy => "naiveproxy",
+            Self::Socks5 => "socks5",
+            Self::Http => "http",
+            Self::HysteriaV1 => "hysteria-v1",
+            Self::AnyTls => "anytls",
+            Self::Snell => "snell",
+            Self::WireGuard => "wireguard",
+            Self::ShadowTls => "shadowtls",
+            Self::Ssh => "ssh",
+            Self::Unknown(name) => name.as_str(),
+        }
+    }
+}
+
 /// Typed configuration payload for a node.
 ///
 /// The seven P0 variants carry fully typed config. The `Unsupported` variant
@@ -175,5 +208,38 @@ mod tests {
         assert_eq!(json, "{\"Unknown\":\"FutureProto\"}");
         let recovered: ProtocolKind = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(recovered, kind);
+    }
+
+    #[test]
+    fn as_filter_key_stable() {
+        let cases = [
+            (ProtocolKind::Vless, "vless"),
+            (ProtocolKind::VMess, "vmess"),
+            (ProtocolKind::Trojan, "trojan"),
+            (ProtocolKind::Shadowsocks, "shadowsocks"),
+            (ProtocolKind::Hysteria2, "hysteria2"),
+            (ProtocolKind::TuicV5, "tuic-v5"),
+            (ProtocolKind::NaiveProxy, "naiveproxy"),
+            (ProtocolKind::Socks5, "socks5"),
+            (ProtocolKind::Http, "http"),
+            (ProtocolKind::HysteriaV1, "hysteria-v1"),
+            (ProtocolKind::AnyTls, "anytls"),
+            (ProtocolKind::Snell, "snell"),
+            (ProtocolKind::WireGuard, "wireguard"),
+            (ProtocolKind::ShadowTls, "shadowtls"),
+            (ProtocolKind::Ssh, "ssh"),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(
+                kind.as_filter_key(),
+                expected,
+                "filter key for {kind:?} must stay stable"
+            );
+        }
+        assert_eq!(
+            ProtocolKind::Unknown("CustomProto".to_owned()).as_filter_key(),
+            "CustomProto",
+            "Unknown passes the raw name through"
+        );
     }
 }

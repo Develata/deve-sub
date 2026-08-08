@@ -14,8 +14,8 @@ order. It schedules approved contracts; it cannot override plans.
 | M2 | Auth and Users | done | M1 | Login, RBAC, session, 2FA, user management |
 | M3 | Protocol Engine | done | M1 | Canonical model, P0 parsers, P0 emitters, golden + fuzz |
 | M4 | Sources and Node Pool | done | M3 | Source CRUD, snapshot, refresh, diff, node pool, override |
-| M5 | Generator and V3 Template | active | M3, M4 | Node selection, proxy groups, V3 template, generation, cache |
-| M6 | Subscription Distribution | planned | M5 | Profile URL, short code, temp link, ETag, auth, traffic |
+| M5 | Generator and V3 Template | done | M3, M4 | Node selection, proxy groups, V3 template, generation, cache |
+| M6 | Subscription Distribution | active | M5 | Profile URL, short code, temp link, ETag, auth, traffic |
 | M7 | Probes and Detection | planned | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
 | M8 | Deployment and Hardening | planned | M7 | Install script, self-update, backup, SSRF, perf, multi-arch |
 
@@ -66,8 +66,20 @@ GeoIP, batch ops), source filter rules (two-phase protocol + region filter),
 concurrent refresh scheduler (semaphore-bounded), zero-node guard, 369 tests.
 SRC-001–014, NODE-001/003–011, SEC-001–005 all pass.
 
-M5 (Generator and V3 Template) is next. Blueprint:
-`docs/plan/milestones/M5-generator-and-v3-template.md`.
+M5 (Generator and V3 Template) is complete — V3 subscription template
+aggregate (versioned, declarative YAML with `apiVersion: deve-sub.io/v1`),
+proxy group model (seven types, chain graph with DFS cycle detection),
+node selection (dynamic filters / fixed node IDs, quick-group by
+region/protocol/tag, drag-sort), compatibility matrix
+(`deve-sub-compatibility` crate), container emitters (mihomo, sing-box,
+xray, v2ray, shadowrocket, uri_list), generation pipeline with strict mode
+(fail on incompatible) and lenient mode (exclude with report, constraint
+#7), generation cache with atomic publish (constraint #19: preserve last
+successful on failure), preview endpoint with consistency (preview ==
+published). 453 tests pass; GEN-001–016 all pass.
+
+M6 (Subscription Distribution) is next. Blueprint:
+`docs/plan/milestones/M6-subscription-distribution.md`.
 
 ## Authority
 

@@ -120,3 +120,41 @@ pub struct ListTemplatesQuery {
     #[serde(default)]
     pub limit: Option<u32>,
 }
+
+/// A node reference that could not be resolved to an active pool entry.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MissingNodeRefDto {
+    /// The node ULID that was referenced.
+    pub node_id: String,
+    /// Why the node is unavailable: `not_found`, `missing_from_source`, or
+    /// `inactive`.
+    pub reason: String,
+}
+
+/// Resolution of a single proxy group's membership against the live pool.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GroupResolutionDto {
+    /// The group name from the template spec.
+    pub group_name: String,
+    /// Node IDs from explicit `GroupMember::Node` entries that were found and
+    /// active. Order matches the spec's `members` order.
+    pub explicit_node_ids: Vec<String>,
+    /// Node IDs auto-populated by the group's quick-group filter.
+    pub quick_group_node_ids: Vec<String>,
+    /// Explicit node references that could not be resolved.
+    pub missing: Vec<MissingNodeRefDto>,
+}
+
+/// Response body for `GET /api/v1/templates/{id}/resolve`.
+///
+/// Resolves the template's `nodeSelector` and `proxyGroups` against the live
+/// node pool. Read-only: no generation, no caching, no state change.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ResolveTemplateResponse {
+    /// Node IDs selected by the template's `nodeSelector`.
+    pub selected_node_ids: Vec<String>,
+    /// Node IDs from the selector that were referenced but unavailable.
+    pub selection_missing: Vec<MissingNodeRefDto>,
+    /// Per-group resolution for each `ProxyGroup` in the spec.
+    pub groups: Vec<GroupResolutionDto>,
+}

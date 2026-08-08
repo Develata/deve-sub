@@ -42,4 +42,8 @@ pub enum TemplateAppError {
     /// A template domain or storage operation failed.
     #[error(transparent)]
     Template(#[from] TemplateError),
+
+    /// A node pool storage operation failed.
+    #[error("storage error: {0}")]
+    Storage(String),
 }

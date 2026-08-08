@@ -32,7 +32,8 @@ pub use source::{
     SourceFilterRulesDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
 };
 pub use template::{
-    CreateTemplateRequest, GetTemplateResponse, ListTemplatesQuery, ListTemplatesResponse,
-    ListVersionsResponse, RollbackTemplateResponse, TemplateDto, TemplateResponse,
-    TemplateVersionDto, UpdateTemplateRequest,
+    CreateTemplateRequest, GetTemplateResponse, GroupResolutionDto, ListTemplatesQuery,
+    ListTemplatesResponse, ListVersionsResponse, MissingNodeRefDto, ResolveTemplateResponse,
+    RollbackTemplateResponse, TemplateDto, TemplateResponse, TemplateVersionDto,
+    UpdateTemplateRequest,
 };

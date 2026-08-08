@@ -9,11 +9,13 @@
 pub mod entity;
 pub mod error;
 pub mod ports;
+pub mod selection;
 pub mod spec;
 
 pub use entity::{SubscriptionTemplate, TemplateVersion};
 pub use error::TemplateError;
 pub use ports::{TemplateRepository, TemplateVersionRepository};
+pub use selection::{GroupResolution, MissingNodeRef, MissingReason, TemplateResolution};
 pub use spec::{
     API_VERSION, FilterField, GroupMember, GroupType, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES,
     NodeFilterRule, NodeSelector, ProxyGroup, QuickGroupFilter, Rule, SelectionMode, SortOrder,

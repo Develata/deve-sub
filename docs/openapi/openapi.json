@@ -2409,6 +2409,90 @@
         ]
       }
     },
+    "/api/v1/templates/{id}/resolve": {
+      "get": {
+        "summary": "`GET /api/v1/templates/{id}/resolve` — resolve the template's nodeSelector\nand proxyGroups against the live node pool (admin). Read-only: no\ngeneration, no caching, no state change.",
+        "operationId": "resolve_template_route",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolution result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveTemplateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid template id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/templates/{id}/rollback": {
       "post": {
         "summary": "`POST /api/v1/templates/{id}/rollback` — rollback to a specific version\n(admin).",
@@ -3178,6 +3262,43 @@
           }
         }
       },
+      "GroupResolutionDto": {
+        "type": "object",
+        "description": "Resolution of a single proxy group's membership against the live pool.",
+        "required": [
+          "group_name",
+          "explicit_node_ids",
+          "quick_group_node_ids",
+          "missing"
+        ],
+        "properties": {
+          "explicit_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Node IDs from explicit `GroupMember::Node` entries that were found and\nactive. Order matches the spec's `members` order."
+          },
+          "group_name": {
+            "type": "string",
+            "description": "The group name from the template spec."
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MissingNodeRefDto"
+            },
+            "description": "Explicit node references that could not be resolved."
+          },
+          "quick_group_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Node IDs auto-populated by the group's quick-group filter."
+          }
+        }
+      },
       "HealthLiveResponse": {
         "type": "object",
         "description": "Response body for `GET /health/live`.",
@@ -3536,6 +3657,24 @@
           }
         }
       },
+      "MissingNodeRefDto": {
+        "type": "object",
+        "description": "A node reference that could not be resolved to an active pool entry.",
+        "required": [
+          "node_id",
+          "reason"
+        ],
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "description": "The node ULID that was referenced."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the node is unavailable: `not_found`, `missing_from_source`, or\n`inactive`."
+          }
+        }
+      },
       "NodeDto": {
         "type": "object",
         "description": "A node in the unified pool, as returned by list/get endpoints.\n\nPool metadata (`missing_from_source`, `is_active`, `revision`) is\nincluded alongside the canonical node fields. Sensitive fields\n(raw URI with embedded credentials) are never serialized.",
@@ -3848,6 +3987,38 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ResolveTemplateResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/templates/{id}/resolve`.\n\nResolves the template's `nodeSelector` and `proxyGroups` against the live\nnode pool. Read-only: no generation, no caching, no state change.",
+        "required": [
+          "selected_node_ids",
+          "selection_missing",
+          "groups"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupResolutionDto"
+            },
+            "description": "Per-group resolution for each `ProxyGroup` in the spec."
+          },
+          "selected_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Node IDs selected by the template's `nodeSelector`."
+          },
+          "selection_missing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MissingNodeRefDto"
+            },
+            "description": "Node IDs from the selector that were referenced but unavailable."
           }
         }
       },

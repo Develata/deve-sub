@@ -38,6 +38,15 @@ const FORBIDDEN_SCRIPT_KEYS: &[&str] = &[
     "lua",
 ];
 
+/// Parse a V3 template YAML string into a [`TemplateDocument`].
+///
+/// # Errors
+/// - [`TemplateAppError::SpecYamlParse`] — the YAML is malformed or does not
+///   conform to the `TemplateDocument` schema.
+pub fn parse_template_document(spec_yaml: &str) -> Result<TemplateDocument, TemplateAppError> {
+    serde_yaml::from_str(spec_yaml).map_err(|e| TemplateAppError::SpecYamlParse(e.to_string()))
+}
+
 /// Validate a parsed V3 template document against the M5 schema constraints.
 ///
 /// Returns the first violation as [`TemplateAppError`], or `Ok(())` if the

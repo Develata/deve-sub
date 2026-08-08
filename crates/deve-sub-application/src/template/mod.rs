@@ -8,6 +8,7 @@
 
 pub mod commands;
 pub mod error;
+pub mod selection;
 pub mod validation;
 
 pub use commands::{
@@ -16,4 +17,5 @@ pub use commands::{
     list_templates, list_versions, rollback_template, update_template,
 };
 pub use error::TemplateAppError;
-pub use validation::validate_document;
+pub use selection::{apply_sort_order, resolve_group, resolve_selection, resolve_template};
+pub use validation::{parse_template_document, validate_document};

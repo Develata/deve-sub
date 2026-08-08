@@ -39,10 +39,11 @@ pub use source::{
     SourceItem, SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
 };
 pub use template::{
-    API_VERSION, FilterField, GroupMember, GroupType, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES,
-    NodeFilterRule, NodeSelector, ProxyGroup, QuickGroupFilter, Rule, SelectionMode, SortOrder,
-    SubscriptionTemplate, TemplateDocument, TemplateError, TemplateMetadata, TemplateRepository,
-    TemplateSpec, TemplateVersion, TemplateVersionRepository,
+    API_VERSION, FilterField, GroupMember, GroupResolution, GroupType, KIND, MAX_ALIAS_DEPTH,
+    MAX_SPEC_BYTES, MissingNodeRef, MissingReason, NodeFilterRule, NodeSelector, ProxyGroup,
+    QuickGroupFilter, Rule, SelectionMode, SortOrder, SubscriptionTemplate, TemplateDocument,
+    TemplateError, TemplateMetadata, TemplateRepository, TemplateResolution, TemplateSpec,
+    TemplateVersion, TemplateVersionRepository,
 };
 pub use tls::{CertificatePin, RealityConfig, TlsConfig};
 pub use transport::{

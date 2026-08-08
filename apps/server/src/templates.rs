@@ -10,9 +10,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
 use deve_sub_application::template::{self, CreateTemplateParams, UpdateTemplateParams};
 use deve_sub_contract::{
-    CreateTemplateRequest, ErrorResponse, GetTemplateResponse, ListTemplatesQuery,
-    ListTemplatesResponse, ListVersionsResponse, RollbackTemplateResponse, TemplateDto,
-    TemplateResponse, TemplateVersionDto, UpdateTemplateRequest,
+    CreateTemplateRequest, ErrorResponse, GetTemplateResponse, GroupResolutionDto,
+    ListTemplatesQuery, ListTemplatesResponse, ListVersionsResponse, MissingNodeRefDto,
+    ResolveTemplateResponse, RollbackTemplateResponse, TemplateDto, TemplateResponse,
+    TemplateVersionDto, UpdateTemplateRequest,
 };
 use deve_sub_domain::{SubscriptionTemplate, TemplateVersion};
 use deve_sub_kernel::{TemplateId, TemplateVersionId};
@@ -382,6 +383,131 @@ pub struct RollbackRequest {
     pub version_id: String,
 }
 
+/// `GET /api/v1/templates/{id}/resolve` — resolve the template's nodeSelector
+/// and proxyGroups against the live node pool (admin). Read-only: no
+/// generation, no caching, no state change.
+#[utoipa::path(
+    get,
+    path = "/api/v1/templates/{id}/resolve",
+    security(("cookie_auth" = [])),
+    params(("id" = String, Path, description = "Template ULID")),
+    responses(
+        (status = 200, description = "Resolution result", body = ResolveTemplateResponse),
+        (status = 400, description = "Invalid template id", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Not an admin", body = ErrorResponse),
+        (status = 404, description = "Template not found", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
+    )
+)]
+async fn resolve_template_route(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<ResolveTemplateResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let template_id = TemplateId::parse(&id).map_err(|_| {
+        err(
+            StatusCode::BAD_REQUEST,
+            "invalid_id",
+            "template id is not a valid ULID",
+        )
+    })?;
+
+    let _tmpl = template::get_template(state.template_repo.as_ref(), template_id)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "resolve: get_template failed");
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal",
+                "failed to get template",
+            )
+        })?
+        .ok_or_else(|| {
+            err(
+                StatusCode::NOT_FOUND,
+                "template_not_found",
+                "template does not exist",
+            )
+        })?;
+
+    let version = template::get_active_version(state.version_repo.as_ref(), template_id)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "resolve: get_active_version failed");
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal",
+                "failed to get active version",
+            )
+        })?
+        .ok_or_else(|| {
+            err(
+                StatusCode::NOT_FOUND,
+                "no_active_version",
+                "template has no active version",
+            )
+        })?;
+
+    let doc = template::parse_template_document(&version.spec_yaml).map_err(|e| {
+        tracing::warn!(error = %e, "resolve: spec YAML parse failed");
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "invalid_spec_yaml",
+            "stored spec YAML is invalid",
+        )
+    })?;
+
+    let resolution = template::resolve_template(&doc, state.pool_repo.as_ref())
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "resolve: resolve_template failed");
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal",
+                "failed to resolve template",
+            )
+        })?;
+
+    Ok(Json(resolution_to_dto(&resolution)))
+}
+
+fn resolution_to_dto(r: &deve_sub_domain::TemplateResolution) -> ResolveTemplateResponse {
+    ResolveTemplateResponse {
+        selected_node_ids: r
+            .selected_node_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect(),
+        selection_missing: r.selection_missing.iter().map(missing_to_dto).collect(),
+        groups: r.groups.iter().map(group_resolution_to_dto).collect(),
+    }
+}
+
+fn missing_to_dto(m: &deve_sub_domain::MissingNodeRef) -> MissingNodeRefDto {
+    MissingNodeRefDto {
+        node_id: m.node_id.to_string(),
+        reason: m.reason.to_string(),
+    }
+}
+
+fn group_resolution_to_dto(g: &deve_sub_domain::GroupResolution) -> GroupResolutionDto {
+    GroupResolutionDto {
+        group_name: g.group_name.clone(),
+        explicit_node_ids: g
+            .explicit_node_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect(),
+        quick_group_node_ids: g
+            .quick_group_node_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect(),
+        missing: g.missing.iter().map(missing_to_dto).collect(),
+    }
+}
+
 /// Map a [`TemplateAppError`] to an HTTP error response with context.
 fn map_template_app_error(
     e: deve_sub_application::TemplateAppError,
@@ -447,4 +573,5 @@ pub fn register(
         .routes(routes!(delete_template))
         .routes(routes!(list_versions))
         .routes(routes!(rollback_template))
+        .routes(routes!(resolve_template_route))
 }

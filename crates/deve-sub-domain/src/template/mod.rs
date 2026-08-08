@@ -6,6 +6,7 @@
 //! creates a new `TemplateVersion`; the active version is the one served by
 //! generation. See `docs/plan/milestones/M5-generator-and-v3-template.md`.
 
+pub mod cache;
 pub mod chain;
 pub mod entity;
 pub mod error;
@@ -14,6 +15,7 @@ pub mod ports;
 pub mod selection;
 pub mod spec;
 
+pub use cache::{CacheKeyParams, GenerationCacheEntry, GenerationCacheRepository};
 pub use chain::{ChainEdge, ChainGraph, ChainVertex, CyclePath};
 pub use entity::{SubscriptionTemplate, TemplateVersion};
 pub use error::TemplateError;

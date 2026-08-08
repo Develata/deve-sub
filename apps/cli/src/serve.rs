@@ -14,9 +14,9 @@ use deve_sub_application::{
     DbHealthPort, GeoIpPort, LoginRateLimiter, RefreshScheduler, SubscriptionFetcher,
 };
 use deve_sub_domain::{
-    NodeOverrideRepository, NodePoolRepository, RecoveryCodeRepository, SessionRepository,
-    SourceRepository, SourceSnapshotRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, UserRepository,
+    GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
+    RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
+    TemplateRepository, TemplateVersionRepository, TotpSecretRepository, UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -85,6 +85,11 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     );
     let version_repo: Arc<dyn TemplateVersionRepository> =
         Arc::new(deve_sub_storage_sqlite::SqliteTemplateVersionRepository::new(db.clone()));
+    let pool_meta_repo: Arc<dyn PoolMetaRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqlitePoolMetaRepository::new(db.clone()),
+    );
+    let cache_repo: Arc<dyn GenerationCacheRepository> =
+        Arc::new(deve_sub_storage_sqlite::SqliteGenerationCacheRepository::new(db.clone()));
     let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
     let geoip: Arc<dyn GeoIpPort> = Arc::new(deve_sub_adapters::MaxMindGeoIp::new(
         config.geoip.mmdb_path.as_deref(),
@@ -109,9 +114,11 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         source_repo: source_repo.clone(),
         snapshot_repo: snapshot_repo.clone(),
         pool_repo: pool_repo.clone(),
+        pool_meta_repo,
         override_repo,
         template_repo,
         version_repo,
+        cache_repo,
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
         rate_limiter,

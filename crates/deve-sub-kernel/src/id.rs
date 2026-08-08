@@ -165,6 +165,12 @@ entity_id!(
     "Strong-typed identifier for a versioned snapshot of a template's spec."
 );
 
+entity_id!(
+    GenerationCacheId,
+    "generation cache",
+    "Strong-typed identifier for a generated subscription cache entry."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

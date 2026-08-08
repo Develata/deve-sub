@@ -860,7 +860,7 @@ cases:
     steps: []
     assertions: ["生成失败继续返回旧版本"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-016
     title: 预览一致性
     priority: P0

@@ -235,3 +235,31 @@ pub struct GenerateQuery {
     #[serde(default)]
     pub mode: Option<String>,
 }
+
+/// Query parameters for `GET /api/v1/templates/{id}/generations/active`.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct ActiveGenerationQuery {
+    /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,
+    /// `shadowrocket`, or `uri_list`.
+    pub profile: String,
+}
+
+/// Response body for `GET /api/v1/templates/{id}/generations/active`.
+///
+/// Returns the currently active (last successfully published) generation for
+/// the given template + profile. On generation failure, the previous active
+/// generation remains served (GEN-015, constraint #19). Returns 404 if no
+/// active generation exists.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ActiveGenerationResponse {
+    /// The emitted subscription content.
+    pub content: String,
+    /// The target profile that was generated.
+    pub profile: String,
+    /// The template version the active generation was produced from.
+    pub template_version: u64,
+    /// The pool revision at the time of generation.
+    pub pool_revision: u64,
+    /// The cache key (SHA-256 hex) of the active entry.
+    pub cache_key: String,
+}

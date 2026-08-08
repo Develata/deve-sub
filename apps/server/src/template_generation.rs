@@ -9,7 +9,10 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Json;
 use deve_sub_application::template;
-use deve_sub_contract::{ErrorResponse, ExcludedNodeDto, GenerateQuery, GenerationResultDto};
+use deve_sub_contract::{
+    ActiveGenerationQuery, ActiveGenerationResponse, ErrorResponse, ExcludedNodeDto, GenerateQuery,
+    GenerationResultDto,
+};
 use deve_sub_kernel::TemplateId;
 
 use crate::AppState;
@@ -75,6 +78,8 @@ async fn generate_template(
         state.template_repo.as_ref(),
         state.version_repo.as_ref(),
         state.pool_repo.as_ref(),
+        state.cache_repo.as_ref(),
+        state.pool_meta_repo.as_ref(),
         request,
     )
     .await
@@ -187,10 +192,77 @@ fn map_generation_error(
     }
 }
 
-/// Register the template generation route on the given `OpenApiRouter`.
+/// `GET /api/v1/templates/{id}/generations/active?profile=` — get the
+/// currently active (last successfully published) generation for a template +
+/// profile (admin). Returns 404 if no active generation exists. On generation
+/// failure, the previous active generation remains served (GEN-015,
+/// constraint #19).
+#[utoipa::path(
+    get,
+    path = "/api/v1/templates/{id}/generations/active",
+    security(("cookie_auth" = [])),
+    params(
+        ("id" = String, Path, description = "Template ULID"),
+        ("profile" = String, Query, description = "Target profile: mihomo, sing-box, xray, v2ray, shadowrocket, uri_list"),
+    ),
+    responses(
+        (status = 200, description = "Active generation", body = ActiveGenerationResponse),
+        (status = 400, description = "Invalid template id or profile", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Not an admin", body = ErrorResponse),
+        (status = 404, description = "No active generation for this template + profile", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
+    )
+)]
+async fn get_active_template_generation(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+    Query(q): Query<ActiveGenerationQuery>,
+) -> Result<Json<ActiveGenerationResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let template_id = TemplateId::parse(&id).map_err(|_| {
+        err(
+            StatusCode::BAD_REQUEST,
+            "invalid_id",
+            "template id is not a valid ULID",
+        )
+    })?;
+
+    if deve_sub_compatibility::ProfileKind::from_kebab(&q.profile).is_none() {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            "unknown_profile",
+            &format!(
+                "profile '{}' must be one of: mihomo, sing-box, xray, v2ray, shadowrocket, uri_list",
+                q.profile
+            ),
+        ));
+    }
+
+    let entry = template::get_active_generation(state.cache_repo.as_ref(), template_id, &q.profile)
+        .await
+        .map_err(map_generation_error)?
+        .ok_or_else(|| {
+            err(
+                StatusCode::NOT_FOUND,
+                "no_active_generation",
+                "no active generation exists for this template + profile",
+            )
+        })?;
+
+    Ok(Json(ActiveGenerationResponse {
+        content: entry.content,
+        profile: entry.profile,
+        template_version: entry.template_version,
+        pool_revision: entry.pool_revision,
+        cache_key: entry.cache_key,
+    }))
+}
+
+/// Register the template generation routes on the given `OpenApiRouter`.
 pub fn register(
     router: utoipa_axum::router::OpenApiRouter<AppState>,
 ) -> utoipa_axum::router::OpenApiRouter<AppState> {
     use utoipa_axum::routes;
-    router.routes(routes!(generate_template))
+    router.routes(routes!(generate_template, get_active_template_generation))
 }

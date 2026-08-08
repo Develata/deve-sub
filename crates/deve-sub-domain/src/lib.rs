@@ -35,12 +35,14 @@ pub use protocol_config::{
 };
 pub use source::{
     ImportOutcome, ImportResult, ItemParseStatus, NodeFilter, NodePoolEntry, NodePoolRepository,
-    ReconcileEntry, ReconcileInput, ReconcileResult, Source, SourceError, SourceFilterRules,
-    SourceItem, SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
+    PoolMetaRepository, ReconcileEntry, ReconcileInput, ReconcileResult, Source, SourceError,
+    SourceFilterRules, SourceItem, SourceRepository, SourceSnapshot, SourceSnapshotRepository,
+    SourceType,
 };
 pub use template::{
-    API_VERSION, ChainEdge, ChainGraph, ChainVertex, CompatibilityReport, CyclePath, ExcludedNode,
-    FilterField, GenerationError, GenerationMode, GenerationRequest, GenerationResult, GroupMember,
+    API_VERSION, CacheKeyParams, ChainEdge, ChainGraph, ChainVertex, CompatibilityReport,
+    CyclePath, ExcludedNode, FilterField, GenerationCacheEntry, GenerationCacheRepository,
+    GenerationError, GenerationMode, GenerationRequest, GenerationResult, GroupMember,
     GroupResolution, GroupType, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES, MissingNodeRef,
     MissingReason, NodeFilterRule, NodeSelector, ProxyGroup, QuickGroupFilter, Rule, SelectionMode,
     SortOrder, SubscriptionTemplate, TemplateDocument, TemplateError, TemplateMetadata,

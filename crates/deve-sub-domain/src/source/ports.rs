@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 
-use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
+use deve_sub_kernel::{NodeId, Revision, SourceId, SourceSnapshotId, Timestamp};
 
 use super::error::SourceError;
 use super::source_item::ItemParseStatus;
@@ -253,4 +253,20 @@ pub trait NodePoolRepository: Send + Sync {
     /// nodes exist in the pool without a `node_source_bindings` row.
     /// The entire batch is committed atomically.
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError>;
+}
+
+/// Storage boundary for the global pool revision counter.
+///
+/// The pool revision is a monotonic counter bumped on every node pool
+/// mutation (reconcile, import). It serves as a cache-key component for
+/// subscription generation so stale cache entries are invalidated when the
+/// pool changes. See `docs/plan/milestones/M5-generator-and-v3-template.md`
+/// §"Generation cache" and `deve-sub-kernel::Revision`.
+#[async_trait]
+pub trait PoolMetaRepository: Send + Sync {
+    /// Read the current pool revision.
+    async fn get_revision(&self) -> Result<Revision, SourceError>;
+
+    /// Atomically bump the pool revision by one and return the new value.
+    async fn bump_revision(&self) -> Result<Revision, SourceError>;
 }

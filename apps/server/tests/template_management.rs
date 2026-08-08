@@ -14,16 +14,17 @@ use tower::ServiceExt;
 
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    NodeOverrideRepository, NodePoolRepository, RecoveryCodeRepository, SessionRepository,
-    SourceRepository, SourceSnapshotRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, UserRepository,
+    GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
+    RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
+    TemplateRepository, TemplateVersionRepository, TotpSecretRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
-    SqliteHealthCheck, SqliteNodeOverrideRepository, SqliteNodePoolRepository,
-    SqliteRecoveryCodeRepository, SqliteSessionRepository, SqliteSourceRepository,
-    SqliteSourceSnapshotRepository, SqliteTemplateRepository, SqliteTemplateVersionRepository,
-    SqliteTotpSecretRepository, SqliteUserRepository,
+    SqliteGenerationCacheRepository, SqliteHealthCheck, SqliteNodeOverrideRepository,
+    SqliteNodePoolRepository, SqlitePoolMetaRepository, SqliteRecoveryCodeRepository,
+    SqliteSessionRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
+    SqliteTemplateRepository, SqliteTemplateVersionRepository, SqliteTotpSecretRepository,
+    SqliteUserRepository,
 };
 
 struct TestApp {
@@ -75,12 +76,16 @@ impl TestApp {
                     as Arc<dyn SourceSnapshotRepository>,
                 pool_repo: Arc::new(SqliteNodePoolRepository::new(pool.clone()))
                     as Arc<dyn NodePoolRepository>,
+                pool_meta_repo: Arc::new(SqlitePoolMetaRepository::new(pool.clone()))
+                    as Arc<dyn PoolMetaRepository>,
                 override_repo: Arc::new(SqliteNodeOverrideRepository::new(pool.clone()))
                     as Arc<dyn NodeOverrideRepository>,
                 template_repo: Arc::new(SqliteTemplateRepository::new(pool.clone()))
                     as Arc<dyn TemplateRepository>,
                 version_repo: Arc::new(SqliteTemplateVersionRepository::new(pool.clone()))
                     as Arc<dyn TemplateVersionRepository>,
+                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(pool.clone()))
+                    as Arc<dyn GenerationCacheRepository>,
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,
@@ -1771,5 +1776,219 @@ async fn gen014_strict_mode_fails_lenient_succeeds() {
         ))
         .await
         .expect("bad mode");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// GEN-015: Atomic publish — a failed generation must NOT replace the
+/// previously active generation. After a successful generate establishes an
+/// active entry, a subsequent strict-mode failure (incompatible nodes) must
+/// leave the old content still served via the active-generation endpoint
+/// (constraint #19: preserve last successful subscription version on failure).
+#[tokio::test]
+async fn gen015_failed_generation_preserves_old_active() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let ids = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let id_a = &ids[0];
+
+    let yaml_v1 = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen015-atomic\n",
+            "  description: Atomic publish test\n",
+            "  version: 1\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - xray\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: fixed\n",
+            "    nodeRevision: 0\n",
+            "    nodeIds:\n",
+            "      - {a}\n",
+            "  proxyGroups: []\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                "/api/v1/templates",
+                &create_body("gen015", "test", &yaml_v1),
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("create");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    let template_id = json["template"]["id"].as_str().expect("id").to_owned();
+
+    // First generate (lenient) — succeeds, stores and activates content_v1.
+    let gen_uri = format!("/api/v1/templates/{template_id}/generate?profile=xray&mode=lenient");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&gen_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("first generate");
+    assert_eq!(response.status(), StatusCode::OK);
+    let result = body_to_json(response).await;
+    let content_v1 = result["content"].as_str().expect("content").to_owned();
+    assert!(!content_v1.is_empty());
+
+    // Active endpoint returns content_v1.
+    let active_uri = format!("/api/v1/templates/{template_id}/generations/active?profile=xray");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&active_uri), &cookie))
+        .await
+        .expect("active after first generate");
+    assert_eq!(response.status(), StatusCode::OK);
+    let active = body_to_json(response).await;
+    assert_eq!(active["content"].as_str(), Some(content_v1.as_str()));
+    assert_eq!(active["profile"].as_str(), Some("xray"));
+    assert_eq!(active["template_version"], 1);
+
+    // Update template to version 2: add an incompatible Hysteria2 node to the
+    // fixed selector so strict-mode generation will fail.
+    let ids2 = import_nodes(
+        &router,
+        &cookie,
+        "hysteria2://pw@host-b.example.com:443?sni=host-b.example.com#NodeB",
+    )
+    .await;
+    let id_b = &ids2[0];
+
+    let yaml_v2 = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen015-atomic\n",
+            "  description: Atomic publish test v2\n",
+            "  version: 2\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - xray\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: fixed\n",
+            "    nodeRevision: 0\n",
+            "    nodeIds:\n",
+            "      - {a}\n",
+            "      - {b}\n",
+            "  proxyGroups: []\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+        b = id_b,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(
+                &format!("/api/v1/templates/{template_id}"),
+                &update_body("gen015", "Atomic publish test v2", &yaml_v2),
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("update to v2");
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_to_json(response).await;
+    assert_eq!(json["version"]["version"], 2);
+
+    // Second generate (strict) — fails with 422 because Hysteria2 is
+    // incompatible with Xray. No store or activate occurs.
+    let strict_uri = format!("/api/v1/templates/{template_id}/generate?profile=xray&mode=strict");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&strict_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("strict generate v2");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "strict mode with incompatible node must fail with 422"
+    );
+
+    // GEN-015 core assertion: the active endpoint still returns content_v1.
+    // The failed generation did NOT replace the previously active entry.
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&active_uri), &cookie))
+        .await
+        .expect("active after failed generate");
+    assert_eq!(response.status(), StatusCode::OK);
+    let active = body_to_json(response).await;
+    assert_eq!(
+        active["content"].as_str(),
+        Some(content_v1.as_str()),
+        "failed generation must preserve the old active content (constraint #19)"
+    );
+    assert_eq!(
+        active["template_version"], 1,
+        "active entry should still be from version 1"
+    );
+
+    // Active endpoint for a profile with no generation → 404.
+    let no_active_uri =
+        format!("/api/v1/templates/{template_id}/generations/active?profile=mihomo");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&no_active_uri), &cookie))
+        .await
+        .expect("no active for mihomo");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    // Invalid template id → 400.
+    let bad_id_uri = "/api/v1/templates/not-a-ulid/generations/active?profile=xray";
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(bad_id_uri), &cookie))
+        .await
+        .expect("bad id");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // Unknown profile → 400.
+    let bad_profile_uri =
+        format!("/api/v1/templates/{template_id}/generations/active?profile=bogus");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&bad_profile_uri), &cookie))
+        .await
+        .expect("bad profile");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

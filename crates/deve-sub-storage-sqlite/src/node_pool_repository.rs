@@ -233,7 +233,15 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             }
         }
 
-        // 7. Commit the transaction.
+        // 7. Bump the global pool revision so stale generation cache entries
+        // are invalidated. WHY: the cache key includes pool_revision; bumping
+        // here ensures a post-refresh generation produces a new cache entry
+        // rather than serving stale content (GEN-015, constraint #19).
+        sqlx::query("UPDATE pool_meta SET revision = revision + 1 WHERE id = 1")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+
         tx.commit()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
@@ -383,6 +391,14 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                 }
             }
         }
+
+        // Bump the global pool revision so stale generation cache entries are
+        // invalidated. WHY: same as reconcile — the cache key includes
+        // pool_revision (GEN-015).
+        sqlx::query("UPDATE pool_meta SET revision = revision + 1 WHERE id = 1")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
 
         tx.commit()
             .await

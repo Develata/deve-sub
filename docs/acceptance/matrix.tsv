@@ -83,7 +83,7 @@ GEN-011	删除节点	P0	Regression	pass
 GEN-012	循环组依赖	P0	Integration	pass
 GEN-013	目标不兼容	P0	Integration	pass
 GEN-014	严格模式	P0	Integration	pass
-GEN-015	原子发布	P0	Regression	planned
+GEN-015	原子发布	P0	Regression	pass
 GEN-016	预览一致性	P0	E2E	planned
 OUT-001	Mihomo	P0	Compatibility	planned
 OUT-002	FlClash	P0	Compatibility	planned

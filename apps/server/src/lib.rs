@@ -12,9 +12,9 @@ use std::sync::Arc;
 use axum::Router;
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    NodeOverrideRepository, NodePoolRepository, RecoveryCodeRepository, SessionRepository,
-    SourceRepository, SourceSnapshotRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, UserRepository,
+    GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
+    RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
+    TemplateRepository, TemplateVersionRepository, TotpSecretRepository, UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -56,9 +56,11 @@ pub struct AppState {
     pub source_repo: Arc<dyn SourceRepository>,
     pub snapshot_repo: Arc<dyn SourceSnapshotRepository>,
     pub pool_repo: Arc<dyn NodePoolRepository>,
+    pub pool_meta_repo: Arc<dyn PoolMetaRepository>,
     pub override_repo: Arc<dyn NodeOverrideRepository>,
     pub template_repo: Arc<dyn TemplateRepository>,
     pub version_repo: Arc<dyn TemplateVersionRepository>,
+    pub cache_repo: Arc<dyn GenerationCacheRepository>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,

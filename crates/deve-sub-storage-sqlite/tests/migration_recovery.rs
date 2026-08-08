@@ -639,6 +639,175 @@ async fn migration_0006_adds_filter_rules_json_column() {
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
 
+/// Recovery test for migration 0008 (constraint #13): pool_meta singleton
+/// table, generation_cache.is_active column, and the partial unique index
+/// idx_generation_cache_single_active that enforces at most one active
+/// generation per (template_id, profile). See
+/// `docs/plan/milestones/M5-generator-and-v3-template.md` §"Generation cache"
+/// (GEN-015: atomic publish).
+#[tokio::test]
+async fn migration_0008_applies_and_schema_is_correct() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    assert!(
+        tables.contains(&"pool_meta".to_string()),
+        "expected table 'pool_meta', got {tables:?}"
+    );
+
+    let indexes = get_index_names(&pool).await;
+    assert!(
+        indexes.contains(&"idx_generation_cache_single_active".to_string()),
+        "expected index 'idx_generation_cache_single_active', got {indexes:?}"
+    );
+
+    let meta_cols = get_columns(&pool, "pool_meta").await;
+    for col in ["id", "revision"] {
+        assert!(
+            meta_cols.contains(&col.to_string()),
+            "expected column '{col}' in pool_meta, got {meta_cols:?}"
+        );
+    }
+
+    let cache_cols = get_columns(&pool, "generation_cache").await;
+    assert!(
+        cache_cols.contains(&"is_active".to_string()),
+        "expected column 'is_active' in generation_cache, got {cache_cols:?}"
+    );
+
+    let (rev,): (i64,) = sqlx::query_as("SELECT revision FROM pool_meta WHERE id = 1")
+        .fetch_one(&pool)
+        .await
+        .expect("pool_meta row");
+    assert_eq!(rev, 0, "pool_meta.revision should default to 0");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+#[tokio::test]
+async fn migration_0008_is_idempotent() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    assert!(tables.contains(&"pool_meta".to_string()));
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+#[tokio::test]
+async fn migration_0008_single_active_generation_enforced() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let template_id = "01J0TMPL000000000000000001";
+
+    sqlx::query("INSERT INTO templates (id, name, description) VALUES (?, ?, ?)")
+        .bind(template_id)
+        .bind("t")
+        .bind("")
+        .execute(&pool)
+        .await
+        .expect("insert template");
+
+    sqlx::query(
+        "INSERT INTO generation_cache \
+         (id, template_id, template_version, profile, selection_mode, \
+          selection_payload, pool_revision, cache_key, content, is_active) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+    )
+    .bind("01J0CACHE000000000000000000")
+    .bind(template_id)
+    .bind(1_i64)
+    .bind("mihomo")
+    .bind("dynamic")
+    .bind("{}")
+    .bind(0_i64)
+    .bind("key0")
+    .bind("content")
+    .execute(&pool)
+    .await
+    .expect("insert active cache");
+
+    let second = sqlx::query(
+        "INSERT INTO generation_cache \
+         (id, template_id, template_version, profile, selection_mode, \
+          selection_payload, pool_revision, cache_key, content, is_active) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+    )
+    .bind("01J0CACHE000000000000000001")
+    .bind(template_id)
+    .bind(1_i64)
+    .bind("mihomo")
+    .bind("dynamic")
+    .bind("{}")
+    .bind(0_i64)
+    .bind("key1")
+    .bind("content")
+    .execute(&pool)
+    .await;
+    assert!(
+        second.is_err(),
+        "a second active generation for the same (template_id, profile) should be rejected"
+    );
+
+    sqlx::query("UPDATE generation_cache SET is_active = 0 WHERE id = ?")
+        .bind("01J0CACHE000000000000000000")
+        .execute(&pool)
+        .await
+        .expect("deactivate first");
+
+    let activate = sqlx::query(
+        "INSERT INTO generation_cache \
+         (id, template_id, template_version, profile, selection_mode, \
+          selection_payload, pool_revision, cache_key, content, is_active) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+    )
+    .bind("01J0CACHE000000000000000004")
+    .bind(template_id)
+    .bind(1_i64)
+    .bind("mihomo")
+    .bind("dynamic")
+    .bind("{}")
+    .bind(0_i64)
+    .bind("key4")
+    .bind("content")
+    .execute(&pool)
+    .await;
+    assert!(
+        activate.is_ok(),
+        "after deactivating the prior active entry, a new one should be allowed"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
 /// Recovery test for migration 0007 (constraint #13): templates,
 /// template_versions, generation_cache tables, the partial unique active-version
 /// index, cascade deletes, and idempotency. See

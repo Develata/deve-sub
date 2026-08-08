@@ -20,6 +20,6 @@ pub use commands::{
 };
 pub use compatibility::check_compatibility;
 pub use error::TemplateAppError;
-pub use generation::generate;
+pub use generation::{generate, get_active_generation};
 pub use selection::{apply_sort_order, resolve_group, resolve_selection, resolve_template};
 pub use validation::{parse_template_document, validate_document};

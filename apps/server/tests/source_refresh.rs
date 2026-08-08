@@ -17,16 +17,17 @@ use deve_sub_application::{
     DbHealthPort, FetchError, FetchResult, GeoIpPort, LoginRateLimiter, SubscriptionFetcher,
 };
 use deve_sub_domain::{
-    NodeOverrideRepository, NodePoolRepository, RecoveryCodeRepository, SessionRepository,
-    SourceRepository, SourceSnapshotRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, UserRepository,
+    GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
+    RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
+    TemplateRepository, TemplateVersionRepository, TotpSecretRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
-    SqliteHealthCheck, SqliteNodeOverrideRepository, SqliteNodePoolRepository,
-    SqliteRecoveryCodeRepository, SqliteSessionRepository, SqliteSourceRepository,
-    SqliteSourceSnapshotRepository, SqliteTemplateRepository, SqliteTemplateVersionRepository,
-    SqliteTotpSecretRepository, SqliteUserRepository,
+    SqliteGenerationCacheRepository, SqliteHealthCheck, SqliteNodeOverrideRepository,
+    SqliteNodePoolRepository, SqlitePoolMetaRepository, SqliteRecoveryCodeRepository,
+    SqliteSessionRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
+    SqliteTemplateRepository, SqliteTemplateVersionRepository, SqliteTotpSecretRepository,
+    SqliteUserRepository,
 };
 
 struct MockFetcher {
@@ -127,12 +128,16 @@ impl TestApp {
                     as Arc<dyn SourceSnapshotRepository>,
                 pool_repo: Arc::new(SqliteNodePoolRepository::new(pool.clone()))
                     as Arc<dyn NodePoolRepository>,
+                pool_meta_repo: Arc::new(SqlitePoolMetaRepository::new(pool.clone()))
+                    as Arc<dyn PoolMetaRepository>,
                 override_repo: Arc::new(SqliteNodeOverrideRepository::new(pool.clone()))
                     as Arc<dyn NodeOverrideRepository>,
                 template_repo: Arc::new(SqliteTemplateRepository::new(pool.clone()))
                     as Arc<dyn TemplateRepository>,
                 version_repo: Arc::new(SqliteTemplateVersionRepository::new(pool.clone()))
                     as Arc<dyn TemplateVersionRepository>,
+                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(pool.clone()))
+                    as Arc<dyn GenerationCacheRepository>,
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(fetcher) as Arc<dyn SubscriptionFetcher>,
                 rate_limiter,

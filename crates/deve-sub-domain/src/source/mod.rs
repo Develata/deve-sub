@@ -14,8 +14,8 @@ pub mod source_item;
 pub use entity::{Source, SourceFilterRules, SourceType};
 pub use error::SourceError;
 pub use ports::{
-    ImportOutcome, ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, ReconcileEntry,
-    ReconcileInput, ReconcileResult, SourceRepository, SourceSnapshotRepository,
+    ImportOutcome, ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, PoolMetaRepository,
+    ReconcileEntry, ReconcileInput, ReconcileResult, SourceRepository, SourceSnapshotRepository,
 };
 pub use snapshot::SourceSnapshot;
 pub use source_item::{ItemParseStatus, SourceItem};

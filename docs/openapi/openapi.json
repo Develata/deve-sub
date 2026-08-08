@@ -2614,6 +2614,99 @@
         ]
       }
     },
+    "/api/v1/templates/{id}/generations/active": {
+      "get": {
+        "summary": "`GET /api/v1/templates/{id}/generations/active?profile=` — get the\ncurrently active (last successfully published) generation for a template +\nprofile (admin). Returns 404 if no active generation exists. On generation\nfailure, the previous active generation remains served (GEN-015,\nconstraint #19).",
+        "operationId": "get_active_template_generation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "description": "Target profile: mihomo, sing-box, xray, v2ray, shadowrocket, uri_list",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active generation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveGenerationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid template id or profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No active generation for this template + profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/templates/{id}/resolve": {
       "get": {
         "summary": "`GET /api/v1/templates/{id}/resolve` — resolve the template's nodeSelector\nand proxyGroups against the live node pool (admin). Read-only: no\ngeneration, no caching, no state change.",
@@ -3248,6 +3341,43 @@
   },
   "components": {
     "schemas": {
+      "ActiveGenerationResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/templates/{id}/generations/active`.\n\nReturns the currently active (last successfully published) generation for\nthe given template + profile. On generation failure, the previous active\ngeneration remains served (GEN-015, constraint #19). Returns 404 if no\nactive generation exists.",
+        "required": [
+          "content",
+          "profile",
+          "template_version",
+          "pool_revision",
+          "cache_key"
+        ],
+        "properties": {
+          "cache_key": {
+            "type": "string",
+            "description": "The cache key (SHA-256 hex) of the active entry."
+          },
+          "content": {
+            "type": "string",
+            "description": "The emitted subscription content."
+          },
+          "pool_revision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The pool revision at the time of generation.",
+            "minimum": 0
+          },
+          "profile": {
+            "type": "string",
+            "description": "The target profile that was generated."
+          },
+          "template_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The template version the active generation was produced from.",
+            "minimum": 0
+          }
+        }
+      },
       "BatchEnabledRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/nodes/batch-enabled` (NODE-004).",

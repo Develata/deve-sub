@@ -14,7 +14,8 @@ use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, Subscripti
 use deve_sub_domain::{
     GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
     RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
-    TemplateRepository, TemplateVersionRepository, TotpSecretRepository, UserRepository,
+    SubscriptionRepository, SubscriptionTokenRepository, TemplateRepository,
+    TemplateVersionRepository, TotpSecretRepository, UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -31,6 +32,7 @@ pub mod node_overrides;
 pub mod nodes;
 pub mod routes;
 pub mod sources;
+pub mod subscriptions;
 pub mod template_generation;
 pub mod templates;
 pub mod twofa;
@@ -61,6 +63,8 @@ pub struct AppState {
     pub template_repo: Arc<dyn TemplateRepository>,
     pub version_repo: Arc<dyn TemplateVersionRepository>,
     pub cache_repo: Arc<dyn GenerationCacheRepository>,
+    pub subscription_repo: Arc<dyn SubscriptionRepository>,
+    pub subscription_token_repo: Arc<dyn SubscriptionTokenRepository>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,

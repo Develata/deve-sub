@@ -13,15 +13,16 @@ use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, Subscripti
 use deve_sub_domain::{
     GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
     RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
-    TemplateRepository, TemplateVersionRepository, TotpSecretRepository, UserRepository,
+    SubscriptionRepository, SubscriptionTokenRepository, TemplateRepository,
+    TemplateVersionRepository, TotpSecretRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
     SqliteGenerationCacheRepository, SqliteHealthCheck, SqliteNodeOverrideRepository,
     SqliteNodePoolRepository, SqlitePoolMetaRepository, SqliteRecoveryCodeRepository,
     SqliteSessionRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
-    SqliteTemplateRepository, SqliteTemplateVersionRepository, SqliteTotpSecretRepository,
-    SqliteUserRepository,
+    SqliteSubscriptionRepository, SqliteSubscriptionTokenRepository, SqliteTemplateRepository,
+    SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteUserRepository,
 };
 
 struct TestApp {
@@ -91,6 +92,11 @@ impl TestApp {
                     as Arc<dyn TemplateVersionRepository>,
                 cache_repo: Arc::new(SqliteGenerationCacheRepository::new(pool.clone()))
                     as Arc<dyn GenerationCacheRepository>,
+                subscription_repo: Arc::new(SqliteSubscriptionRepository::new(pool.clone()))
+                    as Arc<dyn SubscriptionRepository>,
+                subscription_token_repo: Arc::new(SqliteSubscriptionTokenRepository::new(
+                    pool.clone(),
+                )) as Arc<dyn SubscriptionTokenRepository>,
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,

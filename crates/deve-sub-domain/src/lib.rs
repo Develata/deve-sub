@@ -16,6 +16,7 @@ pub mod node_override;
 pub mod protocol;
 pub mod protocol_config;
 pub mod source;
+pub mod subscription;
 pub mod template;
 pub mod tls;
 pub mod transport;
@@ -38,6 +39,10 @@ pub use source::{
     PoolMetaRepository, ReconcileEntry, ReconcileInput, ReconcileResult, Source, SourceError,
     SourceFilterRules, SourceItem, SourceRepository, SourceSnapshot, SourceSnapshotRepository,
     SourceType,
+};
+pub use subscription::{
+    Subscription, SubscriptionError, SubscriptionRepository, SubscriptionToken,
+    SubscriptionTokenRepository,
 };
 pub use template::{
     API_VERSION, CacheKeyParams, ChainEdge, ChainGraph, ChainVertex, CompatibilityReport,

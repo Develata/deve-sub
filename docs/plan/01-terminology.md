@@ -147,3 +147,59 @@ The web UI renders server-owned state, collects user intent, and dispatches
 typed requests to `/api/v1`. No node parsing, protocol conversion,
 subscription generation, compatibility judgment, security-field correction, or
 permission logic in the frontend.
+
+## Subscription distribution
+
+### Subscription
+
+An independent aggregate root that binds one `SubscriptionTemplate` (by id,
+optionally pinned to a specific version), carries its own node-selection
+configuration, and owns its delivery configuration (token, traffic limit,
+expiry). Template updates never silently mutate an existing Subscription's
+selection snapshot; the Subscription is regenerated on demand at delivery
+time. See `docs/plan/milestones/M6-subscription-distribution.md`.
+
+### Profile
+
+A target output format identifier: `mihomo`, `sing-box`, `xray`, `v2ray`,
+`shadowrocket`, or `uri_list`. A Subscription targets one profile; delivery
+serves the cached generation for `(template, version, profile)` or generates
+on demand on cache miss. The `ProfileKind` enum in `deve-sub-compatibility`
+enumerates the valid values; the domain stores the profile as a kebab-case
+string.
+
+### Subscription Token
+
+A CSPRNG-generated plaintext (at least 32 bytes, Base64URL no padding) used
+to authenticate `/sub/{token}` delivery requests. Only the HMAC-SHA256 digest
+is persisted; the plaintext is returned once at creation or rotation time and
+never logged. ULIDs must not be used as subscription tokens. See
+`docs/plan/00-engineering-constitution.md` §"Data and security".
+
+### Short Code
+
+A high-entropy CSPRNG-generated short string mapping to a Subscription's
+delivery URL (`/s/{code}` → `/sub/{token}/{profile}`). Short codes are not
+user-defined low-entropy values; probe attempts are rate-limited. A UNIQUE
+constraint rejects collisions atomically.
+
+### Temp Link
+
+A temporary delivery URL with an explicit expiry. After expiry, the link
+returns 404 (no existence leak). Temp links share the Subscription's token
+semantics but carry their own shorter-lived credential.
+
+### ETag
+
+An HTTP entity tag returned with a subscription delivery response. A
+conditional GET with a matching `If-None-Match` returns `304 Not Modified`,
+avoiding regeneration and re-transfer. The ETag is derived from the generated
+content or the generation cache entry.
+
+### Delivery
+
+The public subscription distribution surface (`/sub/{token}/{profile}` and
+`/sub/{token}` for User-Agent auto-detect). Distinct from the admin REST
+surface (`/api/v1/*`), the delivery handler is a thin adapter: it resolves
+the token, delegates enforcement and generation to Application commands, and
+contains no business rules.

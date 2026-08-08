@@ -23,6 +23,23 @@ layer.
 - Dispatches typed requests to application commands/queries.
 - Contains no business rules. No cross-repository hand-stitched transactions.
 
+The Delivery layer exposes two distinct HTTP surfaces in `apps/server`:
+
+- **REST admin surface** (`/api/v1/*`): cookie-authenticated, `AdminUser`
+  guarded, returns JSON DTOs. Handlers map to application commands/queries.
+  Documented in the OpenAPI spec.
+- **Public subscription delivery surface** (`/sub/{token}[/{profile}]`,
+  `/s/{code}`): path-token authenticated (no cookie), returns generated
+  subscription content with profile-specific `Content-Type` and delivery
+  headers (`ETag`, `Last-Modified`, `subscription-userinfo`,
+  `Cache-Control: private, no-cache`). The delivery handler is a thin adapter:
+  it resolves the token, delegates enforcement and generation to Application
+  commands, and contains no business rules or cross-repository transactions.
+  Not bound to OpenAPI security schemes (uses path tokens, not cookie auth).
+
+DTOs and `ToSchema` derives for both surfaces live in `deve-sub-contract`
+per ADR-0004. Path, method, and status definitions live in `apps/server`.
+
 ### Application (crates/application)
 
 - Commands (mutate state), queries (read state), jobs, event handlers.

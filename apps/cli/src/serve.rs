@@ -16,7 +16,8 @@ use deve_sub_application::{
 use deve_sub_domain::{
     GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
     RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
-    TemplateRepository, TemplateVersionRepository, TotpSecretRepository, UserRepository,
+    SubscriptionRepository, SubscriptionTokenRepository, TemplateRepository,
+    TemplateVersionRepository, TotpSecretRepository, UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -90,6 +91,11 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     );
     let cache_repo: Arc<dyn GenerationCacheRepository> =
         Arc::new(deve_sub_storage_sqlite::SqliteGenerationCacheRepository::new(db.clone()));
+    let subscription_repo: Arc<dyn SubscriptionRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(db.clone()),
+    );
+    let subscription_token_repo: Arc<dyn SubscriptionTokenRepository> =
+        Arc::new(deve_sub_storage_sqlite::SqliteSubscriptionTokenRepository::new(db.clone()));
     let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
     let geoip: Arc<dyn GeoIpPort> = Arc::new(deve_sub_adapters::MaxMindGeoIp::new(
         config.geoip.mmdb_path.as_deref(),
@@ -119,6 +125,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         template_repo,
         version_repo,
         cache_repo,
+        subscription_repo,
+        subscription_token_repo,
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
         rate_limiter,

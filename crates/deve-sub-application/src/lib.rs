@@ -11,6 +11,7 @@ pub mod auth;
 pub mod config;
 pub mod health;
 pub mod source;
+pub mod subscription;
 pub mod template;
 
 pub use auth::{AuthError, LoginRateLimiter};
@@ -19,6 +20,11 @@ pub use health::{DbHealthPort, HealthError, HealthStatus, HealthView};
 pub use source::{
     FetchError, FetchResult, GeoIpPort, ImportParseResult, ParseContentError, RefreshScheduler,
     SourceAppError, SubscriptionFetcher, parse_content, parse_for_import,
+};
+pub use subscription::{
+    CreateSubscriptionParams, CreateSubscriptionResult, RotateTokenResult, SubscriptionAppError,
+    UpdateSubscriptionParams, create_subscription, delete_subscription, get_subscription,
+    list_subscriptions, rotate_token, update_subscription,
 };
 pub use template::{
     CreateTemplateParams, CreateTemplateResult, TemplateAppError, UpdateTemplateParams,

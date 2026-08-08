@@ -13,6 +13,7 @@ use clap::{Parser, Subcommand};
 mod commands;
 mod node_cmds;
 mod serve;
+mod subscription_cmds;
 mod template_cmds;
 
 /// Deve Sub — self-hosted proxy subscription infrastructure manager.
@@ -43,6 +44,8 @@ enum Commands {
     Node(commands::NodeArgs),
     /// Template management commands.
     Template(commands::TemplateArgs),
+    /// Subscription management commands.
+    Subscription(subscription_cmds::SubscriptionArgs),
 }
 
 fn main() -> ExitCode {
@@ -87,6 +90,26 @@ fn main() -> ExitCode {
                 }
                 commands::TemplateSubCommand::Rollback(sub) => {
                     commands::template_rollback(sub).await
+                }
+            },
+            Commands::Subscription(args) => match args.command {
+                subscription_cmds::SubscriptionSubCommand::Add(sub) => {
+                    subscription_cmds::subscription_add(sub).await
+                }
+                subscription_cmds::SubscriptionSubCommand::List(sub) => {
+                    subscription_cmds::subscription_list(sub).await
+                }
+                subscription_cmds::SubscriptionSubCommand::Get(sub) => {
+                    subscription_cmds::subscription_get(sub).await
+                }
+                subscription_cmds::SubscriptionSubCommand::Update(sub) => {
+                    subscription_cmds::subscription_update(sub).await
+                }
+                subscription_cmds::SubscriptionSubCommand::Delete(sub) => {
+                    subscription_cmds::subscription_delete(sub).await
+                }
+                subscription_cmds::SubscriptionSubCommand::RotateToken(sub) => {
+                    subscription_cmds::subscription_rotate(sub).await
                 }
             },
         }

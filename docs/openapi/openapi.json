@@ -1771,6 +1771,527 @@
         ]
       }
     },
+    "/api/v1/subscriptions": {
+      "get": {
+        "summary": "`GET /api/v1/subscriptions` — list subscriptions with cursor pagination\n(admin). Lists subscriptions owned by the authenticated admin.",
+        "operationId": "list_subscriptions",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pagination cursor (last subscription ULID)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max subscriptions per page (default 50, max 100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListSubscriptionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "`POST /api/v1/subscriptions` — create a new subscription (admin).",
+        "operationId": "create_subscription",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Subscription created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Slug already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}": {
+      "get": {
+        "summary": "`GET /api/v1/subscriptions/{id}` — get a subscription by ID (admin).",
+        "operationId": "get_subscription",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid subscription id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "`PUT /api/v1/subscriptions/{id}` — update an existing subscription (admin).",
+        "operationId": "update_subscription",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Subscription updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Slug already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "`DELETE /api/v1/subscriptions/{id}` — delete a subscription (admin).",
+        "operationId": "delete_subscription",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription deleted"
+          },
+          "400": {
+            "description": "Invalid subscription id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}/rotate-token": {
+      "post": {
+        "summary": "`POST /api/v1/subscriptions/{id}/rotate-token` — rotate the delivery token\n(admin). The new plaintext token is returned once.",
+        "operationId": "rotate_token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RotateTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Token rotated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenRotationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid subscription id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/tags": {
       "get": {
         "summary": "`GET /api/v1/tags` — list all tags (admin only).",
@@ -3646,6 +4167,54 @@
           }
         }
       },
+      "CreateSubscriptionRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/subscriptions`.",
+        "required": [
+          "name",
+          "slug",
+          "template_id",
+          "profile",
+          "node_selection"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Subscription expiry as an ISO 8601 string. `null` = never expires."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable subscription name."
+          },
+          "node_selection": {
+            "description": "Node selection configuration as a JSON object matching the V3\n`nodeSelector` schema (`mode`, `filters`, `nodeIds`, `nodeRevision`)."
+          },
+          "profile": {
+            "type": "string",
+            "description": "Target output profile (kebab-case: `mihomo`, `sing-box`, `xray`,\n`v2ray`, `shadowrocket`, `uri_list`)."
+          },
+          "slug": {
+            "type": "string",
+            "description": "URL-safe slug, unique per owner."
+          },
+          "template_id": {
+            "type": "string",
+            "description": "The template ULID this subscription binds."
+          },
+          "traffic_limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Traffic limit in bytes. `null` = unlimited. Enforced at delivery.",
+            "minimum": 0
+          }
+        }
+      },
       "CreateTagRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/tags`.",
@@ -3815,6 +4384,19 @@
               "type": "string"
             },
             "description": "Non-fatal warnings: missing references, nodes that became unavailable\nduring generation, or an empty compatible pool."
+          }
+        }
+      },
+      "GetSubscriptionResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/subscriptions/{id}`.",
+        "required": [
+          "subscription"
+        ],
+        "properties": {
+          "subscription": {
+            "$ref": "#/components/schemas/SubscriptionDto",
+            "description": "The subscription aggregate."
           }
         }
       },
@@ -4085,6 +4667,29 @@
               "$ref": "#/components/schemas/SourceDto"
             },
             "description": "Sources in the current page."
+          }
+        }
+      },
+      "ListSubscriptionsResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/subscriptions` (cursor-paginated).",
+        "required": [
+          "subscriptions"
+        ],
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cursor for the next page (`None` if no more results)."
+          },
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionDto"
+            },
+            "description": "Subscriptions in the current page."
           }
         }
       },
@@ -4633,6 +5238,20 @@
           }
         }
       },
+      "RotateTokenRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/subscriptions/{id}/rotate-token`.\n\n`grace_seconds` controls the rotation grace period: during grace, both the\nold and new tokens remain valid. `null` or `-1` means permanent grace (the\nold token stays valid indefinitely). `0` means no grace (the old token is\nimmediately invalid).",
+        "properties": {
+          "grace_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Grace period in seconds. `null` or `-1` = permanent grace."
+          }
+        }
+      },
       "SetNodeTagsRequest": {
         "type": "object",
         "description": "Request body for `PUT /api/v1/nodes/{id}/tags`.",
@@ -4820,6 +5439,106 @@
           "shadowrocket"
         ]
       },
+      "SubscriptionDto": {
+        "type": "object",
+        "description": "Subscription information returned by subscription management endpoints.",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "owner_id",
+          "template_id",
+          "profile",
+          "node_selection",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "Creation time (ISO 8601 UTC)."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether delivery is enabled."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Subscription expiry (ISO 8601). `null` = never expires."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name."
+          },
+          "node_selection": {
+            "description": "Node selection configuration as a JSON object."
+          },
+          "owner_id": {
+            "type": "string",
+            "description": "The owning user ULID."
+          },
+          "profile": {
+            "type": "string",
+            "description": "Target output profile (kebab-case)."
+          },
+          "slug": {
+            "type": "string",
+            "description": "URL-safe slug, unique per owner."
+          },
+          "template_id": {
+            "type": "string",
+            "description": "The bound template ULID."
+          },
+          "template_version_pin": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Pinned template version. `null` follows the template's active version.",
+            "minimum": 0
+          },
+          "traffic_limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Traffic limit in bytes. `null` = unlimited.",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Last update time (ISO 8601 UTC)."
+          }
+        }
+      },
+      "SubscriptionResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/subscriptions`.\n\nThe `token_plaintext` is the CSPRNG-generated delivery token shown exactly\nonce at creation time. The server stores only the HMAC-SHA256 digest; the\nplaintext is never persisted and never appears in logs (SEC-009).",
+        "required": [
+          "subscription",
+          "token_plaintext"
+        ],
+        "properties": {
+          "subscription": {
+            "$ref": "#/components/schemas/SubscriptionDto",
+            "description": "The created subscription aggregate."
+          },
+          "token_plaintext": {
+            "type": "string",
+            "description": "The plaintext delivery token. Shown once; store it securely."
+          }
+        }
+      },
       "TagDto": {
         "type": "object",
         "description": "A user-defined tag.",
@@ -4959,6 +5678,24 @@
             "format": "int64",
             "description": "Monotonic version number.",
             "minimum": 0
+          }
+        }
+      },
+      "TokenRotationResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/subscriptions/{id}/rotate-token`.",
+        "required": [
+          "token_id",
+          "token_plaintext"
+        ],
+        "properties": {
+          "token_id": {
+            "type": "string",
+            "description": "The token row ULID (stable across rotations)."
+          },
+          "token_plaintext": {
+            "type": "string",
+            "description": "The new plaintext delivery token. Shown once; store it securely."
           }
         }
       },
@@ -5122,6 +5859,65 @@
           "url": {
             "type": "string",
             "description": "Subscription URL."
+          }
+        }
+      },
+      "UpdateSubscriptionRequest": {
+        "type": "object",
+        "description": "Request body for `PUT /api/v1/subscriptions/{id}`.",
+        "required": [
+          "name",
+          "slug",
+          "profile",
+          "node_selection"
+        ],
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether delivery is enabled. `null` preserves the current value."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Subscription expiry as an ISO 8601 string. `null` = never expires."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable subscription name."
+          },
+          "node_selection": {
+            "description": "Node selection configuration as a JSON object."
+          },
+          "profile": {
+            "type": "string",
+            "description": "Target output profile (kebab-case)."
+          },
+          "slug": {
+            "type": "string",
+            "description": "URL-safe slug, unique per owner."
+          },
+          "template_version_pin": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Pinned template version. `null` follows the template's active version.",
+            "minimum": 0
+          },
+          "traffic_limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Traffic limit in bytes. `null` = unlimited.",
+            "minimum": 0
           }
         }
       },

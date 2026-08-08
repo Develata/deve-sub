@@ -10,10 +10,11 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
 use deve_sub_application::template::{self, CreateTemplateParams, UpdateTemplateParams};
 use deve_sub_contract::{
-    ChainEdgeDto, CompatibilityReportDto, CreateTemplateRequest, ErrorResponse,
+    ChainEdgeDto, CompatibilityQuery, CompatibilityReportDto, CreateTemplateRequest, ErrorResponse,
     GetTemplateResponse, GroupResolutionDto, ListTemplatesQuery, ListTemplatesResponse,
-    ListVersionsResponse, MissingNodeRefDto, ResolveTemplateResponse, RollbackTemplateResponse,
-    TemplateDto, TemplateResponse, TemplateVersionDto, UpdateTemplateRequest,
+    ListVersionsResponse, MissingNodeRefDto, ResolveTemplateResponse, RollbackRequest,
+    RollbackTemplateResponse, TemplateDto, TemplateResponse, TemplateVersionDto,
+    UpdateTemplateRequest,
 };
 use deve_sub_domain::{SubscriptionTemplate, TemplateVersion};
 use deve_sub_kernel::{TemplateId, TemplateVersionId};
@@ -377,13 +378,6 @@ async fn rollback_template(
     }))
 }
 
-/// Request body for `POST /api/v1/templates/{id}/rollback`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-pub struct RollbackRequest {
-    /// The version ULID to activate.
-    pub version_id: String,
-}
-
 /// `GET /api/v1/templates/{id}/resolve` — resolve the template's nodeSelector
 /// and proxyGroups against the live node pool (admin). Read-only: no
 /// generation, no caching, no state change.
@@ -612,12 +606,6 @@ fn compat_report_to_dto(r: &deve_sub_domain::CompatibilityReport) -> Compatibili
             })
             .collect(),
     }
-}
-
-/// Query parameters for `GET /api/v1/templates/{id}/compatibility`.
-#[derive(Debug, Clone, serde::Deserialize, utoipa::ToSchema)]
-pub struct CompatibilityQuery {
-    pub profile: String,
 }
 
 fn resolution_to_dto(

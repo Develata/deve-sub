@@ -263,3 +263,18 @@ pub struct ActiveGenerationResponse {
     /// The cache key (SHA-256 hex) of the active entry.
     pub cache_key: String,
 }
+
+/// Request body for `POST /api/v1/templates/{id}/rollback`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RollbackRequest {
+    /// The version ULID to activate.
+    pub version_id: String,
+}
+
+/// Query parameters for `GET /api/v1/templates/{id}/compatibility`.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct CompatibilityQuery {
+    /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`, `shadowrocket`,
+    /// or `uri_list`.
+    pub profile: String,
+}

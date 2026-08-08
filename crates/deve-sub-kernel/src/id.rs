@@ -171,6 +171,20 @@ entity_id!(
     "Strong-typed identifier for a generated subscription cache entry."
 );
 
+entity_id!(
+    SubscriptionId,
+    "subscription",
+    "Strong-typed identifier for a subscription distribution entry."
+);
+
+entity_id!(
+    SubscriptionTokenId,
+    "subscription token",
+    "Strong-typed identifier for a subscription delivery token row. \
+     Identifies the row only; the token value itself is a secret stored as an \
+     HMAC-SHA256 digest."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

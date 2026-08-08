@@ -10,6 +10,7 @@ pub mod auth;
 pub mod health;
 pub mod node;
 pub mod source;
+pub mod subscription;
 pub mod template;
 
 pub use auth::{
@@ -31,10 +32,16 @@ pub use source::{
     CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,
     SourceFilterRulesDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
 };
+pub use subscription::{
+    CreateSubscriptionRequest, GetSubscriptionResponse, ListSubscriptionsQuery,
+    ListSubscriptionsResponse, RotateTokenRequest, SubscriptionDto, SubscriptionResponse,
+    TokenRotationResponse, UpdateSubscriptionRequest,
+};
 pub use template::{
-    ActiveGenerationQuery, ActiveGenerationResponse, ChainEdgeDto, CompatibilityReportDto,
-    CreateTemplateRequest, ExcludedNodeDto, GenerateQuery, GenerationResultDto,
-    GetTemplateResponse, GroupResolutionDto, ListTemplatesQuery, ListTemplatesResponse,
-    ListVersionsResponse, MissingNodeRefDto, ResolveTemplateResponse, RollbackTemplateResponse,
-    TemplateDto, TemplateResponse, TemplateVersionDto, UpdateTemplateRequest,
+    ActiveGenerationQuery, ActiveGenerationResponse, ChainEdgeDto, CompatibilityQuery,
+    CompatibilityReportDto, CreateTemplateRequest, ExcludedNodeDto, GenerateQuery,
+    GenerationResultDto, GetTemplateResponse, GroupResolutionDto, ListTemplatesQuery,
+    ListTemplatesResponse, ListVersionsResponse, MissingNodeRefDto, ResolveTemplateResponse,
+    RollbackRequest, RollbackTemplateResponse, TemplateDto, TemplateResponse, TemplateVersionDto,
+    UpdateTemplateRequest,
 };

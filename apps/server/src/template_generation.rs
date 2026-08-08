@@ -170,6 +170,11 @@ fn map_generation_error(
             "empty_output",
             "generated output is empty or invalid",
         ),
+        TemplateAppError::NoCompatibleNodes => err(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "no_compatible_nodes",
+            "no compatible nodes available for generation (all resolved nodes were excluded or unavailable)",
+        ),
         TemplateAppError::SpecYamlParse(msg) => {
             err(StatusCode::INTERNAL_SERVER_ERROR, "invalid_spec_yaml", &msg)
         }

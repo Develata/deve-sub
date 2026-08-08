@@ -250,8 +250,13 @@ async fn run_pipeline(
     sort_and_dedup(&mut nodes);
     let node_refs: Vec<Node> = nodes.into_iter().map(|(n, _)| n).collect();
 
+    // WHY: returning an error here — before `emit` and before any cache
+    // mutation — ensures the prior active generation remains served when the
+    // pool is temporarily empty (constraint #19). Emitting an empty-but-
+    // structurally-valid document would silently replace the last good
+    // subscription with a blank one.
     if node_refs.is_empty() {
-        warnings.push("no compatible nodes available for generation".to_owned());
+        return Err(TemplateAppError::NoCompatibleNodes);
     }
 
     let content = emit(profile, &node_refs)?;

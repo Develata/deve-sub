@@ -63,4 +63,11 @@ pub enum TemplateAppError {
     /// The generated output is empty or unparseable.
     #[error("generated output is empty or invalid")]
     EmptyOutput,
+
+    /// No compatible nodes are available for generation. All resolved nodes
+    /// were either excluded by the compatibility matrix or unavailable in the
+    /// pool. Returning this error before cache mutation preserves the last
+    /// successful generation (constraint #19).
+    #[error("no compatible nodes available for generation")]
+    NoCompatibleNodes,
 }

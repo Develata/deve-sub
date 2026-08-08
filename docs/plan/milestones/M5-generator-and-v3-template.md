@@ -185,7 +185,7 @@ GenerationRequest
   → assemble ProxyGroups (populate members, apply quick-group filters)
   → apply template (rules, dns, tun, output config)
   → emit to target profile format
-  → validate output (non-empty, well-formed)
+  → validate output (non-empty, well-formed; zero compatible nodes → error)
   → cache lookup (key = hash of request params)
       hit: return cached content
       miss: store, then publish
@@ -248,6 +248,9 @@ previous active generation remains served (constraint #19, GEN-015).
   No content is published.
 - Generation failure (emitter error, validation error): the previous active
   generation remains served (GEN-015, constraint #19). The failure is logged.
+- Empty compatible pool (all nodes excluded or unavailable): the pipeline
+  returns `NoCompatibleNodes` before any cache mutation, preserving the
+  previous active generation (GEN-015b, constraint #19).
 - Migration 0007 has a recovery test (constraint #13): apply migration,
   verify schema, rollback, verify rollback.
 

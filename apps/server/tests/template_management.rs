@@ -2229,3 +2229,179 @@ async fn gen016_preview_matches_published_output() {
         "strict preview must not replace the active generation"
     );
 }
+
+/// GEN-015b: Empty-pool protection — when a generation produces zero
+/// compatible nodes (e.g. all referenced nodes became unavailable), the
+/// pipeline must fail with 422 `no_compatible_nodes` rather than emitting
+/// an empty subscription. The previous active generation remains served
+/// (constraint #19). This complements GEN-015 (strict-mode failure) by
+/// covering the lenient-mode empty-pool case.
+#[tokio::test]
+async fn gen015b_empty_pool_preserves_active() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let ids = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let id_a = &ids[0];
+
+    let yaml_v1 = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen015b-empty\n",
+            "  description: Empty pool protection test\n",
+            "  version: 1\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - xray\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: fixed\n",
+            "    nodeRevision: 0\n",
+            "    nodeIds:\n",
+            "      - {a}\n",
+            "  proxyGroups: []\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                "/api/v1/templates",
+                &create_body("gen015b", "test", &yaml_v1),
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("create");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    let template_id = json["template"]["id"].as_str().expect("id").to_owned();
+
+    // First generate (lenient) — succeeds, stores and activates content_v1.
+    let gen_uri = format!("/api/v1/templates/{template_id}/generate?profile=xray&mode=lenient");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&gen_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("first generate");
+    assert_eq!(response.status(), StatusCode::OK);
+    let result = body_to_json(response).await;
+    let content_v1 = result["content"].as_str().expect("content").to_owned();
+    assert!(!content_v1.is_empty());
+
+    // Active endpoint returns content_v1.
+    let active_uri = format!("/api/v1/templates/{template_id}/generations/active?profile=xray");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&active_uri), &cookie))
+        .await
+        .expect("active after first generate");
+    assert_eq!(response.status(), StatusCode::OK);
+    let active = body_to_json(response).await;
+    assert_eq!(active["content"].as_str(), Some(content_v1.as_str()));
+
+    // Update template to v2: reference a non-existent node ULID. This forces
+    // a cache miss (template_version changes) and produces zero resolved
+    // nodes — the pipeline must fail with 422 no_compatible_nodes.
+    let yaml_v2 = concat!(
+        "apiVersion: deve-sub.io/v1\n",
+        "kind: SubscriptionTemplate\n",
+        "\n",
+        "metadata:\n",
+        "  name: gen015b-empty\n",
+        "  description: Empty pool protection test v2\n",
+        "  version: 2\n",
+        "\n",
+        "spec:\n",
+        "  targetProfiles:\n",
+        "    - xray\n",
+        "  variables: {}\n",
+        "  nodeSelector:\n",
+        "    mode: fixed\n",
+        "    nodeRevision: 0\n",
+        "    nodeIds:\n",
+        "      - 01KZAAAAAAAAAAAAAAAAAAAAAA\n",
+        "  proxyGroups: []\n",
+        "  rules: []\n",
+        "  dns: {}\n",
+        "  tun: {}\n",
+        "  output: {}",
+    )
+    .to_string();
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(
+                &format!("/api/v1/templates/{template_id}"),
+                &update_body("gen015b", "Empty pool protection test v2", &yaml_v2),
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("update to v2");
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_to_json(response).await;
+    assert_eq!(json["version"]["version"], 2);
+
+    // Second generate (lenient) — must fail with 422 no_compatible_nodes.
+    let gen_uri_v2 = format!("/api/v1/templates/{template_id}/generate?profile=xray&mode=lenient");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&gen_uri_v2)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("second generate");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "empty-pool generation must fail with 422, not emit an empty subscription"
+    );
+    let err = body_to_json(response).await;
+    assert_eq!(
+        err["error"].as_str().expect("error code"),
+        "no_compatible_nodes"
+    );
+
+    // GEN-015b core assertion: the active endpoint still returns content_v1.
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&active_uri), &cookie))
+        .await
+        .expect("active after empty-pool failure");
+    assert_eq!(response.status(), StatusCode::OK);
+    let active = body_to_json(response).await;
+    assert_eq!(
+        active["content"].as_str(),
+        Some(content_v1.as_str()),
+        "empty-pool failure must preserve the old active content (constraint #19)"
+    );
+    assert_eq!(
+        active["template_version"], 1,
+        "active entry should still be from version 1"
+    );
+}

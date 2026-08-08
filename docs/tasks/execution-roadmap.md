@@ -81,6 +81,23 @@ published). 453 tests pass; GEN-001–016 all pass.
 M6 (Subscription Distribution) is next. Blueprint:
 `docs/plan/milestones/M6-subscription-distribution.md`.
 
+## M5 review follow-ups (M6 backlog)
+
+The per-module M5 review surfaced four non-blocking findings deferred to M6.
+None weaken the M5 acceptance cases; each is tracked here so M6 closes it.
+
+| ID | Severity | Finding | Owner area | Action |
+|---|---|---|---|---|
+| F5.1 | medium | `crates/deve-sub-application/src/template/selection.rs` is 780 lines (prod 294 + test 486), exceeding the ~500-line hard fuse. | application/template | Split the `#[cfg(test)]` module into a sibling `selection_tests.rs` (or `tests/` within the crate) so production source stays under the fuse. |
+| F8.1 | medium | `apps/server/src/templates.rs` is 736 lines, exceeding the ~500-line hard fuse. | server/templates | Split DTO mappers, route handlers, and the error mapper into submodules under `apps/server/src/templates/`. |
+| F8.3 | medium | `RollbackRequest` and `CompatibilityQuery` are defined in the server crate, but ADR-0004 / `docs/contracts/module-boundaries.md` assign DTOs to the contract crate. | contract/template | Move both DTOs to `crates/deve-sub-contract/src/template.rs`, re-export from server. |
+| F1.1 | low | `docs/plan/00-engineering-constitution.md` §252 says "rollback, verify rollback" but migrations are forward-only (no down migrations), so the wording is plan drift. | plan/constitution | Amend §252 to "apply, verify forward migration; for rollback, restore from backup and re-run migrations" or equivalent forward-only phrasing. |
+
+F4.1 (mihomo manual YAML concatenation) and F5.3 (double DB fetch) and F5.5
+(update_template two-call transaction gap) remain low-priority observations
+not requiring M6 action; they are noted here for completeness and may be
+revisited if touched by other work.
+
 ## Authority
 
 - Milestone blueprints: `docs/plan/milestones/`

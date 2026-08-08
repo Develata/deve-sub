@@ -13,8 +13,8 @@ order. It schedules approved contracts; it cannot override plans.
 | M1 | Infrastructure | done | M0 | `deve-sub serve` with health, API skeleton, DB, Docker |
 | M2 | Auth and Users | done | M1 | Login, RBAC, session, 2FA, user management |
 | M3 | Protocol Engine | done | M1 | Canonical model, P0 parsers, P0 emitters, golden + fuzz |
-| M4 | Sources and Node Pool | planned | M3 | Source CRUD, snapshot, refresh, diff, node pool, override |
-| M5 | Generator and V3 Template | planned | M3, M4 | Node selection, proxy groups, V3 template, generation, cache |
+| M4 | Sources and Node Pool | done | M3 | Source CRUD, snapshot, refresh, diff, node pool, override |
+| M5 | Generator and V3 Template | active | M3, M4 | Node selection, proxy groups, V3 template, generation, cache |
 | M6 | Subscription Distribution | planned | M5 | Profile URL, short code, temp link, ETag, auth, traffic |
 | M7 | Probes and Detection | planned | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
 | M8 | Deployment and Hardening | planned | M7 | Install script, self-update, backup, SSRF, perf, multi-arch |
@@ -59,7 +59,15 @@ Hysteria2, TUIC v5, NaiveProxy, Shadowsocks, VMess, Trojan), `deve-sub-emitter`
 crate with URI emitters, 36 golden tests + 15 fuzz/property tests.
 PARSE-001–018 all pass.
 
-M4 (Sources and Node Pool) is next.
+M4 (Sources and Node Pool) is complete — source CRUD, refresh engine (SSRF
+guard, DNS pinning, redirect re-check, body size limit, timeout, gzip/deflate/
+brotli/zstd decompression, ETag), node pool (dedup, override, manual region,
+GeoIP, batch ops), source filter rules (two-phase protocol + region filter),
+concurrent refresh scheduler (semaphore-bounded), zero-node guard, 369 tests.
+SRC-001–014, NODE-001/003–011, SEC-001–005 all pass.
+
+M5 (Generator and V3 Template) is next. Blueprint:
+`docs/plan/milestones/M5-generator-and-v3-template.md`.
 
 ## Authority
 

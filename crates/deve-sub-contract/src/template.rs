@@ -200,3 +200,38 @@ pub struct CompatibilityReportDto {
     /// Nodes that are incompatible and excluded from generation.
     pub excluded: Vec<ExcludedNodeDto>,
 }
+
+/// Response body for `POST /api/v1/templates/{id}/generate`.
+///
+/// Contains the emitted subscription content for the requested target profile,
+/// the compatibility report (included/excluded nodes), and any warnings
+/// (missing references, empty pool). In strict mode, the request fails with
+/// 422 instead of returning this body when any node is excluded (GEN-014).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GenerationResultDto {
+    /// The emitted subscription content (YAML for mihomo, JSON for
+    /// sing-box/xray/v2ray, base64 URI list for shadowrocket, plain URI list
+    /// for uri_list).
+    pub content: String,
+    /// The target profile that was generated.
+    pub profile: String,
+    /// Node IDs included in the generated output.
+    pub included_node_ids: Vec<String>,
+    /// Nodes excluded from generation due to incompatibility.
+    pub excluded: Vec<ExcludedNodeDto>,
+    /// Non-fatal warnings: missing references, nodes that became unavailable
+    /// during generation, or an empty compatible pool.
+    pub warnings: Vec<String>,
+}
+
+/// Query parameters for `POST /api/v1/templates/{id}/generate`.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct GenerateQuery {
+    /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,
+    /// `shadowrocket`, or `uri_list`.
+    pub profile: String,
+    /// Generation mode: `strict` (fail on incompatible nodes) or `lenient`
+    /// (exclude and continue). Defaults to `lenient`.
+    #[serde(default)]
+    pub mode: Option<String>,
+}

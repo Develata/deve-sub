@@ -590,7 +590,27 @@ async fn check_compatibility_route(
             )
         })?;
 
-    Ok(Json(report))
+    Ok(Json(compat_report_to_dto(&report)))
+}
+
+fn compat_report_to_dto(r: &deve_sub_domain::CompatibilityReport) -> CompatibilityReportDto {
+    CompatibilityReportDto {
+        profile: r.profile.clone(),
+        included_node_ids: r
+            .included_node_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect(),
+        excluded: r
+            .excluded
+            .iter()
+            .map(|n| deve_sub_contract::ExcludedNodeDto {
+                node_id: n.node_id.to_string(),
+                display_name: n.display_name.clone(),
+                reason: n.reason.clone(),
+            })
+            .collect(),
+    }
 }
 
 /// Query parameters for `GET /api/v1/templates/{id}/compatibility`.

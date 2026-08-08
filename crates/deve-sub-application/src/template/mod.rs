@@ -9,6 +9,7 @@
 pub mod commands;
 pub mod compatibility;
 pub mod error;
+pub mod generation;
 pub mod selection;
 pub mod validation;
 
@@ -19,5 +20,6 @@ pub use commands::{
 };
 pub use compatibility::check_compatibility;
 pub use error::TemplateAppError;
+pub use generation::generate;
 pub use selection::{apply_sort_order, resolve_group, resolve_selection, resolve_template};
 pub use validation::{parse_template_document, validate_document};

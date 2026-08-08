@@ -639,6 +639,7 @@ dependencies = [
  "deve-sub-compatibility",
  "deve-sub-contract",
  "deve-sub-domain",
+ "deve-sub-emitter",
  "deve-sub-kernel",
  "deve-sub-protocol",
  "deve-sub-security",

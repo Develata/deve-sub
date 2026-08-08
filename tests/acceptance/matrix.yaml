@@ -850,7 +850,7 @@ cases:
     steps: []
     assertions: ["存在不兼容节点时生成失败"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-015
     title: 原子发布
     priority: P0

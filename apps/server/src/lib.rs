@@ -31,6 +31,7 @@ pub mod node_overrides;
 pub mod nodes;
 pub mod routes;
 pub mod sources;
+pub mod template_generation;
 pub mod templates;
 pub mod twofa;
 pub mod users;

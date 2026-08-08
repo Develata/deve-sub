@@ -9,8 +9,8 @@
 //! matrix".
 
 use deve_sub_compatibility::{ProfileKind, capability_for, check_node};
-use deve_sub_contract::template::{CompatibilityReportDto, ExcludedNodeDto};
 use deve_sub_domain::source::{NodePoolEntry, NodePoolRepository};
+use deve_sub_domain::{CompatibilityReport, ExcludedNode};
 use deve_sub_kernel::NodeId;
 
 use super::error::TemplateAppError;
@@ -22,12 +22,15 @@ use super::error::TemplateAppError;
 /// against the profile's capability matrix. Compatible nodes go into
 /// `included_node_ids`; incompatible nodes go into `excluded` with a reason.
 ///
+/// Returns a domain [`CompatibilityReport`]; the delivery layer maps it to
+/// `CompatibilityReportDto` at the API boundary.
+///
 /// This is a read-only operation.
 pub async fn check_compatibility(
     node_ids: &[NodeId],
     profile: ProfileKind,
     pool_repo: &dyn NodePoolRepository,
-) -> Result<CompatibilityReportDto, TemplateAppError> {
+) -> Result<CompatibilityReport, TemplateAppError> {
     let cap = capability_for(profile);
     let entries = fetch_nodes(node_ids, pool_repo).await?;
 
@@ -37,22 +40,22 @@ pub async fn check_compatibility(
     for id in node_ids {
         match entries.get(id) {
             Some(entry) => match check_node(&entry.node, &cap) {
-                Ok(()) => included.push(id.to_string()),
-                Err(reason) => excluded.push(ExcludedNodeDto {
-                    node_id: id.to_string(),
+                Ok(()) => included.push(*id),
+                Err(reason) => excluded.push(ExcludedNode {
+                    node_id: *id,
                     display_name: entry.node.display_name.clone(),
                     reason: reason.to_string(),
                 }),
             },
-            None => excluded.push(ExcludedNodeDto {
-                node_id: id.to_string(),
+            None => excluded.push(ExcludedNode {
+                node_id: *id,
                 display_name: String::new(),
                 reason: "node not found in pool".to_owned(),
             }),
         }
     }
 
-    Ok(CompatibilityReportDto {
+    Ok(CompatibilityReport {
         profile: profile.as_kebab().to_owned(),
         included_node_ids: included,
         excluded,
@@ -119,7 +122,7 @@ mod tests {
             .expect("compat");
         assert!(report.included_node_ids.is_empty());
         assert_eq!(report.excluded.len(), 1);
-        assert_eq!(report.excluded[0].node_id, id.to_string());
+        assert_eq!(report.excluded[0].node_id, id);
         assert_eq!(report.excluded[0].reason, "node not found in pool");
     }
 

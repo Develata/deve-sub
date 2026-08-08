@@ -39,7 +39,8 @@ pub use source::{
     SourceItem, SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
 };
 pub use template::{
-    API_VERSION, ChainEdge, ChainGraph, ChainVertex, CyclePath, FilterField, GroupMember,
+    API_VERSION, ChainEdge, ChainGraph, ChainVertex, CompatibilityReport, CyclePath, ExcludedNode,
+    FilterField, GenerationError, GenerationMode, GenerationRequest, GenerationResult, GroupMember,
     GroupResolution, GroupType, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES, MissingNodeRef,
     MissingReason, NodeFilterRule, NodeSelector, ProxyGroup, QuickGroupFilter, Rule, SelectionMode,
     SortOrder, SubscriptionTemplate, TemplateDocument, TemplateError, TemplateMetadata,

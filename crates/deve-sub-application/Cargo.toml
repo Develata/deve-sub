@@ -15,6 +15,7 @@ deve-sub-security = { workspace = true }
 deve-sub-kernel = { workspace = true }
 deve-sub-protocol = { workspace = true }
 deve-sub-compatibility = { workspace = true }
+deve-sub-emitter = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }

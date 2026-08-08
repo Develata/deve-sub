@@ -2502,6 +2502,118 @@
         ]
       }
     },
+    "/api/v1/templates/{id}/generate": {
+      "post": {
+        "summary": "`POST /api/v1/templates/{id}/generate?profile=&mode=` — generate a\nsubscription for the given template and target profile (admin). In strict\nmode, returns 422 with the compatibility report if any node is excluded\n(GEN-014). In lenient mode, excludes incompatible nodes and continues.",
+        "operationId": "generate_template",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "description": "Target profile: mihomo, sing-box, xray, v2ray, shadowrocket, uri_list",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "Generation mode: strict or lenient (default lenient)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Generation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid template id or profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template or active version not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Strict mode: incompatible nodes excluded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/templates/{id}/resolve": {
       "get": {
         "summary": "`GET /api/v1/templates/{id}/resolve` — resolve the template's nodeSelector\nand proxyGroups against the live node pool (admin). Read-only: no\ngeneration, no caching, no state change.",
@@ -3409,6 +3521,48 @@
           "reason": {
             "type": "string",
             "description": "Why the node is incompatible (human-readable)."
+          }
+        }
+      },
+      "GenerationResultDto": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/templates/{id}/generate`.\n\nContains the emitted subscription content for the requested target profile,\nthe compatibility report (included/excluded nodes), and any warnings\n(missing references, empty pool). In strict mode, the request fails with\n422 instead of returning this body when any node is excluded (GEN-014).",
+        "required": [
+          "content",
+          "profile",
+          "included_node_ids",
+          "excluded",
+          "warnings"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The emitted subscription content (YAML for mihomo, JSON for\nsing-box/xray/v2ray, base64 URI list for shadowrocket, plain URI list\nfor uri_list)."
+          },
+          "excluded": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExcludedNodeDto"
+            },
+            "description": "Nodes excluded from generation due to incompatibility."
+          },
+          "included_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Node IDs included in the generated output."
+          },
+          "profile": {
+            "type": "string",
+            "description": "The target profile that was generated."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Non-fatal warnings: missing references, nodes that became unavailable\nduring generation, or an empty compatible pool."
           }
         }
       },

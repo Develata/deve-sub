@@ -50,4 +50,17 @@ pub enum TemplateAppError {
     /// The requested target profile is not recognized.
     #[error("unknown profile: {0}")]
     UnknownProfile(String),
+
+    /// A generation pipeline semantic failure (e.g. strict-mode incompatible
+    /// nodes).
+    #[error(transparent)]
+    Generation(#[from] deve_sub_domain::GenerationError),
+
+    /// An emitter failed to produce output.
+    #[error("emission error: {0}")]
+    Emit(String),
+
+    /// The generated output is empty or unparseable.
+    #[error("generated output is empty or invalid")]
+    EmptyOutput,
 }

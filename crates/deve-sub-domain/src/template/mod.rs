@@ -9,6 +9,7 @@
 pub mod chain;
 pub mod entity;
 pub mod error;
+pub mod generation;
 pub mod ports;
 pub mod selection;
 pub mod spec;
@@ -16,6 +17,10 @@ pub mod spec;
 pub use chain::{ChainEdge, ChainGraph, ChainVertex, CyclePath};
 pub use entity::{SubscriptionTemplate, TemplateVersion};
 pub use error::TemplateError;
+pub use generation::{
+    CompatibilityReport, ExcludedNode, GenerationError, GenerationMode, GenerationRequest,
+    GenerationResult,
+};
 pub use ports::{TemplateRepository, TemplateVersionRepository};
 pub use selection::{GroupResolution, MissingNodeRef, MissingReason, TemplateResolution};
 pub use spec::{

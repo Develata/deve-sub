@@ -1574,3 +1574,202 @@ async fn gen013_incompatible_nodes_excluded_with_report() {
     let display_name = excluded[0]["display_name"].as_str().expect("display_name");
     assert_eq!(display_name, "NodeB");
 }
+
+/// GEN-014: Strict mode generation fails when incompatible nodes are present
+/// (returns 422 with the compatibility report), and lenient mode succeeds
+/// with the incompatible nodes excluded and the compatible ones emitted.
+#[tokio::test]
+async fn gen014_strict_mode_fails_lenient_succeeds() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let ids = import_nodes(
+        &router,
+        &cookie,
+        "trojan://pw@host-a.example.com:443#NodeA\nhysteria2://pw@host-b.example.com:443?sni=host-b.example.com#NodeB",
+    )
+    .await;
+    let id_a = &ids[0];
+    let id_b = &ids[1];
+
+    let yaml = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen014-strict\n",
+            "  description: Strict mode test\n",
+            "  version: 1\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - xray\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: fixed\n",
+            "    nodeRevision: 0\n",
+            "    nodeIds:\n",
+            "      - {a}\n",
+            "      - {b}\n",
+            "  proxyGroups: []\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+        b = id_b,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/templates", &create_body("gen014", "test", &yaml)),
+            &cookie,
+        ))
+        .await
+        .expect("create");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    let template_id = json["template"]["id"].as_str().expect("id").to_owned();
+
+    // Strict mode: Hysteria2 is incompatible with Xray → 422.
+    let strict_uri = format!("/api/v1/templates/{template_id}/generate?profile=xray&mode=strict");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&strict_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("strict generate");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "strict mode should fail with 422"
+    );
+    let err = body_to_json(response).await;
+    assert_eq!(
+        err["error"].as_str().expect("error code"),
+        "incompatible_nodes"
+    );
+    let message = err["message"].as_str().expect("message");
+    assert!(
+        message.contains("strict mode"),
+        "message should mention strict mode, got: {message}"
+    );
+    assert!(
+        message.contains(id_b),
+        "message should include the excluded node id, got: {message}"
+    );
+    assert!(
+        message.to_lowercase().contains("hysteria2"),
+        "message should reference hysteria2 incompatibility, got: {message}"
+    );
+
+    // Lenient mode: incompatible node excluded, compatible node emitted.
+    let lenient_uri = format!("/api/v1/templates/{template_id}/generate?profile=xray&mode=lenient");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&lenient_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("lenient generate");
+    assert_eq!(response.status(), StatusCode::OK);
+    let result = body_to_json(response).await;
+
+    assert_eq!(result["profile"].as_str().expect("profile"), "xray");
+    let included = result["included_node_ids"].as_array().expect("included");
+    assert_eq!(included.len(), 1, "only the Trojan node should be included");
+    assert_eq!(included[0].as_str().expect("id"), id_a);
+
+    let excluded = result["excluded"].as_array().expect("excluded");
+    assert_eq!(excluded.len(), 1, "Hysteria2 node should be excluded");
+    assert_eq!(excluded[0]["node_id"].as_str().expect("id"), id_b);
+
+    let content = result["content"].as_str().expect("content");
+    assert!(!content.is_empty(), "generated content must not be empty");
+    let content_json: serde_json::Value =
+        serde_json::from_str(content).expect("xray output should be valid JSON");
+
+    let outbounds = content_json["outbounds"]
+        .as_array()
+        .expect("outbounds array");
+    assert!(
+        outbounds
+            .iter()
+            .any(|o| o["tag"].as_str().is_some_and(|t| t.contains("NodeA"))),
+        "emitted outbounds should include NodeA"
+    );
+    assert!(
+        !outbounds
+            .iter()
+            .any(|o| o["tag"].as_str().is_some_and(|t| t.contains("NodeB"))),
+        "emitted outbounds must not include the excluded NodeB"
+    );
+
+    // Default mode (omitted) is lenient.
+    let default_uri = format!("/api/v1/templates/{template_id}/generate?profile=xray");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&default_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("default generate");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "default mode should be lenient and succeed"
+    );
+
+    // Unknown profile → 400.
+    let bad_uri = format!("/api/v1/templates/{template_id}/generate?profile=bogus&mode=lenient");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&bad_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("bad profile");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // Invalid mode → 400.
+    let bad_mode_uri =
+        format!("/api/v1/templates/{template_id}/generate?profile=xray&mode=aggressive");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("POST")
+                .uri(&bad_mode_uri)
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("bad mode");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

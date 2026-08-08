@@ -26,7 +26,7 @@ pub const MAX_ALIAS_DEPTH: u32 = 10;
 /// The seven proxy group types (spec §11.2). The concrete set available to a
 /// given template is filtered by the target profile's capability matrix at
 /// generation time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum GroupType {
     /// Manual selection.

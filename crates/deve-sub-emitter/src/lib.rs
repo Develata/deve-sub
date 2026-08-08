@@ -12,6 +12,7 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 mod common;
+mod container;
 pub mod error;
 mod hysteria2;
 mod naive;
@@ -24,6 +25,7 @@ mod uri_list;
 mod vless_reality;
 mod vmess;
 
+pub use container::{emit_mihomo, emit_shadowrocket, emit_singbox, emit_v2ray, emit_xray};
 pub use error::EmitError;
 
 pub use uri::emit_uri;

@@ -18,6 +18,7 @@ deve-sub-application = { workspace = true }
 deve-sub-domain = { workspace = true }
 deve-sub-security = { workspace = true }
 deve-sub-kernel = { workspace = true }
+deve-sub-compatibility = { workspace = true }
 deve-sub-web = { workspace = true }
 deve-sub-storage-sqlite = { workspace = true }
 deve-sub-adapters = { workspace = true }

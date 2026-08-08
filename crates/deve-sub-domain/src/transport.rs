@@ -29,6 +29,21 @@ pub enum TransportKind {
     Xtls,
 }
 
+impl std::fmt::Display for TransportKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Tcp => write!(f, "tcp"),
+            Self::Kcp => write!(f, "kcp"),
+            Self::Ws => write!(f, "ws"),
+            Self::H2 => write!(f, "h2"),
+            Self::Quic => write!(f, "quic"),
+            Self::Grpc => write!(f, "grpc"),
+            Self::HttpUpgrade => write!(f, "httpupgrade"),
+            Self::Xtls => write!(f, "xtls"),
+        }
+    }
+}
+
 /// Transport configuration. Lifted to the node level so emitters share one
 /// shape regardless of protocol.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -840,7 +840,7 @@ cases:
     steps: []
     assertions: ["节点被排除并生成报告"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-014
     title: 严格模式
     priority: P0

@@ -1,0 +1,233 @@
+//! Mihomo (Clash Meta) YAML container emitter.
+//!
+//! Emits a `proxies:` array with one entry per compatible node. Each entry
+//! follows the Mihomo proxy schema. The full template (proxy-groups, rules,
+//! dns) is assembled in Slice 5.
+
+use deve_sub_domain::{
+    Authentication, Node, ProtocolConfig, ProtocolKind, Transport, TransportKind,
+};
+
+use crate::error::EmitError;
+
+pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
+    let mut lines = Vec::new();
+    lines.push("proxies:".to_owned());
+    for node in nodes {
+        emit_proxy(node, &mut lines)?;
+    }
+    Ok(lines.join("\n"))
+}
+
+fn emit_proxy(node: &Node, lines: &mut Vec<String>) -> Result<(), EmitError> {
+    let server = node.endpoint.host.uri_host();
+    let port = node.endpoint.port;
+    let name = &node.display_name;
+
+    match node.protocol {
+        ProtocolKind::Trojan => emit_trojan(node, &server, port, name, lines),
+        ProtocolKind::Shadowsocks => emit_ss(node, &server, port, name, lines),
+        ProtocolKind::VMess => emit_vmess(node, &server, port, name, lines),
+        ProtocolKind::Vless => emit_vless(node, &server, port, name, lines),
+        ProtocolKind::Hysteria2 => emit_hysteria2(node, &server, port, name, lines),
+        ProtocolKind::TuicV5 => emit_tuic_v5(node, &server, port, name, lines),
+        ref other => {
+            return Err(EmitError::NoEmitter(format!(
+                "mihomo: unsupported protocol {other}"
+            )));
+        }
+    }?;
+    Ok(())
+}
+
+fn yaml_entry(name: &str, ptype: &str, server: &str, port: u16) -> String {
+    format!("  - name: \"{name}\"\n    type: {ptype}\n    server: {server}\n    port: {port}")
+}
+
+fn emit_trojan(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let password = match &node.authentication {
+        Authentication::Password { password } => password,
+        _ => return Err(EmitError::MissingField("trojan password")),
+    };
+    let mut entry = yaml_entry(name, "trojan", server, port);
+    entry.push_str(&format!("\n    password: \"{password}\""));
+    push_tls(node, &mut entry);
+    push_network(node, &mut entry);
+    lines.push(entry);
+    Ok(())
+}
+
+fn emit_ss(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let password = match &node.authentication {
+        Authentication::Password { password } => password,
+        _ => return Err(EmitError::MissingField("ss password")),
+    };
+    let method = match &node.config {
+        ProtocolConfig::Shadowsocks(cfg) => &cfg.method,
+        _ => return Err(EmitError::MissingField("ss method")),
+    };
+    let entry = format!(
+        "{}\n    cipher: {method}\n    password: \"{password}\"",
+        yaml_entry(name, "ss", server, port)
+    );
+    lines.push(entry);
+    Ok(())
+}
+
+fn emit_vmess(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let uuid = match &node.authentication {
+        Authentication::Uuid { uuid } => uuid,
+        _ => return Err(EmitError::MissingField("vmess uuid")),
+    };
+    let mut entry = yaml_entry(name, "vmess", server, port);
+    entry.push_str(&format!("\n    uuid: \"{uuid}\""));
+    if let ProtocolConfig::VMess(cfg) = &node.config {
+        if let Some(aid) = cfg.alter_id {
+            entry.push_str(&format!("\n    alterId: {aid}"));
+        }
+        if let Some(ref sec) = cfg.security {
+            entry.push_str(&format!("\n    cipher: {sec}"));
+        }
+    }
+    push_tls(node, &mut entry);
+    push_network(node, &mut entry);
+    lines.push(entry);
+    Ok(())
+}
+
+fn emit_vless(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let uuid = match &node.authentication {
+        Authentication::Uuid { uuid } => uuid,
+        _ => return Err(EmitError::MissingField("vless uuid")),
+    };
+    let mut entry = yaml_entry(name, "vless", server, port);
+    entry.push_str(&format!("\n    uuid: \"{uuid}\""));
+    if let ProtocolConfig::VlessReality(cfg) = &node.config
+        && let Some(ref flow) = cfg.flow
+    {
+        entry.push_str(&format!("\n    flow: {flow}"));
+    }
+    push_tls(node, &mut entry);
+    push_network(node, &mut entry);
+    lines.push(entry);
+    Ok(())
+}
+
+fn emit_hysteria2(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let password = match &node.authentication {
+        Authentication::Password { password } => password,
+        _ => return Err(EmitError::MissingField("hysteria2 password")),
+    };
+    let mut entry = yaml_entry(name, "hysteria2", server, port);
+    entry.push_str(&format!("\n    password: \"{password}\""));
+    push_tls(node, &mut entry);
+    lines.push(entry);
+    Ok(())
+}
+
+fn emit_tuic_v5(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let (uuid, password) = match &node.authentication {
+        Authentication::UuidPassword { uuid, password } => (uuid, password),
+        _ => return Err(EmitError::MissingField("tuic v5 uuid+password")),
+    };
+    let mut entry = yaml_entry(name, "tuic", server, port);
+    entry.push_str(&format!("\n    uuid: \"{uuid}\""));
+    entry.push_str(&format!("\n    password: \"{password}\""));
+    push_tls(node, &mut entry);
+    lines.push(entry);
+    Ok(())
+}
+
+fn push_tls(node: &Node, entry: &mut String) {
+    if let Some(ref tls) = node.tls {
+        if tls.enabled {
+            entry.push_str("\n    tls: true");
+        }
+        if let Some(ref sni) = tls.server_name {
+            entry.push_str(&format!("\n    sni: {sni}"));
+        }
+        if let Some(skip) = tls.skip_cert_verify {
+            entry.push_str(&format!("\n    skip-cert-verify: {skip}"));
+        }
+        if !tls.alpn.is_empty() {
+            let alpn: Vec<String> = tls.alpn.iter().map(|a| format!("\"{a}\"")).collect();
+            entry.push_str(&format!("\n    alpn: [{}]", alpn.join(", ")));
+        }
+    }
+}
+
+fn push_network(node: &Node, entry: &mut String) {
+    if let Some(ref transport) = node.transport {
+        let network = match transport.kind {
+            TransportKind::Tcp => "tcp",
+            TransportKind::Ws => "ws",
+            TransportKind::H2 => "h2",
+            TransportKind::Grpc => "grpc",
+            TransportKind::Quic => "quic",
+            TransportKind::HttpUpgrade => "httpupgrade",
+            TransportKind::Kcp => "kcp",
+            TransportKind::Xtls => "xtls",
+        };
+        entry.push_str(&format!("\n    network: {network}"));
+        push_transport_opts(transport, entry);
+    }
+}
+
+fn push_transport_opts(transport: &Transport, entry: &mut String) {
+    match transport.kind {
+        TransportKind::Ws | TransportKind::HttpUpgrade => {
+            if let Some(ref path) = transport.path {
+                entry.push_str(&format!("\n    ws-opts:\n      path: \"{path}\""));
+            }
+        }
+        TransportKind::Grpc => {
+            if let Some(ref path) = transport.path {
+                entry.push_str(&format!(
+                    "\n    grpc-opts:\n      grpc-service-name: \"{path}\""
+                ));
+            }
+        }
+        TransportKind::H2 => {
+            if let Some(ref path) = transport.path {
+                entry.push_str(&format!("\n    h2-opts:\n      path: \"{path}\""));
+            }
+        }
+        _ => {}
+    }
+}

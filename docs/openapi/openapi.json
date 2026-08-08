@@ -2409,6 +2409,99 @@
         ]
       }
     },
+    "/api/v1/templates/{id}/compatibility": {
+      "get": {
+        "summary": "`GET /api/v1/templates/{id}/compatibility?profile=` — check which\nresolved nodes are compatible with a target profile (admin). Read-only.",
+        "operationId": "check_compatibility_route",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "description": "Target profile: mihomo, sing-box, xray, v2ray, shadowrocket, uri_list",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compatibility report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompatibilityReportDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid template id or profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/templates/{id}/resolve": {
       "get": {
         "summary": "`GET /api/v1/templates/{id}/resolve` — resolve the template's nodeSelector\nand proxyGroups against the live node pool (admin). Read-only: no\ngeneration, no caching, no state change.",
@@ -3112,6 +3205,35 @@
           }
         }
       },
+      "CompatibilityReportDto": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/templates/{id}/compatibility`.\n\nReports which resolved nodes are included in and excluded from generation\nfor a given target profile. Incompatible nodes are never silently dropped\n(constraint #7): they appear in `excluded` with a reason.",
+        "required": [
+          "profile",
+          "included_node_ids",
+          "excluded"
+        ],
+        "properties": {
+          "excluded": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExcludedNodeDto"
+            },
+            "description": "Nodes that are incompatible and excluded from generation."
+          },
+          "included_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Node IDs that are compatible and will be included in generation."
+          },
+          "profile": {
+            "type": "string",
+            "description": "The target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,\n`shadowrocket`, or `uri_list`."
+          }
+        }
+      },
       "CreateSourceRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/sources`.",
@@ -3264,6 +3386,29 @@
           "message": {
             "type": "string",
             "description": "Human-readable error message."
+          }
+        }
+      },
+      "ExcludedNodeDto": {
+        "type": "object",
+        "description": "A node excluded from generation because it is incompatible with the\nrequested target profile.",
+        "required": [
+          "node_id",
+          "display_name",
+          "reason"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "The node's display name at the time of exclusion."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "The node ULID."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the node is incompatible (human-readable)."
           }
         }
       },

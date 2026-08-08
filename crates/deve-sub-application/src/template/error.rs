@@ -46,4 +46,8 @@ pub enum TemplateAppError {
     /// A node pool storage operation failed.
     #[error("storage error: {0}")]
     Storage(String),
+
+    /// The requested target profile is not recognized.
+    #[error("unknown profile: {0}")]
+    UnknownProfile(String),
 }

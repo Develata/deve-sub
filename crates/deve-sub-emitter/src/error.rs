@@ -20,4 +20,8 @@ pub enum EmitError {
     /// A field has an invalid value that cannot be emitted.
     #[error("invalid field {field}: {value}")]
     InvalidField { field: &'static str, value: String },
+
+    /// A container-format encoder failed (e.g. JSON/YAML serialization).
+    #[error("encode error: {0}")]
+    Encode(String),
 }

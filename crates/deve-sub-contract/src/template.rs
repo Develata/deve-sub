@@ -172,3 +172,31 @@ pub struct ChainEdgeDto {
     /// Destination vertex: `node:<ULID>` or `group:<name>`.
     pub to: String,
 }
+
+/// A node excluded from generation because it is incompatible with the
+/// requested target profile.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ExcludedNodeDto {
+    /// The node ULID.
+    pub node_id: String,
+    /// The node's display name at the time of exclusion.
+    pub display_name: String,
+    /// Why the node is incompatible (human-readable).
+    pub reason: String,
+}
+
+/// Response body for `GET /api/v1/templates/{id}/compatibility`.
+///
+/// Reports which resolved nodes are included in and excluded from generation
+/// for a given target profile. Incompatible nodes are never silently dropped
+/// (constraint #7): they appear in `excluded` with a reason.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CompatibilityReportDto {
+    /// The target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,
+    /// `shadowrocket`, or `uri_list`.
+    pub profile: String,
+    /// Node IDs that are compatible and will be included in generation.
+    pub included_node_ids: Vec<String>,
+    /// Nodes that are incompatible and excluded from generation.
+    pub excluded: Vec<ExcludedNodeDto>,
+}

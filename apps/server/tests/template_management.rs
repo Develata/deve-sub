@@ -1478,3 +1478,99 @@ async fn gen012_cyclic_group_dependency_rejected() {
         "error should include cycle path with both groups, got: {message}"
     );
 }
+
+/// GEN-013: Incompatible nodes are excluded from generation and reported with
+/// a reason. Import a Trojan node (compatible with Xray) and a Hysteria2 node
+/// (incompatible with Xray), then query the Xray compatibility report: the
+/// Trojan should be included, the Hysteria2 excluded with an
+/// "unsupported protocol" reason.
+#[tokio::test]
+async fn gen013_incompatible_nodes_excluded_with_report() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let ids = import_nodes(
+        &router,
+        &cookie,
+        "trojan://pw@host-a.example.com:443#NodeA\nhysteria2://pw@host-b.example.com:443?sni=host-b.example.com#NodeB",
+    )
+    .await;
+    let id_a = &ids[0];
+    let id_b = &ids[1];
+
+    let yaml = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen013-compat\n",
+            "  description: Compatibility test\n",
+            "  version: 1\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - xray\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: fixed\n",
+            "    nodeRevision: 0\n",
+            "    nodeIds:\n",
+            "      - {a}\n",
+            "      - {b}\n",
+            "  proxyGroups: []\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+        b = id_b,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/templates", &create_body("gen013", "test", &yaml)),
+            &cookie,
+        ))
+        .await
+        .expect("create");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    let template_id = json["template"]["id"].as_str().expect("id").to_owned();
+
+    let compat_uri = format!("/api/v1/templates/{template_id}/compatibility?profile=xray");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(get(&compat_uri), &cookie))
+        .await
+        .expect("compatibility");
+    assert_eq!(response.status(), StatusCode::OK);
+    let report = body_to_json(response).await;
+
+    assert_eq!(report["profile"].as_str().expect("profile"), "xray");
+
+    let included = report["included_node_ids"]
+        .as_array()
+        .expect("included_node_ids");
+    assert_eq!(included.len(), 1, "Trojan node should be included");
+    assert_eq!(included[0].as_str().expect("id"), id_a);
+
+    let excluded = report["excluded"].as_array().expect("excluded");
+    assert_eq!(excluded.len(), 1, "Hysteria2 node should be excluded");
+    assert_eq!(excluded[0]["node_id"].as_str().expect("id"), id_b);
+    let reason = excluded[0]["reason"].as_str().expect("reason");
+    assert!(
+        reason.contains("unsupported protocol"),
+        "reason should mention unsupported protocol, got: {reason}"
+    );
+    assert!(
+        reason.to_lowercase().contains("hysteria2"),
+        "reason should mention hysteria2, got: {reason}"
+    );
+
+    let display_name = excluded[0]["display_name"].as_str().expect("display_name");
+    assert_eq!(display_name, "NodeB");
+}

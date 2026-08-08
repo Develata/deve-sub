@@ -13,6 +13,7 @@ members = [
     "crates/deve-sub-inmemory",
     "crates/deve-sub-protocol",
     "crates/deve-sub-emitter",
+    "crates/deve-sub-compatibility",
     "crates/deve-sub-adapters",
 ]
 exclude = ["spikes/*"]
@@ -39,6 +40,7 @@ deve-sub-observability = { path = "crates/deve-sub-observability" }
 deve-sub-inmemory = { path = "crates/deve-sub-inmemory" }
 deve-sub-protocol = { path = "crates/deve-sub-protocol" }
 deve-sub-emitter = { path = "crates/deve-sub-emitter" }
+deve-sub-compatibility = { path = "crates/deve-sub-compatibility" }
 deve-sub-adapters = { path = "crates/deve-sub-adapters" }
 deve-sub-server = { path = "apps/server" }
 deve-sub-web = { path = "apps/web" }

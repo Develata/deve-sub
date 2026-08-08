@@ -13,6 +13,7 @@
 //! - API version and kind match the V3 namespace.
 //! - Proxy group names unique within the template.
 //! - Group member references resolve to a known group name.
+//! - Chain proxy graph is acyclic (DFS three-color cycle detection, GEN-012).
 //!
 //! Schema validation runs before persistence; no partial template is stored
 //! (GEN-002).
@@ -20,7 +21,7 @@
 use serde_yaml::Value;
 
 use deve_sub_domain::{
-    API_VERSION, GroupMember, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES, TemplateDocument,
+    API_VERSION, ChainGraph, GroupMember, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES, TemplateDocument,
     TemplateError,
 };
 
@@ -126,6 +127,13 @@ pub fn validate_document(doc: &TemplateDocument, spec_yaml: &str) -> Result<(), 
                 )));
             }
         }
+    }
+
+    let chain_graph = ChainGraph::from_groups(&doc.spec.proxy_groups);
+    if let Some(cycle) = chain_graph.detect_cycle() {
+        return Err(TemplateAppError::InvalidInput(format!(
+            "chain proxy cycle detected: {cycle}"
+        )));
     }
 
     Ok(())

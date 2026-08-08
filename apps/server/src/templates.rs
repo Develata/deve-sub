@@ -10,7 +10,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
 use deve_sub_application::template::{self, CreateTemplateParams, UpdateTemplateParams};
 use deve_sub_contract::{
-    CreateTemplateRequest, ErrorResponse, GetTemplateResponse, GroupResolutionDto,
+    ChainEdgeDto, CreateTemplateRequest, ErrorResponse, GetTemplateResponse, GroupResolutionDto,
     ListTemplatesQuery, ListTemplatesResponse, ListVersionsResponse, MissingNodeRefDto,
     ResolveTemplateResponse, RollbackTemplateResponse, TemplateDto, TemplateResponse,
     TemplateVersionDto, UpdateTemplateRequest,
@@ -469,10 +469,15 @@ async fn resolve_template_route(
             )
         })?;
 
-    Ok(Json(resolution_to_dto(&resolution)))
+    let chain_graph = deve_sub_domain::ChainGraph::from_groups(&doc.spec.proxy_groups);
+
+    Ok(Json(resolution_to_dto(&resolution, &chain_graph)))
 }
 
-fn resolution_to_dto(r: &deve_sub_domain::TemplateResolution) -> ResolveTemplateResponse {
+fn resolution_to_dto(
+    r: &deve_sub_domain::TemplateResolution,
+    chain_graph: &deve_sub_domain::ChainGraph,
+) -> ResolveTemplateResponse {
     ResolveTemplateResponse {
         selected_node_ids: r
             .selected_node_ids
@@ -481,6 +486,14 @@ fn resolution_to_dto(r: &deve_sub_domain::TemplateResolution) -> ResolveTemplate
             .collect(),
         selection_missing: r.selection_missing.iter().map(missing_to_dto).collect(),
         groups: r.groups.iter().map(group_resolution_to_dto).collect(),
+        chain_edges: chain_graph
+            .edges()
+            .into_iter()
+            .map(|e| ChainEdgeDto {
+                from: e.from.to_string(),
+                to: e.to.to_string(),
+            })
+            .collect(),
     }
 }
 

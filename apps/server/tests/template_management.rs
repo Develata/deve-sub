@@ -1277,3 +1277,204 @@ async fn gen011_node_deletion_reports_missing_refs() {
         .expect("explicit");
     assert_eq!(explicit.len(), 1, "only node B should be active");
 }
+
+/// GEN-010: A template with multiple relay groups resolves correctly, and
+/// the chain dependency graph is reported without false-positive cycles.
+#[tokio::test]
+async fn gen010_multi_relay_group_resolves() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let ids = import_nodes(
+        &router,
+        &cookie,
+        "trojan://pw@host-a.example.com:443#NodeA\ntrojan://pw@host-b.example.com:443#NodeB\ntrojan://pw@host-c.example.com:443#NodeC",
+    )
+    .await;
+    let id_a = &ids[0];
+    let id_b = &ids[1];
+    let id_c = &ids[2];
+
+    let yaml = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen010-multi-relay\n",
+            "  description: Multi-relay test\n",
+            "  version: 1\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - mihomo\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: dynamic\n",
+            "    filters: []\n",
+            "  proxyGroups:\n",
+            "    - name: entry\n",
+            "      type: select\n",
+            "      members:\n",
+            "        - kind: group\n",
+            "          name: relay-1\n",
+            "        - kind: group\n",
+            "          name: relay-2\n",
+            "    - name: relay-1\n",
+            "      type: relay\n",
+            "      members:\n",
+            "        - kind: node\n",
+            "          id: {a}\n",
+            "        - kind: node\n",
+            "          id: {b}\n",
+            "    - name: relay-2\n",
+            "      type: relay\n",
+            "      members:\n",
+            "        - kind: node\n",
+            "          id: {b}\n",
+            "        - kind: node\n",
+            "          id: {c}\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+        b = id_b,
+        c = id_c,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/templates", &create_body("gen010", "test", &yaml)),
+            &cookie,
+        ))
+        .await
+        .expect("create");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = body_to_json(response).await;
+    let template_id = json["template"]["id"].as_str().expect("id").to_owned();
+
+    let res = resolve_template_api(&router, &cookie, &template_id).await;
+
+    let groups = res["groups"].as_array().expect("groups");
+    assert_eq!(groups.len(), 3, "entry + two relays");
+
+    let relay_1 = groups
+        .iter()
+        .find(|g| g["group_name"] == "relay-1")
+        .expect("relay-1");
+    assert_eq!(
+        relay_1["explicit_node_ids"].as_array().expect("ids").len(),
+        2
+    );
+
+    let relay_2 = groups
+        .iter()
+        .find(|g| g["group_name"] == "relay-2")
+        .expect("relay-2");
+    assert_eq!(
+        relay_2["explicit_node_ids"].as_array().expect("ids").len(),
+        2
+    );
+
+    let chain_edges = res["chain_edges"].as_array().expect("chain_edges");
+    assert!(
+        !chain_edges.is_empty(),
+        "relay sequence edges should be present"
+    );
+    assert!(
+        chain_edges.iter().any(|e| {
+            e["from"].as_str() == Some(&format!("node:{id_a}"))
+                && e["to"].as_str() == Some(&format!("node:{id_b}"))
+        }),
+        "relay-1 edge A->B should exist"
+    );
+    assert!(
+        chain_edges.iter().any(|e| {
+            e["from"].as_str() == Some(&format!("node:{id_b}"))
+                && e["to"].as_str() == Some(&format!("node:{id_c}"))
+        }),
+        "relay-2 edge B->C should exist"
+    );
+    assert!(
+        chain_edges.iter().any(|e| {
+            e["from"].as_str() == Some("group:entry") && e["to"].as_str() == Some("group:relay-1")
+        }),
+        "entry->relay-1 dependency edge should exist"
+    );
+}
+
+/// GEN-012: A cyclic group dependency is rejected on save, and the error
+/// message includes the cycle path.
+#[tokio::test]
+async fn gen012_cyclic_group_dependency_rejected() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let ids = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let id_a = &ids[0];
+
+    let yaml = format!(
+        concat!(
+            "apiVersion: deve-sub.io/v1\n",
+            "kind: SubscriptionTemplate\n",
+            "\n",
+            "metadata:\n",
+            "  name: gen012-cycle\n",
+            "  description: Cyclic dependency test\n",
+            "  version: 1\n",
+            "\n",
+            "spec:\n",
+            "  targetProfiles:\n",
+            "    - mihomo\n",
+            "  variables: {{}}\n",
+            "  nodeSelector:\n",
+            "    mode: dynamic\n",
+            "    filters: []\n",
+            "  proxyGroups:\n",
+            "    - name: relay-alpha\n",
+            "      type: relay\n",
+            "      members:\n",
+            "        - kind: node\n",
+            "          id: {a}\n",
+            "        - kind: group\n",
+            "          name: relay-beta\n",
+            "    - name: relay-beta\n",
+            "      type: relay\n",
+            "      members:\n",
+            "        - kind: group\n",
+            "          name: relay-alpha\n",
+            "        - kind: node\n",
+            "          id: {a}\n",
+            "  rules: []\n",
+            "  dns: {{}}\n",
+            "  tun: {{}}\n",
+            "  output: {{}}",
+        ),
+        a = id_a,
+    );
+
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/templates", &create_body("gen012", "test", &yaml)),
+            &cookie,
+        ))
+        .await
+        .expect("create");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = body_to_json(response).await;
+    let message = json["message"].as_str().expect("message");
+    assert!(
+        message.contains("cycle"),
+        "error should mention cycle, got: {message}"
+    );
+    assert!(
+        message.contains("relay-alpha") && message.contains("relay-beta"),
+        "error should include cycle path with both groups, got: {message}"
+    );
+}

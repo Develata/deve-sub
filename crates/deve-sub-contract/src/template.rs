@@ -157,4 +157,18 @@ pub struct ResolveTemplateResponse {
     pub selection_missing: Vec<MissingNodeRefDto>,
     /// Per-group resolution for each `ProxyGroup` in the spec.
     pub groups: Vec<GroupResolutionDto>,
+    /// Directed edges in the chain proxy dependency graph. Each edge
+    /// represents a `from → to` dependency (relay sequence or group
+    /// reference). Empty when the template has no relay groups or
+    /// group-to-group references.
+    pub chain_edges: Vec<ChainEdgeDto>,
+}
+
+/// A directed edge in the chain proxy dependency graph.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ChainEdgeDto {
+    /// Source vertex: `node:<ULID>` or `group:<name>`.
+    pub from: String,
+    /// Destination vertex: `node:<ULID>` or `group:<name>`.
+    pub to: String,
 }

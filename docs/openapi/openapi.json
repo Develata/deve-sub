@@ -3094,6 +3094,24 @@
           }
         }
       },
+      "ChainEdgeDto": {
+        "type": "object",
+        "description": "A directed edge in the chain proxy dependency graph.",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Source vertex: `node:<ULID>` or `group:<name>`."
+          },
+          "to": {
+            "type": "string",
+            "description": "Destination vertex: `node:<ULID>` or `group:<name>`."
+          }
+        }
+      },
       "CreateSourceRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/sources`.",
@@ -3996,9 +4014,17 @@
         "required": [
           "selected_node_ids",
           "selection_missing",
-          "groups"
+          "groups",
+          "chain_edges"
         ],
         "properties": {
+          "chain_edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChainEdgeDto"
+            },
+            "description": "Directed edges in the chain proxy dependency graph. Each edge\nrepresents a `from → to` dependency (relay sequence or group\nreference). Empty when the template has no relay groups or\ngroup-to-group references."
+          },
           "groups": {
             "type": "array",
             "items": {

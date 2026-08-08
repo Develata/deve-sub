@@ -78,9 +78,9 @@ GEN-006	固定快照	P0	Integration	pass
 GEN-007	按地区分组	P0	E2E	pass
 GEN-008	按协议分组	P0	E2E	pass
 GEN-009	拖拽排序	P0	E2E	pass
-GEN-010	多中转组	P0	Regression	planned
+GEN-010	多中转组	P0	Regression	pass
 GEN-011	删除节点	P0	Regression	pass
-GEN-012	循环组依赖	P0	Integration	planned
+GEN-012	循环组依赖	P0	Integration	pass
 GEN-013	目标不兼容	P0	Integration	planned
 GEN-014	严格模式	P0	Integration	planned
 GEN-015	原子发布	P0	Regression	planned

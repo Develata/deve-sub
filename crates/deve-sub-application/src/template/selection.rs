@@ -184,11 +184,7 @@ pub async fn resolve_group(
 /// `SortOrder::Latency` is not yet supported (latency data arrives with
 /// url-test probes in a later slice); it falls back to ascending alphabetical
 /// order for now.
-pub fn apply_sort_order(
-    node_ids: &mut [NodeId],
-    entries: &[NodePoolEntry],
-    sort_order: SortOrder,
-) {
+pub fn apply_sort_order(node_ids: &mut [NodeId], entries: &[NodePoolEntry], sort_order: SortOrder) {
     let name_by_id: std::collections::HashMap<NodeId, &str> = entries
         .iter()
         .map(|e| (e.node.id, e.node.display_name.as_str()))

@@ -16,9 +16,9 @@ mod target;
 mod tls;
 
 // Protocol clients — added incrementally per phase:
-mod shadowsocks;
-mod trojan; // Phase 2 // Phase 2
-// mod vless;        // Phase 2
+mod shadowsocks; // Phase 2
+mod trojan; // Phase 2
+mod vless; // Phase 2
 // mod vmess;        // Phase 3
 // mod hysteria2;    // Phase 4
 // mod tuic;         // Phase 4
@@ -115,10 +115,7 @@ impl RealProxyProbe {
             ProtocolConfig::Shadowsocks(_) => {
                 shadowsocks::dial(node, &self.test_target, _timeout).await
             }
-            ProtocolConfig::VlessReality(_) => {
-                tracing::debug!(protocol = "vless", "real-proxy client not yet implemented");
-                Err(ErrorClass::Refused)
-            }
+            ProtocolConfig::VlessReality(_) => vless::dial(node, &self.test_target, _timeout).await,
             ProtocolConfig::VMess(_) => {
                 tracing::debug!(protocol = "vmess", "real-proxy client not yet implemented");
                 Err(ErrorClass::Refused)

@@ -21,6 +21,8 @@ tracing = { workspace = true }
 maxminddb = { workspace = true }
 quinn = { workspace = true }
 rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+webpki-roots = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

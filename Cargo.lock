@@ -629,8 +629,10 @@ dependencies = [
  "reqwest",
  "rustls",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "url",
+ "webpki-roots",
  "zstd",
 ]
 

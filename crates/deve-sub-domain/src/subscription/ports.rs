@@ -74,6 +74,14 @@ pub trait SubscriptionTokenRepository: Send + Sync {
         token_hash: &str,
     ) -> Result<Option<SubscriptionToken>, SubscriptionError>;
 
+    /// Find a token row whose `previous_token_digest` matches the given hash.
+    /// Used by delivery to resolve the old token during a rotation grace
+    /// period. Returns `None` if no row retains that digest as its previous.
+    async fn find_by_previous_token_hash(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<SubscriptionToken>, SubscriptionError>;
+
     /// Find the active token for a subscription.
     async fn find_active_for_subscription(
         &self,
@@ -101,6 +109,17 @@ pub trait SubscriptionTokenRepository: Send + Sync {
         &self,
         id: SubscriptionTokenId,
     ) -> Result<Option<SubscriptionToken>, SubscriptionError>;
+
+    /// Clear expired grace tokens: for every token row whose
+    /// `rotation_grace_until` is in the past (non-`None` and `<= now`),
+    /// set `previous_token_digest = NULL` and `rotation_grace_until = NULL`.
+    /// Rows with `None` grace (permanent) are left untouched. Returns the
+    /// number of rows cleaned. Called by the grace cleanup scheduler
+    /// (constraint #20).
+    async fn clear_expired_grace_tokens(
+        &self,
+        now: deve_sub_kernel::Timestamp,
+    ) -> Result<u64, SubscriptionError>;
 }
 
 /// Storage boundary for subscription short codes.

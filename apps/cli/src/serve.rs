@@ -11,7 +11,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 
 use deve_sub_application::{
-    DbHealthPort, GeoIpPort, LoginRateLimiter, RefreshScheduler, SubscriptionFetcher,
+    DbHealthPort, GeoIpPort, GraceTokenCleanupScheduler, LoginRateLimiter, RefreshScheduler,
+    SubscriptionFetcher,
 };
 use deve_sub_domain::{
     GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
@@ -133,7 +134,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         version_repo,
         cache_repo,
         subscription_repo,
-        subscription_token_repo,
+        subscription_token_repo: subscription_token_repo.clone(),
         short_code_repo,
         temp_link_repo,
         fetcher: fetcher.clone(),
@@ -149,6 +150,17 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         scheduler
             .run(async move {
                 let mut rx = scheduler_rx;
+                let _ = rx.recv().await;
+            })
+            .await;
+    });
+
+    let grace_scheduler = GraceTokenCleanupScheduler::new(subscription_token_repo);
+    let grace_rx = shutdown_tx.subscribe();
+    let grace_handle = tokio::spawn(async move {
+        grace_scheduler
+            .run(async move {
+                let mut rx = grace_rx;
                 let _ = rx.recv().await;
             })
             .await;
@@ -171,6 +183,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     .map_err(|e| anyhow::anyhow!(e))?;
 
     let _ = scheduler_handle.await;
+    let _ = grace_handle.await;
     tracing::info!("refresh scheduler stopped, server exiting");
 
     Ok(())

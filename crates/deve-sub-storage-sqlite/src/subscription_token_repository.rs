@@ -103,6 +103,22 @@ impl SubscriptionTokenRepository for SqliteSubscriptionTokenRepository {
         row.map(|r| r.to_domain()).transpose()
     }
 
+    async fn find_by_previous_token_hash(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<SubscriptionToken>, SubscriptionError> {
+        let row: Option<TokenRow> = sqlx::query_as(
+            "SELECT id, subscription_id, token_digest, previous_token_digest, \
+             rotation_grace_until, issued_at \
+             FROM subscription_tokens WHERE previous_token_digest = ?",
+        )
+        .bind(token_hash)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        row.map(|r| r.to_domain()).transpose()
+    }
+
     async fn find_active_for_subscription(
         &self,
         subscription_id: SubscriptionId,
@@ -204,5 +220,22 @@ impl SubscriptionTokenRepository for SqliteSubscriptionTokenRepository {
         .await
         .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
         row.map(|r| r.to_domain()).transpose()
+    }
+
+    async fn clear_expired_grace_tokens(
+        &self,
+        now: deve_sub_kernel::Timestamp,
+    ) -> Result<u64, SubscriptionError> {
+        let now_str = format_ts(now).map_err(SubscriptionError::Storage)?;
+        let result = sqlx::query(
+            "UPDATE subscription_tokens \
+             SET previous_token_digest = NULL, rotation_grace_until = NULL \
+             WHERE rotation_grace_until IS NOT NULL AND rotation_grace_until <= ?",
+        )
+        .bind(&now_str)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        Ok(result.rows_affected())
     }
 }

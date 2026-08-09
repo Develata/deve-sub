@@ -990,7 +990,7 @@ cases:
     steps: []
     assertions: ["宽限期和失效时间正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-013
     title: 短码冲突
     priority: P0

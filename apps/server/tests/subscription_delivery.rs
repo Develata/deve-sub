@@ -980,7 +980,190 @@ async fn del016_temp_link_delivery() {
         .clone()
         .oneshot(get(&format!("/sub/{temp_token}/mihomo")))
         .await
-        .expect("deliver after revoke");
+        .expect("deliver");
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+/// DEL-018 (OUT-012): After rotation with a grace period, the old token
+/// remains valid until grace expires. The new token is also valid.
+#[tokio::test]
+async fn del018_old_token_valid_during_grace() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let v = create_sub(&router, &cookie, &template_id, "grace-sub").await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+    let old_token = v["token_plaintext"].as_str().expect("token").to_owned();
+
+    // Rotate with 1-hour grace.
+    let rotate_body = serde_json::json!({ "grace_seconds": 3600 }).to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/rotate-token"),
+                &rotate_body,
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("rotate");
+    assert_eq!(res.status(), StatusCode::OK);
+    let new_token = body_to_json(res).await["token_plaintext"]
+        .as_str()
+        .expect("token")
+        .to_owned();
+    assert_ne!(old_token, new_token, "rotation must produce a new token");
+
+    // Old token still valid during grace.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{old_token}/mihomo")))
+        .await
+        .expect("old token deliver");
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(!body_to_string(res).await.is_empty());
+
+    // New token also valid.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{new_token}/mihomo")))
+        .await
+        .expect("new token deliver");
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(!body_to_string(res).await.is_empty());
+}
+
+/// DEL-019 (OUT-012): After rotation with grace_seconds=0 (no grace), the
+/// old token is immediately invalid.
+#[tokio::test]
+async fn del019_no_grace_old_token_immediately_invalid() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let v = create_sub(&router, &cookie, &template_id, "no-grace").await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+    let old_token = v["token_plaintext"].as_str().expect("token").to_owned();
+
+    let rotate_body = serde_json::json!({ "grace_seconds": 0 }).to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/rotate-token"),
+                &rotate_body,
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("rotate");
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Old token immediately invalid (grace_seconds=0).
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{old_token}/mihomo")))
+        .await
+        .expect("old token");
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+/// DEL-020 (OUT-012): With permanent grace (null grace_seconds), the old
+/// token stays valid indefinitely.
+#[tokio::test]
+async fn del020_permanent_grace_old_token_always_valid() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let v = create_sub(&router, &cookie, &template_id, "perm-grace").await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+    let old_token = v["token_plaintext"].as_str().expect("token").to_owned();
+
+    // Rotate with null grace = permanent.
+    let rotate_body = serde_json::json!({ "grace_seconds": null }).to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/rotate-token"),
+                &rotate_body,
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("rotate");
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Old token valid (permanent grace).
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{old_token}/mihomo")))
+        .await
+        .expect("old token");
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(!body_to_string(res).await.is_empty());
+}
+
+/// DEL-021 (OUT-012): The grace cleanup scheduler clears expired grace rows.
+/// After rotation with a past-expiry grace (simulated via direct DB
+/// manipulation), the cleanup port method clears the old digest so the old
+/// token returns 404.
+#[tokio::test]
+async fn del021_grace_cleanup_clears_expired() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let v = create_sub(&router, &cookie, &template_id, "cleanup").await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+    let old_token = v["token_plaintext"].as_str().expect("token").to_owned();
+
+    // Rotate with 1-hour grace.
+    let rotate_body = serde_json::json!({ "grace_seconds": 3600 }).to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/rotate-token"),
+                &rotate_body,
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("rotate");
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Old token valid during grace.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{old_token}/mihomo")))
+        .await
+        .expect("before cleanup");
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Run cleanup with a future timestamp (simulates time passing past grace).
+    let future = deve_sub_kernel::Timestamp::now() + time::Duration::hours(2);
+    let cleaned = app
+        .state
+        .subscription_token_repo
+        .clear_expired_grace_tokens(future)
+        .await
+        .expect("cleanup");
+    assert_eq!(cleaned, 1, "one grace row should be cleaned");
+
+    // Old token now invalid after cleanup.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{old_token}/mihomo")))
+        .await
+        .expect("after cleanup");
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 

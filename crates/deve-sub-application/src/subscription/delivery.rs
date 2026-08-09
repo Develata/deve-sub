@@ -102,11 +102,25 @@ pub async fn deliver_subscription(
         deps.master_key.as_bytes(),
     )?;
 
-    let token = deps
-        .token_repo
-        .find_by_token_hash(&token_digest)
-        .await?
-        .ok_or(SubscriptionAppError::TokenNotFound)?;
+    // WHY two-stage lookup: the active token is the common path (every
+    // non-rotated subscription). Only on an active-digest miss do we check
+    // the previous_token_digest column to honor the rotation grace window.
+    // `None` grace means the old token stays valid permanently (blueprint
+    // §301-304); an expired grace (`until <= now`) returns 404.
+    let token = if let Some(t) = deps.token_repo.find_by_token_hash(&token_digest).await? {
+        t
+    } else {
+        let prev = deps
+            .token_repo
+            .find_by_previous_token_hash(&token_digest)
+            .await?
+            .ok_or(SubscriptionAppError::TokenNotFound)?;
+
+        if !prev.is_previous_token_valid_at(deve_sub_kernel::Timestamp::now()) {
+            return Err(SubscriptionAppError::TokenNotFound);
+        }
+        prev
+    };
 
     let subscription = deps
         .sub_repo

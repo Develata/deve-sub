@@ -86,6 +86,10 @@ webpki-roots = "1"
 rcgen = { version = "0.13", default-features = false, features = ["ring"] }
 shadowsocks = "1"
 uuid = "1"
+md-5 = "0.11"
+aes = "0.8"
+aes-gcm = "0.10"
+crc32fast = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

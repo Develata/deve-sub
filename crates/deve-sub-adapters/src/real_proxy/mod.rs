@@ -21,7 +21,7 @@ mod trojan; // Phase 2
 mod vless; // Phase 2
 mod vmess; // Phase 3
 mod hysteria2; // Phase 4
-// mod tuic;         // Phase 4
+mod tuic; // Phase 4
 // mod vless_reality; // Phase 5
 mod naiveproxy; // Phase 5
 
@@ -121,8 +121,7 @@ impl RealProxyProbe {
                 hysteria2::dial(node, &self.test_target, _timeout).await
             }
             ProtocolConfig::TuicV5(_) => {
-                tracing::debug!(protocol = "tuic", "real-proxy client not yet implemented");
-                Err(ErrorClass::Refused)
+                tuic::dial(node, &self.test_target, _timeout).await
             }
             ProtocolConfig::NaiveProxy(_) => {
                 naiveproxy::dial(node, &self.test_target, _timeout).await

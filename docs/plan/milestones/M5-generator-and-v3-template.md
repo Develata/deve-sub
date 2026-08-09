@@ -252,7 +252,9 @@ previous active generation remains served (constraint #19, GEN-015).
   returns `NoCompatibleNodes` before any cache mutation, preserving the
   previous active generation (GEN-015b, constraint #19).
 - Migration 0007 has a recovery test (constraint #13): apply migration,
-  verify schema, rollback, verify rollback.
+  verify schema, restore from pre-migration backup, verify rollback.
+  Migrations are forward-only (`docs/plan/13-storage.md`); rollback is
+  always backup-restore, never a down migration.
 
 ## Authority
 

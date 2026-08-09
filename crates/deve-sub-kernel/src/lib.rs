@@ -14,10 +14,10 @@ pub mod time;
 
 pub use error::{KernelError, Result};
 pub use id::{
-    AuditLogId, GenerationCacheId, NodeId, NodeOverrideId, NodeSourceBindingId, OutboxEventId,
-    RecoveryCodeId, SessionId, ShortCodeId, SourceId, SourceItemId, SourceSnapshotId,
-    SubscriptionId, SubscriptionTokenId, TagId, TempLinkId, TemplateId, TemplateVersionId,
-    TrafficRecordId, UserId,
+    AuditLogId, GenerationCacheId, LatencyRecordId, NodeId, NodeOverrideId, NodeSourceBindingId,
+    OutboxEventId, ProbeRunId, ProbeSourceId, RecoveryCodeId, SessionId, ShortCodeId, SourceId,
+    SourceItemId, SourceSnapshotId, SubscriptionId, SubscriptionTokenId, TagId, TempLinkId,
+    TemplateId, TemplateVersionId, TrafficRecordId, UserId,
 };
 pub use revision::Revision;
 pub use time::Timestamp;

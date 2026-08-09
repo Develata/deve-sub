@@ -11,6 +11,7 @@ pub mod node_override_repository;
 pub mod node_pool_repository;
 mod node_row;
 pub mod pool_meta_repository;
+pub mod probe_repository;
 pub mod recovery_code_repository;
 pub mod session_repository;
 pub mod short_code_repository;
@@ -38,6 +39,9 @@ pub use generation_cache_repository::SqliteGenerationCacheRepository;
 pub use node_override_repository::SqliteNodeOverrideRepository;
 pub use node_pool_repository::SqliteNodePoolRepository;
 pub use pool_meta_repository::SqlitePoolMetaRepository;
+pub use probe_repository::{
+    SqliteLatencyRecordRepository, SqliteProbeRunRepository, SqliteProbeSourceRepository,
+};
 pub use recovery_code_repository::SqliteRecoveryCodeRepository;
 pub use session_repository::SqliteSessionRepository;
 pub use short_code_repository::SqliteShortCodeRepository;

@@ -62,7 +62,7 @@ NODE-008	自动地区 IPv6	P0	Integration	pass
 NODE-009	双栈域名	P0	Integration	pass
 NODE-010	人工覆写	P0	Regression	pass
 NODE-011	上游删除	P0	Integration	pass
-NODE-012	TCP 延迟	P0	Integration	planned
+NODE-012	TCP 延迟	P0	Integration	pass
 NODE-013	QUIC 延迟	P0	Integration	planned
 NODE-014	UDP 无响应	P0	Regression	planned
 NODE-015	真实代理测速	P0	Integration	planned

@@ -209,6 +209,25 @@ entity_id!(
      for quota enforcement and the subscription-userinfo header."
 );
 
+entity_id!(
+    ProbeSourceId,
+    "probe source",
+    "Strong-typed identifier for an external probe source (Nezha, DStatus, \
+     Komari) configured as a traffic data source."
+);
+
+entity_id!(
+    ProbeRunId,
+    "probe run",
+    "Strong-typed identifier for a batch latency probe run."
+);
+
+entity_id!(
+    LatencyRecordId,
+    "latency record",
+    "Strong-typed identifier for a single node latency measurement."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

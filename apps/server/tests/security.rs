@@ -11,7 +11,8 @@ use tower::ServiceExt;
 
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
+    GenerationCacheRepository, LatencyProbe, LatencyRecordRepository, NodeOverrideRepository,
+    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceRepository,
     RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
     SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
     TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
@@ -19,8 +20,9 @@ use deve_sub_domain::{
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
-    SqliteGenerationCacheRepository, SqliteHealthCheck, SqliteNodeOverrideRepository,
-    SqliteNodePoolRepository, SqlitePoolMetaRepository, SqliteRecoveryCodeRepository,
+    SqliteGenerationCacheRepository, SqliteHealthCheck, SqliteLatencyRecordRepository,
+    SqliteNodeOverrideRepository, SqliteNodePoolRepository, SqlitePoolMetaRepository,
+    SqliteProbeRunRepository, SqliteProbeSourceRepository, SqliteRecoveryCodeRepository,
     SqliteSessionRepository, SqliteShortCodeRepository, SqliteSourceRepository,
     SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
     SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
@@ -106,6 +108,15 @@ impl TestApp {
                     as Arc<dyn TempLinkRepository>,
                 traffic_repo: Arc::new(SqliteTrafficRepository::new(pool.clone()))
                     as Arc<dyn TrafficRepository>,
+                probe_source_repo: Arc::new(SqliteProbeSourceRepository::new(pool.clone()))
+                    as Arc<dyn ProbeSourceRepository>,
+                probe_run_repo: Arc::new(SqliteProbeRunRepository::new(pool.clone()))
+                    as Arc<dyn ProbeRunRepository>,
+                latency_repo: Arc::new(SqliteLatencyRecordRepository::new(pool.clone()))
+                    as Arc<dyn LatencyRecordRepository>,
+                tcp_probe: Arc::new(deve_sub_adapters::TcpConnectProbe::new())
+                    as Arc<dyn LatencyProbe>,
+                cancelled_flags: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,

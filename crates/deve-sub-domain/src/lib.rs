@@ -13,6 +13,7 @@ pub mod error;
 pub mod identity;
 pub mod node;
 pub mod node_override;
+pub mod probe;
 pub mod protocol;
 pub mod protocol_config;
 pub mod source;
@@ -29,6 +30,11 @@ pub use identity::{
 };
 pub use node::{Authentication, ChainTarget, Node, NodeSource, RegionAssignment, RegionMethod};
 pub use node_override::{NodeOverride, NodeOverrideRepository, Tag};
+pub use probe::{
+    ErrorClass, LatencyProbe, LatencyRecord, LatencyRecordRepository, LatencyResult, ProbeError,
+    ProbeRun, ProbeRunRepository, ProbeRunResult, ProbeRunStatus, ProbeSource, ProbeSourceKind,
+    ProbeSourceRepository, ProbeType, SyncStatus,
+};
 pub use protocol::{ProtocolConfig, ProtocolKind, UnsupportedNode};
 pub use protocol_config::{
     Hysteria2Config, NaiveProxyConfig, ShadowsocksConfig, TrojanConfig, TuicV5Config, UdpRelayMode,

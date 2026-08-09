@@ -6,13 +6,16 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
+    GenerationCacheRepository, LatencyProbe, LatencyRecordRepository, NodeOverrideRepository,
+    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceRepository,
     RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
     SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
     TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
@@ -32,6 +35,7 @@ pub mod csrf;
 pub mod delivery;
 pub mod node_overrides;
 pub mod nodes;
+pub mod probes;
 pub mod routes;
 pub mod sources;
 pub mod subscriptions;
@@ -71,6 +75,11 @@ pub struct AppState {
     pub short_code_repo: Arc<dyn ShortCodeRepository>,
     pub temp_link_repo: Arc<dyn TempLinkRepository>,
     pub traffic_repo: Arc<dyn TrafficRepository>,
+    pub probe_source_repo: Arc<dyn ProbeSourceRepository>,
+    pub probe_run_repo: Arc<dyn ProbeRunRepository>,
+    pub latency_repo: Arc<dyn LatencyRecordRepository>,
+    pub tcp_probe: Arc<dyn LatencyProbe>,
+    pub cancelled_flags: Arc<Mutex<HashMap<deve_sub_kernel::ProbeRunId, Arc<AtomicBool>>>>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,

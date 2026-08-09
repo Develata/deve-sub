@@ -9,6 +9,7 @@
 pub mod auth;
 pub mod health;
 pub mod node;
+pub mod probe;
 pub mod source;
 pub mod subscription;
 pub mod template;
@@ -28,6 +29,12 @@ pub use node::{
     NodeOverrideDto, NodeOverrideResponse, NodeResponse, NodeTagAssignmentDto, RegionMethodDto,
     RegionResponse, SetNodeTagsRequest, SetRegionRequest, TagDto, TagResponse,
     UpdateOverrideRequest,
+};
+pub use probe::{
+    CreateProbeRunRequest, CreateProbeSourceRequest, ErrorClassDto, LatencyRecordDto,
+    ListLatencyRecordsResponse, ListProbeSourcesResponse, ProbeRunDto, ProbeRunResponse,
+    ProbeRunResultDto, ProbeRunStatusDto, ProbeSourceDto, ProbeSourceKindDto, ProbeSourceResponse,
+    ProbeTypeDto, SyncStatusDto, UpdateProbeSourceRequest,
 };
 pub use source::{
     CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,

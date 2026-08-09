@@ -10,6 +10,7 @@
 pub mod auth;
 pub mod config;
 pub mod health;
+pub mod probe;
 pub mod source;
 pub mod subscription;
 pub mod template;
@@ -17,6 +18,12 @@ pub mod template;
 pub use auth::{AuthError, LoginRateLimiter};
 pub use config::AppConfig;
 pub use health::{DbHealthPort, HealthError, HealthStatus, HealthView};
+pub use probe::{
+    CreateProbeSourceParams, ProbeAppError, RunnerConfig, StartProbeRunParams,
+    UpdateProbeSourceParams, cancel_probe_run, create_probe_source, delete_probe_source,
+    execute_probe_run, get_probe_run, get_probe_source, list_probe_sources, recover_crashed_runs,
+    start_probe_run, update_probe_source,
+};
 pub use source::{
     FetchError, FetchResult, GeoIpPort, ImportParseResult, ParseContentError, RefreshScheduler,
     SourceAppError, SubscriptionFetcher, parse_content, parse_for_import,

@@ -5,8 +5,9 @@
 //! contract and `M4-sources-and-node-pool.md` Slice 4 for GeoIP and node
 //! override wiring.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 
@@ -15,7 +16,8 @@ use deve_sub_application::{
     SubscriptionFetcher,
 };
 use deve_sub_domain::{
-    GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
+    GenerationCacheRepository, LatencyProbe, LatencyRecordRepository, NodeOverrideRepository,
+    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceRepository,
     RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
     SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
     TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
@@ -107,6 +109,16 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let traffic_repo: Arc<dyn TrafficRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteTrafficRepository::new(db.clone()),
     );
+    let probe_source_repo: Arc<dyn ProbeSourceRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteProbeSourceRepository::new(db.clone()),
+    );
+    let probe_run_repo: Arc<dyn ProbeRunRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteProbeRunRepository::new(db.clone()),
+    );
+    let latency_repo: Arc<dyn LatencyRecordRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteLatencyRecordRepository::new(db.clone()),
+    );
+    let tcp_probe: Arc<dyn LatencyProbe> = Arc::new(deve_sub_adapters::TcpConnectProbe::new());
     let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
     let geoip: Arc<dyn GeoIpPort> = Arc::new(deve_sub_adapters::MaxMindGeoIp::new(
         config.geoip.mmdb_path.as_deref(),
@@ -141,6 +153,11 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         short_code_repo,
         temp_link_repo,
         traffic_repo,
+        probe_source_repo,
+        probe_run_repo,
+        latency_repo,
+        tcp_probe,
+        cancelled_flags: Arc::new(Mutex::new(HashMap::new())),
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
         rate_limiter,
@@ -149,6 +166,15 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
 
     let scheduler = RefreshScheduler::new(source_repo, snapshot_repo, pool_repo, fetcher, geoip);
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+
+    // Crash recovery (constraint #20): mark any probe runs left in Running or
+    // Pending as Failed before serving traffic.
+    match deve_sub_application::probe::recover_crashed_runs(state.probe_run_repo.as_ref()).await {
+        Ok(n) if n > 0 => tracing::info!(recovered = n, "marked crashed probe runs as failed"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = %e, "failed to recover crashed probe runs"),
+    }
+
     let scheduler_rx = shutdown_tx.subscribe();
     let scheduler_handle = tokio::spawn(async move {
         scheduler

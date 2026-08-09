@@ -919,6 +919,91 @@
         ]
       }
     },
+    "/api/v1/nodes/{id}/latency": {
+      "get": {
+        "summary": "`GET /api/v1/nodes/{id}/latency` — list recent latency records for a node.",
+        "operationId": "list_node_latency",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Node ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max records (1-200, default 50)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latency records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListLatencyRecordsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/nodes/{id}/override": {
       "delete": {
         "summary": "`DELETE /api/v1/nodes/{id}/override` — delete a node's override (admin only).",
@@ -1223,6 +1308,687 @@
           },
           "403": {
             "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/probe-runs": {
+      "post": {
+        "summary": "`POST /api/v1/probe-runs` — start a probe run (admin only).",
+        "description": "Creates a `Pending` run and spawns the runner as a background task. The\nresponse returns immediately with the run in `Pending` status; poll\n`GET /api/v1/probe-runs/{id}` for progress.",
+        "operationId": "create_probe_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProbeRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Probe run created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeRunResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/probe-runs/{id}": {
+      "get": {
+        "summary": "`GET /api/v1/probe-runs/{id}` — get a probe run (admin only).",
+        "operationId": "get_probe_run",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Probe run ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Probe run found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeRunResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/probe-runs/{id}/cancel": {
+      "post": {
+        "summary": "`POST /api/v1/probe-runs/{id}/cancel` — cancel a probe run (admin only).",
+        "operationId": "cancel_probe_run",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Probe run ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Probe run cancelled"
+          },
+          "400": {
+            "description": "Invalid id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Run already terminal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/probe-sources": {
+      "get": {
+        "summary": "`GET /api/v1/probe-sources` — list probe sources (admin only).",
+        "operationId": "list_probe_sources",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max sources per page (1-100, default 20)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pagination cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "Filter by kind (nezha/dstatus/komari)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Probe source list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListProbeSourcesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "`POST /api/v1/probe-sources` — create a probe source (admin only).",
+        "operationId": "create_probe_source",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProbeSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Probe source created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeSourceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/probe-sources/{id}": {
+      "get": {
+        "summary": "`GET /api/v1/probe-sources/{id}` — get a probe source (admin only).",
+        "operationId": "get_probe_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Probe source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Probe source found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeSourceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "`PUT /api/v1/probe-sources/{id}` — update a probe source (admin only).",
+        "operationId": "update_probe_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Probe source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProbeSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Probe source updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeSourceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "`DELETE /api/v1/probe-sources/{id}` — delete a probe source (admin only).",
+        "operationId": "delete_probe_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Probe source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Probe source deleted"
+          },
+          "400": {
+            "description": "Invalid id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -4541,6 +5307,61 @@
           }
         }
       },
+      "CreateProbeRunRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/probe-runs`.",
+        "required": [
+          "probe_type",
+          "node_ids"
+        ],
+        "properties": {
+          "node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Node ULIDs to probe."
+          },
+          "probe_type": {
+            "$ref": "#/components/schemas/ProbeTypeDto",
+            "description": "The probe type to run."
+          }
+        }
+      },
+      "CreateProbeSourceRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/probe-sources`.",
+        "required": [
+          "kind",
+          "name",
+          "endpoint_url"
+        ],
+        "properties": {
+          "auth_config": {
+            "type": "string",
+            "description": "Auth config (API token for Nezha; empty for DStatus/Komari). Encrypted\nat rest with XChaCha20-Poly1305."
+          },
+          "endpoint_url": {
+            "type": "string",
+            "description": "Panel base URL."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ProbeSourceKindDto",
+            "description": "Panel kind."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name."
+          },
+          "subscription_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bound subscription ULID, if any."
+          }
+        }
+      },
       "CreateSourceRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/sources`.",
@@ -4761,6 +5582,18 @@
             "description": "The authenticated user."
           }
         }
+      },
+      "ErrorClassDto": {
+        "type": "string",
+        "description": "The error classification of a latency result.",
+        "enum": [
+          "refused",
+          "dns_failed",
+          "timeout",
+          "tls_failed",
+          "quic_failed",
+          "ok"
+        ]
       },
       "ErrorResponse": {
         "type": "object",
@@ -5082,6 +5915,69 @@
         ],
         "description": "Per-line outcome of a manual import."
       },
+      "LatencyRecordDto": {
+        "type": "object",
+        "description": "A single latency measurement record.",
+        "required": [
+          "id",
+          "run_id",
+          "node_id",
+          "probe_type",
+          "error_class",
+          "measured_at"
+        ],
+        "properties": {
+          "error_class": {
+            "$ref": "#/components/schemas/ErrorClassDto",
+            "description": "Error classification."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "measured_at": {
+            "type": "string",
+            "description": "When the measurement was taken (ISO 8601 UTC)."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "Node ULID."
+          },
+          "probe_type": {
+            "$ref": "#/components/schemas/ProbeTypeDto",
+            "description": "The probe type."
+          },
+          "rtt_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Round-trip time in milliseconds. `None` means no response (NODE-014).",
+            "minimum": 0
+          },
+          "run_id": {
+            "type": "string",
+            "description": "The probe run that produced this record."
+          }
+        }
+      },
+      "ListLatencyRecordsResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/nodes/{id}/latency`.",
+        "required": [
+          "records"
+        ],
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LatencyRecordDto"
+            },
+            "description": "Latency records, newest first."
+          }
+        }
+      },
       "ListNodesResponse": {
         "type": "object",
         "description": "Response body for `GET /api/v1/nodes` (cursor-paginated node list).",
@@ -5102,6 +5998,29 @@
               "$ref": "#/components/schemas/NodeDto"
             },
             "description": "Nodes in the current page."
+          }
+        }
+      },
+      "ListProbeSourcesResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/probe-sources` (cursor-paginated).",
+        "required": [
+          "sources"
+        ],
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cursor for the next page (`None` if no more results)."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProbeSourceDto"
+            },
+            "description": "Sources in the current page."
           }
         }
       },
@@ -5567,6 +6486,216 @@
             }
           }
         }
+      },
+      "ProbeRunDto": {
+        "type": "object",
+        "description": "Probe run information returned by probe run endpoints.",
+        "required": [
+          "id",
+          "probe_type",
+          "node_ids",
+          "status",
+          "results",
+          "created_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Terminal time (ISO 8601 UTC). `None` if still pending or running."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation time (ISO 8601 UTC)."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Node ULIDs in the run."
+          },
+          "probe_type": {
+            "$ref": "#/components/schemas/ProbeTypeDto",
+            "description": "The probe type."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProbeRunResultDto"
+            },
+            "description": "Per-node results. Populated as probes complete."
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProbeRunStatusDto",
+            "description": "Current status."
+          }
+        }
+      },
+      "ProbeRunResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/probe-runs` and `GET /api/v1/probe-runs/{id}`.",
+        "required": [
+          "run"
+        ],
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/ProbeRunDto",
+            "description": "The probe run."
+          }
+        }
+      },
+      "ProbeRunResultDto": {
+        "type": "object",
+        "description": "Per-node result within a probe run.",
+        "required": [
+          "node_id",
+          "error_class"
+        ],
+        "properties": {
+          "error_class": {
+            "$ref": "#/components/schemas/ErrorClassDto",
+            "description": "Error classification."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "Node ULID."
+          },
+          "rtt_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Round-trip time in milliseconds. `None` means no response (NODE-014).",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "boolean",
+            "description": "Whether this node's probe was skipped (run cancelled before it started)."
+          }
+        }
+      },
+      "ProbeRunStatusDto": {
+        "type": "string",
+        "description": "The status of a probe run.",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "cancelled",
+          "failed"
+        ]
+      },
+      "ProbeSourceDto": {
+        "type": "object",
+        "description": "Probe source information returned by probe source endpoints.\n\nNever includes the raw `auth_config` ciphertext in responses.",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "endpoint_url",
+          "has_auth",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "Creation time (ISO 8601 UTC)."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the source is active."
+          },
+          "endpoint_url": {
+            "type": "string",
+            "description": "Panel base URL."
+          },
+          "has_auth": {
+            "type": "boolean",
+            "description": "Whether an auth credential is configured (the credential itself is not\nreturned)."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ProbeSourceKindDto",
+            "description": "Panel kind."
+          },
+          "last_sync_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the last sync was attempted (ISO 8601 UTC)."
+          },
+          "last_sync_status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SyncStatusDto",
+                "description": "Status of the last sync."
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name."
+          },
+          "subscription_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bound subscription ULID, if any."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Last update time (ISO 8601 UTC)."
+          }
+        }
+      },
+      "ProbeSourceKindDto": {
+        "type": "string",
+        "description": "The kind of external probe panel.",
+        "enum": [
+          "nezha",
+          "dstatus",
+          "komari"
+        ]
+      },
+      "ProbeSourceResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/probe-sources` and\n`PUT /api/v1/probe-sources/{id}`.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/ProbeSourceDto",
+            "description": "The probe source."
+          }
+        }
+      },
+      "ProbeTypeDto": {
+        "type": "string",
+        "description": "The type of latency probe.",
+        "enum": [
+          "tcp_connect",
+          "quic_handshake",
+          "real_proxy"
+        ]
       },
       "ReconcileCountsDto": {
         "type": "object",
@@ -6096,6 +7225,33 @@
           }
         }
       },
+      "SyncStatusDto": {
+        "oneOf": [
+          {
+            "type": "null",
+            "description": "The last sync succeeded.",
+            "default": null
+          },
+          {
+            "type": "object",
+            "description": "The last sync failed with the given message.",
+            "required": [
+              "message"
+            ],
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "null",
+            "description": "Never synced or stale.",
+            "default": null
+          }
+        ],
+        "description": "Sync status of a probe source's last traffic sync."
+      },
       "TagDto": {
         "type": "object",
         "description": "A user-defined tag.",
@@ -6429,6 +7585,47 @@
           "sort_order": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "UpdateProbeSourceRequest": {
+        "type": "object",
+        "description": "Request body for `PUT /api/v1/probe-sources/{id}`. Only provided fields are\nmutated.",
+        "properties": {
+          "auth_config": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Auth config. Replaces the existing credential."
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the source is active."
+          },
+          "endpoint_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Panel base URL."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Human-readable name."
+          },
+          "subscription_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bound subscription ULID. `None` clears the binding; omitting the field\nleaves it unchanged."
           }
         }
       },

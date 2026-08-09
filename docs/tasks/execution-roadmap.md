@@ -86,12 +86,12 @@ M6 (Subscription Distribution) is next. Blueprint:
 The per-module M5 review surfaced four non-blocking findings deferred to M6.
 None weaken the M5 acceptance cases; each is tracked here so M6 closes it.
 
-| ID | Severity | Finding | Owner area | Action |
-|---|---|---|---|---|
-| F5.1 | medium | `crates/deve-sub-application/src/template/selection.rs` is 780 lines (prod 294 + test 486), exceeding the ~500-line hard fuse. | application/template | Split the `#[cfg(test)]` module into a sibling `selection_tests.rs` (or `tests/` within the crate) so production source stays under the fuse. |
-| F8.1 | medium | `apps/server/src/templates.rs` is 736 lines, exceeding the ~500-line hard fuse. | server/templates | Split DTO mappers, route handlers, and the error mapper into submodules under `apps/server/src/templates/`. |
-| F8.3 | medium | `RollbackRequest` and `CompatibilityQuery` are defined in the server crate, but ADR-0004 / `docs/contracts/module-boundaries.md` assign DTOs to the contract crate. | contract/template | Move both DTOs to `crates/deve-sub-contract/src/template.rs`, re-export from server. |
-| F1.1 | low | `docs/plan/00-engineering-constitution.md` §252 says "rollback, verify rollback" but migrations are forward-only (no down migrations), so the wording is plan drift. | plan/constitution | Amend §252 to "apply, verify forward migration; for rollback, restore from backup and re-run migrations" or equivalent forward-only phrasing. |
+| ID | Severity | Finding | Owner area | Action | Status |
+|---|---|---|---|---|---|
+| F5.1 | medium | `crates/deve-sub-application/src/template/selection.rs` is 780 lines (prod 294 + test 486), exceeding the ~500-line hard fuse. | application/template | Split the `#[cfg(test)]` module into a sibling `selection_tests.rs` (or `tests/` within the crate) so production source stays under the fuse. | **done** — tests extracted to `selection_tests.rs` via `#[path]`; prod now 298 lines. |
+| F8.1 | medium | `apps/server/src/templates.rs` is 736 lines, exceeding the ~500-line hard fuse. | server/templates | Split DTO mappers, route handlers, and the error mapper into submodules under `apps/server/src/templates/`. | **done** — split into `templates/{mod,crud,resolve,mappers,error}.rs`; largest file 353 lines. |
+| F8.3 | medium | `RollbackRequest` and `CompatibilityQuery` are defined in the server crate, but ADR-0004 / `docs/contracts/module-boundaries.md` assign DTOs to the contract crate. | contract/template | Move both DTOs to `crates/deve-sub-contract/src/template.rs`, re-export from server. | **done** — both DTOs already in `deve-sub-contract/src/template.rs` (commit `eaf796e`); server imports from `deve_sub_contract`. No remaining local definitions. |
+| F1.1 | low | `docs/plan/00-engineering-constitution.md` §252 says "rollback, verify rollback" but migrations are forward-only (no down migrations), so the wording is plan drift. | plan/constitution | Amend §252 to "apply, verify forward migration; for rollback, restore from backup and re-run migrations" or equivalent forward-only phrasing. | **done** — constitution no longer contains §252 (refactored to 165 lines). The surviving drift was `M5-generator-and-v3-template.md:255`; amended to forward-only backup-restore phrasing matching `13-storage.md`, M4, and M6. |
 
 F4.1 (mihomo manual YAML concatenation) and F5.3 (double DB fetch) and F5.5
 (update_template two-call transaction gap) remain low-priority observations

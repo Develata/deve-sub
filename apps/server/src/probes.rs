@@ -24,8 +24,8 @@ use deve_sub_contract::{
     ProbeTypeDto, SyncStatusDto, UpdateProbeSourceRequest,
 };
 use deve_sub_domain::{
-    ErrorClass, LatencyRecord, ProbeRun, ProbeRunStatus, ProbeSource,
-    ProbeSourceKind, ProbeType, SyncStatus,
+    ErrorClass, LatencyRecord, ProbeRun, ProbeRunStatus, ProbeSource, ProbeSourceKind, ProbeType,
+    SyncStatus,
 };
 use deve_sub_kernel::{NodeId, ProbeRunId, ProbeSourceId, SubscriptionId};
 
@@ -530,11 +530,12 @@ async fn create_probe_run(
 
     let probe_adapter = match probe_type {
         ProbeType::TcpConnect => Arc::clone(&state.tcp_probe),
-        ProbeType::QuicHandshake | ProbeType::RealProxy => {
+        ProbeType::QuicHandshake => Arc::clone(&state.quic_probe),
+        ProbeType::RealProxy => {
             return Err(err(
                 StatusCode::BAD_REQUEST,
                 "unsupported_probe_type",
-                "QUIC and real-proxy probes are not yet available",
+                "real-proxy probes are not yet available",
             ));
         }
     };

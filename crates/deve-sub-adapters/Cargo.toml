@@ -19,6 +19,8 @@ url = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 maxminddb = { workspace = true }
+quinn = { workspace = true }
+rustls = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

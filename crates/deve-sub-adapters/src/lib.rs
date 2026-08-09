@@ -9,8 +9,10 @@
 
 pub mod geoip;
 pub mod http_fetcher;
+pub mod quic_probe;
 pub mod tcp_probe;
 
 pub use geoip::MaxMindGeoIp;
 pub use http_fetcher::{HttpFetcher, ProductionSsrfChecker, SsrfChecker};
+pub use quic_probe::QuicHandshakeProbe;
 pub use tcp_probe::TcpConnectProbe;

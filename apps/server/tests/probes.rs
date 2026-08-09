@@ -1,17 +1,18 @@
 #![allow(clippy::expect_used)]
 
 //! Integration tests for M7 Slice 1: probe source CRUD, TCP latency probe
-//! (NODE-012), and latency query.
+//! (NODE-012), QUIC handshake probe (NODE-013), UDP no-response handling
+//! (NODE-014), and latency query.
 //!
 //! Covers:
 //! - `POST/GET/PUT/DELETE /api/v1/probe-sources/*` (probe source CRUD)
-//! - `POST /api/v1/probe-runs` + `GET /api/v1/probe-runs/{id}` (NODE-012 TCP RTT)
+//! - `POST /api/v1/probe-runs` + `GET /api/v1/probe-runs/{id}` (NODE-012 TCP RTT,
+//!   NODE-013 QUIC handshake RTT, NODE-014 UDP no-response)
 //! - `GET /api/v1/nodes/{id}/latency` (latency record query)
-//! - Error classification on a closed port (refused)
+//! - Error classification on a closed port (refused) and silent UDP (timeout)
 //!
-//! QUIC handshake (NODE-013) and UDP no-response (NODE-014) are deferred until
-//! a QUIC library is selected. See
-//! `docs/plan/milestones/M7-probes-and-detection.md`.
+//! See `docs/plan/milestones/M7-probes-and-detection.md` §"Latency probe
+//! model".
 
 use std::str::FromStr;
 use std::sync::Arc;
@@ -121,6 +122,8 @@ impl TestApp {
                 latency_repo: Arc::new(SqliteLatencyRecordRepository::new(pool.clone()))
                     as Arc<dyn LatencyRecordRepository>,
                 tcp_probe: Arc::new(deve_sub_adapters::TcpConnectProbe::new())
+                    as Arc<dyn LatencyProbe>,
+                quic_probe: Arc::new(deve_sub_adapters::QuicHandshakeProbe::new())
                     as Arc<dyn LatencyProbe>,
                 cancelled_flags: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
@@ -363,7 +366,10 @@ async fn update_probe_source() {
         .await
         .expect("create");
     let create_json = body_to_json(create_resp).await;
-    let id = create_json["source"]["id"].as_str().expect("source id").to_owned();
+    let id = create_json["source"]["id"]
+        .as_str()
+        .expect("source id")
+        .to_owned();
 
     let response = router
         .clone()
@@ -487,7 +493,9 @@ async fn tcp_probe_records_rtt_for_live_endpoint() {
     }
 
     assert_eq!(final_json["run"]["status"], "completed");
-    let results = final_json["run"]["results"].as_array().expect("results array");
+    let results = final_json["run"]["results"]
+        .as_array()
+        .expect("results array");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0]["node_id"], node_id);
     assert!(
@@ -573,7 +581,9 @@ async fn tcp_probe_closed_port_classified_as_refused() {
     }
 
     assert_eq!(final_status, "completed");
-    let results = final_json["run"]["results"].as_array().expect("results array");
+    let results = final_json["run"]["results"]
+        .as_array()
+        .expect("results array");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0]["node_id"], node_id);
     assert!(
@@ -605,26 +615,219 @@ async fn probe_run_empty_node_list_rejected() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-/// Creating a probe run with QUIC type is rejected (not yet implemented).
+/// A self-signed ECDSA P-256 certificate for `127.0.0.1`, DER-encoded.
+/// Generated once and embedded so tests need no `rcgen` dependency or
+/// runtime cert generation. Safe to commit: it is a test-only cert with no
+/// private key embedded alongside the secret in production code paths.
+const QUIC_TEST_CERT_DER: &[u8] = include_bytes!("fixtures/cert.der");
+const QUIC_TEST_KEY_DER: &[u8] = include_bytes!("fixtures/key.der");
+
+/// Spawn a real QUIC server on `127.0.0.1:0` that completes handshakes.
+/// Returns the bound port. The server runs until the returned handle is
+/// aborted.
+fn spawn_quic_server() -> (u16, tokio::task::JoinHandle<()>) {
+    use std::net::SocketAddr;
+
+    let cert = rustls::pki_types::CertificateDer::from(QUIC_TEST_CERT_DER.to_vec());
+    let key = rustls::pki_types::PrivateKeyDer::Pkcs8(QUIC_TEST_KEY_DER.to_vec().into());
+
+    let server_config =
+        quinn::ServerConfig::with_single_cert(vec![cert], key).expect("server config");
+    let endpoint = quinn::Endpoint::server(server_config, SocketAddr::from(([127, 0, 0, 1], 0)))
+        .expect("bind");
+
+    let port = endpoint.local_addr().expect("addr").port();
+    let handle = tokio::spawn(async move {
+        // Await the Connecting future to drive the handshake to completion.
+        // We do not exchange application data — the probe only measures
+        // handshake RTT, so the connection is dropped immediately after.
+        while let Some(incoming) = endpoint.accept().await {
+            if let Ok(connecting) = incoming.accept() {
+                let _ = connecting.await;
+            }
+        }
+    });
+    (port, handle)
+}
+
+/// NODE-013: QUIC handshake probe against a live QUIC endpoint records RTT
+/// and `error_class = "ok"`.
 #[tokio::test]
-async fn quic_probe_type_rejected_as_unsupported() {
+async fn quic_probe_records_rtt_for_live_endpoint() {
     let app = TestApp::new().await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
 
-    let response = router
+    let (port, _server_handle) = spawn_quic_server();
+
+    let node_uri =
+        format!("hysteria2://TEST_PASSWORD@127.0.0.1:{port}?sni=127.0.0.1#quic-live-node");
+    let node_id = import_node(&router, &cookie, &node_uri).await;
+
+    let run_body = format!(r#"{{"probe_type":"quic_handshake","node_ids":["{node_id}"]}}"#);
+    let run_resp = router
         .clone()
         .oneshot(with_cookie(
-            post_json(
-                "/api/v1/probe-runs",
-                r#"{"probe_type":"quic_handshake","node_ids":["01J00000000000000000000001"]}"#,
-            ),
+            post_json("/api/v1/probe-runs", &run_body),
             &cookie,
         ))
         .await
         .expect("run");
+    assert_eq!(run_resp.status(), StatusCode::CREATED);
+    let run_id = body_to_json(run_resp).await["run"]["id"]
+        .as_str()
+        .expect("run id")
+        .to_owned();
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let json = body_to_json(response).await;
-    assert_eq!(json["error"], "unsupported_probe_type");
+    // Poll until terminal (max ~10s; handshake should complete in <1s).
+    let mut final_json = serde_json::Value::Null;
+    for _ in 0..100 {
+        let resp = router
+            .clone()
+            .oneshot(with_cookie(
+                get(&format!("/api/v1/probe-runs/{run_id}")),
+                &cookie,
+            ))
+            .await
+            .expect("poll");
+        let json = body_to_json(resp).await;
+        let status = json["run"]["status"].as_str().unwrap_or("");
+        if status == "completed" || status == "cancelled" || status == "failed" {
+            final_json = json;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    assert_eq!(final_json["run"]["status"], "completed");
+    let results = final_json["run"]["results"]
+        .as_array()
+        .expect("results array");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["node_id"], node_id);
+    assert!(
+        results[0]["rtt_ms"].as_u64().is_some(),
+        "rtt_ms should be Some for a live QUIC endpoint"
+    );
+    assert_eq!(results[0]["error_class"], "ok");
+    assert_eq!(results[0]["skipped"], false);
+
+    let lat_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/nodes/{node_id}/latency")),
+            &cookie,
+        ))
+        .await
+        .expect("latency");
+    assert_eq!(lat_resp.status(), StatusCode::OK);
+    let lat_json = body_to_json(lat_resp).await;
+    let records = lat_json["records"].as_array().expect("records array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["probe_type"], "quic_handshake");
+    assert!(records[0]["rtt_ms"].as_u64().is_some());
+}
+
+/// NODE-014 (regression): a non-responsive UDP endpoint produces
+/// `rtt_ms = None` + `error_class = "timeout"` — no fake latency, no
+/// auto-kill. We bind a UDP socket that never responds to QUIC packets,
+/// so the handshake times out within the probe deadline.
+#[tokio::test]
+async fn quic_probe_silent_udp_endpoint_times_out() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    // Bind a UDP socket that silently absorbs packets (never responds).
+    let silent_socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+        .await
+        .expect("bind udp");
+    let port = silent_socket.local_addr().expect("addr").port();
+    // Keep the socket alive in the background; drain incoming packets but
+    // never reply.
+    let socket_handle = tokio::spawn(async move {
+        let mut buf = [0u8; 1500];
+        loop {
+            if silent_socket.recv_from(&mut buf).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let node_uri =
+        format!("hysteria2://TEST_PASSWORD@127.0.0.1:{port}?sni=127.0.0.1#silent-udp-node");
+    let node_id = import_node(&router, &cookie, &node_uri).await;
+
+    let run_body = format!(r#"{{"probe_type":"quic_handshake","node_ids":["{node_id}"]}}"#);
+    let run_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/probe-runs", &run_body),
+            &cookie,
+        ))
+        .await
+        .expect("run");
+    assert_eq!(run_resp.status(), StatusCode::CREATED);
+    let run_id = body_to_json(run_resp).await["run"]["id"]
+        .as_str()
+        .expect("run id")
+        .to_owned();
+
+    // Poll until terminal. The probe timeout is 5s; allow up to ~15s for
+    // scheduling + DB writes.
+    let mut final_json = serde_json::Value::Null;
+    for _ in 0..150 {
+        let resp = router
+            .clone()
+            .oneshot(with_cookie(
+                get(&format!("/api/v1/probe-runs/{run_id}")),
+                &cookie,
+            ))
+            .await
+            .expect("poll");
+        let json = body_to_json(resp).await;
+        let status = json["run"]["status"].as_str().unwrap_or("");
+        if status == "completed" || status == "cancelled" || status == "failed" {
+            final_json = json;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    assert_eq!(final_json["run"]["status"], "completed");
+    let results = final_json["run"]["results"]
+        .as_array()
+        .expect("results array");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["node_id"], node_id);
+    assert!(
+        results[0]["rtt_ms"].is_null(),
+        "rtt_ms must be None for a silent UDP endpoint (no fake latency)"
+    );
+    assert_eq!(
+        results[0]["error_class"], "timeout",
+        "silent UDP must classify as timeout, not a fake RTT"
+    );
+    assert_eq!(results[0]["skipped"], false);
+
+    let lat_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/nodes/{node_id}/latency")),
+            &cookie,
+        ))
+        .await
+        .expect("latency");
+    assert_eq!(lat_resp.status(), StatusCode::OK);
+    let lat_json = body_to_json(lat_resp).await;
+    let records = lat_json["records"].as_array().expect("records array");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["probe_type"], "quic_handshake");
+    assert!(
+        records[0]["rtt_ms"].is_null(),
+        "persisted rtt_ms must be null"
+    );
+    assert_eq!(records[0]["error_class"], "timeout");
+
+    socket_handle.abort();
 }

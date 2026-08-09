@@ -79,6 +79,7 @@ pub struct AppState {
     pub probe_run_repo: Arc<dyn ProbeRunRepository>,
     pub latency_repo: Arc<dyn LatencyRecordRepository>,
     pub tcp_probe: Arc<dyn LatencyProbe>,
+    pub quic_probe: Arc<dyn LatencyProbe>,
     pub cancelled_flags: Arc<Mutex<HashMap<deve_sub_kernel::ProbeRunId, Arc<AtomicBool>>>>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,

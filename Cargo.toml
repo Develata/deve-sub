@@ -79,6 +79,8 @@ percent-encoding = "2"
 serde_yaml = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["gzip", "deflate", "brotli", "zstd", "stream", "rustls-tls"] }
 maxminddb = "0.30"
+quinn = { version = "0.11", default-features = false, features = ["rustls", "runtime-tokio"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

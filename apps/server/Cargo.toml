@@ -47,3 +47,5 @@ deve-sub-storage-sqlite = { workspace = true }
 deve-sub-inmemory = { workspace = true }
 deve-sub-adapters = { workspace = true }
 async-trait = { workspace = true }
+quinn = { workspace = true }
+rustls = { workspace = true }

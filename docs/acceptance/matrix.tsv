@@ -63,8 +63,8 @@ NODE-009	双栈域名	P0	Integration	pass
 NODE-010	人工覆写	P0	Regression	pass
 NODE-011	上游删除	P0	Integration	pass
 NODE-012	TCP 延迟	P0	Integration	pass
-NODE-013	QUIC 延迟	P0	Integration	planned
-NODE-014	UDP 无响应	P0	Regression	planned
+NODE-013	QUIC 延迟	P0	Integration	pass
+NODE-014	UDP 无响应	P0	Regression	pass
 NODE-015	真实代理测速	P0	Integration	planned
 NODE-016	批量取消测速	P0	E2E	planned
 NODE-017	链式代理	P0	Integration	planned

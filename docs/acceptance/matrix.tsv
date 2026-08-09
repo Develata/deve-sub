@@ -92,13 +92,13 @@ OUT-004	Xray	P0	Compatibility	planned
 OUT-005	v2rayN	P0	Compatibility	planned
 OUT-006	v2rayNG	P0	Compatibility	planned
 OUT-007	Shadowrocket	P0	Compatibility	planned
-OUT-008	ETag	P0	Integration	planned
-OUT-009	Token 错误	P0	Security	planned
+OUT-008	ETag	P0	Integration	pass
+OUT-009	Token 错误	P0	Security	pass
 OUT-010	用户过期	P0	Integration	planned
 OUT-011	流量超额	P0	Integration	planned
 OUT-012	Token 轮换	P0	Integration	planned
 OUT-013	短码冲突	P0	Integration	planned
-OUT-014	并发生成	P0	Concurrency	planned
+OUT-014	并发生成	P0	Concurrency	pass
 PROBE-001	Nezha	P1	Contract	planned
 PROBE-002	DStatus	P1	Contract	planned
 PROBE-003	Komari	P1	Contract	planned

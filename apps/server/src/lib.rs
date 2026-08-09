@@ -28,6 +28,7 @@ use deve_sub_security::MasterKey;
 
 pub mod auth;
 pub mod csrf;
+pub mod delivery;
 pub mod node_overrides;
 pub mod nodes;
 pub mod routes;
@@ -83,10 +84,14 @@ pub struct AppState {
 /// CSRF protection (`Origin` header validation) is applied to the API router
 /// only, not to the Scalar docs endpoint.
 pub fn build_router(state: AppState) -> Router {
-    let (api_router, openapi) = routes::build_api_router(state);
+    let (api_router, openapi) = routes::build_api_router(state.clone());
+
+    let delivery_router =
+        crate::delivery::register_delivery_routes(Router::new()).with_state(state);
 
     Router::new()
         .merge(api_router.layer(axum::middleware::from_fn(crate::csrf::csrf_guard)))
+        .merge(delivery_router)
         .merge(Scalar::with_url("/docs", openapi))
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())

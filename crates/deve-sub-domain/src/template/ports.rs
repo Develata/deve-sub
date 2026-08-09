@@ -60,6 +60,15 @@ pub trait TemplateVersionRepository: Send + Sync {
         id: TemplateVersionId,
     ) -> Result<Option<TemplateVersion>, TemplateError>;
 
+    /// Find a specific version by `(template_id, version_number)`. Used by
+    /// Subscription delivery when `template_version_pin` is set. Returns
+    /// `None` if the template has no version with that number.
+    async fn find_by_version_number(
+        &self,
+        template_id: TemplateId,
+        version: u64,
+    ) -> Result<Option<TemplateVersion>, TemplateError>;
+
     /// List versions for a template, newest first.
     async fn list_for_template(
         &self,

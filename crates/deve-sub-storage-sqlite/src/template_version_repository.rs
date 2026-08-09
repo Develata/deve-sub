@@ -133,6 +133,24 @@ impl TemplateVersionRepository for SqliteTemplateVersionRepository {
         row.map(|r| r.to_domain()).transpose()
     }
 
+    async fn find_by_version_number(
+        &self,
+        template_id: TemplateId,
+        version: u64,
+    ) -> Result<Option<TemplateVersion>, TemplateError> {
+        let row: Option<VersionRow> = sqlx::query_as(
+            "SELECT id, template_id, version, spec_json, spec_yaml, is_active, created_at \
+             FROM template_versions \
+             WHERE template_id = ? AND version = ?",
+        )
+        .bind(template_id.to_string())
+        .bind(version as i64)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| TemplateError::Storage(e.to_string()))?;
+        row.map(|r| r.to_domain()).transpose()
+    }
+
     async fn list_for_template(
         &self,
         template_id: TemplateId,

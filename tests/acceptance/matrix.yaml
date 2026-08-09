@@ -950,7 +950,7 @@ cases:
     steps: []
     assertions: ["未变化请求返回 304"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-009
     title: Token 错误
     priority: P0
@@ -960,7 +960,7 @@ cases:
     steps: []
     assertions: ["返回 404 或受控错误，不泄露存在性"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-010
     title: 用户过期
     priority: P0
@@ -1010,7 +1010,7 @@ cases:
     steps: []
     assertions: ["所有客户端只看到完整版本"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PROBE-001
     title: Nezha
     priority: P1

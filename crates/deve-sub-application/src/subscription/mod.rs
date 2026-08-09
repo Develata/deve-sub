@@ -7,11 +7,15 @@
 //! milestone blueprint.
 
 pub mod commands;
+pub mod delivery;
 pub mod error;
 
 pub use commands::{
     CreateSubscriptionParams, CreateSubscriptionResult, RotateTokenResult,
     UpdateSubscriptionParams, create_subscription, delete_subscription, get_subscription,
     list_subscriptions, rotate_token, update_subscription,
+};
+pub use delivery::{
+    DeliveryDeps, DeliveryResult, deliver_subscription, detect_profile_from_user_agent,
 };
 pub use error::SubscriptionAppError;

@@ -72,7 +72,14 @@ pub async fn generate(
         return Ok(cached_result(&cached));
     }
 
-    let result = run_pipeline(&ctx.version, pool_repo, ctx.profile, request.mode).await?;
+    let result = run_pipeline(
+        &ctx.version,
+        pool_repo,
+        ctx.profile,
+        request.mode,
+        request.node_selection.as_ref(),
+    )
+    .await?;
 
     let entry = GenerationCacheEntry {
         id: GenerationCacheId::new(),
@@ -95,8 +102,71 @@ pub async fn generate(
     Ok(result)
 }
 
-/// Preview the generation output for a template + profile + mode without
-/// publishing (GEN-016).
+/// Generate for subscription delivery: store the result as inactive for cache
+/// reuse but do NOT activate it.
+///
+/// WHY: a Subscription may have its own `node_selection` override, producing a
+/// different `cache_key` than the admin's template-level generation. The
+/// `activate` step deactivates the currently active entry for the same
+/// `(template_id, profile)` — so activating a subscription's generation would
+/// silently replace the admin's active generation. Delivery stores as
+/// inactive only: the cache_key lookup on subsequent deliveries hits the
+/// stored entry, and the admin's active generation is untouched.
+///
+/// On cache hit (same `cache_key`), returns the cached content without
+/// re-running the pipeline. On any pipeline error, no store occurs — the
+/// previous cached entry (if any) remains available for the next delivery
+/// (constraint #19).
+pub async fn generate_for_delivery(
+    template_repo: &dyn TemplateRepository,
+    version_repo: &dyn TemplateVersionRepository,
+    pool_repo: &dyn NodePoolRepository,
+    cache_repo: &dyn GenerationCacheRepository,
+    pool_meta_repo: &dyn PoolMetaRepository,
+    request: GenerationRequest,
+) -> Result<GenerationResult, TemplateAppError> {
+    let ctx = resolve_context(template_repo, version_repo, pool_meta_repo, &request).await?;
+
+    if let Some(cached) = cache_repo.find_by_key(&ctx.cache_key).await? {
+        return Ok(cached_result(&cached));
+    }
+
+    let result = run_pipeline(
+        &ctx.version,
+        pool_repo,
+        ctx.profile,
+        request.mode,
+        request.node_selection.as_ref(),
+    )
+    .await?;
+
+    let entry = GenerationCacheEntry {
+        id: GenerationCacheId::new(),
+        template_id: request.template_id,
+        template_version: ctx.version.version,
+        profile: request.profile.clone(),
+        selection_mode: ctx.selection_mode.to_owned(),
+        selection_payload: ctx.selection_payload,
+        pool_revision: ctx.pool_revision.value(),
+        cache_key: ctx.cache_key,
+        content: result.content.clone(),
+        is_active: false,
+    };
+
+    // WHY: concurrent deliveries with the same cache_key may race to store.
+    // The UNIQUE constraint on cache_key rejects the duplicate; on that
+    // specific failure, re-read the cache to retrieve the winning entry
+    // rather than returning a 503 (OUT-014: all concurrent clients see a
+    // complete version). Any non-UNIQUE store error propagates.
+    if let Err(store_err) = cache_repo.store(&entry).await {
+        if let Some(cached) = cache_repo.find_by_key(&entry.cache_key).await? {
+            return Ok(cached_result(&cached));
+        }
+        return Err(store_err.into());
+    }
+
+    Ok(result)
+}
 ///
 /// Shares the same cache lookup and pipeline as [`generate`]. On cache hit,
 /// returns the cached (active) content. On cache miss, runs the full
@@ -120,7 +190,14 @@ pub async fn preview(
         return Ok(cached_result(&cached));
     }
 
-    run_pipeline(&ctx.version, pool_repo, ctx.profile, request.mode).await
+    run_pipeline(
+        &ctx.version,
+        pool_repo,
+        ctx.profile,
+        request.mode,
+        request.node_selection.as_ref(),
+    )
+    .await
 }
 
 /// Get the currently active generation for a template + profile.
@@ -149,9 +226,15 @@ async fn resolve_context(
         return Err(TemplateAppError::TemplateNotFound);
     }
 
-    let version = super::get_active_version(version_repo, request.template_id)
-        .await?
-        .ok_or(TemplateAppError::VersionNotFound)?;
+    let version = match request.template_version_pin {
+        Some(n) => version_repo
+            .find_by_version_number(request.template_id, n)
+            .await?
+            .ok_or(TemplateAppError::VersionNotFound)?,
+        None => super::get_active_version(version_repo, request.template_id)
+            .await?
+            .ok_or(TemplateAppError::VersionNotFound)?,
+    };
 
     let doc = parse_template_document(&version.spec_yaml)?;
 
@@ -163,12 +246,16 @@ async fn resolve_context(
         .await
         .map_err(|e| TemplateAppError::Storage(e.to_string()))?;
 
-    let selection_mode = match doc.spec.node_selector.mode {
+    let selector = request
+        .node_selection
+        .as_ref()
+        .unwrap_or(&doc.spec.node_selector);
+    let selection_mode = match selector.mode {
         SelectionMode::Dynamic => "dynamic",
         SelectionMode::Fixed => "fixed",
     };
-    let selection_payload = serde_json::to_string(&doc.spec.node_selector)
-        .map_err(|e| TemplateAppError::Storage(e.to_string()))?;
+    let selection_payload =
+        serde_json::to_string(selector).map_err(|e| TemplateAppError::Storage(e.to_string()))?;
 
     let cache_key = CacheKeyParams {
         template_id: request.template_id,
@@ -195,8 +282,13 @@ async fn run_pipeline(
     pool_repo: &dyn NodePoolRepository,
     profile: ProfileKind,
     mode: GenerationMode,
+    selection_override: Option<&deve_sub_domain::NodeSelector>,
 ) -> Result<GenerationResult, TemplateAppError> {
-    let doc = parse_template_document(&version.spec_yaml)?;
+    let mut doc = parse_template_document(&version.spec_yaml)?;
+
+    if let Some(sel) = selection_override {
+        doc.spec.node_selector = sel.clone();
+    }
 
     let resolution = resolve_template(&doc, pool_repo).await?;
 

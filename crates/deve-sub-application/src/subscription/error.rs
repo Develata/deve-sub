@@ -32,6 +32,27 @@ pub enum SubscriptionAppError {
     #[error("unknown profile: {0}")]
     UnknownProfile(String),
 
+    /// The subscription is disabled. Delivery returns 404 (no existence leak).
+    #[error("subscription disabled")]
+    SubscriptionDisabled,
+
+    /// The subscription has expired.
+    #[error("subscription expired")]
+    SubscriptionExpired,
+
+    /// The owning user is disabled or expired.
+    #[error("user inactive or expired")]
+    UserInactive,
+
+    /// The subscription or user traffic quota is exceeded.
+    #[error("traffic quota exceeded")]
+    TrafficExceeded,
+
+    /// On-demand generation failed during delivery and no cached content is
+    /// available. Delivery returns 503 (constraint #19).
+    #[error("generation failed during delivery: {0}")]
+    GenerationFailed(String),
+
     /// A storage operation failed.
     #[error("storage error: {0}")]
     Storage(String),
@@ -39,6 +60,10 @@ pub enum SubscriptionAppError {
     /// A subscription domain or storage operation failed.
     #[error(transparent)]
     Subscription(#[from] SubscriptionError),
+
+    /// An identity storage operation failed (user lookup for delivery).
+    #[error(transparent)]
+    Identity(#[from] deve_sub_domain::IdentityError),
 
     /// A cryptographic or token operation failed.
     #[error(transparent)]

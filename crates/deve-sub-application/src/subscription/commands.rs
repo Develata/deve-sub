@@ -28,7 +28,7 @@ use super::error::{SubscriptionAppError, map_subscription_error};
 /// WHY: domain separation — a digest computed under this purpose cannot be
 /// replayed as a session, recovery, or challenge token digest, and vice
 /// versa. See `deve-sub-security/src/hmac.rs`.
-const PURPOSE_SUBSCRIPTION_TOKEN: &str = "subscription_token";
+pub(super) const PURPOSE_SUBSCRIPTION_TOKEN: &str = "subscription_token";
 
 /// Maximum subscription name length.
 const MAX_NAME_LEN: usize = 128;

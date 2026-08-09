@@ -15,6 +15,8 @@ use thiserror::Error;
 
 use deve_sub_kernel::{NodeId, TemplateId};
 
+use super::spec::NodeSelector;
+
 /// Whether generation fails or proceeds when incompatible nodes are present.
 ///
 /// `Strict` returns [`GenerationError::IncompatibleNodes`] if any node is
@@ -62,11 +64,39 @@ impl FromStr for GenerationMode {
 /// `profile` is a kebab-case string (e.g. `"mihomo"`) parsed to
 /// [`deve_sub_compatibility::ProfileKind`] by the application layer. It is a
 /// `String` here because the domain cannot depend on the compatibility crate.
+///
+/// `node_selection` overrides the template's `nodeSelector` when set. This is
+/// used by Subscription delivery: a Subscription is an independent aggregate
+/// that owns its selection, and delivery generates against the Subscription's
+/// selection, not the template's. `None` uses the template's `nodeSelector`
+/// (the M5 admin-generate path).
+///
+/// `template_version_pin` selects a specific template version instead of the
+/// active one. `None` follows the template's active version (M5 behavior).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerationRequest {
     pub template_id: TemplateId,
     pub profile: String,
     pub mode: GenerationMode,
+    /// Override the template's `nodeSelector`. `None` = use the template's.
+    pub node_selection: Option<NodeSelector>,
+    /// Pin a specific template version. `None` = use the active version.
+    pub template_version_pin: Option<u64>,
+}
+
+impl GenerationRequest {
+    /// Construct a generation request using the template's own selection and
+    /// the active version (the M5 admin-generate path).
+    #[must_use]
+    pub fn new(template_id: TemplateId, profile: String, mode: GenerationMode) -> Self {
+        Self {
+            template_id,
+            profile,
+            mode,
+            node_selection: None,
+            template_version_pin: None,
+        }
+    }
 }
 
 /// The result of a successful generation: emitted content plus the

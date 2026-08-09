@@ -1,0 +1,417 @@
+//! Subscription delivery query: resolve a delivery token to generated
+//! subscription content.
+//!
+//! The delivery pipeline (M6 Slice 2):
+//! 1. Parse the plaintext token from the URL path.
+//! 2. HMAC-SHA256 → constant-time digest comparison → resolve the token row.
+//! 3. Resolve the Subscription; check `enabled`.
+//! 4. Resolve the owning User; check `enabled` (disabled → 404, no leak).
+//! 5. Resolve the profile: explicit path segment or User-Agent auto-detect.
+//! 6. Cache lookup by `cache_key`; on miss, run `generate_for_delivery`
+//!    (stores inactive, does NOT activate — preserves admin's active
+//!    generation).
+//! 7. Compute ETag (SHA-256 of content), set `subscription-userinfo`,
+//!    `Content-Type`, `Content-Disposition`, `Cache-Control`.
+//!
+//! Traffic/expiry quota enforcement is M6 Slice 5; this query checks
+//! `enabled` only. See `docs/plan/milestones/M6-subscription-distribution.md`
+//! §"Delivery pipeline" and §"Slicing".
+
+use deve_sub_compatibility::ProfileKind;
+use deve_sub_domain::{
+    GenerationCacheRepository, GenerationMode, GenerationRequest, NodePoolRepository,
+    PoolMetaRepository, Subscription, SubscriptionRepository, SubscriptionTokenRepository,
+    TemplateRepository, TemplateVersionRepository, UserRepository,
+};
+use deve_sub_security::{MasterKey, hmac_digest};
+use sha2::{Digest, Sha256};
+
+use super::commands::PURPOSE_SUBSCRIPTION_TOKEN;
+use super::error::SubscriptionAppError;
+
+/// The result of a successful delivery: generated content plus the HTTP
+/// response headers the delivery handler should set.
+#[derive(Debug, Clone)]
+pub struct DeliveryResult {
+    /// The generated subscription content (YAML, JSON, or URI list).
+    pub content: String,
+    /// The resolved profile (kebab-case).
+    pub profile: String,
+    /// Strong ETag: quoted SHA-256 hex of the content.
+    pub etag: String,
+    /// HTTP `Content-Type` for the resolved profile.
+    pub content_type: &'static str,
+    /// HTTP `Content-Disposition` (attachment with profile-specific filename).
+    pub content_disposition: String,
+    /// HTTP `subscription-userinfo` header value.
+    pub subscription_userinfo: String,
+}
+
+/// Bundled storage and crypto dependencies for delivery. Passing these as a
+/// single struct keeps [`deliver_subscription`] under the argument-count lint
+/// and mirrors the `AppState` grouping the Delivery layer already holds.
+pub struct DeliveryDeps<'a> {
+    pub token_repo: &'a dyn SubscriptionTokenRepository,
+    pub sub_repo: &'a dyn SubscriptionRepository,
+    pub user_repo: &'a dyn UserRepository,
+    pub template_repo: &'a dyn TemplateRepository,
+    pub version_repo: &'a dyn TemplateVersionRepository,
+    pub pool_repo: &'a dyn NodePoolRepository,
+    pub cache_repo: &'a dyn GenerationCacheRepository,
+    pub pool_meta_repo: &'a dyn PoolMetaRepository,
+    pub master_key: &'a MasterKey,
+}
+
+/// Resolve a delivery token to subscription content.
+///
+/// `token_plaintext` is the raw token from the URL path. `profile` is the
+/// explicit path segment (`Some("mihomo")`) or `None` for User-Agent
+/// auto-detect. `user_agent` is the request's User-Agent header (used only
+/// when `profile` is `None`).
+///
+/// # Errors
+/// - [`SubscriptionAppError::TokenNotFound`] — token digest does not match
+///   any row (OUT-009: 404, no existence leak).
+/// - [`SubscriptionAppError::SubscriptionNotFound`] — token resolved but the
+///   subscription was deleted (404).
+/// - [`SubscriptionAppError::SubscriptionDisabled`] — subscription is
+///   disabled (404, no leak).
+/// - [`SubscriptionAppError::UserInactive`] — owning user is disabled (404).
+/// - [`SubscriptionAppError::UnknownProfile`] — explicit profile not
+///   recognized, or User-Agent could not be auto-detected (404 for no-leak
+///   on bad explicit profile; 404 for undetectable User-Agent).
+/// - [`SubscriptionAppError::GenerationFailed`] — on-demand generation failed
+///   and no cached content is available (503, constraint #19).
+/// - [`SubscriptionAppError::Storage`] / [`SubscriptionAppError::Security`]
+///   — infra errors.
+pub async fn deliver_subscription(
+    deps: &DeliveryDeps<'_>,
+    token_plaintext: &str,
+    profile: Option<&str>,
+    user_agent: Option<&str>,
+) -> Result<DeliveryResult, SubscriptionAppError> {
+    let token_digest = hmac_digest(
+        PURPOSE_SUBSCRIPTION_TOKEN,
+        token_plaintext,
+        deps.master_key.as_bytes(),
+    )?;
+
+    let token = deps
+        .token_repo
+        .find_by_token_hash(&token_digest)
+        .await?
+        .ok_or(SubscriptionAppError::TokenNotFound)?;
+
+    let subscription = deps
+        .sub_repo
+        .find_by_id(token.subscription_id)
+        .await?
+        .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
+
+    if !subscription.enabled {
+        return Err(SubscriptionAppError::SubscriptionDisabled);
+    }
+
+    let user = deps
+        .user_repo
+        .find_by_id(subscription.owner_id)
+        .await?
+        .ok_or(SubscriptionAppError::UserInactive)?;
+
+    if !user.is_active() {
+        return Err(SubscriptionAppError::UserInactive);
+    }
+
+    let resolved_profile = resolve_profile(profile, user_agent, &subscription)?;
+
+    let request = GenerationRequest {
+        template_id: subscription.template_id,
+        profile: resolved_profile.as_kebab().to_owned(),
+        mode: GenerationMode::Lenient,
+        node_selection: Some(subscription.node_selection.clone()),
+        template_version_pin: subscription.template_version_pin,
+    };
+
+    let result = crate::template::generate_for_delivery(
+        deps.template_repo,
+        deps.version_repo,
+        deps.pool_repo,
+        deps.cache_repo,
+        deps.pool_meta_repo,
+        request,
+    )
+    .await
+    .map_err(|e| SubscriptionAppError::GenerationFailed(e.to_string()))?;
+
+    let etag = compute_etag(&result.content);
+    let content_type = content_type_for(resolved_profile);
+    let content_disposition = content_disposition_for(resolved_profile, &subscription.slug);
+    let subscription_userinfo = build_subscription_userinfo(&subscription);
+
+    Ok(DeliveryResult {
+        content: result.content,
+        profile: resolved_profile.as_kebab().to_owned(),
+        etag,
+        content_type,
+        content_disposition,
+        subscription_userinfo,
+    })
+}
+
+/// Resolve the target profile from the explicit path segment or User-Agent.
+///
+/// If `profile` is `Some`, validate it against the Subscription's profile
+/// (must match) and parse to `ProfileKind`. If `None`, auto-detect from the
+/// User-Agent header.
+///
+/// WHY the explicit profile must match the Subscription's configured profile:
+/// a Subscription is bound to one profile at creation; serving a different
+/// profile for the same token would produce content the client did not
+/// subscribe to. The `/sub/{token}/{profile}` path segment is a convenience
+/// for clients that include it, not a profile-switching mechanism.
+fn resolve_profile(
+    profile: Option<&str>,
+    user_agent: Option<&str>,
+    subscription: &Subscription,
+) -> Result<ProfileKind, SubscriptionAppError> {
+    match profile {
+        Some(p) => {
+            if p != subscription.profile {
+                return Err(SubscriptionAppError::UnknownProfile(p.to_owned()));
+            }
+            ProfileKind::from_kebab(p)
+                .ok_or_else(|| SubscriptionAppError::UnknownProfile(p.to_owned()))
+        }
+        None => {
+            let detected = detect_profile_from_user_agent(user_agent);
+            detected.ok_or_else(|| {
+                SubscriptionAppError::UnknownProfile(
+                    "could not auto-detect profile from User-Agent".to_owned(),
+                )
+            })
+        }
+    }
+}
+
+/// Infer the target profile from the User-Agent header.
+///
+/// Common proxy client User-Agents:
+/// - Clash / Mihomo: contains "clash" or "mihomo"
+/// - sing-box: contains "singbox" or "sing-box"
+/// - V2RayN / V2Ray: contains "v2ray"
+/// - Xray: contains "xray"
+/// - Shadowrocket: contains "shadowrocket"
+/// - Fallback: `None` (caller returns 404).
+#[must_use]
+pub fn detect_profile_from_user_agent(user_agent: Option<&str>) -> Option<ProfileKind> {
+    let ua = user_agent?.to_ascii_lowercase();
+    if ua.contains("shadowrocket") {
+        Some(ProfileKind::Shadowrocket)
+    } else if ua.contains("clash") || ua.contains("mihomo") {
+        Some(ProfileKind::Mihomo)
+    } else if ua.contains("sing-box") || ua.contains("singbox") {
+        Some(ProfileKind::SingBox)
+    } else if ua.contains("xray") {
+        Some(ProfileKind::Xray)
+    } else if ua.contains("v2ray") {
+        Some(ProfileKind::V2Ray)
+    } else {
+        None
+    }
+}
+
+/// Compute a strong ETag: quoted SHA-256 hex of the content.
+fn compute_etag(content: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(64);
+    for b in digest.iter() {
+        hex.push_str(&format!("{b:02x}"));
+    }
+    format!("\"{hex}\"")
+}
+
+/// Return the HTTP `Content-Type` for a profile.
+#[must_use]
+fn content_type_for(profile: ProfileKind) -> &'static str {
+    match profile {
+        ProfileKind::Mihomo => "text/yaml; charset=utf-8",
+        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray => {
+            "application/json; charset=utf-8"
+        }
+        ProfileKind::Shadowrocket | ProfileKind::UriList => "text/plain; charset=utf-8",
+    }
+}
+
+/// Return the HTTP `Content-Disposition` header (attachment with a
+/// profile-specific filename).
+fn content_disposition_for(profile: ProfileKind, slug: &str) -> String {
+    let ext = match profile {
+        ProfileKind::Mihomo => "yaml",
+        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray => "json",
+        ProfileKind::Shadowrocket | ProfileKind::UriList => "txt",
+    };
+    format!("attachment; filename=\"{slug}.{ext}\"")
+}
+
+/// Build the `subscription-userinfo` response header.
+///
+/// Format: `upload=BYTES; download=BYTES; total=BYTES; expire=UNIX_SECONDS`
+///
+/// In M6 Slice 2 (no traffic accounting), upload and download are 0 and total
+/// is the Subscription's `traffic_limit` (or 0 if unlimited). `expire` is the
+/// Subscription's `expires_at` as a Unix timestamp in seconds (or 0 if never).
+/// Traffic accounting and quota enforcement are M6 Slice 5.
+fn build_subscription_userinfo(subscription: &Subscription) -> String {
+    let upload: u64 = 0;
+    let download: u64 = 0;
+    let total = subscription.traffic_limit.unwrap_or(0);
+    let expire = subscription
+        .expires_at
+        .map(|ts| (ts.unix_ms() / 1000).max(0) as u64)
+        .unwrap_or(0);
+    format!("upload={upload}; download={download}; total={total}; expire={expire}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deve_sub_kernel::{TemplateId, UserId};
+
+    #[test]
+    fn etag_is_quoted_sha256_hex() {
+        let etag = compute_etag("hello");
+        assert!(etag.starts_with('"') && etag.ends_with('"'));
+        let inner = &etag[1..etag.len() - 1];
+        assert_eq!(inner.len(), 64);
+        assert!(inner.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn etag_is_deterministic() {
+        assert_eq!(compute_etag("abc"), compute_etag("abc"));
+        assert_ne!(compute_etag("abc"), compute_etag("abd"));
+    }
+
+    #[test]
+    fn detect_clash() {
+        assert_eq!(
+            detect_profile_from_user_agent(Some("Clash/0.20")),
+            Some(ProfileKind::Mihomo)
+        );
+    }
+
+    #[test]
+    fn detect_mihomo() {
+        assert_eq!(
+            detect_profile_from_user_agent(Some("mihomo/1.18")),
+            Some(ProfileKind::Mihomo)
+        );
+    }
+
+    #[test]
+    fn detect_singbox() {
+        assert_eq!(
+            detect_profile_from_user_agent(Some("sing-box/1.8")),
+            Some(ProfileKind::SingBox)
+        );
+    }
+
+    #[test]
+    fn detect_xray() {
+        assert_eq!(
+            detect_profile_from_user_agent(Some("Xray/1.8")),
+            Some(ProfileKind::Xray)
+        );
+    }
+
+    #[test]
+    fn detect_v2ray() {
+        assert_eq!(
+            detect_profile_from_user_agent(Some("v2rayN/6.0")),
+            Some(ProfileKind::V2Ray)
+        );
+    }
+
+    #[test]
+    fn detect_shadowrocket() {
+        assert_eq!(
+            detect_profile_from_user_agent(Some("Shadowrocket/2.2")),
+            Some(ProfileKind::Shadowrocket)
+        );
+    }
+
+    #[test]
+    fn detect_unknown_returns_none() {
+        assert_eq!(detect_profile_from_user_agent(Some("Mozilla/5.0")), None);
+    }
+
+    #[test]
+    fn detect_none_user_agent_returns_none() {
+        assert_eq!(detect_profile_from_user_agent(None), None);
+    }
+
+    #[test]
+    fn detect_is_case_insensitive() {
+        assert_eq!(
+            detect_profile_from_user_agent(Some("CLASH/Verge")),
+            Some(ProfileKind::Mihomo)
+        );
+    }
+
+    #[test]
+    fn content_type_yaml_for_mihomo() {
+        assert_eq!(
+            content_type_for(ProfileKind::Mihomo),
+            "text/yaml; charset=utf-8"
+        );
+    }
+
+    #[test]
+    fn content_type_json_for_singbox() {
+        assert_eq!(
+            content_type_for(ProfileKind::SingBox),
+            "application/json; charset=utf-8"
+        );
+    }
+
+    #[test]
+    fn content_disposition_includes_slug_and_ext() {
+        let cd = content_disposition_for(ProfileKind::Mihomo, "my-sub");
+        assert_eq!(cd, "attachment; filename=\"my-sub.yaml\"");
+        let cd = content_disposition_for(ProfileKind::SingBox, "test");
+        assert_eq!(cd, "attachment; filename=\"test.json\"");
+    }
+
+    #[test]
+    fn subscription_userinfo_zero_traffic_no_expiry() {
+        let sub = Subscription::new(
+            "n",
+            "s",
+            UserId::new(),
+            TemplateId::new(),
+            "mihomo",
+            deve_sub_domain::NodeSelector::default(),
+            deve_sub_kernel::SubscriptionTokenId::new(),
+        );
+        let info = build_subscription_userinfo(&sub);
+        assert_eq!(info, "upload=0; download=0; total=0; expire=0");
+    }
+
+    #[test]
+    fn subscription_userinfo_with_traffic_limit() {
+        let mut sub = Subscription::new(
+            "n",
+            "s",
+            UserId::new(),
+            TemplateId::new(),
+            "mihomo",
+            deve_sub_domain::NodeSelector::default(),
+            deve_sub_kernel::SubscriptionTokenId::new(),
+        );
+        sub.traffic_limit = Some(1_073_741_824);
+        let info = build_subscription_userinfo(&sub);
+        assert!(info.contains("total=1073741824"));
+    }
+}

@@ -68,11 +68,7 @@ async fn generate_template(
         }
     };
 
-    let request = deve_sub_domain::GenerationRequest {
-        template_id,
-        profile: q.profile,
-        mode,
-    };
+    let request = deve_sub_domain::GenerationRequest::new(template_id, q.profile, mode);
 
     let result = template::generate(
         state.template_repo.as_ref(),
@@ -315,11 +311,7 @@ async fn preview_template(
         }
     };
 
-    let request = deve_sub_domain::GenerationRequest {
-        template_id,
-        profile: q.profile,
-        mode,
-    };
+    let request = deve_sub_domain::GenerationRequest::new(template_id, q.profile, mode);
 
     let result = template::preview(
         state.template_repo.as_ref(),

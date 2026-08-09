@@ -17,7 +17,7 @@ AUTH-005	2FA	P0	E2E	pass
 AUTH-006	恢复码	P0	Integration	pass
 AUTH-007	禁用用户	P0	Integration	pass
 AUTH-008	普通用户越权	P0	Security	pass
-AUTH-009	Token 重置	P0	Integration	planned
+AUTH-009	Token 重置	P0	Integration	pass
 AUTH-010	强制注销	P0	E2E	pass
 SRC-001	新建 HTTP 源	P0	E2E	pass
 SRC-002	手动刷新	P0	E2E	pass

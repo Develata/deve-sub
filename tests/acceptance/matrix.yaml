@@ -200,7 +200,7 @@ cases:
     steps: []
     assertions: ["旧订阅 Token 失效"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-010
     title: 强制注销
     priority: P0

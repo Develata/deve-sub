@@ -23,7 +23,7 @@ mod vmess; // Phase 3
 mod hysteria2; // Phase 4
 // mod tuic;         // Phase 4
 // mod vless_reality; // Phase 5
-// mod naiveproxy;   // Phase 5
+mod naiveproxy; // Phase 5
 
 #[cfg(test)]
 mod test_util;
@@ -125,11 +125,7 @@ impl RealProxyProbe {
                 Err(ErrorClass::Refused)
             }
             ProtocolConfig::NaiveProxy(_) => {
-                tracing::debug!(
-                    protocol = "naiveproxy",
-                    "real-proxy client not yet implemented"
-                );
-                Err(ErrorClass::Refused)
+                naiveproxy::dial(node, &self.test_target, _timeout).await
             }
             ProtocolConfig::Unsupported(_) => {
                 tracing::debug!(

@@ -109,6 +109,40 @@ not return data; timeout does not prove node failure. The system must not
 generate meaningless "UDP ping" values. Hysteria2 and TUIC may measure QUIC
 handshake RTT; other UDP capability is verified by the real proxy tester.
 
+## Probes
+
+### Probe source
+
+An external monitoring panel (Nezha, DStatus, Komari) configured as a traffic
+data source. Each probe source binds to a subscription and syncs traffic
+samples (upload/download) via HTTP API. The `auth_config` (API token) is
+encrypted with XChaCha20-Poly1305. On sync failure, the last successful data
+is preserved and marked stale (PROBE-004).
+
+### Latency record
+
+A single latency measurement for one node: `probe_type` (TCP connect, QUIC
+handshake, real proxy), `rtt_ms` (optional — `None` means no response),
+`error_class` (timeout, refused, DNS failure, TLS/QUIC failure), and
+`measured_at`. UDP no-response stores `rtt_ms = None` and does not disable the
+node (NODE-014: no fake latency, no auto-kill).
+
+### Probe run
+
+A batch latency probing job: a set of node IDs, a probe type, a status
+(pending, running, completed, cancelled, failed), and per-node results. The
+probe runner executes with semaphore-bounded concurrency, is observable via
+status polling, cancellable via `CancellationToken` (NODE-016), and safely
+shuts down on server stop (constraint #20). The runner is a built-in
+background job, not a separate service.
+
+### Probe type
+
+Three latency probe types: `TcpConnect` (TCP connect RTT to the node
+endpoint), `QuicHandshake` (QUIC handshake RTT for HY2/TUIC nodes only — other
+UDP protocols do not get a fake ping), `RealProxy` (real HTTP request through
+the proxy, the most accurate latency metric).
+
 ## Traffic
 
 ### Traffic measurement

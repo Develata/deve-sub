@@ -31,6 +31,8 @@ This matrix keeps the live documentation layers aligned:
 | `milestones/M3-protocol-engine` | `contracts/data-models.md` | — | `PARSE-*`, `NODE-*` |
 | `milestones/M4-sources-and-node-pool` | `contracts/module-boundaries.md` | — | `SRC-*`, `NODE-*` |
 | `milestones/M5-generator-and-v3-template` | `contracts/module-boundaries.md` | — | `GEN-001`–`GEN-016` |
+| `milestones/M6-subscription-distribution` | `contracts/module-boundaries.md` | — | `OUT-008`–`OUT-014`, `AUTH-009`, `SEC-009` |
+| `milestones/M7-probes-and-detection` | `contracts/module-boundaries.md` | — | `PROBE-001`–`PROBE-005`, `NODE-012`–`NODE-018` |
 
 ## Test coverage notes
 

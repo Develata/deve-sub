@@ -15,8 +15,8 @@ order. It schedules approved contracts; it cannot override plans.
 | M3 | Protocol Engine | done | M1 | Canonical model, P0 parsers, P0 emitters, golden + fuzz |
 | M4 | Sources and Node Pool | done | M3 | Source CRUD, snapshot, refresh, diff, node pool, override |
 | M5 | Generator and V3 Template | done | M3, M4 | Node selection, proxy groups, V3 template, generation, cache |
-| M6 | Subscription Distribution | active | M5 | Profile URL, short code, temp link, ETag, auth, traffic |
-| M7 | Probes and Detection | planned | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
+| M6 | Subscription Distribution | done | M5 | Profile URL, short code, temp link, ETag, auth, traffic |
+| M7 | Probes and Detection | active | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
 | M8 | Deployment and Hardening | planned | M7 | Install script, self-update, backup, SSRF, perf, multi-arch |
 
 ## Phase 1

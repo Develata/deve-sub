@@ -31,11 +31,16 @@ md-5 = { workspace = true }
 aes = { workspace = true }
 aes-gcm = { workspace = true }
 crc32fast = { workspace = true }
+h3 = { workspace = true }
+h3-quinn = { workspace = true }
+http = { workspace = true }
+base64 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true }
+bytes = { workspace = true }
 flate2 = "1"
 brotli = "7"
 zstd = "0.13"

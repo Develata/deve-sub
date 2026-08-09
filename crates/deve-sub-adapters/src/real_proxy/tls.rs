@@ -71,6 +71,20 @@ impl rustls::client::danger::ServerCertVerifier for SkipVerification {
 /// Returns `Err` if the rustls client config cannot be built (should not
 /// happen with the ring provider).
 pub fn skip_verify_connector(alpn: Vec<Vec<u8>>) -> Result<TlsConnector, rustls::Error> {
+    let config = skip_verify_client_config(alpn)?;
+    Ok(TlsConnector::from(Arc::new(config)))
+}
+
+/// Build a raw `rustls::ClientConfig` that skips certificate verification.
+/// Used by QUIC-based clients (Hysteria2, TUIC) that need the config for
+/// `quinn` rather than a `tokio-rustls` connector.
+///
+/// # Errors
+/// Returns `Err` if the rustls client config cannot be built (should not
+/// happen with the ring provider).
+pub fn skip_verify_client_config(
+    alpn: Vec<Vec<u8>>,
+) -> Result<rustls::ClientConfig, rustls::Error> {
     let verifier = Arc::new(SkipVerification(Arc::new(
         rustls::crypto::ring::default_provider(),
     )));
@@ -79,5 +93,5 @@ pub fn skip_verify_connector(alpn: Vec<Vec<u8>>) -> Result<TlsConnector, rustls:
         .with_custom_certificate_verifier(verifier)
         .with_no_client_auth();
     builder.alpn_protocols = alpn;
-    Ok(TlsConnector::from(Arc::new(builder)))
+    Ok(builder)
 }

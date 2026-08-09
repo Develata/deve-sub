@@ -10,14 +10,13 @@
 //! See `docs/plan/milestones/M7-probes-and-detection.md` §"Latency probe
 //! model" and NODE-015.
 
-#[allow(dead_code)] // Used by protocol clients added in Phase 2+
+#[allow(dead_code)] // wrap_quinn_bidi used by Phase 4 QUIC clients
 mod stream;
 mod target;
-#[allow(dead_code)] // Used by protocol clients added in Phase 2+
 mod tls;
 
 // Protocol clients — added incrementally per phase:
-// mod trojan;       // Phase 2
+mod trojan; // Phase 2
 // mod shadowsocks;  // Phase 2
 // mod vless;        // Phase 2
 // mod vmess;        // Phase 3
@@ -25,6 +24,9 @@ mod tls;
 // mod tuic;         // Phase 4
 // mod vless_reality; // Phase 5
 // mod naiveproxy;   // Phase 5
+
+#[cfg(test)]
+mod test_util;
 
 use std::time::Duration;
 
@@ -109,10 +111,7 @@ impl RealProxyProbe {
     /// tunneled stream. Dispatches by protocol config variant.
     async fn dial(&self, node: &Node, _timeout: Duration) -> Result<BoxedStream, ErrorClass> {
         match &node.config {
-            ProtocolConfig::Trojan(_) => {
-                tracing::debug!(protocol = "trojan", "real-proxy client not yet implemented");
-                Err(ErrorClass::Refused)
-            }
+            ProtocolConfig::Trojan(_) => trojan::dial(node, &self.test_target, _timeout).await,
             ProtocolConfig::Shadowsocks(_) => {
                 tracing::debug!(
                     protocol = "shadowsocks",

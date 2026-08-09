@@ -35,6 +35,14 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
     };
     let uuid = Uuid::parse_str(uuid_str).map_err(|_| ErrorClass::Refused)?;
 
+    if node.tls.as_ref().and_then(|t| t.reality.as_ref()).is_some() {
+        tracing::debug!(
+            protocol = "vless-reality",
+            "Reality TLS handshake not supported by probe; returning Refused"
+        );
+        return Err(ErrorClass::Refused);
+    }
+
     let tcp = TcpStream::connect((node.endpoint.host.uri_host(), node.endpoint.port))
         .await
         .map_err(|_| ErrorClass::Refused)?;
@@ -104,7 +112,8 @@ mod tests {
     use crate::real_proxy::test_util::{LocalHttpTarget, TestCert};
     use deve_sub_domain::{
         Authentication, Endpoint, Host, LatencyProbe, Node, NodeSource, ProtocolConfig,
-        ProtocolKind, RegionAssignment, RegionMethod, TlsConfig, UdpCapability, VlessRealityConfig,
+        ProtocolKind, RealityConfig, RegionAssignment, RegionMethod, TlsConfig, UdpCapability,
+        VlessRealityConfig,
     };
     use deve_sub_kernel::{NodeId, Timestamp};
     use std::collections::BTreeMap;
@@ -221,5 +230,33 @@ mod tests {
             },
             extras: BTreeMap::new(),
         }
+    }
+
+    #[tokio::test]
+    async fn vless_reality_rejected() {
+        let http_target = LocalHttpTarget::start().await;
+        let target_port = http_target.addr().port();
+
+        let mut node = build_vless_node("127.0.0.1:0".parse().expect("addr"));
+        if let Some(tls) = node.tls.as_mut() {
+            tls.reality = Some(RealityConfig {
+                public_key: "test-pbk".to_owned(),
+                short_id: "01".to_owned(),
+                spider_x: None,
+            });
+        }
+
+        let target = TestTarget::new("127.0.0.1", target_port, "/");
+        let probe = RealProxyProbe::with_target(target);
+        let result = probe.probe(&node, Duration::from_secs(5)).await;
+
+        assert_eq!(
+            result.error_class,
+            ErrorClass::Refused,
+            "VLESS Reality must be refused, not attempted"
+        );
+        assert!(result.rtt_ms.is_none(), "no RTT on refusal");
+
+        http_target.abort();
     }
 }

@@ -90,4 +90,24 @@ impl User {
     pub fn is_active(&self) -> bool {
         self.enabled && self.expires_at.is_none_or(|e| e > Timestamp::now())
     }
+
+    /// Whether the user's account has expired.
+    ///
+    /// Distinct from `!is_active()`: a disabled-but-unexpired user returns
+    /// `false` here. Delivery uses this to distinguish 404 (disabled, no
+    /// existence leak) from 403 (expired, clear error per OUT-010).
+    #[must_use]
+    pub fn is_expired(&self) -> bool {
+        self.expires_at.is_some_and(|e| e <= Timestamp::now())
+    }
+
+    /// Whether the user's traffic quota is exceeded.
+    ///
+    /// `traffic_quota == 0` means unlimited (never exceeded). Otherwise the
+    /// consumed total must exceed the quota. The caller supplies the consumed
+    /// total (aggregated from the user's subscriptions' traffic records).
+    #[must_use]
+    pub fn is_traffic_exceeded(&self, consumed: u64) -> bool {
+        self.traffic_quota > 0 && consumed > self.traffic_quota
+    }
 }

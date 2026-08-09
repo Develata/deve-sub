@@ -12,6 +12,7 @@ pub mod node;
 pub mod source;
 pub mod subscription;
 pub mod template;
+pub mod traffic;
 
 pub use auth::{
     CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse, ListUsersResponse,
@@ -45,4 +46,8 @@ pub use template::{
     ListTemplatesResponse, ListVersionsResponse, MissingNodeRefDto, ResolveTemplateResponse,
     RollbackRequest, RollbackTemplateResponse, TemplateDto, TemplateResponse, TemplateVersionDto,
     UpdateTemplateRequest,
+};
+pub use traffic::{
+    ManualCorrectionRequest, ManualCorrectionResponse, TrafficSourceBreakdownDto,
+    TrafficSummaryResponse,
 };

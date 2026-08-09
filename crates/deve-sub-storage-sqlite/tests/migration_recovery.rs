@@ -1219,3 +1219,171 @@ async fn migration_0007_cascade_delete_and_single_active() {
     let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
+
+/// Recovery test for migration 0011 (constraint #13): subscription_traffic
+/// table, the source_kind CHECK constraint, the subscription index, and ON
+/// DELETE CASCADE. See `docs/plan/milestones/M6-subscription-distribution.md`
+/// §"Traffic and expiry policy framework" (M6 Slice 5, OUT-010/OUT-011).
+#[tokio::test]
+async fn migration_0011_applies_and_schema_is_correct() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    assert!(
+        tables.contains(&"subscription_traffic".to_string()),
+        "expected table 'subscription_traffic', got {tables:?}"
+    );
+
+    let cols = get_columns(&pool, "subscription_traffic").await;
+    for col in [
+        "id",
+        "subscription_id",
+        "source_kind",
+        "upload",
+        "download",
+        "recorded_at",
+        "source_ref",
+    ] {
+        assert!(
+            cols.contains(&col.to_string()),
+            "expected column '{col}' in subscription_traffic, got {cols:?}"
+        );
+    }
+
+    let indexes = get_index_names(&pool).await;
+    assert!(
+        indexes.contains(&"idx_subscription_traffic_subscription".to_string()),
+        "expected index 'idx_subscription_traffic_subscription', got {indexes:?}"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+#[tokio::test]
+async fn migration_0011_is_idempotent() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    assert!(tables.contains(&"subscription_traffic".to_string()));
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+/// Verify the source_kind CHECK constraint rejects invalid discriminators and
+/// ON DELETE CASCADE removes traffic records when the subscription is deleted.
+#[tokio::test]
+async fn migration_0011_source_kind_check_and_cascade_delete() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    sqlx::query("INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)")
+        .bind("01J0USR0000000000000000TR")
+        .bind("owner_tr")
+        .bind("hash")
+        .execute(&pool)
+        .await
+        .expect("insert user");
+
+    sqlx::query("INSERT INTO templates (id, name, description) VALUES (?, ?, ?)")
+        .bind("01J0TMPL0000000000000000TR")
+        .bind("t")
+        .bind("")
+        .execute(&pool)
+        .await
+        .expect("insert template");
+
+    sqlx::query(
+        "INSERT INTO subscriptions \
+         (id, name, slug, owner_id, template_id, profile, node_selection, token_id, enabled) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+    )
+    .bind("01J0SUB0000000000000000TR")
+    .bind("sub-tr")
+    .bind("slug-tr")
+    .bind("01J0USR0000000000000000TR")
+    .bind("01J0TMPL0000000000000000TR")
+    .bind("mihomo")
+    .bind("{}")
+    .bind("01J0TOKN0000000000000000TR")
+    .execute(&pool)
+    .await
+    .expect("insert subscription");
+
+    for (id, kind) in [
+        ("01J0TRF000000000000000001", "A"),
+        ("01J0TRF000000000000000002", "M"),
+        ("01J0TRF000000000000000003", "P"),
+    ] {
+        sqlx::query(
+            "INSERT INTO subscription_traffic (id, subscription_id, source_kind, upload, download) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind("01J0SUB0000000000000000TR")
+        .bind(kind)
+        .bind(100_i64)
+        .bind(200_i64)
+        .execute(&pool)
+        .await
+        .expect("insert traffic record");
+    }
+
+    // WHY: CHECK (source_kind IN ('A','M','P')) must reject an unknown
+    // discriminator so a future writer cannot silently corrupt aggregation.
+    let bad = sqlx::query(
+        "INSERT INTO subscription_traffic (id, subscription_id, source_kind) \
+         VALUES (?, ?, ?)",
+    )
+    .bind("01J0TRF0000000000000000BX")
+    .bind("01J0SUB0000000000000000TR")
+    .bind("X")
+    .execute(&pool)
+    .await;
+    assert!(
+        bad.is_err(),
+        "invalid source_kind 'X' should be rejected by CHECK constraint"
+    );
+
+    sqlx::query("DELETE FROM subscriptions WHERE id = ?")
+        .bind("01J0SUB0000000000000000TR")
+        .execute(&pool)
+        .await
+        .expect("delete subscription");
+
+    let (tr_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_traffic WHERE subscription_id = ?")
+            .bind("01J0SUB0000000000000000TR")
+            .fetch_one(&pool)
+            .await
+            .expect("count traffic");
+    assert_eq!(tr_count, 0, "traffic records should be cascade-deleted");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}

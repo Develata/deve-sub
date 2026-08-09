@@ -15,7 +15,7 @@ use deve_sub_domain::{
     RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
     SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
     TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
-    UserRepository,
+    TrafficRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
@@ -24,7 +24,8 @@ use deve_sub_storage_sqlite::{
     SqliteSessionRepository, SqliteShortCodeRepository, SqliteSourceRepository,
     SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
     SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
-    SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteUserRepository,
+    SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteTrafficRepository,
+    SqliteUserRepository,
 };
 
 struct TestApp {
@@ -103,6 +104,8 @@ impl TestApp {
                     as Arc<dyn ShortCodeRepository>,
                 temp_link_repo: Arc::new(SqliteTempLinkRepository::new(pool.clone()))
                     as Arc<dyn TempLinkRepository>,
+                traffic_repo: Arc::new(SqliteTrafficRepository::new(pool.clone()))
+                    as Arc<dyn TrafficRepository>,
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,

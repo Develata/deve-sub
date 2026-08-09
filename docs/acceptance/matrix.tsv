@@ -94,8 +94,8 @@ OUT-006	v2rayNG	P0	Compatibility	planned
 OUT-007	Shadowrocket	P0	Compatibility	planned
 OUT-008	ETag	P0	Integration	pass
 OUT-009	Token 错误	P0	Security	pass
-OUT-010	用户过期	P0	Integration	planned
-OUT-011	流量超额	P0	Integration	planned
+OUT-010	用户过期	P0	Integration	pass
+OUT-011	流量超额	P0	Integration	pass
 OUT-012	Token 轮换	P0	Integration	pass
 OUT-013	短码冲突	P0	Integration	pass
 OUT-014	并发生成	P0	Concurrency	pass

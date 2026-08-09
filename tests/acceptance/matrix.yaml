@@ -970,7 +970,7 @@ cases:
     steps: []
     assertions: ["按策略拒绝下载"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-011
     title: 流量超额
     priority: P0
@@ -980,7 +980,7 @@ cases:
     steps: []
     assertions: ["按策略拒绝下载"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-012
     title: Token 轮换
     priority: P0

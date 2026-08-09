@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use deve_sub_kernel::{ShortCodeId, SubscriptionId, SubscriptionTokenId, TempLinkId, UserId};
 
 use super::error::SubscriptionError;
-use super::{ShortCode, Subscription, SubscriptionToken, TempLink};
+use super::{ShortCode, Subscription, SubscriptionToken, TempLink, TrafficRecord, TrafficSummary};
 
 /// Storage boundary for subscription aggregates.
 #[async_trait]
@@ -188,4 +188,39 @@ pub trait TempLinkRepository: Send + Sync {
 
     /// Find a temp link by ID.
     async fn find_by_id(&self, id: TempLinkId) -> Result<Option<TempLink>, SubscriptionError>;
+}
+
+/// Storage boundary for subscription traffic accounting records.
+///
+/// Records are summed per subscription to compute consumed traffic for quota
+/// enforcement and the `subscription-userinfo` header. M6 does not infer
+/// real proxy traffic from download counts (terminology §116-121). See
+/// `docs/plan/milestones/M6-subscription-distribution.md` §"Traffic and
+/// expiry policy framework".
+#[async_trait]
+pub trait TrafficRepository: Send + Sync {
+    /// Insert a new traffic record.
+    async fn create(&self, record: &TrafficRecord) -> Result<(), SubscriptionError>;
+
+    /// Sum all traffic records for a subscription, returning the aggregate
+    /// upload/download totals and a per-source-kind breakdown.
+    async fn get_summary(
+        &self,
+        subscription_id: SubscriptionId,
+    ) -> Result<TrafficSummary, SubscriptionError>;
+
+    /// Sum all traffic records across all subscriptions owned by a user,
+    /// returning the aggregate upload/download totals. Used for user-level
+    /// `traffic_quota` enforcement at delivery time (OUT-011).
+    async fn get_summary_for_user(
+        &self,
+        user_id: UserId,
+    ) -> Result<TrafficSummary, SubscriptionError>;
+
+    /// Delete all traffic records for a subscription. Called on subscription
+    /// delete.
+    async fn delete_for_subscription(
+        &self,
+        subscription_id: SubscriptionId,
+    ) -> Result<(), SubscriptionError>;
 }

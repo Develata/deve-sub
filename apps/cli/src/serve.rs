@@ -19,7 +19,7 @@ use deve_sub_domain::{
     RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
     SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
     TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
-    UserRepository,
+    TrafficRepository, UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -104,6 +104,9 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let temp_link_repo: Arc<dyn TempLinkRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteTempLinkRepository::new(db.clone()),
     );
+    let traffic_repo: Arc<dyn TrafficRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteTrafficRepository::new(db.clone()),
+    );
     let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
     let geoip: Arc<dyn GeoIpPort> = Arc::new(deve_sub_adapters::MaxMindGeoIp::new(
         config.geoip.mmdb_path.as_deref(),
@@ -137,6 +140,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         subscription_token_repo: subscription_token_repo.clone(),
         short_code_repo,
         temp_link_repo,
+        traffic_repo,
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
         rate_limiter,

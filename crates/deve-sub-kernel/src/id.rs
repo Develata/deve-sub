@@ -201,6 +201,14 @@ entity_id!(
      digest, like the permanent delivery token."
 );
 
+entity_id!(
+    TrafficRecordId,
+    "subscription traffic record",
+    "Strong-typed identifier for a subscription traffic record row. Identifies \
+     the row only; the record captures one observed upload/download sample used \
+     for quota enforcement and the subscription-userinfo header."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -16,7 +16,7 @@ use deve_sub_domain::{
     RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
     SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
     TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
-    UserRepository,
+    TrafficRepository, UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -37,6 +37,7 @@ pub mod sources;
 pub mod subscriptions;
 pub mod template_generation;
 pub mod templates;
+pub mod traffic;
 pub mod twofa;
 pub mod users;
 
@@ -69,6 +70,7 @@ pub struct AppState {
     pub subscription_token_repo: Arc<dyn SubscriptionTokenRepository>,
     pub short_code_repo: Arc<dyn ShortCodeRepository>,
     pub temp_link_repo: Arc<dyn TempLinkRepository>,
+    pub traffic_repo: Arc<dyn TrafficRepository>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,

@@ -9,9 +9,10 @@
 //! pipeline".
 //!
 //! Security: bad token, disabled subscription, deleted subscription, expired
-//! temp link, and inactive user all return 404 with a generic body — the
-//! response must not reveal whether the token, subscription, or owner exists
-//! (OUT-009).
+//! temp link, and inactive (disabled) user return 404 with a generic body —
+//! the response must not reveal whether the token, subscription, or owner
+//! exists (OUT-009). Expired user or subscription returns 403 with a clear
+//! error (OUT-010). Traffic quota exceeded returns 429 (OUT-011).
 
 use axum::Router;
 use axum::body::Body;
@@ -135,6 +136,7 @@ fn make_deps(state: &AppState) -> subscription::DeliveryDeps<'_> {
         pool_repo: state.pool_repo.as_ref(),
         cache_repo: state.cache_repo.as_ref(),
         pool_meta_repo: state.pool_meta_repo.as_ref(),
+        traffic_repo: state.traffic_repo.as_ref(),
         master_key: state.master_key.as_ref(),
     }
 }
@@ -200,6 +202,16 @@ fn not_found() -> Response {
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
+/// Build a 403 Forbidden response with a clear error body (OUT-010).
+fn forbidden() -> Response {
+    (StatusCode::FORBIDDEN, "Forbidden").into_response()
+}
+
+/// Build a 429 Too Many Requests response (OUT-011, traffic quota exceeded).
+fn too_many_requests() -> Response {
+    (StatusCode::TOO_MANY_REQUESTS, "Traffic Quota Exceeded").into_response()
+}
+
 /// Build a 503 Service Unavailable response (generation failure).
 fn service_unavailable() -> Response {
     (StatusCode::SERVICE_UNAVAILABLE, "Service Unavailable").into_response()
@@ -207,9 +219,13 @@ fn service_unavailable() -> Response {
 
 /// Map a [`subscription::SubscriptionAppError`] to a delivery HTTP response.
 ///
-/// All token-resolution and access-control failures return 404 (OUT-009).
-/// Generation failure returns 503 (constraint #19). Infrastructure errors
-/// return 500.
+/// Access-control semantics (blueprint §278-283):
+/// - 404 (no leak): bad token, disabled/deleted subscription, disabled user,
+///   expired temp link, unknown profile.
+/// - 403 (clear error): expired user or expired subscription (OUT-010).
+/// - 429: traffic quota exceeded (OUT-011).
+/// - 503: generation failure (constraint #19).
+/// - 500: infrastructure errors.
 fn map_delivery_error(e: subscription::SubscriptionAppError) -> Response {
     use subscription::SubscriptionAppError;
     match e {
@@ -221,6 +237,10 @@ fn map_delivery_error(e: subscription::SubscriptionAppError) -> Response {
         | SubscriptionAppError::SubscriptionDisabled
         | SubscriptionAppError::UserInactive
         | SubscriptionAppError::UnknownProfile(_) => not_found(),
+        SubscriptionAppError::UserExpired | SubscriptionAppError::SubscriptionExpired => {
+            forbidden()
+        }
+        SubscriptionAppError::TrafficExceeded => too_many_requests(),
         SubscriptionAppError::GenerationFailed(msg) => {
             tracing::warn!(error = %msg, "delivery: generation failed");
             service_unavailable()

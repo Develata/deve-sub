@@ -20,7 +20,7 @@ use deve_sub_domain::{
     RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
     SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
     TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
-    UserRepository,
+    TrafficRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
@@ -29,7 +29,8 @@ use deve_sub_storage_sqlite::{
     SqliteSessionRepository, SqliteShortCodeRepository, SqliteSourceRepository,
     SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
     SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
-    SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteUserRepository,
+    SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteTrafficRepository,
+    SqliteUserRepository,
 };
 
 struct TestApp {
@@ -100,6 +101,8 @@ impl TestApp {
                     as Arc<dyn ShortCodeRepository>,
                 temp_link_repo: Arc::new(SqliteTempLinkRepository::new(pool.clone()))
                     as Arc<dyn TempLinkRepository>,
+                traffic_repo: Arc::new(SqliteTrafficRepository::new(pool.clone()))
+                    as Arc<dyn TrafficRepository>,
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,
@@ -299,6 +302,41 @@ async fn create_sub(
         .clone()
         .oneshot(with_cookie(
             post_json("/api/v1/subscriptions", &body),
+            cookie,
+        ))
+        .await
+        .expect("send");
+    assert_eq!(res.status(), StatusCode::CREATED);
+    body_to_json(res).await
+}
+
+/// Like [`create_sub`] but with optional `traffic_limit` and `expires_at`.
+async fn create_sub_with_opts(
+    router: &axum::Router,
+    cookie: &str,
+    template_id: &str,
+    slug: &str,
+    traffic_limit: Option<u64>,
+    expires_at: Option<&str>,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "name": slug,
+        "slug": slug,
+        "template_id": template_id,
+        "profile": "mihomo",
+        "node_selection": {"mode": "dynamic"},
+    });
+    if let Some(limit) = traffic_limit {
+        body["traffic_limit"] = serde_json::json!(limit);
+    }
+    if let Some(exp) = expires_at {
+        body["expires_at"] = serde_json::json!(exp);
+    }
+    let body_str = body.to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/subscriptions", &body_str),
             cookie,
         ))
         .await
@@ -1206,4 +1244,211 @@ async fn del017_expired_temp_link_returns_404() {
         .await
         .expect("deliver");
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+/// DEL-022 (OUT-010): A subscription with `expires_at` in the past returns
+/// 403 (not 404) — expired is a clear error, distinct from disabled which
+/// hides existence.
+#[tokio::test]
+async fn del022_expired_subscription_returns_403() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+
+    let past = {
+        let t = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
+        t.format(&time::format_description::well_known::Rfc3339)
+            .expect("rfc3339")
+    };
+    let v = create_sub_with_opts(
+        &router,
+        &cookie,
+        &template_id,
+        "expired-sub",
+        None,
+        Some(&past),
+    )
+    .await;
+    let token = v["token_plaintext"].as_str().expect("token").to_owned();
+
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{token}/mihomo")))
+        .await
+        .expect("deliver");
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+/// DEL-023 (OUT-011): A subscription whose consumed traffic exceeds its
+/// `traffic_limit` returns 429.
+#[tokio::test]
+async fn del023_traffic_exceeded_returns_429() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+
+    let v = create_sub_with_opts(
+        &router,
+        &cookie,
+        &template_id,
+        "quota-sub",
+        Some(1000),
+        None,
+    )
+    .await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+    let token = v["token_plaintext"].as_str().expect("token").to_owned();
+
+    // Record traffic exceeding the 1000-byte limit.
+    let correction = serde_json::json!({
+        "upload": 500,
+        "download": 600,
+        "note": "test correction exceeding quota",
+    })
+    .to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/traffic-correction"),
+                &correction,
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("apply correction");
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Delivery must return 429 (traffic exceeded).
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{token}/mihomo")))
+        .await
+        .expect("deliver");
+    assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+/// DEL-024 (OUT-011): `GET /api/v1/subscriptions/{id}/traffic` returns the
+/// aggregated traffic summary with per-source-kind breakdown.
+#[tokio::test]
+async fn del024_traffic_summary_endpoint() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+
+    let v = create_sub_with_opts(&router, &cookie, &template_id, "traffic-sub", None, None).await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+
+    // Apply two corrections.
+    for (up, dl) in [(100, 200), (300, 400)] {
+        let correction =
+            serde_json::json!({ "upload": up, "download": dl, "note": "batch" }).to_string();
+        let res = router
+            .clone()
+            .oneshot(with_cookie(
+                post_json(
+                    &format!("/api/v1/subscriptions/{sub_id}/traffic-correction"),
+                    &correction,
+                ),
+                &cookie,
+            ))
+            .await
+            .expect("correction");
+        assert_eq!(res.status(), StatusCode::CREATED);
+    }
+
+    // Fetch summary.
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/subscriptions/{sub_id}/traffic")),
+            &cookie,
+        ))
+        .await
+        .expect("summary");
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = body_to_json(res).await;
+    assert_eq!(json["upload"].as_u64(), Some(400));
+    assert_eq!(json["download"].as_u64(), Some(600));
+    assert_eq!(json["total"].as_u64(), Some(1000));
+    let by_source = json["by_source"].as_array().expect("by_source array");
+    assert!(
+        by_source.iter().any(|e| {
+            e["source_kind"].as_str() == Some("manual-correction")
+                && e["upload"].as_u64() == Some(400)
+                && e["download"].as_u64() == Some(600)
+        }),
+        "by_source should contain the manual-correction breakdown: {by_source:?}"
+    );
+}
+
+/// DEL-025 (OUT-010/011): A subscription within quota returns 200 and the
+/// `subscription-userinfo` header reflects consumed traffic.
+#[tokio::test]
+async fn del025_within_quota_returns_200_with_userinfo() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+
+    let v = create_sub_with_opts(
+        &router,
+        &cookie,
+        &template_id,
+        "ok-sub",
+        Some(1_000_000),
+        None,
+    )
+    .await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+    let token = v["token_plaintext"].as_str().expect("token").to_owned();
+
+    // Record traffic well within quota.
+    let correction =
+        serde_json::json!({ "upload": 500, "download": 300, "note": "within quota" }).to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/traffic-correction"),
+                &correction,
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("correction");
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Delivery succeeds and userinfo reflects consumed traffic.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{token}/mihomo")))
+        .await
+        .expect("deliver");
+    assert_eq!(res.status(), StatusCode::OK);
+    let userinfo = res
+        .headers()
+        .get("subscription-userinfo")
+        .expect("userinfo header")
+        .to_str()
+        .expect("userinfo str");
+    assert!(
+        userinfo.contains("upload=500"),
+        "userinfo should reflect upload=500: {userinfo}"
+    );
+    assert!(
+        userinfo.contains("download=300"),
+        "userinfo should reflect download=300: {userinfo}"
+    );
+    assert!(
+        userinfo.contains("total=1000000"),
+        "userinfo should reflect total limit: {userinfo}"
+    );
 }

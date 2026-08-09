@@ -10,6 +10,7 @@ pub mod commands;
 pub mod delivery;
 pub mod error;
 pub mod scheduler;
+pub mod traffic;
 
 pub use commands::{
     CreateSubscriptionParams, CreateSubscriptionResult, CreateTempLinkParams, CreateTempLinkResult,
@@ -23,3 +24,7 @@ pub use delivery::{
 };
 pub use error::SubscriptionAppError;
 pub use scheduler::GraceTokenCleanupScheduler;
+pub use traffic::{
+    ManualCorrectionParams, RecordTrafficParams, apply_manual_correction, get_traffic_summary,
+    record_traffic,
+};

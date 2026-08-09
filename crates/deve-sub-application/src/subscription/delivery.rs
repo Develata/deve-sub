@@ -25,7 +25,7 @@ use deve_sub_domain::{
     GenerationCacheRepository, GenerationMode, GenerationRequest, NodePoolRepository,
     PoolMetaRepository, ShortCodeRepository, Subscription, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
-    UserRepository,
+    TrafficRepository, TrafficSummary, UserRepository,
 };
 use deve_sub_security::{MasterKey, hmac_digest};
 use sha2::{Digest, Sha256};
@@ -60,6 +60,7 @@ pub struct DeliveryDeps<'a> {
     pub temp_link_repo: &'a dyn TempLinkRepository,
     pub sub_repo: &'a dyn SubscriptionRepository,
     pub user_repo: &'a dyn UserRepository,
+    pub traffic_repo: &'a dyn TrafficRepository,
     pub template_repo: &'a dyn TemplateRepository,
     pub version_repo: &'a dyn TemplateVersionRepository,
     pub pool_repo: &'a dyn NodePoolRepository,
@@ -212,6 +213,14 @@ pub async fn deliver_by_temp_link(
 
 /// Shared delivery pipeline: given a resolved subscription, check access
 /// control, resolve the profile, run generation, and build the response.
+///
+/// Enforcement order (blueprint §278-283):
+/// 1. `!subscription.enabled` → 404 (no leak)
+/// 2. `!user.enabled` → 404 (no leak)
+/// 3. `user.is_expired()` → 403 (OUT-010, clear error)
+/// 4. `subscription.is_expired(now)` → 403 (OUT-010)
+/// 5. `user.is_traffic_exceeded(user_consumed)` → 429 (OUT-011)
+/// 6. `subscription.is_traffic_exceeded(sub_consumed)` → 429 (OUT-011)
 async fn deliver_for_subscription(
     deps: &DeliveryDeps<'_>,
     subscription: &Subscription,
@@ -228,8 +237,33 @@ async fn deliver_for_subscription(
         .await?
         .ok_or(SubscriptionAppError::UserInactive)?;
 
-    if !user.is_active() {
+    if !user.enabled {
         return Err(SubscriptionAppError::UserInactive);
+    }
+
+    let now = deve_sub_kernel::Timestamp::now();
+
+    if user.is_expired() {
+        return Err(SubscriptionAppError::UserExpired);
+    }
+
+    if subscription.is_expired(now) {
+        return Err(SubscriptionAppError::SubscriptionExpired);
+    }
+
+    let sub_traffic = deps.traffic_repo.get_summary(subscription.id).await?;
+
+    let user_traffic = deps
+        .traffic_repo
+        .get_summary_for_user(subscription.owner_id)
+        .await?;
+
+    if user.is_traffic_exceeded(user_traffic.total()) {
+        return Err(SubscriptionAppError::TrafficExceeded);
+    }
+
+    if subscription.is_traffic_exceeded(sub_traffic.total()) {
+        return Err(SubscriptionAppError::TrafficExceeded);
     }
 
     let resolved_profile = resolve_profile(profile, user_agent, subscription)?;
@@ -256,7 +290,8 @@ async fn deliver_for_subscription(
     let etag = compute_etag(&result.content);
     let content_type = content_type_for(resolved_profile);
     let content_disposition = content_disposition_for(resolved_profile, &subscription.slug);
-    let subscription_userinfo = build_subscription_userinfo(subscription);
+    let subscription_userinfo =
+        build_subscription_userinfo(subscription, &sub_traffic, user.traffic_quota);
 
     Ok(DeliveryResult {
         content: result.content,
@@ -369,14 +404,28 @@ fn content_disposition_for(profile: ProfileKind, slug: &str) -> String {
 ///
 /// Format: `upload=BYTES; download=BYTES; total=BYTES; expire=UNIX_SECONDS`
 ///
-/// In M6 Slice 2 (no traffic accounting), upload and download are 0 and total
-/// is the Subscription's `traffic_limit` (or 0 if unlimited). `expire` is the
+/// `upload`/`download` are the aggregated consumed bytes from traffic records.
+/// `total` is the effective limit: the Subscription's `traffic_limit`, or the
+/// owning User's `traffic_quota` if the subscription is unlimited (whichever
+/// is smaller and non-zero), or 0 if both are unlimited. `expire` is the
 /// Subscription's `expires_at` as a Unix timestamp in seconds (or 0 if never).
-/// Traffic accounting and quota enforcement are M6 Slice 5.
-fn build_subscription_userinfo(subscription: &Subscription) -> String {
-    let upload: u64 = 0;
-    let download: u64 = 0;
-    let total = subscription.traffic_limit.unwrap_or(0);
+fn build_subscription_userinfo(
+    subscription: &Subscription,
+    traffic: &TrafficSummary,
+    user_quota: u64,
+) -> String {
+    let upload = traffic.upload;
+    let download = traffic.download;
+    let sub_limit = subscription.traffic_limit.unwrap_or(0);
+    let total = if sub_limit > 0 {
+        if user_quota > 0 {
+            sub_limit.min(user_quota)
+        } else {
+            sub_limit
+        }
+    } else {
+        user_quota
+    };
     let expire = subscription
         .expires_at
         .map(|ts| (ts.unix_ms() / 1000).max(0) as u64)
@@ -505,7 +554,12 @@ mod tests {
             deve_sub_domain::NodeSelector::default(),
             deve_sub_kernel::SubscriptionTokenId::new(),
         );
-        let info = build_subscription_userinfo(&sub);
+        let traffic = TrafficSummary {
+            upload: 0,
+            download: 0,
+            by_source: vec![],
+        };
+        let info = build_subscription_userinfo(&sub, &traffic, 0);
         assert_eq!(info, "upload=0; download=0; total=0; expire=0");
     }
 
@@ -521,7 +575,35 @@ mod tests {
             deve_sub_kernel::SubscriptionTokenId::new(),
         );
         sub.traffic_limit = Some(1_073_741_824);
-        let info = build_subscription_userinfo(&sub);
+        let traffic = TrafficSummary {
+            upload: 0,
+            download: 0,
+            by_source: vec![],
+        };
+        let info = build_subscription_userinfo(&sub, &traffic, 0);
         assert!(info.contains("total=1073741824"));
+    }
+
+    #[test]
+    fn subscription_userinfo_reflects_consumed_traffic() {
+        let sub = Subscription::new(
+            "n",
+            "s",
+            UserId::new(),
+            TemplateId::new(),
+            "mihomo",
+            deve_sub_domain::NodeSelector::default(),
+            deve_sub_kernel::SubscriptionTokenId::new(),
+        );
+        let traffic = TrafficSummary {
+            upload: 1_000,
+            download: 2_000,
+            by_source: vec![],
+        };
+        let info = build_subscription_userinfo(&sub, &traffic, 0);
+        assert!(
+            info.contains("upload=1000") && info.contains("download=2000"),
+            "userinfo should reflect consumed traffic: {info}"
+        );
     }
 }

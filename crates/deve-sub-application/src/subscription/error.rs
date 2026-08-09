@@ -48,15 +48,22 @@ pub enum SubscriptionAppError {
     #[error("subscription disabled")]
     SubscriptionDisabled,
 
-    /// The subscription has expired.
+    /// The subscription has expired. Delivery returns 403 with a clear error
+    /// (OUT-010), distinct from disabled which returns 404 with no leak.
     #[error("subscription expired")]
     SubscriptionExpired,
 
-    /// The owning user is disabled or expired.
-    #[error("user inactive or expired")]
+    /// The owning user is disabled. Delivery returns 404 (no existence leak).
+    #[error("user inactive")]
     UserInactive,
 
-    /// The subscription or user traffic quota is exceeded.
+    /// The owning user's account has expired. Delivery returns 403 with a
+    /// clear error (OUT-010), distinct from disabled which returns 404.
+    #[error("user expired")]
+    UserExpired,
+
+    /// The subscription or user traffic quota is exceeded. Delivery returns
+    /// 429 (OUT-011).
     #[error("traffic quota exceeded")]
     TrafficExceeded,
 

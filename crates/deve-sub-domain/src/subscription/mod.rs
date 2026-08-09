@@ -11,9 +11,12 @@
 pub mod entity;
 pub mod error;
 pub mod ports;
+pub mod traffic;
 
 pub use entity::{ShortCode, Subscription, SubscriptionToken, TempLink};
 pub use error::SubscriptionError;
 pub use ports::{
     ShortCodeRepository, SubscriptionRepository, SubscriptionTokenRepository, TempLinkRepository,
+    TrafficRepository,
 };
+pub use traffic::{TrafficRecord, TrafficSourceKind, TrafficSummary};

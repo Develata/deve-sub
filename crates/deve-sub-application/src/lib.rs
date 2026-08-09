@@ -23,8 +23,10 @@ pub use source::{
 };
 pub use subscription::{
     CreateSubscriptionParams, CreateSubscriptionResult, GraceTokenCleanupScheduler,
-    RotateTokenResult, SubscriptionAppError, UpdateSubscriptionParams, create_subscription,
-    delete_subscription, get_subscription, list_subscriptions, rotate_token, update_subscription,
+    ManualCorrectionParams, RecordTrafficParams, RotateTokenResult, SubscriptionAppError,
+    UpdateSubscriptionParams, apply_manual_correction, create_subscription, delete_subscription,
+    get_subscription, get_traffic_summary, list_subscriptions, record_traffic, rotate_token,
+    update_subscription,
 };
 pub use template::{
     CreateTemplateParams, CreateTemplateResult, TemplateAppError, UpdateTemplateParams,

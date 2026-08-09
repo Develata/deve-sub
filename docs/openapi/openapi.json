@@ -2556,6 +2556,164 @@
         ]
       }
     },
+    "/api/v1/subscriptions/{id}/traffic": {
+      "get": {
+        "summary": "`GET /api/v1/subscriptions/{id}/traffic` — get aggregated traffic summary\nfor a subscription (admin). Returns consumed upload/download totals and a\nper-source-kind breakdown.",
+        "operationId": "get_traffic",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Traffic summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrafficSummaryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid subscription id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}/traffic-correction": {
+      "post": {
+        "summary": "`POST /api/v1/subscriptions/{id}/traffic-correction` — apply a manual\ntraffic correction (admin). Appends a `manual-correction` record; aggregation\nis sum-based.",
+        "operationId": "apply_traffic_correction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualCorrectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Correction applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualCorrectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/tags": {
       "get": {
         "summary": "`GET /api/v1/tags` — list all tags (admin only).",
@@ -5131,6 +5289,80 @@
           }
         }
       },
+      "ManualCorrectionRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/subscriptions/{id}/traffic-correction`.\n\nRecords a manual traffic correction (admin escape hatch for drifted totals).\nThe correction is appended like any other record; aggregation is sum-based.",
+        "required": [
+          "upload",
+          "download",
+          "note"
+        ],
+        "properties": {
+          "download": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Download bytes to record.",
+            "minimum": 0
+          },
+          "note": {
+            "type": "string",
+            "description": "Admin note explaining the correction (max 512 chars)."
+          },
+          "upload": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Upload bytes to record.",
+            "minimum": 0
+          }
+        }
+      },
+      "ManualCorrectionResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/subscriptions/{id}/traffic-correction`.",
+        "required": [
+          "record_id",
+          "subscription_id",
+          "source_kind",
+          "upload",
+          "download",
+          "recorded_at",
+          "source_ref"
+        ],
+        "properties": {
+          "download": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Download bytes recorded.",
+            "minimum": 0
+          },
+          "record_id": {
+            "type": "string",
+            "description": "The traffic record ULID."
+          },
+          "recorded_at": {
+            "type": "string",
+            "description": "When the record was created (ISO 8601 UTC)."
+          },
+          "source_kind": {
+            "type": "string",
+            "description": "Source kind (`manual-correction`)."
+          },
+          "source_ref": {
+            "type": "string",
+            "description": "The admin note / source reference."
+          },
+          "subscription_id": {
+            "type": "string",
+            "description": "The subscription ULID."
+          },
+          "upload": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Upload bytes recorded.",
+            "minimum": 0
+          }
+        }
+      },
       "MissingNodeRefDto": {
         "type": "object",
         "description": "A node reference that could not be resolved to an active pool entry.",
@@ -6021,6 +6253,75 @@
           "token_plaintext": {
             "type": "string",
             "description": "The new plaintext delivery token. Shown once; store it securely."
+          }
+        }
+      },
+      "TrafficSourceBreakdownDto": {
+        "type": "object",
+        "description": "Per-source-kind breakdown entry in a [`TrafficSummaryResponse`].",
+        "required": [
+          "source_kind",
+          "upload",
+          "download"
+        ],
+        "properties": {
+          "download": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Download bytes from this source kind.",
+            "minimum": 0
+          },
+          "source_kind": {
+            "type": "string",
+            "description": "Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`."
+          },
+          "upload": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Upload bytes from this source kind.",
+            "minimum": 0
+          }
+        }
+      },
+      "TrafficSummaryResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/subscriptions/{id}/traffic`.\n\nReturns the aggregated consumed traffic for a subscription, broken down by\nsource kind. The `total` is `upload + download`. Used by the admin traffic\ndashboard and to verify quota enforcement state (OUT-010/OUT-011).",
+        "required": [
+          "subscription_id",
+          "upload",
+          "download",
+          "total",
+          "by_source"
+        ],
+        "properties": {
+          "by_source": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrafficSourceBreakdownDto"
+            },
+            "description": "Per-source-kind breakdown."
+          },
+          "download": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total download bytes across all source kinds.",
+            "minimum": 0
+          },
+          "subscription_id": {
+            "type": "string",
+            "description": "The subscription ULID."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total consumed traffic (`upload + download`).",
+            "minimum": 0
+          },
+          "upload": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total upload bytes across all source kinds.",
+            "minimum": 0
           }
         }
       },

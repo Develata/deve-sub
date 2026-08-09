@@ -99,6 +99,27 @@ impl Subscription {
             updated_at: now,
         }
     }
+
+    /// Whether the subscription has expired at the given reference time.
+    ///
+    /// `None` expiry means never expires. Delivery uses this to return 403
+    /// with a clear error (OUT-010), distinct from `!enabled` which returns
+    /// 404 with no existence leak.
+    #[must_use]
+    pub fn is_expired(&self, now: Timestamp) -> bool {
+        self.expires_at.is_some_and(|e| e <= now)
+    }
+
+    /// Whether the subscription's traffic limit is exceeded.
+    ///
+    /// `None` limit means unlimited (never exceeded). Otherwise `consumed`
+    /// must exceed the limit. The caller supplies the consumed total
+    /// (aggregated from this subscription's traffic records).
+    #[must_use]
+    pub fn is_traffic_exceeded(&self, consumed: u64) -> bool {
+        self.traffic_limit
+            .is_some_and(|limit| limit > 0 && consumed > limit)
+    }
 }
 
 /// A delivery token row for a subscription.

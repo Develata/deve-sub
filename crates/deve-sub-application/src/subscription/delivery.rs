@@ -1,16 +1,19 @@
-//! Subscription delivery query: resolve a delivery token to generated
-//! subscription content.
+//! Subscription delivery query: resolve a delivery token, short code, or temp
+//! link to generated subscription content.
 //!
-//! The delivery pipeline (M6 Slice 2):
-//! 1. Parse the plaintext token from the URL path.
-//! 2. HMAC-SHA256 → constant-time digest comparison → resolve the token row.
-//! 3. Resolve the Subscription; check `enabled`.
-//! 4. Resolve the owning User; check `enabled` (disabled → 404, no leak).
-//! 5. Resolve the profile: explicit path segment or User-Agent auto-detect.
-//! 6. Cache lookup by `cache_key`; on miss, run `generate_for_delivery`
+//! The delivery pipeline (M6 Slice 2 + Slice 3):
+//! 1. Resolve the subscription via one of three entry points:
+//!    - permanent token (`/sub/{token}`): HMAC-SHA256 digest → token row
+//!    - short code (`/s/{code}`): code string → short code row → subscription
+//!    - temp link (`/sub/{temp_token}`): HMAC-SHA256 digest → temp link row
+//!      (checks revoked + expires_at)
+//! 2. Resolve the Subscription; check `enabled`.
+//! 3. Resolve the owning User; check `enabled` (disabled → 404, no leak).
+//! 4. Resolve the profile: explicit path segment or User-Agent auto-detect.
+//! 5. Cache lookup by `cache_key`; on miss, run `generate_for_delivery`
 //!    (stores inactive, does NOT activate — preserves admin's active
 //!    generation).
-//! 7. Compute ETag (SHA-256 of content), set `subscription-userinfo`,
+//! 6. Compute ETag (SHA-256 of content), set `subscription-userinfo`,
 //!    `Content-Type`, `Content-Disposition`, `Cache-Control`.
 //!
 //! Traffic/expiry quota enforcement is M6 Slice 5; this query checks
@@ -20,8 +23,9 @@
 use deve_sub_compatibility::ProfileKind;
 use deve_sub_domain::{
     GenerationCacheRepository, GenerationMode, GenerationRequest, NodePoolRepository,
-    PoolMetaRepository, Subscription, SubscriptionRepository, SubscriptionTokenRepository,
-    TemplateRepository, TemplateVersionRepository, UserRepository,
+    PoolMetaRepository, ShortCodeRepository, Subscription, SubscriptionRepository,
+    SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
+    UserRepository,
 };
 use deve_sub_security::{MasterKey, hmac_digest};
 use sha2::{Digest, Sha256};
@@ -48,10 +52,12 @@ pub struct DeliveryResult {
 }
 
 /// Bundled storage and crypto dependencies for delivery. Passing these as a
-/// single struct keeps [`deliver_subscription`] under the argument-count lint
+/// single struct keeps the delivery functions under the argument-count lint
 /// and mirrors the `AppState` grouping the Delivery layer already holds.
 pub struct DeliveryDeps<'a> {
     pub token_repo: &'a dyn SubscriptionTokenRepository,
+    pub short_code_repo: &'a dyn ShortCodeRepository,
+    pub temp_link_repo: &'a dyn TempLinkRepository,
     pub sub_repo: &'a dyn SubscriptionRepository,
     pub user_repo: &'a dyn UserRepository,
     pub template_repo: &'a dyn TemplateRepository,
@@ -62,7 +68,7 @@ pub struct DeliveryDeps<'a> {
     pub master_key: &'a MasterKey,
 }
 
-/// Resolve a delivery token to subscription content.
+/// Resolve a permanent delivery token to subscription content.
 ///
 /// `token_plaintext` is the raw token from the URL path. `profile` is the
 /// explicit path segment (`Some("mihomo")`) or `None` for User-Agent
@@ -108,6 +114,96 @@ pub async fn deliver_subscription(
         .await?
         .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
 
+    deliver_for_subscription(deps, &subscription, profile, user_agent).await
+}
+
+/// Resolve a short code to subscription content (`GET /s/{code}`).
+///
+/// `code` is the base62 short code from the URL path. Unlike the permanent
+/// token, the short code is stored in the clear and looked up directly. The
+/// resolved subscription is then served through the standard delivery
+/// pipeline.
+///
+/// # Errors
+/// - [`SubscriptionAppError::ShortCodeNotFound`] — code does not match any
+///   row (404, no existence leak).
+/// - [`SubscriptionAppError::SubscriptionNotFound`] — code resolved but the
+///   subscription was deleted (404).
+/// - See [`deliver_subscription`] for the remaining error variants.
+pub async fn deliver_by_short_code(
+    deps: &DeliveryDeps<'_>,
+    code: &str,
+    profile: Option<&str>,
+    user_agent: Option<&str>,
+) -> Result<DeliveryResult, SubscriptionAppError> {
+    let short_code = deps
+        .short_code_repo
+        .find_by_code(code)
+        .await?
+        .ok_or(SubscriptionAppError::ShortCodeNotFound)?;
+
+    let subscription = deps
+        .sub_repo
+        .find_by_id(short_code.subscription_id)
+        .await?
+        .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
+
+    deliver_for_subscription(deps, &subscription, profile, user_agent).await
+}
+
+/// Resolve a temp link token to subscription content (`GET /sub/{temp_token}`).
+///
+/// `token_plaintext` is the raw temp token from the URL path. The digest is
+/// looked up in the temp link table; if found, `revoked` and `expires_at` are
+/// checked before delegating to the standard delivery pipeline.
+///
+/// # Errors
+/// - [`SubscriptionAppError::TokenNotFound`] — temp token digest does not
+///   match any row (404, no existence leak).
+/// - [`SubscriptionAppError::TempLinkInvalid`] — temp link is revoked or
+///   expired (404, no leak).
+/// - [`SubscriptionAppError::SubscriptionNotFound`] — temp link resolved but
+///   the subscription was deleted (404).
+/// - See [`deliver_subscription`] for the remaining error variants.
+pub async fn deliver_by_temp_link(
+    deps: &DeliveryDeps<'_>,
+    token_plaintext: &str,
+    profile: Option<&str>,
+    user_agent: Option<&str>,
+) -> Result<DeliveryResult, SubscriptionAppError> {
+    let token_digest = hmac_digest(
+        PURPOSE_SUBSCRIPTION_TOKEN,
+        token_plaintext,
+        deps.master_key.as_bytes(),
+    )?;
+
+    let temp_link = deps
+        .temp_link_repo
+        .find_by_token_hash(&token_digest)
+        .await?
+        .ok_or(SubscriptionAppError::TokenNotFound)?;
+
+    if !temp_link.is_valid_at(deve_sub_kernel::Timestamp::now()) {
+        return Err(SubscriptionAppError::TempLinkInvalid);
+    }
+
+    let subscription = deps
+        .sub_repo
+        .find_by_id(temp_link.subscription_id)
+        .await?
+        .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
+
+    deliver_for_subscription(deps, &subscription, profile, user_agent).await
+}
+
+/// Shared delivery pipeline: given a resolved subscription, check access
+/// control, resolve the profile, run generation, and build the response.
+async fn deliver_for_subscription(
+    deps: &DeliveryDeps<'_>,
+    subscription: &Subscription,
+    profile: Option<&str>,
+    user_agent: Option<&str>,
+) -> Result<DeliveryResult, SubscriptionAppError> {
     if !subscription.enabled {
         return Err(SubscriptionAppError::SubscriptionDisabled);
     }
@@ -122,7 +218,7 @@ pub async fn deliver_subscription(
         return Err(SubscriptionAppError::UserInactive);
     }
 
-    let resolved_profile = resolve_profile(profile, user_agent, &subscription)?;
+    let resolved_profile = resolve_profile(profile, user_agent, subscription)?;
 
     let request = GenerationRequest {
         template_id: subscription.template_id,
@@ -146,7 +242,7 @@ pub async fn deliver_subscription(
     let etag = compute_etag(&result.content);
     let content_type = content_type_for(resolved_profile);
     let content_disposition = content_disposition_for(resolved_profile, &subscription.slug);
-    let subscription_userinfo = build_subscription_userinfo(&subscription);
+    let subscription_userinfo = build_subscription_userinfo(subscription);
 
     Ok(DeliveryResult {
         content: result.content,

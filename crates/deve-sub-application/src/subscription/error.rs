@@ -24,6 +24,18 @@ pub enum SubscriptionAppError {
     #[error("subscription token not found")]
     TokenNotFound,
 
+    /// A short code was not found.
+    #[error("short code not found")]
+    ShortCodeNotFound,
+
+    /// A temp link was not found.
+    #[error("temp link not found")]
+    TempLinkNotFound,
+
+    /// A temp link has been revoked or has expired (delivery: 404, no leak).
+    #[error("temp link revoked or expired")]
+    TempLinkInvalid,
+
     /// The referenced template was not found.
     #[error("template not found")]
     TemplateNotFound,
@@ -78,6 +90,11 @@ pub(super) fn map_subscription_error(e: SubscriptionError) -> SubscriptionAppErr
         SubscriptionError::SubscriptionNotFound => SubscriptionAppError::SubscriptionNotFound,
         SubscriptionError::SlugExists => SubscriptionAppError::SlugExists,
         SubscriptionError::TokenNotFound => SubscriptionAppError::TokenNotFound,
-        other => SubscriptionAppError::Subscription(other),
+        SubscriptionError::ShortCodeNotFound => SubscriptionAppError::ShortCodeNotFound,
+        SubscriptionError::TempLinkNotFound => SubscriptionAppError::TempLinkNotFound,
+        SubscriptionError::TempLinkInvalid => SubscriptionAppError::TempLinkInvalid,
+        SubscriptionError::ShortCodeExists | SubscriptionError::Storage(_) => {
+            SubscriptionAppError::Subscription(e)
+        }
     }
 }

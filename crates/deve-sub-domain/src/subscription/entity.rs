@@ -13,7 +13,9 @@
 //! `docs/plan/00-engineering-constitution.md` §"Data and security" and
 //! `docs/plan/milestones/M6-subscription-distribution.md`.
 
-use deve_sub_kernel::{SubscriptionId, SubscriptionTokenId, TemplateId, Timestamp, UserId};
+use deve_sub_kernel::{
+    ShortCodeId, SubscriptionId, SubscriptionTokenId, TempLinkId, TemplateId, Timestamp, UserId,
+};
 
 use crate::template::NodeSelector;
 
@@ -52,6 +54,9 @@ pub struct Subscription {
     /// The active delivery token row. Rotation retains the previous token
     /// digest during the grace period.
     pub token_id: SubscriptionTokenId,
+    /// Optional short code row for `GET /s/{code}` delivery. `None` if no
+    /// short code has been generated for this subscription.
+    pub short_code_id: Option<ShortCodeId>,
     /// Whether delivery is enabled. Disabled subscriptions return 404 at
     /// delivery (no existence leak).
     pub enabled: bool,
@@ -88,6 +93,7 @@ impl Subscription {
             traffic_limit: None,
             expires_at: None,
             token_id,
+            short_code_id: None,
             enabled: true,
             created_at: now,
             updated_at: now,
@@ -145,5 +151,93 @@ impl SubscriptionToken {
             (Some(_), Some(until)) => until > now,
             (None, _) => false,
         }
+    }
+}
+
+/// A short code row for `GET /s/{code}` delivery.
+///
+/// The short code is a CSPRNG-generated base62 string (8–12 chars, ≥47 bits of
+/// entropy at 8). Unlike the delivery token, it is stored in the clear: it is
+/// a public lookup key, not a secret — the `GET /s/{code}` endpoint resolves
+/// the code to the subscription and serves content directly (it cannot redirect
+/// to `/sub/{token}` because only the digest is persisted, never the plaintext
+/// token). The `code` column has a UNIQUE constraint so concurrent inserts are
+/// rejected atomically (OUT-013); the application layer retries with a fresh
+/// CSPRNG code on conflict.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShortCode {
+    /// Unique identifier (ULID). Identifies the row, not the code value.
+    pub id: ShortCodeId,
+    /// The subscription this short code delivers.
+    pub subscription_id: SubscriptionId,
+    /// The public base62 short code string (e.g. `"aB3xK9mQ"`).
+    pub code: String,
+    /// When this short code was created.
+    pub created_at: Timestamp,
+}
+
+impl ShortCode {
+    /// Create a new short code row for a subscription with the given code
+    /// string.
+    #[must_use]
+    pub fn new(subscription_id: SubscriptionId, code: String) -> Self {
+        Self {
+            id: ShortCodeId::new(),
+            subscription_id,
+            code,
+            created_at: Timestamp::now(),
+        }
+    }
+}
+
+/// A temporary delivery link row.
+///
+/// A temp link is an alternative delivery token with a mandatory expiry and a
+/// revocation flag. Like the permanent delivery token, the plaintext is
+/// CSPRNG-generated and stored only as an HMAC-SHA256 digest; the plaintext is
+/// returned once at creation. Delivery via `GET /sub/{temp_token}` resolves the
+/// digest, checks `revoked` and `expires_at`, then delegates to the same
+/// delivery pipeline. See `docs/plan/milestones/M6-subscription-distribution.md`
+/// §"Slicing" Slice 3.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TempLink {
+    /// Unique identifier (ULID). Identifies the row, not the token secret.
+    pub id: TempLinkId,
+    /// The subscription this temp link delivers.
+    pub subscription_id: SubscriptionId,
+    /// HMAC-SHA256 digest of the plaintext temp token, base64url-encoded.
+    pub token_digest: String,
+    /// When this temp link expires. Delivery returns 404 after expiry.
+    pub expires_at: Timestamp,
+    /// Whether this temp link has been manually revoked.
+    pub revoked: bool,
+    /// When this temp link was created.
+    pub created_at: Timestamp,
+}
+
+impl TempLink {
+    /// Create a new temp link row for a subscription with the given digest and
+    /// expiry.
+    #[must_use]
+    pub fn new(
+        subscription_id: SubscriptionId,
+        token_digest: String,
+        expires_at: Timestamp,
+    ) -> Self {
+        Self {
+            id: TempLinkId::new(),
+            subscription_id,
+            token_digest,
+            expires_at,
+            revoked: false,
+            created_at: Timestamp::now(),
+        }
+    }
+
+    /// Whether this temp link is still valid at the given reference time: not
+    /// revoked and not expired.
+    #[must_use]
+    pub fn is_valid_at(&self, now: Timestamp) -> bool {
+        !self.revoked && self.expires_at > now
     }
 }

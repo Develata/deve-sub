@@ -185,6 +185,22 @@ entity_id!(
      HMAC-SHA256 digest."
 );
 
+entity_id!(
+    ShortCodeId,
+    "subscription short code",
+    "Strong-typed identifier for a subscription short code row. Identifies the \
+     row only; the short code value itself is a CSPRNG-generated base62 string \
+     stored in the clear (it is a public lookup key, not a secret)."
+);
+
+entity_id!(
+    TempLinkId,
+    "subscription temp link",
+    "Strong-typed identifier for a subscription temporary link row. Identifies \
+     the row only; the temp link token is a secret stored as an HMAC-SHA256 \
+     digest, like the permanent delivery token."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

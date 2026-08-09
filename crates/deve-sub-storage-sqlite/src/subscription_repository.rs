@@ -9,7 +9,7 @@
 
 use async_trait::async_trait;
 use deve_sub_domain::{NodeSelector, Subscription, SubscriptionError, SubscriptionRepository};
-use deve_sub_kernel::{SubscriptionId, TemplateId, UserId};
+use deve_sub_kernel::{ShortCodeId, SubscriptionId, TemplateId, UserId};
 use sqlx::sqlite::SqlitePool;
 
 use crate::timestamp::{format_ts, parse_ts};
@@ -41,6 +41,7 @@ struct SubscriptionRow {
     traffic_limit: Option<i64>,
     expires_at: Option<String>,
     token_id: String,
+    short_code_id: Option<String>,
     enabled: i64,
     created_at: String,
     updated_at: String,
@@ -73,6 +74,13 @@ impl SubscriptionRow {
                 .map_err(SubscriptionError::Storage)?,
             token_id: deve_sub_kernel::SubscriptionTokenId::parse(&self.token_id)
                 .map_err(|e| SubscriptionError::Storage(e.to_string()))?,
+            short_code_id: self
+                .short_code_id
+                .as_deref()
+                .map(|s| {
+                    ShortCodeId::parse(s).map_err(|e| SubscriptionError::Storage(e.to_string()))
+                })
+                .transpose()?,
             enabled: self.enabled != 0,
             created_at: parse_ts(&self.created_at).map_err(SubscriptionError::Storage)?,
             updated_at: parse_ts(&self.updated_at).map_err(SubscriptionError::Storage)?,
@@ -135,7 +143,7 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
     ) -> Result<Option<Subscription>, SubscriptionError> {
         let row: Option<SubscriptionRow> = sqlx::query_as(
             "SELECT id, name, slug, owner_id, template_id, template_version_pin, profile, \
-             node_selection, traffic_limit, expires_at, token_id, enabled, created_at, updated_at \
+             node_selection, traffic_limit, expires_at, token_id, short_code_id, enabled, created_at, updated_at \
              FROM subscriptions WHERE id = ?",
         )
         .bind(id.to_string())
@@ -152,7 +160,7 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
     ) -> Result<Option<Subscription>, SubscriptionError> {
         let row: Option<SubscriptionRow> = sqlx::query_as(
             "SELECT id, name, slug, owner_id, template_id, template_version_pin, profile, \
-             node_selection, traffic_limit, expires_at, token_id, enabled, created_at, updated_at \
+             node_selection, traffic_limit, expires_at, token_id, short_code_id, enabled, created_at, updated_at \
              FROM subscriptions WHERE owner_id = ? AND slug = ?",
         )
         .bind(owner_id.to_string())
@@ -173,8 +181,8 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
         let rows: Vec<SubscriptionRow> = match cursor {
             Some(c) => sqlx::query_as(
                 "SELECT id, name, slug, owner_id, template_id, template_version_pin, profile, \
-                     node_selection, traffic_limit, expires_at, token_id, enabled, created_at, \
-                     updated_at FROM subscriptions \
+                     node_selection, traffic_limit, expires_at, token_id, short_code_id, \
+                     enabled, created_at, updated_at FROM subscriptions \
                      WHERE owner_id = ? AND id > ? ORDER BY id LIMIT ?",
             )
             .bind(owner_id.to_string())
@@ -185,8 +193,8 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
             .map_err(|e| SubscriptionError::Storage(e.to_string()))?,
             None => sqlx::query_as(
                 "SELECT id, name, slug, owner_id, template_id, template_version_pin, profile, \
-                     node_selection, traffic_limit, expires_at, token_id, enabled, created_at, \
-                     updated_at FROM subscriptions \
+                     node_selection, traffic_limit, expires_at, token_id, short_code_id, \
+                     enabled, created_at, updated_at FROM subscriptions \
                      WHERE owner_id = ? ORDER BY id LIMIT ?",
             )
             .bind(owner_id.to_string())
@@ -248,10 +256,29 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
     }
 
     async fn delete(&self, id: SubscriptionId) -> Result<(), SubscriptionError> {
-        // WHY: ON DELETE CASCADE in migration 0009 removes subscription_tokens
-        // rows automatically. No manual cascade needed for the token row.
+        // WHY: ON DELETE CASCADE in migrations 0009 and 0010 removes
+        // subscription_tokens, subscription_short_codes, and
+        // subscription_temp_links rows automatically. No manual cascade
+        // needed for dependent rows.
         let result = sqlx::query("DELETE FROM subscriptions WHERE id = ?")
             .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(SubscriptionError::SubscriptionNotFound);
+        }
+        Ok(())
+    }
+
+    async fn set_short_code_id(
+        &self,
+        subscription_id: SubscriptionId,
+        short_code_id: Option<ShortCodeId>,
+    ) -> Result<(), SubscriptionError> {
+        let result = sqlx::query("UPDATE subscriptions SET short_code_id = ? WHERE id = ?")
+            .bind(short_code_id.map(|id| id.to_string()))
+            .bind(subscription_id.to_string())
             .execute(&self.pool)
             .await
             .map_err(|e| SubscriptionError::Storage(e.to_string()))?;

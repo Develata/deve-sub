@@ -1000,7 +1000,7 @@ cases:
     steps: []
     assertions: ["原子拒绝重复值"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-014
     title: 并发生成
     priority: P0

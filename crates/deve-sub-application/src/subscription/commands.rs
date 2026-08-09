@@ -14,11 +14,11 @@
 
 use deve_sub_compatibility::ProfileKind;
 use deve_sub_domain::{
-    NodeSelector, Subscription, SubscriptionRepository, SubscriptionToken,
-    SubscriptionTokenRepository,
+    NodeSelector, ShortCode, ShortCodeRepository, Subscription, SubscriptionRepository,
+    SubscriptionToken, SubscriptionTokenRepository, TempLink, TempLinkRepository,
 };
-use deve_sub_kernel::{SubscriptionId, TemplateId, Timestamp, UserId};
-use deve_sub_security::{MasterKey, generate_session_token, hmac_digest};
+use deve_sub_kernel::{SubscriptionId, TempLinkId, TemplateId, Timestamp, UserId};
+use deve_sub_security::{MasterKey, generate_session_token, generate_short_code, hmac_digest};
 use time::format_description::well_known::Rfc3339;
 
 use super::error::{SubscriptionAppError, map_subscription_error};
@@ -375,4 +375,146 @@ pub async fn rotate_token(
         token_id: updated.id,
         token_plaintext,
     })
+}
+
+/// Maximum retry attempts for short code UNIQUE conflict (OUT-013). After this
+/// many collisions (astronomically unlikely with 47 bits of entropy), return
+/// a storage error.
+const SHORT_CODE_MAX_RETRIES: u32 = 8;
+
+/// Result of a successful short code (re)generation.
+#[derive(Debug, Clone)]
+pub struct ShortCodeResult {
+    /// The short code row id.
+    pub short_code_id: deve_sub_kernel::ShortCodeId,
+    /// The public base62 short code string (e.g. `"aB3xK9mQ"`).
+    pub code: String,
+}
+
+/// (Re)generate a short code for a subscription.
+///
+/// If the subscription already has a short code, the old row is deleted first.
+/// Generates a CSPRNG base62 code and retries on UNIQUE conflict (OUT-013).
+/// Links the new short code to the subscription via `set_short_code_id`.
+///
+/// # Errors
+/// - [`SubscriptionAppError::SubscriptionNotFound`] — subscription missing.
+/// - [`SubscriptionAppError::Subscription`] — storage error after retry budget
+///   exhausted.
+pub async fn regenerate_short_code(
+    sub_repo: &dyn SubscriptionRepository,
+    short_code_repo: &dyn ShortCodeRepository,
+    subscription_id: SubscriptionId,
+) -> Result<ShortCodeResult, SubscriptionAppError> {
+    let subscription = sub_repo
+        .find_by_id(subscription_id)
+        .await
+        .map_err(map_subscription_error)?
+        .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
+
+    if let Some(old_id) = subscription.short_code_id {
+        let _ = short_code_repo.delete(old_id).await;
+    }
+
+    for _ in 0..SHORT_CODE_MAX_RETRIES {
+        let code = generate_short_code()?;
+        let short_code = ShortCode::new(subscription_id, code.clone());
+        match short_code_repo.create(&short_code).await {
+            Ok(()) => {
+                sub_repo
+                    .set_short_code_id(subscription_id, Some(short_code.id))
+                    .await
+                    .map_err(map_subscription_error)?;
+                return Ok(ShortCodeResult {
+                    short_code_id: short_code.id,
+                    code,
+                });
+            }
+            Err(deve_sub_domain::SubscriptionError::ShortCodeExists) => continue,
+            Err(e) => return Err(map_subscription_error(e)),
+        }
+    }
+
+    Err(SubscriptionAppError::Storage(format!(
+        "short code generation exhausted {SHORT_CODE_MAX_RETRIES} retries"
+    )))
+}
+
+/// Parameters for [`create_temp_link`].
+pub struct CreateTempLinkParams {
+    /// The subscription this temp link delivers.
+    pub subscription_id: SubscriptionId,
+    /// When the temp link expires. Delivery returns 404 after this time.
+    pub expires_at: Timestamp,
+}
+
+/// Result of a successful temp link creation.
+#[derive(Debug, Clone)]
+pub struct CreateTempLinkResult {
+    /// The temp link row id.
+    pub temp_link_id: TempLinkId,
+    /// The plaintext temp link token. Shown once; never persisted.
+    pub token_plaintext: String,
+    /// The expiry timestamp.
+    pub expires_at: Timestamp,
+}
+
+/// Create a temporary delivery link for a subscription.
+///
+/// Generates a CSPRNG plaintext temp token, stores only the HMAC-SHA256
+/// digest, and returns the plaintext once. The temp link is valid until
+/// `expires_at` or until revoked via [`revoke_temp_link`].
+///
+/// # Errors
+/// - [`SubscriptionAppError::SubscriptionNotFound`] — subscription missing.
+/// - [`SubscriptionAppError::Security`] — token generation or HMAC failed.
+/// - [`SubscriptionAppError::Subscription`] — storage error.
+pub async fn create_temp_link(
+    sub_repo: &dyn SubscriptionRepository,
+    temp_link_repo: &dyn TempLinkRepository,
+    master_key: &MasterKey,
+    params: CreateTempLinkParams,
+) -> Result<CreateTempLinkResult, SubscriptionAppError> {
+    let _subscription = sub_repo
+        .find_by_id(params.subscription_id)
+        .await
+        .map_err(map_subscription_error)?
+        .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
+
+    let token_plaintext = generate_session_token()?;
+    let token_digest = hmac_digest(
+        PURPOSE_SUBSCRIPTION_TOKEN,
+        &token_plaintext,
+        master_key.as_bytes(),
+    )?;
+
+    let temp_link = TempLink::new(params.subscription_id, token_digest, params.expires_at);
+    temp_link_repo
+        .create(&temp_link)
+        .await
+        .map_err(map_subscription_error)?;
+
+    Ok(CreateTempLinkResult {
+        temp_link_id: temp_link.id,
+        token_plaintext,
+        expires_at: temp_link.expires_at,
+    })
+}
+
+/// Revoke a temporary delivery link.
+///
+/// Marks the temp link as revoked so subsequent delivery via
+/// `GET /sub/{temp_token}` returns 404.
+///
+/// # Errors
+/// - [`SubscriptionAppError::TempLinkNotFound`] — no temp link matches the id.
+/// - [`SubscriptionAppError::Subscription`] — storage error.
+pub async fn revoke_temp_link(
+    temp_link_repo: &dyn TempLinkRepository,
+    temp_link_id: TempLinkId,
+) -> Result<(), SubscriptionAppError> {
+    temp_link_repo
+        .revoke(temp_link_id)
+        .await
+        .map_err(map_subscription_error)
 }

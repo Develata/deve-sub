@@ -2198,6 +2198,90 @@
         ]
       }
     },
+    "/api/v1/subscriptions/{id}/regenerate-short-code": {
+      "post": {
+        "summary": "`POST /api/v1/subscriptions/{id}/regenerate-short-code` — (re)generate the\nshort code for a subscription (admin). If a short code already exists, it is\nreplaced. The short code is a public lookup key, not a secret.",
+        "operationId": "regenerate_short_code",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Short code generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShortCodeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid subscription id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/subscriptions/{id}/rotate-token": {
       "post": {
         "summary": "`POST /api/v1/subscriptions/{id}/rotate-token` — rotate the delivery token\n(admin). The new plaintext token is returned once.",
@@ -2266,6 +2350,186 @@
           },
           "404": {
             "description": "Subscription not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}/temp-links": {
+      "post": {
+        "summary": "`POST /api/v1/subscriptions/{id}/temp-links` — create a temporary delivery\nlink (admin). The plaintext temp token is returned once and never persisted.",
+        "operationId": "create_temp_link",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTempLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Temp link created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTempLinkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}/temp-links/{temp_link_id}": {
+      "delete": {
+        "summary": "`DELETE /api/v1/subscriptions/{id}/temp-links/{temp_link_id}` — revoke a\ntemporary delivery link (admin). Subsequent delivery via the temp token\nreturns 404.",
+        "operationId": "revoke_temp_link",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Subscription ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "temp_link_id",
+            "in": "path",
+            "description": "Temp link ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Temp link revoked"
+          },
+          "400": {
+            "description": "Invalid id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Temp link not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -4233,6 +4497,42 @@
           }
         }
       },
+      "CreateTempLinkRequest": {
+        "type": "object",
+        "description": "Request body for `POST /api/v1/subscriptions/{id}/temp-links`.\n\nA temp link is an alternative delivery token with a mandatory expiry and\nrevocation. The plaintext is returned once at creation; only the\nHMAC-SHA256 digest is persisted.",
+        "required": [
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "When the temp link expires (ISO 8601 UTC). Required."
+          }
+        }
+      },
+      "CreateTempLinkResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/subscriptions/{id}/temp-links`.",
+        "required": [
+          "temp_link_id",
+          "token_plaintext",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "The expiry timestamp (ISO 8601 UTC)."
+          },
+          "temp_link_id": {
+            "type": "string",
+            "description": "The temp link row ULID."
+          },
+          "token_plaintext": {
+            "type": "string",
+            "description": "The plaintext temp link token. Shown once; store it securely."
+          }
+        }
+      },
       "CreateTemplateRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/templates`.\n\nThe `spec_yaml` field is the full V3 template document (apiVersion,\nkind, metadata, spec) as a YAML string. The server validates it against\nthe M5 schema constraints before persistence (GEN-002).",
@@ -5312,6 +5612,24 @@
           }
         }
       },
+      "ShortCodeResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/subscriptions/{id}/regenerate-short-code`.\n\nThe short code is a CSPRNG-generated base62 string (8 chars). Unlike the\ndelivery token, it is not a secret — it is a public lookup key for\n`GET /s/{code}`. If a short code already exists, it is replaced.",
+        "required": [
+          "short_code_id",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The public base62 short code string (e.g. `\"aB3xK9mQ\"`)."
+          },
+          "short_code_id": {
+            "type": "string",
+            "description": "The short code row ULID."
+          }
+        }
+      },
       "SourceDto": {
         "type": "object",
         "description": "Source information returned by source management endpoints.\n\nNever includes encrypted headers ciphertext in responses.",
@@ -5488,6 +5806,13 @@
           "profile": {
             "type": "string",
             "description": "Target output profile (kebab-case)."
+          },
+          "short_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The active short code string, if one has been generated. `null` = no\nshort code. Delivery via `GET /s/{code}` resolves this to the\nsubscription."
           },
           "slug": {
             "type": "string",

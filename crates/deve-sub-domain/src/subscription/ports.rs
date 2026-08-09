@@ -1,11 +1,12 @@
-//! Port traits for subscription and subscription token storage.
+//! Port traits for subscription, subscription token, short code, and temp link
+//! storage.
 
 use async_trait::async_trait;
 
-use deve_sub_kernel::{SubscriptionId, SubscriptionTokenId, UserId};
+use deve_sub_kernel::{ShortCodeId, SubscriptionId, SubscriptionTokenId, TempLinkId, UserId};
 
 use super::error::SubscriptionError;
-use super::{Subscription, SubscriptionToken};
+use super::{ShortCode, Subscription, SubscriptionToken, TempLink};
 
 /// Storage boundary for subscription aggregates.
 #[async_trait]
@@ -46,6 +47,15 @@ pub trait SubscriptionRepository: Send + Sync {
 
     /// Delete a subscription and its token.
     async fn delete(&self, id: SubscriptionId) -> Result<(), SubscriptionError>;
+
+    /// Set the `short_code_id` reference on a subscription. Called after a
+    /// short code row is inserted so the subscription points to it. Pass
+    /// `None` to clear the reference (e.g. after short code deletion).
+    async fn set_short_code_id(
+        &self,
+        subscription_id: SubscriptionId,
+        short_code_id: Option<ShortCodeId>,
+    ) -> Result<(), SubscriptionError>;
 }
 
 /// Storage boundary for subscription delivery tokens.
@@ -91,4 +101,72 @@ pub trait SubscriptionTokenRepository: Send + Sync {
         &self,
         id: SubscriptionTokenId,
     ) -> Result<Option<SubscriptionToken>, SubscriptionError>;
+}
+
+/// Storage boundary for subscription short codes.
+///
+/// Short codes are CSPRNG-generated base62 strings stored in the clear (they
+/// are public lookup keys, not secrets). The `code` column has a UNIQUE
+/// constraint for atomic conflict rejection (OUT-013). See
+/// `docs/plan/milestones/M6-subscription-distribution.md` §"Token and
+/// short-code security model".
+#[async_trait]
+pub trait ShortCodeRepository: Send + Sync {
+    /// Insert a new short code row. Returns
+    /// [`SubscriptionError::ShortCodeExists`] on UNIQUE constraint violation
+    /// (OUT-013); the application layer retries with a fresh CSPRNG code.
+    async fn create(&self, short_code: &ShortCode) -> Result<(), SubscriptionError>;
+
+    /// Find a short code by its code string. Used by the `GET /s/{code}`
+    /// delivery handler.
+    async fn find_by_code(&self, code: &str) -> Result<Option<ShortCode>, SubscriptionError>;
+
+    /// Find the short code for a subscription, if one exists.
+    async fn find_by_subscription(
+        &self,
+        subscription_id: SubscriptionId,
+    ) -> Result<Option<ShortCode>, SubscriptionError>;
+
+    /// Delete a short code by ID.
+    async fn delete(&self, id: ShortCodeId) -> Result<(), SubscriptionError>;
+
+    /// Delete all short codes for a subscription. Called on subscription
+    /// delete.
+    async fn delete_for_subscription(
+        &self,
+        subscription_id: SubscriptionId,
+    ) -> Result<(), SubscriptionError>;
+}
+
+/// Storage boundary for subscription temporary delivery links.
+///
+/// Temp link tokens are CSPRNG-generated and stored as HMAC-SHA256 digests,
+/// like permanent delivery tokens. Each temp link has a mandatory expiry and a
+/// revocation flag. See `docs/plan/milestones/M6-subscription-distribution.md`
+/// §"Slicing" Slice 3.
+#[async_trait]
+pub trait TempLinkRepository: Send + Sync {
+    /// Insert a new temp link row.
+    async fn create(&self, temp_link: &TempLink) -> Result<(), SubscriptionError>;
+
+    /// Find a temp link by its token digest. Used by the delivery handler to
+    /// resolve a `GET /sub/{temp_token}` request.
+    async fn find_by_token_hash(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<TempLink>, SubscriptionError>;
+
+    /// Mark a temp link as revoked. Returns
+    /// [`SubscriptionError::TempLinkNotFound`] if no row matches.
+    async fn revoke(&self, id: TempLinkId) -> Result<(), SubscriptionError>;
+
+    /// Delete all temp links for a subscription. Called on subscription
+    /// delete.
+    async fn delete_for_subscription(
+        &self,
+        subscription_id: SubscriptionId,
+    ) -> Result<(), SubscriptionError>;
+
+    /// Find a temp link by ID.
+    async fn find_by_id(&self, id: TempLinkId) -> Result<Option<TempLink>, SubscriptionError>;
 }

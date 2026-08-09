@@ -10,21 +10,22 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
 use deve_sub_application::subscription::{
-    self, CreateSubscriptionParams, UpdateSubscriptionParams,
+    self, CreateSubscriptionParams, CreateTempLinkParams, UpdateSubscriptionParams,
 };
 use deve_sub_contract::{
-    CreateSubscriptionRequest, ErrorResponse, GetSubscriptionResponse, ListSubscriptionsQuery,
-    ListSubscriptionsResponse, RotateTokenRequest, SubscriptionDto, SubscriptionResponse,
-    TokenRotationResponse, UpdateSubscriptionRequest,
+    CreateSubscriptionRequest, CreateTempLinkRequest, CreateTempLinkResponse, ErrorResponse,
+    GetSubscriptionResponse, ListSubscriptionsQuery, ListSubscriptionsResponse, RotateTokenRequest,
+    ShortCodeResponse, SubscriptionDto, SubscriptionResponse, TokenRotationResponse,
+    UpdateSubscriptionRequest,
 };
 use deve_sub_domain::Subscription;
-use deve_sub_kernel::{SubscriptionId, TemplateId};
+use deve_sub_kernel::{SubscriptionId, TempLinkId, TemplateId, Timestamp};
+use time::format_description::well_known::Rfc3339;
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
 
-/// Convert a domain [`Subscription`] to the DTO representation.
-fn subscription_to_dto(s: &Subscription) -> SubscriptionDto {
+fn subscription_to_dto(s: &Subscription, short_code: Option<String>) -> SubscriptionDto {
     SubscriptionDto {
         id: s.id.to_string(),
         name: s.name.clone(),
@@ -39,7 +40,20 @@ fn subscription_to_dto(s: &Subscription) -> SubscriptionDto {
         enabled: s.enabled,
         created_at: ts_to_iso8601(s.created_at),
         updated_at: ts_to_iso8601(s.updated_at),
+        short_code,
     }
+}
+
+fn parse_iso8601(s: &str) -> Result<Timestamp, (StatusCode, Json<ErrorResponse>)> {
+    time::OffsetDateTime::parse(s, &Rfc3339)
+        .map(Timestamp::from_offset_date_time)
+        .map_err(|e| {
+            err(
+                StatusCode::BAD_REQUEST,
+                "invalid_expires_at",
+                &format!("expires_at is not valid RFC 3339: {e}"),
+            )
+        })
 }
 
 /// `POST /api/v1/subscriptions` — create a new subscription (admin).
@@ -91,7 +105,7 @@ async fn create_subscription(
     Ok((
         StatusCode::CREATED,
         Json(SubscriptionResponse {
-            subscription: subscription_to_dto(&result.subscription),
+            subscription: subscription_to_dto(&result.subscription, None),
             token_plaintext: result.token_plaintext,
         }),
     ))
@@ -150,7 +164,7 @@ async fn list_subscriptions(
         None
     };
 
-    let dtos: Vec<SubscriptionDto> = subs.iter().map(subscription_to_dto).collect();
+    let dtos: Vec<SubscriptionDto> = subs.iter().map(|s| subscription_to_dto(s, None)).collect();
     Ok(Json(ListSubscriptionsResponse {
         subscriptions: dtos,
         next_cursor,
@@ -196,8 +210,15 @@ async fn get_subscription(
             )
         })?;
 
+    let short_code = state
+        .short_code_repo
+        .find_by_subscription(sub.id)
+        .await
+        .map_err(|e| map_subscription_app_error(e.into(), "get_subscription"))?
+        .map(|sc| sc.code);
+
     Ok(Json(GetSubscriptionResponse {
-        subscription: subscription_to_dto(&sub),
+        subscription: subscription_to_dto(&sub, short_code),
     }))
 }
 
@@ -249,8 +270,15 @@ async fn update_subscription(
     .await
     .map_err(|e| map_subscription_app_error(e, "update_subscription"))?;
 
+    let short_code = state
+        .short_code_repo
+        .find_by_subscription(sub.id)
+        .await
+        .map_err(|e| map_subscription_app_error(e.into(), "update_subscription"))?
+        .map(|sc| sc.code);
+
     Ok(Json(GetSubscriptionResponse {
-        subscription: subscription_to_dto(&sub),
+        subscription: subscription_to_dto(&sub, short_code),
     }))
 }
 
@@ -344,6 +372,153 @@ async fn rotate_token(
     }))
 }
 
+/// `POST /api/v1/subscriptions/{id}/regenerate-short-code` — (re)generate the
+/// short code for a subscription (admin). If a short code already exists, it is
+/// replaced. The short code is a public lookup key, not a secret.
+#[utoipa::path(
+    post,
+    path = "/api/v1/subscriptions/{id}/regenerate-short-code",
+    security(("cookie_auth" = [])),
+    params(("id" = String, Path, description = "Subscription ULID")),
+    responses(
+        (status = 200, description = "Short code generated", body = ShortCodeResponse),
+        (status = 400, description = "Invalid subscription id", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Not an admin", body = ErrorResponse),
+        (status = 404, description = "Subscription not found", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
+    )
+)]
+async fn regenerate_short_code(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<ShortCodeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let subscription_id = SubscriptionId::parse(&id).map_err(|_| {
+        err(
+            StatusCode::BAD_REQUEST,
+            "invalid_id",
+            "subscription id is not a valid ULID",
+        )
+    })?;
+
+    let result = subscription::regenerate_short_code(
+        state.subscription_repo.as_ref(),
+        state.short_code_repo.as_ref(),
+        subscription_id,
+    )
+    .await
+    .map_err(|e| map_subscription_app_error(e, "regenerate_short_code"))?;
+
+    Ok(Json(ShortCodeResponse {
+        short_code_id: result.short_code_id.to_string(),
+        code: result.code,
+    }))
+}
+
+/// `POST /api/v1/subscriptions/{id}/temp-links` — create a temporary delivery
+/// link (admin). The plaintext temp token is returned once and never persisted.
+#[utoipa::path(
+    post,
+    path = "/api/v1/subscriptions/{id}/temp-links",
+    security(("cookie_auth" = [])),
+    params(("id" = String, Path, description = "Subscription ULID")),
+    request_body = CreateTempLinkRequest,
+    responses(
+        (status = 201, description = "Temp link created", body = CreateTempLinkResponse),
+        (status = 400, description = "Invalid input", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Not an admin", body = ErrorResponse),
+        (status = 404, description = "Subscription not found", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
+    )
+)]
+async fn create_temp_link(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+    Json(req): Json<CreateTempLinkRequest>,
+) -> Result<(StatusCode, Json<CreateTempLinkResponse>), (StatusCode, Json<ErrorResponse>)> {
+    let subscription_id = SubscriptionId::parse(&id).map_err(|_| {
+        err(
+            StatusCode::BAD_REQUEST,
+            "invalid_id",
+            "subscription id is not a valid ULID",
+        )
+    })?;
+
+    let expires_at = parse_iso8601(&req.expires_at)?;
+
+    let result = subscription::create_temp_link(
+        state.subscription_repo.as_ref(),
+        state.temp_link_repo.as_ref(),
+        &state.master_key,
+        CreateTempLinkParams {
+            subscription_id,
+            expires_at,
+        },
+    )
+    .await
+    .map_err(|e| map_subscription_app_error(e, "create_temp_link"))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateTempLinkResponse {
+            temp_link_id: result.temp_link_id.to_string(),
+            token_plaintext: result.token_plaintext,
+            expires_at: ts_to_iso8601(result.expires_at),
+        }),
+    ))
+}
+
+/// `DELETE /api/v1/subscriptions/{id}/temp-links/{temp_link_id}` — revoke a
+/// temporary delivery link (admin). Subsequent delivery via the temp token
+/// returns 404.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/subscriptions/{id}/temp-links/{temp_link_id}",
+    security(("cookie_auth" = [])),
+    params(
+        ("id" = String, Path, description = "Subscription ULID"),
+        ("temp_link_id" = String, Path, description = "Temp link ULID"),
+    ),
+    responses(
+        (status = 204, description = "Temp link revoked"),
+        (status = 400, description = "Invalid id", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 403, description = "Not an admin", body = ErrorResponse),
+        (status = 404, description = "Temp link not found", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
+    )
+)]
+async fn revoke_temp_link(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path((id, temp_link_id)): Path<(String, String)>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let _subscription_id = SubscriptionId::parse(&id).map_err(|_| {
+        err(
+            StatusCode::BAD_REQUEST,
+            "invalid_id",
+            "subscription id is not a valid ULID",
+        )
+    })?;
+
+    let temp_link_id = TempLinkId::parse(&temp_link_id).map_err(|_| {
+        err(
+            StatusCode::BAD_REQUEST,
+            "invalid_temp_link_id",
+            "temp_link_id is not a valid ULID",
+        )
+    })?;
+
+    subscription::revoke_temp_link(state.temp_link_repo.as_ref(), temp_link_id)
+        .await
+        .map_err(|e| map_subscription_app_error(e, "revoke_temp_link"))?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Map a [`SubscriptionAppError`] to an HTTP error response with context.
 fn map_subscription_app_error(
     e: deve_sub_application::SubscriptionAppError,
@@ -368,6 +543,21 @@ fn map_subscription_app_error(
             StatusCode::NOT_FOUND,
             "token_not_found",
             "subscription token does not exist",
+        ),
+        SubscriptionAppError::ShortCodeNotFound => err(
+            StatusCode::NOT_FOUND,
+            "short_code_not_found",
+            "short code does not exist",
+        ),
+        SubscriptionAppError::TempLinkNotFound => err(
+            StatusCode::NOT_FOUND,
+            "temp_link_not_found",
+            "temp link does not exist",
+        ),
+        SubscriptionAppError::TempLinkInvalid => err(
+            StatusCode::NOT_FOUND,
+            "temp_link_invalid",
+            "temp link is revoked or expired",
         ),
         SubscriptionAppError::TemplateNotFound => err(
             StatusCode::NOT_FOUND,
@@ -402,4 +592,7 @@ pub fn register(
         .routes(routes!(update_subscription))
         .routes(routes!(delete_subscription))
         .routes(routes!(rotate_token))
+        .routes(routes!(regenerate_short_code))
+        .routes(routes!(create_temp_link))
+        .routes(routes!(revoke_temp_link))
 }

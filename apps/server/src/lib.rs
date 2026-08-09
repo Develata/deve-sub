@@ -13,9 +13,10 @@ use axum::Router;
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
     GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
-    RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
-    SubscriptionRepository, SubscriptionTokenRepository, TemplateRepository,
-    TemplateVersionRepository, TotpSecretRepository, UserRepository,
+    RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
+    SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
+    TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
+    UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -66,6 +67,8 @@ pub struct AppState {
     pub cache_repo: Arc<dyn GenerationCacheRepository>,
     pub subscription_repo: Arc<dyn SubscriptionRepository>,
     pub subscription_token_repo: Arc<dyn SubscriptionTokenRepository>,
+    pub short_code_repo: Arc<dyn ShortCodeRepository>,
+    pub temp_link_repo: Arc<dyn TempLinkRepository>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,

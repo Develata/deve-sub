@@ -18,16 +18,18 @@ use deve_sub_application::{
 };
 use deve_sub_domain::{
     GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
-    RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
-    SubscriptionRepository, SubscriptionTokenRepository, TemplateRepository,
-    TemplateVersionRepository, TotpSecretRepository, UserRepository,
+    RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
+    SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
+    TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
+    UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
     SqliteGenerationCacheRepository, SqliteHealthCheck, SqliteNodeOverrideRepository,
     SqliteNodePoolRepository, SqlitePoolMetaRepository, SqliteRecoveryCodeRepository,
-    SqliteSessionRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
-    SqliteSubscriptionRepository, SqliteSubscriptionTokenRepository, SqliteTemplateRepository,
+    SqliteSessionRepository, SqliteShortCodeRepository, SqliteSourceRepository,
+    SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
+    SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
     SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteUserRepository,
 };
 
@@ -144,6 +146,10 @@ impl TestApp {
                 subscription_token_repo: Arc::new(SqliteSubscriptionTokenRepository::new(
                     pool.clone(),
                 )) as Arc<dyn SubscriptionTokenRepository>,
+                short_code_repo: Arc::new(SqliteShortCodeRepository::new(pool.clone()))
+                    as Arc<dyn ShortCodeRepository>,
+                temp_link_repo: Arc::new(SqliteTempLinkRepository::new(pool.clone()))
+                    as Arc<dyn TempLinkRepository>,
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(fetcher) as Arc<dyn SubscriptionFetcher>,
                 rate_limiter,

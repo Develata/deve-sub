@@ -25,7 +25,7 @@ pub use recovery::{
     generate_codes as generate_recovery_codes, normalize_code as normalize_recovery_code,
 };
 pub use ssrf::{SsrfError, SsrfGuard};
-pub use token::generate_session_token;
+pub use token::{generate_session_token, generate_short_code};
 pub use totp::{
     DIGITS as TOTP_DIGITS, PERIOD as TOTP_PERIOD, base32_decode, base32_secret,
     generate_code as totp_generate_code, generate_code_string as totp_generate_code_string,

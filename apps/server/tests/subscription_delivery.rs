@@ -17,16 +17,18 @@ use tower::ServiceExt;
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
     GenerationCacheRepository, NodeOverrideRepository, NodePoolRepository, PoolMetaRepository,
-    RecoveryCodeRepository, SessionRepository, SourceRepository, SourceSnapshotRepository,
-    SubscriptionRepository, SubscriptionTokenRepository, TemplateRepository,
-    TemplateVersionRepository, TotpSecretRepository, UserRepository,
+    RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
+    SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
+    TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
+    UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
     SqliteGenerationCacheRepository, SqliteHealthCheck, SqliteNodeOverrideRepository,
     SqliteNodePoolRepository, SqlitePoolMetaRepository, SqliteRecoveryCodeRepository,
-    SqliteSessionRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
-    SqliteSubscriptionRepository, SqliteSubscriptionTokenRepository, SqliteTemplateRepository,
+    SqliteSessionRepository, SqliteShortCodeRepository, SqliteSourceRepository,
+    SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
+    SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
     SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteUserRepository,
 };
 
@@ -94,6 +96,10 @@ impl TestApp {
                 subscription_token_repo: Arc::new(SqliteSubscriptionTokenRepository::new(
                     pool.clone(),
                 )) as Arc<dyn SubscriptionTokenRepository>,
+                short_code_repo: Arc::new(SqliteShortCodeRepository::new(pool.clone()))
+                    as Arc<dyn ShortCodeRepository>,
+                temp_link_repo: Arc::new(SqliteTempLinkRepository::new(pool.clone()))
+                    as Arc<dyn TempLinkRepository>,
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,
@@ -759,4 +765,262 @@ async fn del012_concurrent_delivery_all_complete() {
     for (i, e) in etags.iter().enumerate() {
         assert_eq!(e, first_etag, "etag {i} differs from etag 0");
     }
+}
+
+/// DEL-013 (OUT-013): `GET /s/{code}` delivers subscription content via a
+/// short code. The short code is generated via the admin route, then the
+/// public delivery route serves the same content as the token route.
+#[tokio::test]
+async fn del013_short_code_delivery() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let v = create_sub(&router, &cookie, &template_id, "short-code-sub").await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+
+    // Generate a short code via the admin route.
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/regenerate-short-code"),
+                "",
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("regenerate");
+    assert_eq!(res.status(), StatusCode::OK);
+    let sc = body_to_json(res).await;
+    let code = sc["code"].as_str().expect("code").to_owned();
+    assert_eq!(code.len(), 8, "short code is 8 base62 chars");
+
+    // Deliver via the short code.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/s/{code}/mihomo")))
+        .await
+        .expect("send");
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(
+        res.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|ct| ct.contains("yaml")),
+        "short code delivery should return mihomo yaml"
+    );
+    let content = body_to_string(res).await;
+    assert!(!content.is_empty());
+
+    // GET subscription should include the short_code field.
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/subscriptions/{sub_id}")),
+            &cookie,
+        ))
+        .await
+        .expect("get sub");
+    assert_eq!(res.status(), StatusCode::OK);
+    let v = body_to_json(res).await;
+    assert_eq!(v["subscription"]["short_code"], code);
+}
+
+/// DEL-014: A bad short code returns 404 with no existence leak.
+#[tokio::test]
+async fn del014_bad_short_code_returns_404_no_leak() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let _ = create_sub(&router, &cookie, &template_id, "sc-404").await;
+
+    let res = router
+        .clone()
+        .oneshot(get("/s/ZZZZZZZZ/mihomo"))
+        .await
+        .expect("send");
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let body = body_to_string(res).await;
+    assert!(
+        !body.contains("subscription") && !body.contains("short"),
+        "404 body must not leak existence: {body}"
+    );
+}
+
+/// DEL-015 (OUT-013): Regenerating a short code replaces the old one; the old
+/// code no longer delivers.
+#[tokio::test]
+async fn del015_regenerate_short_code_replaces_old() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let v = create_sub(&router, &cookie, &template_id, "sc-replace").await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+
+    // First short code.
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/regenerate-short-code"),
+                "",
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("first sc");
+    assert_eq!(res.status(), StatusCode::OK);
+    let code1 = body_to_json(res).await["code"]
+        .as_str()
+        .expect("code")
+        .to_owned();
+
+    // Second short code replaces the first.
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                &format!("/api/v1/subscriptions/{sub_id}/regenerate-short-code"),
+                "",
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("second sc");
+    assert_eq!(res.status(), StatusCode::OK);
+    let code2 = body_to_json(res).await["code"]
+        .as_str()
+        .expect("code")
+        .to_owned();
+    assert_ne!(code1, code2, "regenerated short code must differ");
+
+    // Old code no longer delivers (deleted).
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/s/{code1}/mihomo")))
+        .await
+        .expect("old code");
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+    // New code delivers.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/s/{code2}/mihomo")))
+        .await
+        .expect("new code");
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+/// DEL-016: Temp link delivery via `GET /sub/{temp_token}` returns 200.
+#[tokio::test]
+async fn del016_temp_link_delivery() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let v = create_sub(&router, &cookie, &template_id, "temp-link-sub").await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+
+    // Create a temp link with expiry 1 hour from now.
+    let expires_at = {
+        let now = time::OffsetDateTime::now_utc() + time::Duration::hours(1);
+        now.format(&time::format_description::well_known::Rfc3339)
+            .expect("rfc3339")
+    };
+    let body = serde_json::json!({ "expires_at": expires_at }).to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(&format!("/api/v1/subscriptions/{sub_id}/temp-links"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("create temp link");
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let tl = body_to_json(res).await;
+    let temp_token = tl["token_plaintext"].as_str().expect("token").to_owned();
+    let temp_link_id = tl["temp_link_id"].as_str().expect("id").to_owned();
+
+    // Deliver via the temp link token (same /sub/{token} path).
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{temp_token}/mihomo")))
+        .await
+        .expect("deliver");
+    assert_eq!(res.status(), StatusCode::OK);
+    let content = body_to_string(res).await;
+    assert!(!content.is_empty());
+
+    // Revoke the temp link.
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            axum::http::Request::builder()
+                .method("DELETE")
+                .uri(format!(
+                    "/api/v1/subscriptions/{sub_id}/temp-links/{temp_link_id}"
+                ))
+                .body(Body::empty())
+                .expect("delete req"),
+            &cookie,
+        ))
+        .await
+        .expect("revoke");
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // Delivery after revocation must 404.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{temp_token}/mihomo")))
+        .await
+        .expect("deliver after revoke");
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+/// DEL-017: An expired temp link returns 404.
+#[tokio::test]
+async fn del017_expired_temp_link_returns_404() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let _ = import_nodes(&router, &cookie, "trojan://pw@host-a.example.com:443#NodeA").await;
+    let template_id = create_template(&router, &cookie).await;
+    let v = create_sub(&router, &cookie, &template_id, "expired-tl").await;
+    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
+
+    // Create a temp link that expired 1 hour ago.
+    let expires_at = {
+        let past = time::OffsetDateTime::now_utc() - time::Duration::hours(1);
+        past.format(&time::format_description::well_known::Rfc3339)
+            .expect("rfc3339")
+    };
+    let body = serde_json::json!({ "expires_at": expires_at }).to_string();
+    let res = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(&format!("/api/v1/subscriptions/{sub_id}/temp-links"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("create temp link");
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let temp_token = body_to_json(res).await["token_plaintext"]
+        .as_str()
+        .expect("token")
+        .to_owned();
+
+    // Delivery via the expired temp link must 404.
+    let res = router
+        .clone()
+        .oneshot(get(&format!("/sub/{temp_token}/mihomo")))
+        .await
+        .expect("deliver");
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }

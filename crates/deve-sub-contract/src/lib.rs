@@ -33,9 +33,10 @@ pub use source::{
     SourceFilterRulesDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
 };
 pub use subscription::{
-    CreateSubscriptionRequest, GetSubscriptionResponse, ListSubscriptionsQuery,
-    ListSubscriptionsResponse, RotateTokenRequest, SubscriptionDto, SubscriptionResponse,
-    TokenRotationResponse, UpdateSubscriptionRequest,
+    CreateSubscriptionRequest, CreateTempLinkRequest, CreateTempLinkResponse,
+    GetSubscriptionResponse, ListSubscriptionsQuery, ListSubscriptionsResponse, RotateTokenRequest,
+    ShortCodeResponse, SubscriptionDto, SubscriptionResponse, TokenRotationResponse,
+    UpdateSubscriptionRequest,
 };
 pub use template::{
     ActiveGenerationQuery, ActiveGenerationResponse, ChainEdgeDto, CompatibilityQuery,

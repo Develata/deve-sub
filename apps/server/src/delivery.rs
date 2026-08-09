@@ -1,17 +1,17 @@
-//! Public subscription delivery routes: `/sub/{token}/{profile}` and
-//! `/sub/{token}`.
+//! Public subscription delivery routes: `/sub/{token}/{profile}`, `/sub/{token}`,
+//! and `/s/{code}/{profile}`, `/s/{code}`.
 //!
-//! These routes are the public delivery surface (M6 Slice 2). They use
-//! path-token authentication (no cookie, no `AdminUser` guard) and are
-//! intentionally excluded from the OpenAPI spec (which documents the
-//! cookie-authenticated admin REST surface). See
+//! These routes are the public delivery surface (M6 Slice 2 + Slice 3). They
+//! use path-token or short-code authentication (no cookie, no `AdminUser`
+//! guard) and are intentionally excluded from the OpenAPI spec. See
 //! `docs/contracts/module-boundaries.md` §"Delivery" and
 //! `docs/plan/milestones/M6-subscription-distribution.md` §"Delivery
 //! pipeline".
 //!
-//! Security: bad token, disabled subscription, deleted subscription, and
-//! inactive user all return 404 with a generic body — the response must not
-//! reveal whether the token, subscription, or owner exists (OUT-009).
+//! Security: bad token, disabled subscription, deleted subscription, expired
+//! temp link, and inactive user all return 404 with a generic body — the
+//! response must not reveal whether the token, subscription, or owner exists
+//! (OUT-009).
 
 use axum::Router;
 use axum::body::Body;
@@ -33,7 +33,11 @@ async fn deliver_with_profile(
     Path((token, profile)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    deliver(&state, &token, Some(&profile), None, &headers).await
+    let ua = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+    deliver_token(&state, &token, Some(&profile), ua.as_deref(), &headers).await
 }
 
 /// `GET /sub/{token}` — deliver a subscription with User-Agent auto-detect.
@@ -46,53 +50,108 @@ async fn deliver_auto(
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_owned());
-    deliver(&state, &token, None, ua.as_deref(), &headers).await
+    deliver_token(&state, &token, None, ua.as_deref(), &headers).await
 }
 
-/// Shared delivery logic: resolve token → subscription → generate → respond.
+/// `GET /s/{code}/{profile}` — deliver via short code for an explicit profile.
+async fn deliver_short_code_with_profile(
+    State(state): State<AppState>,
+    Path((code, profile)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    deliver_code(&state, &code, Some(&profile), None, &headers).await
+}
+
+/// `GET /s/{code}` — deliver via short code with User-Agent auto-detect.
+async fn deliver_short_code_auto(
+    State(state): State<AppState>,
+    Path(code): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let ua = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+    deliver_code(&state, &code, None, ua.as_deref(), &headers).await
+}
+
+/// Token-based delivery: try permanent token first, fall back to temp link
+/// on `TokenNotFound`.
 ///
-/// All token-resolution failures (bad token, disabled, deleted, inactive
-/// user) return a generic 404 (OUT-009: no existence leak). Generation
-/// failure returns 503 (constraint #19).
-async fn deliver(
+/// WHY fallback: permanent tokens and temp links share the same URL path
+/// `/sub/{token}` and the same HMAC purpose. The permanent token table is
+/// queried first; only if that misses do we query the temp link table. This
+/// avoids a second HMAC + DB round-trip for the common permanent-token case.
+async fn deliver_token(
     state: &AppState,
     token: &str,
     profile: Option<&str>,
     user_agent: Option<&str>,
     headers: &HeaderMap,
 ) -> Response {
-    let result = {
-        let deps = subscription::DeliveryDeps {
-            token_repo: state.subscription_token_repo.as_ref(),
-            sub_repo: state.subscription_repo.as_ref(),
-            user_repo: state.user_repo.as_ref(),
-            template_repo: state.template_repo.as_ref(),
-            version_repo: state.version_repo.as_ref(),
-            pool_repo: state.pool_repo.as_ref(),
-            cache_repo: state.cache_repo.as_ref(),
-            pool_meta_repo: state.pool_meta_repo.as_ref(),
-            master_key: state.master_key.as_ref(),
-        };
-        subscription::deliver_subscription(&deps, token, profile, user_agent).await
+    let deps = make_deps(state);
+    let result = subscription::deliver_subscription(&deps, token, profile, user_agent).await;
+
+    let result = match result {
+        Ok(d) => return ok_or_304(d, headers),
+        Err(subscription::SubscriptionAppError::TokenNotFound) => {
+            subscription::deliver_by_temp_link(&deps, token, profile, user_agent).await
+        }
+        Err(e) => return map_delivery_error(e),
     };
 
     match result {
-        Ok(delivery) => {
-            let if_none_match = headers
-                .get("if-none-match")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_owned());
-
-            if let Some(inm) = if_none_match
-                && etag_matches(&inm, &delivery.etag)
-            {
-                return not_modified(&delivery.etag);
-            }
-
-            ok_response(delivery)
-        }
+        Ok(d) => ok_or_304(d, headers),
         Err(e) => map_delivery_error(e),
     }
+}
+
+/// Short-code delivery: resolve code → subscription → standard pipeline.
+async fn deliver_code(
+    state: &AppState,
+    code: &str,
+    profile: Option<&str>,
+    user_agent: Option<&str>,
+    headers: &HeaderMap,
+) -> Response {
+    let deps = make_deps(state);
+    let result = subscription::deliver_by_short_code(&deps, code, profile, user_agent).await;
+
+    match result {
+        Ok(d) => ok_or_304(d, headers),
+        Err(e) => map_delivery_error(e),
+    }
+}
+
+fn make_deps(state: &AppState) -> subscription::DeliveryDeps<'_> {
+    subscription::DeliveryDeps {
+        token_repo: state.subscription_token_repo.as_ref(),
+        short_code_repo: state.short_code_repo.as_ref(),
+        temp_link_repo: state.temp_link_repo.as_ref(),
+        sub_repo: state.subscription_repo.as_ref(),
+        user_repo: state.user_repo.as_ref(),
+        template_repo: state.template_repo.as_ref(),
+        version_repo: state.version_repo.as_ref(),
+        pool_repo: state.pool_repo.as_ref(),
+        cache_repo: state.cache_repo.as_ref(),
+        pool_meta_repo: state.pool_meta_repo.as_ref(),
+        master_key: state.master_key.as_ref(),
+    }
+}
+
+fn ok_or_304(delivery: subscription::DeliveryResult, headers: &HeaderMap) -> Response {
+    let if_none_match = headers
+        .get("if-none-match")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+
+    if let Some(inm) = if_none_match
+        && etag_matches(&inm, &delivery.etag)
+    {
+        return not_modified(&delivery.etag);
+    }
+
+    ok_response(delivery)
 }
 
 /// Check whether the `If-None-Match` header matches the current ETag.
@@ -155,6 +214,9 @@ fn map_delivery_error(e: subscription::SubscriptionAppError) -> Response {
     use subscription::SubscriptionAppError;
     match e {
         SubscriptionAppError::TokenNotFound
+        | SubscriptionAppError::ShortCodeNotFound
+        | SubscriptionAppError::TempLinkInvalid
+        | SubscriptionAppError::TempLinkNotFound
         | SubscriptionAppError::SubscriptionNotFound
         | SubscriptionAppError::SubscriptionDisabled
         | SubscriptionAppError::UserInactive
@@ -176,12 +238,15 @@ fn map_delivery_error(e: subscription::SubscriptionAppError) -> Response {
 
 /// Register the public delivery routes on the given router.
 ///
-/// These routes are NOT registered via `OpenApiRouter` (they use path tokens,
-/// not cookie auth) and are intentionally excluded from the OpenAPI spec.
+/// These routes are NOT registered via `OpenApiRouter` (they use path tokens
+/// or short codes, not cookie auth) and are intentionally excluded from the
+/// OpenAPI spec.
 pub fn register_delivery_routes(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/sub/{token}/{profile}", get(deliver_with_profile))
         .route("/sub/{token}", get(deliver_auto))
+        .route("/s/{code}/{profile}", get(deliver_short_code_with_profile))
+        .route("/s/{code}", get(deliver_short_code_auto))
 }
 
 #[cfg(test)]

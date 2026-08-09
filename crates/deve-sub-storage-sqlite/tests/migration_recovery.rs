@@ -808,7 +808,211 @@ async fn migration_0008_single_active_generation_enforced() {
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
 
-/// Recovery test for migration 0007 (constraint #13): templates,
+/// Recovery test for migration 0010 (constraint #13): subscription_short_codes,
+/// subscription_temp_links tables, the subscriptions.short_code_id column, the
+/// UNIQUE constraint on short code (OUT-013), and ON DELETE CASCADE. See
+/// `docs/plan/milestones/M6-subscription-distribution.md` Slice 3.
+#[tokio::test]
+async fn migration_0010_applies_and_schema_is_correct() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    assert!(
+        tables.contains(&"subscription_short_codes".to_string()),
+        "expected table 'subscription_short_codes', got {tables:?}"
+    );
+    assert!(
+        tables.contains(&"subscription_temp_links".to_string()),
+        "expected table 'subscription_temp_links', got {tables:?}"
+    );
+
+    let sub_cols = get_columns(&pool, "subscriptions").await;
+    assert!(
+        sub_cols.contains(&"short_code_id".to_string()),
+        "expected column 'short_code_id' in subscriptions, got {sub_cols:?}"
+    );
+
+    let sc_cols = get_columns(&pool, "subscription_short_codes").await;
+    for col in ["id", "subscription_id", "code", "created_at"] {
+        assert!(
+            sc_cols.contains(&col.to_string()),
+            "expected column '{col}' in subscription_short_codes, got {sc_cols:?}"
+        );
+    }
+
+    let tl_cols = get_columns(&pool, "subscription_temp_links").await;
+    for col in [
+        "id",
+        "subscription_id",
+        "token_digest",
+        "expires_at",
+        "revoked",
+        "created_at",
+    ] {
+        assert!(
+            tl_cols.contains(&col.to_string()),
+            "expected column '{col}' in subscription_temp_links, got {tl_cols:?}"
+        );
+    }
+
+    let indexes = get_index_names(&pool).await;
+    for expected in [
+        "idx_subscription_short_codes_subscription",
+        "idx_subscription_temp_links_subscription",
+    ] {
+        assert!(
+            indexes.contains(&expected.to_string()),
+            "expected index '{expected}', got {indexes:?}"
+        );
+    }
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+#[tokio::test]
+async fn migration_0010_is_idempotent() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+    run_migrations(&pool).await;
+
+    let tables = get_table_names(&pool).await;
+    assert!(tables.contains(&"subscription_short_codes".to_string()));
+    assert!(tables.contains(&"subscription_temp_links".to_string()));
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+/// Verify the UNIQUE constraint on subscription_short_codes.code rejects
+/// duplicates (OUT-013: atomic conflict rejection) and ON DELETE CASCADE
+/// removes short codes and temp links when the subscription is deleted.
+#[tokio::test]
+async fn migration_0010_unique_code_and_cascade_delete() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    // Seed a user + subscription (FK dependencies).
+    sqlx::query("INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)")
+        .bind("01J0USR00000000000000000A")
+        .bind("owner_a")
+        .bind("hash")
+        .execute(&pool)
+        .await
+        .expect("insert user");
+
+    sqlx::query("INSERT INTO templates (id, name, description) VALUES (?, ?, ?)")
+        .bind("01J0TMPL00000000000000000A")
+        .bind("t")
+        .bind("")
+        .execute(&pool)
+        .await
+        .expect("insert template");
+
+    sqlx::query(
+        "INSERT INTO subscriptions \
+         (id, name, slug, owner_id, template_id, profile, node_selection, token_id, enabled) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+    )
+    .bind("01J0SUB00000000000000000A")
+    .bind("sub-a")
+    .bind("slug-a")
+    .bind("01J0USR00000000000000000A")
+    .bind("01J0TMPL00000000000000000A")
+    .bind("mihomo")
+    .bind("{}")
+    .bind("01J0TOKN00000000000000000A")
+    .execute(&pool)
+    .await
+    .expect("insert subscription");
+
+    sqlx::query(
+        "INSERT INTO subscription_short_codes (id, subscription_id, code) \
+         VALUES (?, ?, ?)",
+    )
+    .bind("01J0SHC00000000000000000A")
+    .bind("01J0SUB00000000000000000A")
+    .bind("aB3xK9mQ")
+    .execute(&pool)
+    .await
+    .expect("insert short code");
+
+    // WHY: UNIQUE(code) must reject a duplicate code for a different
+    // subscription (OUT-013: atomic conflict rejection).
+    let dup = sqlx::query(
+        "INSERT INTO subscription_short_codes (id, subscription_id, code) \
+         VALUES (?, ?, ?)",
+    )
+    .bind("01J0SHC00000000000000000B")
+    .bind("01J0SUB00000000000000000A")
+    .bind("aB3xK9mQ")
+    .execute(&pool)
+    .await;
+    assert!(
+        dup.is_err(),
+        "duplicate short code should be rejected by UNIQUE(code)"
+    );
+
+    sqlx::query(
+        "INSERT INTO subscription_temp_links \
+         (id, subscription_id, token_digest, expires_at) \
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind("01J0TPL00000000000000000A")
+    .bind("01J0SUB00000000000000000A")
+    .bind("digest_a")
+    .bind("2030-01-01T00:00:00Z")
+    .execute(&pool)
+    .await
+    .expect("insert temp link");
+
+    sqlx::query("DELETE FROM subscriptions WHERE id = ?")
+        .bind("01J0SUB00000000000000000A")
+        .execute(&pool)
+        .await
+        .expect("delete subscription");
+
+    let (sc_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_short_codes WHERE subscription_id = ?")
+            .bind("01J0SUB00000000000000000A")
+            .fetch_one(&pool)
+            .await
+            .expect("count short codes");
+    assert_eq!(sc_count, 0, "short codes should be cascade-deleted");
+
+    let (tl_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_temp_links WHERE subscription_id = ?")
+            .bind("01J0SUB00000000000000000A")
+            .fetch_one(&pool)
+            .await
+            .expect("count temp links");
+    assert_eq!(tl_count, 0, "temp links should be cascade-deleted");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
 /// template_versions, generation_cache tables, the partial unique active-version
 /// index, cascade deletes, and idempotency. See
 /// `docs/plan/milestones/M5-generator-and-v3-template.md`.

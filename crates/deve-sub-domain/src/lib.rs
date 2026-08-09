@@ -41,8 +41,8 @@ pub use source::{
     SourceType,
 };
 pub use subscription::{
-    Subscription, SubscriptionError, SubscriptionRepository, SubscriptionToken,
-    SubscriptionTokenRepository,
+    ShortCode, ShortCodeRepository, Subscription, SubscriptionError, SubscriptionRepository,
+    SubscriptionToken, SubscriptionTokenRepository, TempLink, TempLinkRepository,
 };
 pub use template::{
     API_VERSION, CacheKeyParams, ChainEdge, ChainGraph, ChainVertex, CompatibilityReport,

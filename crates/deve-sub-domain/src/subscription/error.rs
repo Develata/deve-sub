@@ -17,6 +17,23 @@ pub enum SubscriptionError {
     #[error("subscription token not found")]
     TokenNotFound,
 
+    /// A short code was not found.
+    #[error("short code not found")]
+    ShortCodeNotFound,
+
+    /// A short code string already exists (UNIQUE constraint violation).
+    /// The application layer retries with a fresh CSPRNG code (OUT-013).
+    #[error("short code already exists")]
+    ShortCodeExists,
+
+    /// A temp link was not found.
+    #[error("temp link not found")]
+    TempLinkNotFound,
+
+    /// A temp link has been revoked or has expired.
+    #[error("temp link revoked or expired")]
+    TempLinkInvalid,
+
     /// A storage operation failed.
     #[error("storage error: {0}")]
     Storage(String),

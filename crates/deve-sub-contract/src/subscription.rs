@@ -85,6 +85,11 @@ pub struct SubscriptionDto {
     pub expires_at: Option<String>,
     /// Whether delivery is enabled.
     pub enabled: bool,
+    /// The active short code string, if one has been generated. `null` = no
+    /// short code. Delivery via `GET /s/{code}` resolves this to the
+    /// subscription.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub short_code: Option<String>,
     /// Creation time (ISO 8601 UTC).
     pub created_at: String,
     /// Last update time (ISO 8601 UTC).
@@ -124,6 +129,41 @@ pub struct TokenRotationResponse {
     pub token_id: String,
     /// The new plaintext delivery token. Shown once; store it securely.
     pub token_plaintext: String,
+}
+
+/// Response body for `POST /api/v1/subscriptions/{id}/regenerate-short-code`.
+///
+/// The short code is a CSPRNG-generated base62 string (8 chars). Unlike the
+/// delivery token, it is not a secret — it is a public lookup key for
+/// `GET /s/{code}`. If a short code already exists, it is replaced.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ShortCodeResponse {
+    /// The short code row ULID.
+    pub short_code_id: String,
+    /// The public base62 short code string (e.g. `"aB3xK9mQ"`).
+    pub code: String,
+}
+
+/// Request body for `POST /api/v1/subscriptions/{id}/temp-links`.
+///
+/// A temp link is an alternative delivery token with a mandatory expiry and
+/// revocation. The plaintext is returned once at creation; only the
+/// HMAC-SHA256 digest is persisted.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateTempLinkRequest {
+    /// When the temp link expires (ISO 8601 UTC). Required.
+    pub expires_at: String,
+}
+
+/// Response body for `POST /api/v1/subscriptions/{id}/temp-links`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateTempLinkResponse {
+    /// The temp link row ULID.
+    pub temp_link_id: String,
+    /// The plaintext temp link token. Shown once; store it securely.
+    pub token_plaintext: String,
+    /// The expiry timestamp (ISO 8601 UTC).
+    pub expires_at: String,
 }
 
 /// Response body for `GET /api/v1/subscriptions` (cursor-paginated).

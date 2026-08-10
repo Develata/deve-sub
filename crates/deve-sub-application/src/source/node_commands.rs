@@ -6,6 +6,8 @@
 //! §"Lightweight CQRS" and `docs/plan/milestones/M4-sources-and-node-pool.md`
 //! §"NODE-004/005/006/010".
 
+use std::collections::HashSet;
+
 use deve_sub_domain::{
     NodeChain, NodeChainError, NodeChainGraph, NodeOverride, NodeOverrideRepository, NodePoolEntry,
     NodePoolRepository, RegionAssignment, RegionMethod, SourceError, Tag,
@@ -160,44 +162,33 @@ pub async fn set_node_chain(
             return Ok(None);
         }
         Some(nodes) => {
-            let node_chain = NodeChain { nodes };
+            let node_chain = NodeChain::new(nodes)?;
             node_chain.validate_structure(node_id)?;
             node_chain
         }
     };
 
-    let mut missing: Vec<NodeId> = Vec::new();
-    for &target in &chain.nodes {
-        if pool_repo
-            .get_node(target)
-            .await
-            .map_err(map_source_error)?
-            .is_none()
-        {
-            missing.push(target);
-        }
-    }
+    let existing: HashSet<NodeId> = pool_repo
+        .existing_node_ids(&chain.nodes)
+        .await
+        .map_err(map_source_error)?
+        .into_iter()
+        .collect();
+    let missing: Vec<NodeId> = chain
+        .nodes
+        .iter()
+        .copied()
+        .filter(|id| !existing.contains(id))
+        .collect();
     if !missing.is_empty() {
         return Err(NodeChainError::NodeNotFound(missing).into());
     }
 
-    // WHY: cycle detection must see the would-be graph — the current chains
-    // of all nodes, with this node's chain replaced by the candidate. A cycle
-    // involving this node would only appear with the new edge(s).
-    let mut all_chains = pool_repo
+    let all_chains = pool_repo
         .list_node_chains()
         .await
         .map_err(map_source_error)?;
-    match all_chains.iter().position(|(id, _)| *id == node_id) {
-        Some(i) => all_chains[i].1 = chain.nodes.clone(),
-        None => all_chains.push((node_id, chain.nodes.clone())),
-    }
-    let pairs: Vec<(NodeId, Option<Vec<NodeId>>)> = all_chains
-        .into_iter()
-        .map(|(id, nodes)| (id, Some(nodes)))
-        .collect();
-    let graph = NodeChainGraph::from_chains(&pairs);
-    if let Some(cycle) = graph.detect_cycle() {
+    if let Some(cycle) = NodeChainGraph::validate_update(&all_chains, node_id, &chain.nodes) {
         return Err(NodeChainError::Cycle(cycle).into());
     }
 

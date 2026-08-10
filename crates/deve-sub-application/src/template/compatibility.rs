@@ -111,7 +111,12 @@ mod tests {
         ) -> Result<deve_sub_domain::source::ImportResult, SourceError> {
             unimplemented!()
         }
-        async fn list_node_chains(&self) -> Result<Vec<(NodeId, Vec<NodeId>)>, SourceError> {
+        async fn list_node_chains(
+            &self,
+        ) -> Result<Vec<deve_sub_domain::NodeChainEntry>, SourceError> {
+            Ok(Vec::new())
+        }
+        async fn existing_node_ids(&self, _ids: &[NodeId]) -> Result<Vec<NodeId>, SourceError> {
             Ok(Vec::new())
         }
         async fn set_node_chain(

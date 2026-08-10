@@ -30,7 +30,7 @@ pub use identity::{
     TotpSecret, TotpSecretRepository, User, UserRepository,
 };
 pub use node::{Authentication, Node, NodeChain, NodeSource, RegionAssignment, RegionMethod};
-pub use node_chain::{NodeChainError, NodeChainGraph, NodeCyclePath};
+pub use node_chain::{NodeChainEntry, NodeChainError, NodeChainGraph, NodeCyclePath};
 pub use node_override::{NodeOverride, NodeOverrideRepository, Tag};
 pub use probe::{
     ErrorClass, LatencyProbe, LatencyRecord, LatencyRecordRepository, LatencyResult, ProbeError,

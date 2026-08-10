@@ -14,6 +14,18 @@ use std::fmt;
 use deve_sub_kernel::NodeId;
 use thiserror::Error;
 
+/// A node's chain entry: the owning node ID and its ordered chain of proxy
+/// nodes. Returned by [`crate::source::NodePoolRepository::list_node_chains`]
+/// to give cycle detection a readable, positional-free input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeChainEntry {
+    /// The node that owns this chain.
+    pub node_id: NodeId,
+    /// Ordered node IDs the traffic traverses. Non-empty when present in the
+    /// list (empty chains are filtered out by the adapter).
+    pub chain: Vec<NodeId>,
+}
+
 /// A cycle detected in the node chain graph, with the full node path.
 ///
 /// The `nodes` vector lists the cycle in order, with the first node repeated
@@ -84,6 +96,30 @@ impl NodeChainGraph {
         Self { adjacency }
     }
 
+    /// Validate a proposed chain update for cycles.
+    ///
+    /// Builds the candidate graph from `existing` with `node_id`'s chain
+    /// replaced by `new_chain`, then runs [`Self::detect_cycle`]. Returns
+    /// the first cycle found, or `None` if the update is acyclic. This keeps
+    /// cycle-detection orchestration (graph splicing + DFS) in the domain
+    /// layer instead of leaking into application commands.
+    #[must_use]
+    pub fn validate_update(
+        existing: &[crate::NodeChainEntry],
+        node_id: NodeId,
+        new_chain: &[NodeId],
+    ) -> Option<NodeCyclePath> {
+        let mut chains: Vec<(NodeId, Option<Vec<NodeId>>)> = existing
+            .iter()
+            .map(|e| (e.node_id, Some(e.chain.clone())))
+            .collect();
+        match chains.iter().position(|(id, _)| *id == node_id) {
+            Some(i) => chains[i].1 = Some(new_chain.to_vec()),
+            None => chains.push((node_id, Some(new_chain.to_vec()))),
+        }
+        Self::from_chains(&chains).detect_cycle()
+    }
+
     /// Detect cycles using DFS three-color marking.
     ///
     /// Returns the first cycle found, or `None` if the graph is acyclic.
@@ -110,6 +146,11 @@ impl NodeChainGraph {
         color: &mut HashMap<&'a NodeId, Color>,
         path: &mut Vec<&'a NodeId>,
     ) -> Option<NodeCyclePath> {
+        // WHY: recursion depth is bounded by the longest simple chain, which
+        // is at most the pool size N. With N ≤ 500 (declared domain) and
+        // ~100–200 B/frame, the worst case (~50–100 KB) is far within the
+        // 8 MB main-thread / 2 MB tokio stack budget. Revisit (iterative
+        // DFS) only if pool size or chain nesting can grow unbounded.
         color.insert(v, Color::Gray);
         path.push(v);
 

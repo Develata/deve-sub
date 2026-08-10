@@ -639,3 +639,63 @@ async fn node_chain_unknown_node_returns_404() {
         .expect("set chain");
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+/// NODE-017: Chain with duplicate entries is rejected with 400.
+#[tokio::test]
+async fn node_chain_duplicate_rejected() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let node_ids = import_two_nodes(&router, &cookie).await;
+    let node_a = &node_ids[0];
+    let node_b = &node_ids[1];
+
+    let body = format!(r#"{{"nodes":["{node_b}","{node_b}"]}}"#);
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_a}/chain"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("set chain");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// NODE-017: Setting the same chain twice is idempotent (returns 200 both
+/// times with the same chain).
+#[tokio::test]
+async fn node_chain_idempotent_set() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let node_ids = import_two_nodes(&router, &cookie).await;
+    let node_a = &node_ids[0];
+    let node_b = &node_ids[1];
+
+    let body = format!(r#"{{"nodes":["{node_b}"]}}"#);
+    let response1 = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_a}/chain"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("set chain 1");
+    assert_eq!(response1.status(), StatusCode::OK);
+
+    let response2 = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_a}/chain"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("set chain 2");
+    assert_eq!(response2.status(), StatusCode::OK);
+    let json2 = body_to_json(response2).await;
+    assert_eq!(json2["nodes"].as_array().expect("nodes").len(), 1);
+    assert_eq!(json2["nodes"][0].as_str().expect("node id"), node_b);
+}

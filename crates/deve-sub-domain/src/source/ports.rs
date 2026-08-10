@@ -254,10 +254,16 @@ pub trait NodePoolRepository: Send + Sync {
     /// The entire batch is committed atomically.
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError>;
 
-    /// List all node chains in the pool. Returns `(node_id, chain_nodes)`
-    /// pairs for every node that has a non-null chain. Used for cycle
-    /// detection (NODE-018) before persisting a new chain.
-    async fn list_node_chains(&self) -> Result<Vec<(NodeId, Vec<NodeId>)>, SourceError>;
+    /// List all node chains in the pool. Returns one [`NodeChainEntry`] per
+    /// node that has a non-null, non-empty chain. Used for cycle detection
+    /// (NODE-018) before persisting a new chain.
+    async fn list_node_chains(&self) -> Result<Vec<crate::NodeChainEntry>, SourceError>;
+
+    /// Return the subset of `ids` that exist in the node pool. Used for
+    /// batch existence checks (e.g. validating chain references in one
+    /// query instead of N `get_node` calls). Order of the result is not
+    /// guaranteed; callers that need order should sort or index.
+    async fn existing_node_ids(&self, ids: &[NodeId]) -> Result<Vec<NodeId>, SourceError>;
 
     /// Set or clear a single node's chain (NODE-017). `chain = None` clears
     /// the column (direct connection); `Some(vec)` persists the ordered

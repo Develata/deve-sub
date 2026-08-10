@@ -16,8 +16,8 @@ use std::collections::HashSet;
 
 use async_trait::async_trait;
 use deve_sub_domain::{
-    ImportOutcome, ImportResult, ItemParseStatus, Node, NodeChain, NodeFilter, NodePoolEntry,
-    NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
+    ImportOutcome, ImportResult, ItemParseStatus, Node, NodeChain, NodeChainEntry, NodeFilter,
+    NodePoolEntry, NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
 };
 use deve_sub_kernel::{NodeId, NodeSourceBindingId, SourceItemId};
 use sqlx::sqlite::SqlitePool;
@@ -406,7 +406,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         Ok(result)
     }
 
-    async fn list_node_chains(&self) -> Result<Vec<(NodeId, Vec<NodeId>)>, SourceError> {
+    async fn list_node_chains(&self) -> Result<Vec<NodeChainEntry>, SourceError> {
         let rows: Vec<(String, Option<String>)> =
             sqlx::query_as("SELECT id, chain_json FROM nodes WHERE chain_json IS NOT NULL")
                 .fetch_all(&self.pool)
@@ -420,10 +420,37 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             let chain: NodeChain = serde_json::from_str(chain_json.as_deref().unwrap_or("[]"))
                 .map_err(|e| SourceError::Storage(e.to_string()))?;
             if !chain.nodes.is_empty() {
-                out.push((node_id, chain.nodes));
+                out.push(NodeChainEntry {
+                    node_id,
+                    chain: chain.nodes,
+                });
             }
         }
         Ok(out)
+    }
+
+    async fn existing_node_ids(&self, ids: &[NodeId]) -> Result<Vec<NodeId>, SourceError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = std::iter::repeat_n("?,", ids.len())
+            .collect::<String>()
+            .trim_end_matches(',')
+            .to_owned();
+        let sql = format!("SELECT id FROM nodes WHERE id IN ({placeholders})");
+        let mut query = sqlx::query_as::<_, (String,)>(&sql);
+        for id in ids {
+            query = query.bind(id.to_string());
+        }
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        let mut result: Vec<NodeId> = Vec::with_capacity(rows.len());
+        for (id_str,) in rows {
+            result.push(NodeId::parse(&id_str).map_err(|e| SourceError::Storage(e.to_string()))?);
+        }
+        Ok(result)
     }
 
     async fn set_node_chain(

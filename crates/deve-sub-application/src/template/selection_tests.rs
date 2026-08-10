@@ -285,8 +285,16 @@ impl NodePoolRepository for MockPool {
     ) -> Result<deve_sub_domain::source::ImportResult, SourceError> {
         unimplemented!("not needed for selection tests")
     }
-    async fn list_node_chains(&self) -> Result<Vec<(NodeId, Vec<NodeId>)>, SourceError> {
+    async fn list_node_chains(&self) -> Result<Vec<deve_sub_domain::NodeChainEntry>, SourceError> {
         Ok(Vec::new())
+    }
+    async fn existing_node_ids(&self, ids: &[NodeId]) -> Result<Vec<NodeId>, SourceError> {
+        Ok(self
+            .entries
+            .iter()
+            .map(|e| e.node.id)
+            .filter(|id| ids.contains(id))
+            .collect())
     }
     async fn set_node_chain(
         &self,

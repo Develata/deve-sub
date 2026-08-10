@@ -102,6 +102,19 @@ pub struct NodeChain {
 }
 
 impl NodeChain {
+    /// Create a [`NodeChain`] from `nodes`, enforcing the non-empty
+    /// invariant. Structural validation (self-reference, duplicates) is
+    /// deferred to [`validate_structure`] because it needs `self_id`.
+    ///
+    /// # Errors
+    /// - [`NodeChainError::Empty`] — `nodes` is empty.
+    pub fn new(nodes: Vec<NodeId>) -> Result<Self, NodeChainError> {
+        if nodes.is_empty() {
+            return Err(NodeChainError::Empty);
+        }
+        Ok(Self { nodes })
+    }
+
     /// Validate the chain's structural invariants (non-empty, no
     /// self-reference, no duplicate entries). Does NOT check node existence
     /// or cycles — those require repository context.

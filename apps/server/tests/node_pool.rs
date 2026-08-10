@@ -114,6 +114,8 @@ impl TestApp {
                     as Arc<dyn LatencyProbe>,
                 quic_probe: Arc::new(deve_sub_adapters::QuicHandshakeProbe::new())
                     as Arc<dyn LatencyProbe>,
+                real_proxy_probe: Arc::new(deve_sub_adapters::RealProxyProbe::new())
+                    as Arc<dyn LatencyProbe>,
                 cancelled_flags: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())

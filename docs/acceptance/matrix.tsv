@@ -65,8 +65,8 @@ NODE-011	上游删除	P0	Integration	pass
 NODE-012	TCP 延迟	P0	Integration	pass
 NODE-013	QUIC 延迟	P0	Integration	pass
 NODE-014	UDP 无响应	P0	Regression	pass
-NODE-015	真实代理测速	P0	Integration	planned
-NODE-016	批量取消测速	P0	E2E	planned
+NODE-015	真实代理测速	P0	Integration	pass
+NODE-016	批量取消测速	P0	E2E	pass
 NODE-017	链式代理	P0	Integration	planned
 NODE-018	代理环	P0	Regression	planned
 GEN-001	新建 V3 模板	P0	E2E	pass

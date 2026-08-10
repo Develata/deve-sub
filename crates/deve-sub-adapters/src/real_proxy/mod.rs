@@ -15,15 +15,13 @@ mod stream;
 mod target;
 mod tls;
 
-// Protocol clients — added incrementally per phase:
-mod shadowsocks; // Phase 2
-mod trojan; // Phase 2
-mod vless; // Phase 2
-mod vmess; // Phase 3
-mod hysteria2; // Phase 4
-mod tuic; // Phase 4
-// mod vless_reality; // Phase 5
-mod naiveproxy; // Phase 5
+mod hysteria2;
+mod naiveproxy;
+mod shadowsocks;
+mod trojan;
+mod tuic;
+mod vless;
+mod vmess;
 
 #[cfg(test)]
 mod test_util;
@@ -120,9 +118,7 @@ impl RealProxyProbe {
             ProtocolConfig::Hysteria2(_) => {
                 hysteria2::dial(node, &self.test_target, _timeout).await
             }
-            ProtocolConfig::TuicV5(_) => {
-                tuic::dial(node, &self.test_target, _timeout).await
-            }
+            ProtocolConfig::TuicV5(_) => tuic::dial(node, &self.test_target, _timeout).await,
             ProtocolConfig::NaiveProxy(_) => {
                 naiveproxy::dial(node, &self.test_target, _timeout).await
             }

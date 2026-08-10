@@ -59,16 +59,16 @@ async fn quic_connect(node: &Node) -> Result<(Endpoint, Connection), ErrorClass>
         .next()
         .ok_or(ErrorClass::DnsFailed)?;
 
-    let tls = skip_verify_client_config(vec![b"h3".to_vec()]).map_err(|_| ErrorClass::QuicFailed)?;
+    let tls =
+        skip_verify_client_config(vec![b"h3".to_vec()]).map_err(|_| ErrorClass::QuicFailed)?;
     let quic_cfg = QuicClientConfig::try_from(tls).map_err(|_| ErrorClass::QuicFailed)?;
     let mut transport = TransportConfig::default();
     transport.keep_alive_interval(Some(Duration::from_secs(10)));
     let mut client_cfg = ClientConfig::new(Arc::new(quic_cfg));
     client_cfg.transport_config(Arc::new(transport));
 
-    let mut ep =
-        Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
-            .map_err(|_| ErrorClass::QuicFailed)?;
+    let mut ep = Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
+        .map_err(|_| ErrorClass::QuicFailed)?;
     ep.set_default_client_config(client_cfg);
 
     let sni = node
@@ -85,10 +85,9 @@ async fn quic_connect(node: &Node) -> Result<(Endpoint, Connection), ErrorClass>
 }
 
 async fn authenticate(conn: &Connection, password: &str) -> Result<(), ErrorClass> {
-    let (_driver, mut send_request) =
-        h3::client::new(h3_quinn::Connection::new(conn.clone()))
-            .await
-            .map_err(|_| ErrorClass::QuicFailed)?;
+    let (_driver, mut send_request) = h3::client::new(h3_quinn::Connection::new(conn.clone()))
+        .await
+        .map_err(|_| ErrorClass::QuicFailed)?;
 
     let mut rng = rand::rngs::StdRng::from_entropy();
     let mut pad = vec![0u8; 16];
@@ -110,7 +109,10 @@ async fn authenticate(conn: &Connection, password: &str) -> Result<(), ErrorClas
         .map_err(|_| ErrorClass::Refused)?;
     stream.finish().await.map_err(|_| ErrorClass::Refused)?;
 
-    let resp = stream.recv_response().await.map_err(|_| ErrorClass::Refused)?;
+    let resp = stream
+        .recv_response()
+        .await
+        .map_err(|_| ErrorClass::Refused)?;
     if resp.status().as_u16() != 233 {
         return Err(ErrorClass::Refused);
     }
@@ -136,7 +138,9 @@ async fn open_tcp_stream(
     rng.fill_bytes(&mut pad);
     frame.extend_from_slice(&pad);
 
-    send.write_all(&frame).await.map_err(|_| ErrorClass::Refused)?;
+    send.write_all(&frame)
+        .await
+        .map_err(|_| ErrorClass::Refused)?;
     Ok((send, recv))
 }
 
@@ -242,10 +246,10 @@ fn read_varint(buf: &mut &[u8]) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::real_proxy::test_util::{LocalHttpTarget, TestCert};
     use crate::real_proxy::RealProxyProbe;
+    use crate::real_proxy::test_util::{LocalHttpTarget, TestCert};
     use deve_sub_domain::{
-        Authentication, Endpoint, Hysteria2Config, Host, LatencyProbe, Node, NodeSource,
+        Authentication, Endpoint, Host, Hysteria2Config, LatencyProbe, Node, NodeSource,
         ProtocolConfig, ProtocolKind, RegionAssignment, RegionMethod, TlsConfig, UdpCapability,
     };
     use deve_sub_kernel::{NodeId, Timestamp};
@@ -264,12 +268,10 @@ mod tests {
             .with_single_cert(vec![cert_der], key)
             .expect("server config");
         tls_srv.alpn_protocols = vec![b"h3".to_vec()];
-        let qsc =
-            quinn::crypto::rustls::QuicServerConfig::try_from(tls_srv).expect("quic server");
+        let qsc = quinn::crypto::rustls::QuicServerConfig::try_from(tls_srv).expect("quic server");
         let server_cfg = quinn::ServerConfig::with_crypto(Arc::new(qsc));
-        let srv_ep =
-            quinn::Endpoint::server(server_cfg, "127.0.0.1:0".parse().expect("parse"))
-                .expect("server endpoint");
+        let srv_ep = quinn::Endpoint::server(server_cfg, "127.0.0.1:0".parse().expect("parse"))
+            .expect("server endpoint");
         let hy2_addr = srv_ep.local_addr().expect("addr");
 
         let password = "test-password".to_owned();
@@ -278,10 +280,10 @@ mod tests {
         let server = tokio::spawn(async move {
             let conn = srv_ep.accept().await.expect("accept").await.expect("conn");
 
-            let mut h3_srv =
-                h3::server::builder().build::<_, bytes::Bytes>(h3_quinn::Connection::new(conn.clone()))
-                    .await
-                    .expect("h3 server");
+            let mut h3_srv = h3::server::builder()
+                .build::<_, bytes::Bytes>(h3_quinn::Connection::new(conn.clone()))
+                .await
+                .expect("h3 server");
 
             let resolver = h3_srv.accept().await.expect("accept").expect("req");
             let (req, mut rs) = resolver.resolve_request().await.expect("resolve");
@@ -290,7 +292,10 @@ mod tests {
             let auth = req.headers().get("Hysteria-Auth").expect("auth header");
             assert_eq!(auth.to_str().expect("str"), server_password);
 
-            let resp = http::Response::builder().status(233).body(()).expect("resp");
+            let resp = http::Response::builder()
+                .status(233)
+                .body(())
+                .expect("resp");
             rs.send_response(resp).await.expect("send resp");
             rs.finish().await.expect("finish");
 
@@ -299,19 +304,18 @@ mod tests {
             let id = read_varint_stream(&mut recv).await.expect("read id");
             assert_eq!(id, 0x401);
 
-            let addr_len =
-                read_varint_stream(&mut recv).await.expect("read addr_len") as usize;
+            let addr_len = read_varint_stream(&mut recv).await.expect("read addr_len") as usize;
             let mut addr_buf = vec![0u8; addr_len];
             recv.read_exact(&mut addr_buf).await.expect("read addr");
             let target_addr = String::from_utf8(addr_buf).expect("addr");
 
-            let pad_len =
-                read_varint_stream(&mut recv).await.expect("read pad_len") as usize;
+            let pad_len = read_varint_stream(&mut recv).await.expect("read pad_len") as usize;
             let mut pad = vec![0u8; pad_len];
             recv.read_exact(&mut pad).await.expect("read pad");
 
-            let mut target =
-                tokio::net::TcpStream::connect(target_addr).await.expect("connect");
+            let mut target = tokio::net::TcpStream::connect(target_addr)
+                .await
+                .expect("connect");
             let mut combined = tokio::io::join(recv, send);
             let _ = tokio::io::copy_bidirectional(&mut combined, &mut target).await;
         });

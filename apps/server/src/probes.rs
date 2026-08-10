@@ -531,13 +531,7 @@ async fn create_probe_run(
     let probe_adapter = match probe_type {
         ProbeType::TcpConnect => Arc::clone(&state.tcp_probe),
         ProbeType::QuicHandshake => Arc::clone(&state.quic_probe),
-        ProbeType::RealProxy => {
-            return Err(err(
-                StatusCode::BAD_REQUEST,
-                "unsupported_probe_type",
-                "real-proxy probes are not yet available",
-            ));
-        }
+        ProbeType::RealProxy => Arc::clone(&state.real_proxy_probe),
     };
     let deps = deve_sub_application::probe::RunnerDeps {
         probe: probe_adapter,

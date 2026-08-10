@@ -67,16 +67,16 @@ async fn quic_connect(node: &Node) -> Result<(Endpoint, Connection), ErrorClass>
         .next()
         .ok_or(ErrorClass::DnsFailed)?;
 
-    let tls = skip_verify_client_config(vec![b"h3".to_vec()]).map_err(|_| ErrorClass::QuicFailed)?;
+    let tls =
+        skip_verify_client_config(vec![b"h3".to_vec()]).map_err(|_| ErrorClass::QuicFailed)?;
     let quic_cfg = QuicClientConfig::try_from(tls).map_err(|_| ErrorClass::QuicFailed)?;
     let mut transport = TransportConfig::default();
     transport.keep_alive_interval(Some(Duration::from_secs(10)));
     let mut client_cfg = ClientConfig::new(Arc::new(quic_cfg));
     client_cfg.transport_config(Arc::new(transport));
 
-    let mut ep =
-        Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
-            .map_err(|_| ErrorClass::QuicFailed)?;
+    let mut ep = Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
+        .map_err(|_| ErrorClass::QuicFailed)?;
     ep.set_default_client_config(client_cfg);
 
     let sni = node
@@ -108,7 +108,9 @@ async fn authenticate(
     frame.extend_from_slice(&token);
 
     let mut uni = conn.open_uni().await.map_err(|_| ErrorClass::Refused)?;
-    uni.write_all(&frame).await.map_err(|_| ErrorClass::Refused)?;
+    uni.write_all(&frame)
+        .await
+        .map_err(|_| ErrorClass::Refused)?;
     uni.finish().map_err(|_| ErrorClass::Refused)?;
     Ok(())
 }
@@ -124,7 +126,9 @@ async fn open_connect_stream(
     frame.push(CMD_CONNECT);
     encode_address(&mut frame, target.host(), target.port());
 
-    send.write_all(&frame).await.map_err(|_| ErrorClass::Refused)?;
+    send.write_all(&frame)
+        .await
+        .map_err(|_| ErrorClass::Refused)?;
     Ok((send, recv))
 }
 
@@ -196,8 +200,8 @@ impl tokio::io::AsyncWrite for TuicStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::real_proxy::test_util::{LocalHttpTarget, TestCert};
     use crate::real_proxy::RealProxyProbe;
+    use crate::real_proxy::test_util::{LocalHttpTarget, TestCert};
     use deve_sub_domain::{
         Authentication, Endpoint, Host, LatencyProbe, Node, NodeSource, ProtocolConfig,
         ProtocolKind, RegionAssignment, RegionMethod, TlsConfig, TuicV5Config, UdpCapability,
@@ -218,12 +222,10 @@ mod tests {
             .with_single_cert(vec![cert_der], key)
             .expect("server config");
         tls_srv.alpn_protocols = vec![b"h3".to_vec()];
-        let qsc =
-            quinn::crypto::rustls::QuicServerConfig::try_from(tls_srv).expect("quic server");
+        let qsc = quinn::crypto::rustls::QuicServerConfig::try_from(tls_srv).expect("quic server");
         let server_cfg = quinn::ServerConfig::with_crypto(Arc::new(qsc));
-        let srv_ep =
-            quinn::Endpoint::server(server_cfg, "127.0.0.1:0".parse().expect("parse"))
-                .expect("server endpoint");
+        let srv_ep = quinn::Endpoint::server(server_cfg, "127.0.0.1:0".parse().expect("parse"))
+            .expect("server endpoint");
         let tuic_addr = srv_ep.local_addr().expect("addr");
 
         let uuid_str = "12345678-1234-1234-1234-123456789abc".to_owned();
@@ -268,8 +270,9 @@ mod tests {
             let port = u16::from_be_bytes([addr[4], addr[5]]);
             let target_addr = std::net::SocketAddr::V4(std::net::SocketAddrV4::new(ip, port));
 
-            let mut target =
-                tokio::net::TcpStream::connect(target_addr).await.expect("connect");
+            let mut target = tokio::net::TcpStream::connect(target_addr)
+                .await
+                .expect("connect");
             let mut combined = tokio::io::join(recv, send);
             let _ = tokio::io::copy_bidirectional(&mut combined, &mut target).await;
         });

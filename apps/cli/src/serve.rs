@@ -120,6 +120,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     );
     let tcp_probe: Arc<dyn LatencyProbe> = Arc::new(deve_sub_adapters::TcpConnectProbe::new());
     let quic_probe: Arc<dyn LatencyProbe> = Arc::new(deve_sub_adapters::QuicHandshakeProbe::new());
+    let real_proxy_probe: Arc<dyn LatencyProbe> =
+        Arc::new(deve_sub_adapters::RealProxyProbe::new());
     let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
     let geoip: Arc<dyn GeoIpPort> = Arc::new(deve_sub_adapters::MaxMindGeoIp::new(
         config.geoip.mmdb_path.as_deref(),
@@ -159,6 +161,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         latency_repo,
         tcp_probe,
         quic_probe,
+        real_proxy_probe,
         cancelled_flags: Arc::new(Mutex::new(HashMap::new())),
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),

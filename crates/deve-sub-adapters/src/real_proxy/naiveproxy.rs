@@ -55,8 +55,8 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
         .await
         .map_err(|_| ErrorClass::Refused)?;
 
-    let credentials = base64::engine::general_purpose::STANDARD
-        .encode(format!("{username}:{password}"));
+    let credentials =
+        base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}"));
     let connect_req = format!(
         "CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\nProxy-Authorization: Basic {creds}\r\nProxy-Connection: keep-alive\r\n\r\n",
         host = target.host(),
@@ -80,8 +80,8 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::real_proxy::test_util::{LocalHttpTarget, TestCert};
     use crate::real_proxy::RealProxyProbe;
+    use crate::real_proxy::test_util::{LocalHttpTarget, TestCert};
     use deve_sub_domain::{
         Authentication, Endpoint, Host, LatencyProbe, NaiveProxyConfig, Node, NodeSource,
         ProtocolConfig, ProtocolKind, RegionAssignment, RegionMethod, TlsConfig, UdpCapability,
@@ -115,21 +115,26 @@ mod tests {
             let n = tls.read(&mut buf).await.expect("read connect");
             let request = String::from_utf8_lossy(&buf[..n]);
             assert!(request.starts_with("CONNECT "), "got: {request}");
-            assert!(request.contains("Proxy-Authorization: Basic "), "got: {request}");
+            assert!(
+                request.contains("Proxy-Authorization: Basic "),
+                "got: {request}"
+            );
 
             let expected_creds = base64::engine::general_purpose::STANDARD
                 .encode(format!("{srv_username}:{srv_password}"));
-            assert!(request.contains(&expected_creds), "missing creds in: {request}");
+            assert!(
+                request.contains(&expected_creds),
+                "missing creds in: {request}"
+            );
 
             tls.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
                 .await
                 .expect("write 200");
 
-            let mut target_stream = tokio::net::TcpStream::connect(format!(
-                "127.0.0.1:{target_port}"
-            ))
-            .await
-            .expect("connect target");
+            let mut target_stream =
+                tokio::net::TcpStream::connect(format!("127.0.0.1:{target_port}"))
+                    .await
+                    .expect("connect target");
             let _ = tokio::io::copy_bidirectional(&mut tls, &mut target_stream).await;
         });
 

@@ -37,11 +37,13 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
 
     let mut hasher = Sha224::new();
     hasher.update(password.as_bytes());
-    let hash_hex: String = hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let hash = hasher.finalize();
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut hash_hex = String::with_capacity(56);
+    for &b in hash.iter() {
+        hash_hex.push(HEX[(b >> 4) as usize] as char);
+        hash_hex.push(HEX[(b & 0x0f) as usize] as char);
+    }
 
     let tcp = TcpStream::connect((node.endpoint.host.uri_host(), node.endpoint.port))
         .await

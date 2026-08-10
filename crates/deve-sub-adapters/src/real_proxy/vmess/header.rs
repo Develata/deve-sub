@@ -10,6 +10,7 @@ use aes_gcm::{Aes128Gcm, Nonce};
 use md5::{Digest, Md5};
 use rand::RngCore;
 use sha2::Sha256;
+use tokio::io::AsyncReadExt as _;
 
 use super::kdf::{kdf12, kdf16};
 
@@ -151,8 +152,6 @@ pub async fn read_aead_response_header<R: tokio::io::AsyncRead + Unpin>(
     }
     Ok(())
 }
-
-use tokio::io::AsyncReadExt as _;
 
 /// WHY: `kdf16` produces exactly 16 bytes, so AES-128 `new_from_slice`
 /// is infallible.

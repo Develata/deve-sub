@@ -10,17 +10,15 @@
 //!    ATYP: 0x00=Domain(1-byte len + bytes), 0x01=IPv4(4), 0x02=IPv6(16).
 //!    No server response — the stream immediately relays raw TCP.
 
-use std::sync::Arc;
 use std::time::Duration;
 
-use quinn::crypto::rustls::QuicClientConfig;
-use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
+use quinn::Connection;
 
 use deve_sub_domain::{Authentication, ErrorClass, Node};
 
+use super::quic::{QuicBidiStream, quic_connect};
 use super::stream::BoxedStream;
 use super::target::TestTarget;
-use super::tls::skip_verify_client_config;
 
 const VER: u8 = 0x05;
 const CMD_AUTH: u8 = 0x00;
@@ -51,45 +49,11 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
     let (endpoint, conn) = quic_connect(node).await?;
     authenticate(&conn, &uuid_bytes, password).await?;
     let (send, recv) = open_connect_stream(&conn, target).await?;
-    Ok(Box::new(TuicStream {
+    Ok(Box::new(QuicBidiStream {
         inner: tokio::io::join(recv, send),
         _endpoint: endpoint,
         _conn: conn,
     }))
-}
-
-async fn quic_connect(node: &Node) -> Result<(Endpoint, Connection), ErrorClass> {
-    let host = node.endpoint.host.uri_host();
-    let port = node.endpoint.port;
-    let addr = tokio::net::lookup_host((host.as_str(), port))
-        .await
-        .map_err(|_| ErrorClass::DnsFailed)?
-        .next()
-        .ok_or(ErrorClass::DnsFailed)?;
-
-    let tls =
-        skip_verify_client_config(vec![b"h3".to_vec()]).map_err(|_| ErrorClass::QuicFailed)?;
-    let quic_cfg = QuicClientConfig::try_from(tls).map_err(|_| ErrorClass::QuicFailed)?;
-    let mut transport = TransportConfig::default();
-    transport.keep_alive_interval(Some(Duration::from_secs(10)));
-    let mut client_cfg = ClientConfig::new(Arc::new(quic_cfg));
-    client_cfg.transport_config(Arc::new(transport));
-
-    let mut ep = Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
-        .map_err(|_| ErrorClass::QuicFailed)?;
-    ep.set_default_client_config(client_cfg);
-
-    let sni = node
-        .tls
-        .as_ref()
-        .and_then(|t| t.server_name.as_deref())
-        .unwrap_or(&host);
-    let conn = ep
-        .connect(addr, sni)
-        .map_err(|_| ErrorClass::DnsFailed)?
-        .await
-        .map_err(|_| ErrorClass::QuicFailed)?;
-    Ok((ep, conn))
 }
 
 async fn authenticate(
@@ -152,51 +116,6 @@ fn parse_uuid(s: &str) -> Option<[u8; 16]> {
     Some(*parsed.as_bytes())
 }
 
-/// Owns the QUIC endpoint + connection so they outlive the stream halves.
-struct TuicStream {
-    inner: tokio::io::Join<quinn::RecvStream, quinn::SendStream>,
-    _endpoint: quinn::Endpoint,
-    _conn: quinn::Connection,
-}
-
-impl tokio::io::AsyncRead for TuicStream {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        std::pin::Pin::new(&mut this.inner).poll_read(cx, buf)
-    }
-}
-
-impl tokio::io::AsyncWrite for TuicStream {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        let this = self.get_mut();
-        std::pin::Pin::new(&mut this.inner).poll_write(cx, buf)
-    }
-
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        std::pin::Pin::new(&mut this.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        std::pin::Pin::new(&mut this.inner).poll_shutdown(cx)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,6 +127,7 @@ mod tests {
     };
     use deve_sub_kernel::{NodeId, Timestamp};
     use std::collections::BTreeMap;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn tuic_v5_round_trip() {

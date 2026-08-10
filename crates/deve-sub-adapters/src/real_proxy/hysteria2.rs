@@ -10,19 +10,17 @@
 //! bidi streams. The h3 driver task is spawned for auth only and dropped
 //! afterwards — it does not close the QUIC transport.
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine as _;
-use quinn::crypto::rustls::QuicClientConfig;
-use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
+use quinn::Connection;
 use rand::{RngCore, SeedableRng};
 
 use deve_sub_domain::{Authentication, ErrorClass, Node};
 
+use super::quic::{QuicBidiStream, quic_connect};
 use super::stream::BoxedStream;
 use super::target::TestTarget;
-use super::tls::skip_verify_client_config;
 
 pub async fn dial(
     node: &Node,
@@ -43,45 +41,11 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
     let (endpoint, conn) = quic_connect(node).await?;
     authenticate(&conn, &password).await?;
     let (send, recv) = open_tcp_stream(&conn, target).await?;
-    Ok(Box::new(Hysteria2Stream {
+    Ok(Box::new(QuicBidiStream {
         inner: tokio::io::join(recv, send),
         _endpoint: endpoint,
         _conn: conn,
     }))
-}
-
-async fn quic_connect(node: &Node) -> Result<(Endpoint, Connection), ErrorClass> {
-    let host = node.endpoint.host.uri_host();
-    let port = node.endpoint.port;
-    let addr = tokio::net::lookup_host((host.as_str(), port))
-        .await
-        .map_err(|_| ErrorClass::DnsFailed)?
-        .next()
-        .ok_or(ErrorClass::DnsFailed)?;
-
-    let tls =
-        skip_verify_client_config(vec![b"h3".to_vec()]).map_err(|_| ErrorClass::QuicFailed)?;
-    let quic_cfg = QuicClientConfig::try_from(tls).map_err(|_| ErrorClass::QuicFailed)?;
-    let mut transport = TransportConfig::default();
-    transport.keep_alive_interval(Some(Duration::from_secs(10)));
-    let mut client_cfg = ClientConfig::new(Arc::new(quic_cfg));
-    client_cfg.transport_config(Arc::new(transport));
-
-    let mut ep = Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
-        .map_err(|_| ErrorClass::QuicFailed)?;
-    ep.set_default_client_config(client_cfg);
-
-    let sni = node
-        .tls
-        .as_ref()
-        .and_then(|t| t.server_name.as_deref())
-        .unwrap_or(&host);
-    let conn = ep
-        .connect(addr, sni)
-        .map_err(|_| ErrorClass::DnsFailed)?
-        .await
-        .map_err(|_| ErrorClass::QuicFailed)?;
-    Ok((ep, conn))
 }
 
 async fn authenticate(conn: &Connection, password: &str) -> Result<(), ErrorClass> {
@@ -142,54 +106,6 @@ async fn open_tcp_stream(
         .await
         .map_err(|_| ErrorClass::Refused)?;
     Ok((send, recv))
-}
-
-/// Owns the QUIC endpoint + connection so they outlive the stream halves.
-/// Dropping the endpoint tears down all connections, so it must live at
-/// least as long as the bidi streams. `tokio::io::join` merges the recv
-/// and send halves into a single `AsyncRead + AsyncWrite` object.
-struct Hysteria2Stream {
-    inner: tokio::io::Join<quinn::RecvStream, quinn::SendStream>,
-    _endpoint: quinn::Endpoint,
-    _conn: quinn::Connection,
-}
-
-impl tokio::io::AsyncRead for Hysteria2Stream {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        std::pin::Pin::new(&mut this.inner).poll_read(cx, buf)
-    }
-}
-
-impl tokio::io::AsyncWrite for Hysteria2Stream {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        let this = self.get_mut();
-        std::pin::Pin::new(&mut this.inner).poll_write(cx, buf)
-    }
-
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        std::pin::Pin::new(&mut this.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        std::pin::Pin::new(&mut this.inner).poll_shutdown(cx)
-    }
 }
 
 /// Encode a QUIC variable-length integer (RFC 9000 §16).
@@ -254,6 +170,7 @@ mod tests {
     };
     use deve_sub_kernel::{NodeId, Timestamp};
     use std::collections::BTreeMap;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn hysteria2_round_trip() {

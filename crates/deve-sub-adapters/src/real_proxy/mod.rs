@@ -10,13 +10,13 @@
 //! See `docs/plan/milestones/M7-probes-and-detection.md` §"Latency probe
 //! model" and NODE-015.
 
-#[allow(dead_code)] // wrap_quinn_bidi used by Phase 4 QUIC clients
 mod stream;
 mod target;
 mod tls;
 
 mod hysteria2;
 mod naiveproxy;
+mod quic;
 mod shadowsocks;
 mod trojan;
 mod tuic;
@@ -107,20 +107,18 @@ impl LatencyProbe for RealProxyProbe {
 impl RealProxyProbe {
     /// Dial through the proxy node to the test target, returning a
     /// tunneled stream. Dispatches by protocol config variant.
-    async fn dial(&self, node: &Node, _timeout: Duration) -> Result<BoxedStream, ErrorClass> {
+    async fn dial(&self, node: &Node, timeout: Duration) -> Result<BoxedStream, ErrorClass> {
         match &node.config {
-            ProtocolConfig::Trojan(_) => trojan::dial(node, &self.test_target, _timeout).await,
+            ProtocolConfig::Trojan(_) => trojan::dial(node, &self.test_target, timeout).await,
             ProtocolConfig::Shadowsocks(_) => {
-                shadowsocks::dial(node, &self.test_target, _timeout).await
+                shadowsocks::dial(node, &self.test_target, timeout).await
             }
-            ProtocolConfig::VlessReality(_) => vless::dial(node, &self.test_target, _timeout).await,
-            ProtocolConfig::VMess(_) => vmess::dial(node, &self.test_target, _timeout).await,
-            ProtocolConfig::Hysteria2(_) => {
-                hysteria2::dial(node, &self.test_target, _timeout).await
-            }
-            ProtocolConfig::TuicV5(_) => tuic::dial(node, &self.test_target, _timeout).await,
+            ProtocolConfig::VlessReality(_) => vless::dial(node, &self.test_target, timeout).await,
+            ProtocolConfig::VMess(_) => vmess::dial(node, &self.test_target, timeout).await,
+            ProtocolConfig::Hysteria2(_) => hysteria2::dial(node, &self.test_target, timeout).await,
+            ProtocolConfig::TuicV5(_) => tuic::dial(node, &self.test_target, timeout).await,
             ProtocolConfig::NaiveProxy(_) => {
-                naiveproxy::dial(node, &self.test_target, _timeout).await
+                naiveproxy::dial(node, &self.test_target, timeout).await
             }
             ProtocolConfig::Unsupported(_) => {
                 tracing::debug!(

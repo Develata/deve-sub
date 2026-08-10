@@ -34,8 +34,9 @@ pub use node_chain::{NodeChainEntry, NodeChainError, NodeChainGraph, NodeCyclePa
 pub use node_override::{NodeOverride, NodeOverrideRepository, Tag};
 pub use probe::{
     ErrorClass, LatencyProbe, LatencyRecord, LatencyRecordRepository, LatencyResult, ProbeError,
-    ProbeRun, ProbeRunRepository, ProbeRunResult, ProbeRunStatus, ProbeSource, ProbeSourceKind,
-    ProbeSourceRepository, ProbeType, SyncStatus,
+    ProbeRun, ProbeRunRepository, ProbeRunResult, ProbeRunStatus, ProbeSource, ProbeSourceAdapter,
+    ProbeSourceKind, ProbeSourceRepository, ProbeSyncResult, ProbeTrafficSample, ProbeType,
+    SyncStatus,
 };
 pub use protocol::{ProtocolConfig, ProtocolKind, UnsupportedNode};
 pub use protocol_config::{

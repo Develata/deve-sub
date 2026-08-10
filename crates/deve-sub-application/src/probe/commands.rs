@@ -8,8 +8,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use deve_sub_domain::{
-    ProbeRun, ProbeRunRepository, ProbeRunStatus, ProbeSource, ProbeSourceKind,
-    ProbeSourceRepository, ProbeType,
+    ProbeRun, ProbeRunRepository, ProbeRunStatus, ProbeSource, ProbeSourceAdapter, ProbeSourceKind,
+    ProbeSourceRepository, ProbeSyncResult, ProbeType, SyncStatus, TrafficRecord,
+    TrafficRepository, TrafficSourceKind,
 };
 use deve_sub_kernel::{ProbeRunId, ProbeSourceId, Timestamp};
 
@@ -253,4 +254,127 @@ pub async fn cancel_probe_run(
 /// (crash recovery on startup, constraint #20).
 pub async fn recover_crashed_runs(run_repo: &dyn ProbeRunRepository) -> Result<u64, ProbeAppError> {
     Ok(run_repo.recover_crashed_runs().await?)
+}
+
+/// Result of a successful probe traffic sync.
+#[derive(Debug, Clone)]
+pub struct SyncProbeTrafficResult {
+    /// Number of traffic samples written.
+    pub samples_written: usize,
+    /// Whether the encrypted counter snapshot was updated.
+    pub snapshot_updated: bool,
+}
+
+/// Sync traffic data from an external probe panel.
+///
+/// Calls the adapter to fetch traffic samples, maps each sample to a
+/// [`TrafficRecord`] bound to the probe source's `subscription_id`, and
+/// persists the new encrypted counter snapshot + sync status. The source must
+/// be enabled and have a subscription binding.
+///
+/// See `docs/plan/milestones/M7-probes-and-detection.md` §"Probe source
+/// adapter Port" and PROBE-001.
+///
+/// # Errors
+/// - [`ProbeAppError::SourceNotFound`] — source does not exist.
+/// - [`ProbeAppError::InvalidInput`] — source is disabled or has no
+///   subscription binding.
+/// - [`ProbeAppError::Domain`] — adapter sync failed (network, auth, parse).
+/// - [`ProbeAppError::Traffic`] — traffic record persistence failed.
+pub async fn sync_probe_traffic(
+    source_repo: &dyn ProbeSourceRepository,
+    traffic_repo: &dyn TrafficRepository,
+    adapter: &dyn ProbeSourceAdapter,
+    source_id: ProbeSourceId,
+) -> Result<SyncProbeTrafficResult, ProbeAppError> {
+    let mut source = source_repo
+        .find_by_id(source_id)
+        .await?
+        .ok_or(ProbeAppError::SourceNotFound)?;
+
+    if !source.enabled {
+        return Err(ProbeAppError::InvalidInput(
+            "probe source is disabled".to_owned(),
+        ));
+    }
+
+    let subscription_id = source.subscription_id.ok_or_else(|| {
+        ProbeAppError::InvalidInput("probe source has no subscription binding".to_owned())
+    })?;
+
+    let sync_result: ProbeSyncResult = adapter.sync_traffic(&source).await?;
+
+    let now = Timestamp::now();
+    let source_ref_prefix = source.kind.as_kebab();
+    let snapshot_updated = sync_result.new_counter_snapshot.is_some();
+
+    // WHY: persist the new counter snapshot + sync status BEFORE writing
+    // traffic records. If the records loop fails partway, the snapshot is
+    // already advanced — the next sync under-counts (skips the delta) but
+    // never double-counts. Double-counting corrupts traffic totals; under-
+    // counting is a recoverable, safe failure mode. The two repos cannot
+    // share a transaction (different port traits), so ordering is the
+    // minimal safe boundary.
+    source.last_counter_snapshot = sync_result.new_counter_snapshot;
+    source.last_sync_at = Some(now);
+    source.last_sync_status = Some(SyncStatus::Ok);
+    source.updated_at = now;
+    source_repo.update(&source).await?;
+
+    for sample in &sync_result.samples {
+        let record = TrafficRecord::new(
+            subscription_id,
+            TrafficSourceKind::Probe,
+            sample.upload,
+            sample.download,
+            format!("{source_ref_prefix}:{id}", id = sample.external_server_id),
+        );
+        traffic_repo.create(&record).await?;
+    }
+
+    Ok(SyncProbeTrafficResult {
+        samples_written: sync_result.samples.len(),
+        snapshot_updated,
+    })
+}
+
+/// Mark a probe source's last sync as failed with the given message.
+/// Used by the runner/job scheduler when an adapter call fails outside the
+/// command path, or for stale detection (PROBE-004).
+///
+/// # Errors
+/// - [`ProbeAppError::SourceNotFound`] — source does not exist.
+pub async fn mark_sync_failed(
+    source_repo: &dyn ProbeSourceRepository,
+    source_id: ProbeSourceId,
+    message: String,
+) -> Result<(), ProbeAppError> {
+    let mut source = source_repo
+        .find_by_id(source_id)
+        .await?
+        .ok_or(ProbeAppError::SourceNotFound)?;
+    source.last_sync_at = Some(Timestamp::now());
+    source.last_sync_status = Some(SyncStatus::Failed(message));
+    source.updated_at = Timestamp::now();
+    source_repo.update(&source).await?;
+    Ok(())
+}
+
+/// Mark a probe source's last sync as stale (no sync attempted within the
+/// expected interval). Used by the stale-detection job (PROBE-004).
+///
+/// # Errors
+/// - [`ProbeAppError::SourceNotFound`] — source does not exist.
+pub async fn mark_sync_stale(
+    source_repo: &dyn ProbeSourceRepository,
+    source_id: ProbeSourceId,
+) -> Result<(), ProbeAppError> {
+    let mut source = source_repo
+        .find_by_id(source_id)
+        .await?
+        .ok_or(ProbeAppError::SourceNotFound)?;
+    source.last_sync_status = Some(SyncStatus::Stale);
+    source.updated_at = Timestamp::now();
+    source_repo.update(&source).await?;
+    Ok(())
 }

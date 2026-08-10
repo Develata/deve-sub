@@ -34,7 +34,7 @@ pub use probe::{
     CreateProbeRunRequest, CreateProbeSourceRequest, ErrorClassDto, LatencyRecordDto,
     ListLatencyRecordsResponse, ListProbeSourcesResponse, ProbeRunDto, ProbeRunResponse,
     ProbeRunResultDto, ProbeRunStatusDto, ProbeSourceDto, ProbeSourceKindDto, ProbeSourceResponse,
-    ProbeTypeDto, SyncStatusDto, UpdateProbeSourceRequest,
+    ProbeTypeDto, SyncProbeTrafficResponse, SyncStatusDto, UpdateProbeSourceRequest,
 };
 pub use source::{
     CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,

@@ -15,13 +15,13 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
 use deve_sub_application::probe::{
     self, CreateProbeSourceParams, ProbeAppError, RunnerConfig, StartProbeRunParams,
-    UpdateProbeSourceParams, execute_probe_run,
+    SyncProbeTrafficResult, UpdateProbeSourceParams, execute_probe_run,
 };
 use deve_sub_contract::{
     CreateProbeRunRequest, CreateProbeSourceRequest, ErrorClassDto, LatencyRecordDto,
     ListLatencyRecordsResponse, ListProbeSourcesResponse, ProbeRunDto, ProbeRunResponse,
     ProbeRunResultDto, ProbeRunStatusDto, ProbeSourceDto, ProbeSourceKindDto, ProbeSourceResponse,
-    ProbeTypeDto, SyncStatusDto, UpdateProbeSourceRequest,
+    ProbeTypeDto, SyncProbeTrafficResponse, SyncStatusDto, UpdateProbeSourceRequest,
 };
 use deve_sub_domain::{
     ErrorClass, LatencyRecord, ProbeRun, ProbeRunStatus, ProbeSource, ProbeSourceKind, ProbeType,
@@ -31,6 +31,29 @@ use deve_sub_kernel::{NodeId, ProbeRunId, ProbeSourceId, SubscriptionId};
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
+
+const ENCRYPTED_SEPARATOR: char = ':';
+
+fn encrypt_auth_config(
+    master_key: &deve_sub_security::MasterKey,
+    plaintext: &str,
+) -> Result<String, (StatusCode, Json<deve_sub_contract::ErrorResponse>)> {
+    if plaintext.is_empty() {
+        return Ok(String::new());
+    }
+    let (ct, nonce) =
+        deve_sub_security::encrypt_to_b64(master_key.as_bytes(), plaintext.as_bytes()).map_err(
+            |e| {
+                tracing::warn!(error = %e, "auth_config encryption failed");
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "encryption_failed",
+                    "failed to encrypt auth_config",
+                )
+            },
+        )?;
+    Ok(format!("{ct}{ENCRYPTED_SEPARATOR}{nonce}"))
+}
 
 /// Query parameters for `GET /api/v1/probe-sources`.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -200,6 +223,11 @@ fn map_probe_error(e: ProbeAppError) -> (StatusCode, Json<deve_sub_contract::Err
             "run_already_terminal",
             "probe run is already completed, cancelled, or failed",
         ),
+        ProbeAppError::Traffic(msg) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "traffic_persist_failed",
+            &msg,
+        ),
         ProbeAppError::Domain(deve_sub_domain::ProbeError::NameExists) => err(
             StatusCode::CONFLICT,
             "name_exists",
@@ -262,13 +290,15 @@ async fn create_probe_source(
             )
         })?;
 
+    let auth_config = encrypt_auth_config(state.master_key.as_ref(), &req.auth_config)?;
+
     let source = probe::create_probe_source(
         state.probe_source_repo.as_ref(),
         CreateProbeSourceParams {
             kind: kind_from_dto(req.kind),
             name: req.name,
             endpoint_url: req.endpoint_url,
-            auth_config: req.auth_config,
+            auth_config,
             subscription_id,
         },
     )
@@ -414,13 +444,18 @@ async fn update_probe_source(
         None => None,
     };
 
+    let auth_config = match req.auth_config {
+        Some(plaintext) => Some(encrypt_auth_config(state.master_key.as_ref(), &plaintext)?),
+        None => None,
+    };
+
     let source = probe::update_probe_source(
         state.probe_source_repo.as_ref(),
         UpdateProbeSourceParams {
             id: source_id,
             name: req.name,
             endpoint_url: req.endpoint_url,
-            auth_config: req.auth_config,
+            auth_config,
             subscription_id,
             enabled: req.enabled,
         },
@@ -464,6 +499,65 @@ async fn delete_probe_source(
         .await
         .map_err(map_probe_error)?;
     Ok(StatusCode::OK)
+}
+
+/// `POST /api/v1/probe-sources/{id}/sync` — sync traffic from the external
+/// panel (admin only). Triggers an immediate adapter call, writes
+/// [`TrafficRecord`] rows for the bound subscription, and persists the new
+/// encrypted counter snapshot + sync status (PROBE-001).
+#[utoipa::path(
+    post,
+    path = "/api/v1/probe-sources/{id}/sync",
+    security(("cookie_auth" = [])),
+    params(("id" = String, Path, description = "Probe source ULID")),
+    responses(
+        (status = 200, description = "Sync completed", body = SyncProbeTrafficResponse),
+        (status = 400, description = "Invalid id or source not syncable", body = deve_sub_contract::ErrorResponse),
+        (status = 401, description = "Not authenticated", body = deve_sub_contract::ErrorResponse),
+        (status = 403, description = "Not an admin", body = deve_sub_contract::ErrorResponse),
+        (status = 404, description = "Source not found", body = deve_sub_contract::ErrorResponse),
+        (status = 500, description = "Internal error", body = deve_sub_contract::ErrorResponse),
+    )
+)]
+async fn sync_probe_source(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<SyncProbeTrafficResponse>, (StatusCode, Json<deve_sub_contract::ErrorResponse>)> {
+    let source_id = ProbeSourceId::parse(&id).map_err(|_| {
+        err(
+            StatusCode::BAD_REQUEST,
+            "invalid_id",
+            "probe source id is not a valid ULID",
+        )
+    })?;
+
+    let SyncProbeTrafficResult {
+        samples_written,
+        snapshot_updated,
+    } = probe::sync_probe_traffic(
+        state.probe_source_repo.as_ref(),
+        state.traffic_repo.as_ref(),
+        state.probe_adapter.as_ref(),
+        source_id,
+    )
+    .await
+    .map_err(|e| {
+        if let ProbeAppError::Domain(deve_sub_domain::ProbeError::ProbeFailed(msg)) = &e {
+            tracing::warn!(error = %msg, "probe sync failed");
+        }
+        map_probe_error(e)
+    })?;
+
+    let source = probe::get_probe_source(state.probe_source_repo.as_ref(), source_id)
+        .await
+        .map_err(map_probe_error)?;
+
+    Ok(Json(SyncProbeTrafficResponse {
+        source: source_to_dto(&source),
+        samples_written,
+        snapshot_updated,
+    }))
 }
 
 /// `POST /api/v1/probe-runs` — start a probe run (admin only).
@@ -707,6 +801,7 @@ pub fn register(
         .routes(routes!(get_probe_source))
         .routes(routes!(update_probe_source))
         .routes(routes!(delete_probe_source))
+        .routes(routes!(sync_probe_source))
         .routes(routes!(create_probe_run))
         .routes(routes!(get_probe_run))
         .routes(routes!(cancel_probe_run))

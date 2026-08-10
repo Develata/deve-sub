@@ -73,6 +73,47 @@ impl SsrfChecker for ProductionSsrfChecker {
     }
 }
 
+/// Permissive SSRF checker that resolves the URL hostname and returns all
+/// resolved IPs without blocking internal ranges.
+///
+/// WHY: E2E and integration tests bind mock servers to `127.0.0.1:0`, which
+/// `ProductionSsrfChecker` blocks. Production code must never use this
+/// checker; it is exposed only so test harnesses can exercise the HTTP path
+/// against loopback mocks. The resolved IPs are still returned so DNS-pinning
+/// logic in callers (`resolve_to_addrs`) works identically to production.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PermissiveSsrfChecker;
+
+impl SsrfChecker for PermissiveSsrfChecker {
+    fn check(
+        &self,
+        url: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<IpAddr>, SsrfError>> + Send>>
+    {
+        let url = url.to_owned();
+        Box::pin(async move {
+            let parsed =
+                Url::parse(&url).map_err(|e| SsrfError::DnsLookup(format!("invalid URL: {e}")))?;
+            let host = parsed
+                .host_str()
+                .ok_or_else(|| SsrfError::DnsLookup("URL has no hostname".to_owned()))?;
+            if let Ok(ip) = host.parse::<IpAddr>() {
+                return Ok(vec![ip]);
+            }
+            let port = parsed.port_or_known_default().unwrap_or(80);
+            let addrs = tokio::net::lookup_host(format!("{host}:{port}"))
+                .await
+                .map_err(|e| SsrfError::DnsLookup(e.to_string()))?
+                .map(|sa| sa.ip())
+                .collect::<Vec<_>>();
+            if addrs.is_empty() {
+                return Err(SsrfError::DnsResolutionFailed(host.to_owned()));
+            }
+            Ok(addrs)
+        })
+    }
+}
+
 /// HTTP fetcher with SSRF protection, DNS pinning, and body size limits.
 pub struct HttpFetcher<C: SsrfChecker = ProductionSsrfChecker> {
     ssrf: C,

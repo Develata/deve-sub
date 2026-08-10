@@ -11,6 +11,7 @@ use deve_sub_kernel::{NodeId, ProbeRunId, ProbeSourceId, Timestamp};
 use crate::node::Node;
 use crate::probe::entity::{
     LatencyRecord, LatencyResult, ProbeRun, ProbeRunStatus, ProbeSource, ProbeSourceKind,
+    ProbeSyncResult,
 };
 use crate::probe::error::ProbeError;
 
@@ -101,4 +102,24 @@ pub trait LatencyProbe: Send + Sync {
     /// - return `rtt_ms = None` + `error_class = Timeout` for no response
     ///   (NODE-014: no fake latency, no auto-kill).
     async fn probe(&self, node: &Node, timeout: std::time::Duration) -> LatencyResult;
+}
+
+/// Port trait for an external probe panel traffic sync adapter.
+///
+/// Each panel (Nezha, DStatus, Komari) implements this trait. The application
+/// `sync_probe_traffic` command calls the adapter, maps samples to
+/// `TrafficRecord` rows (source_kind = Probe), and persists the new counter
+/// snapshot. See `docs/plan/milestones/M7-probes-and-detection.md`
+/// §"Probe source adapter Port".
+#[async_trait]
+pub trait ProbeSourceAdapter: Send + Sync {
+    /// Sync traffic data from the external panel.
+    ///
+    /// Implementations must:
+    /// - decrypt `auth_config` and `last_counter_snapshot` as needed;
+    /// - call the panel API;
+    /// - compute upload/download deltas (cumulative models) or current usage
+    ///   (quota models);
+    /// - encrypt the new counter snapshot for persistence.
+    async fn sync_traffic(&self, source: &ProbeSource) -> Result<ProbeSyncResult, ProbeError>;
 }

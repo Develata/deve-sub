@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use deve_sub_domain::ProbeError;
+use deve_sub_domain::{ProbeError, SubscriptionError};
 
 /// Errors produced by probe application commands and queries.
 #[derive(Debug, Error)]
@@ -28,7 +28,17 @@ pub enum ProbeAppError {
     #[error("probe run is already terminal")]
     RunAlreadyTerminal,
 
+    /// A traffic repository operation failed during probe sync.
+    #[error("traffic recording failed: {0}")]
+    Traffic(String),
+
     /// A domain-level probe error.
     #[error(transparent)]
     Domain(#[from] ProbeError),
+}
+
+impl From<SubscriptionError> for ProbeAppError {
+    fn from(e: SubscriptionError) -> Self {
+        Self::Traffic(e.to_string())
+    }
 }

@@ -245,3 +245,14 @@ pub struct ListLatencyRecordsResponse {
     /// Latency records, newest first.
     pub records: Vec<LatencyRecordDto>,
 }
+
+/// Response body for `POST /api/v1/probe-sources/{id}/sync`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SyncProbeTrafficResponse {
+    /// The probe source after sync (with updated `last_sync_at`/status).
+    pub source: ProbeSourceDto,
+    /// Number of traffic samples written in this sync.
+    pub samples_written: usize,
+    /// Whether the encrypted counter snapshot was updated.
+    pub snapshot_updated: bool,
+}

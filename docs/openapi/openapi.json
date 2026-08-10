@@ -2119,6 +2119,90 @@
         ]
       }
     },
+    "/api/v1/probe-sources/{id}/sync": {
+      "post": {
+        "summary": "`POST /api/v1/probe-sources/{id}/sync` — sync traffic from the external\npanel (admin only). Triggers an immediate adapter call, writes\n[`TrafficRecord`] rows for the bound subscription, and persists the new\nencrypted counter snapshot + sync status (PROBE-001).",
+        "operationId": "sync_probe_source",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Probe source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sync completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncProbeTrafficResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid id or source not syncable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/sources": {
       "get": {
         "summary": "`GET /api/v1/sources` — list sources with cursor pagination (admin only).",
@@ -7366,6 +7450,30 @@
           "token_plaintext": {
             "type": "string",
             "description": "The plaintext delivery token. Shown once; store it securely."
+          }
+        }
+      },
+      "SyncProbeTrafficResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/probe-sources/{id}/sync`.",
+        "required": [
+          "source",
+          "samples_written",
+          "snapshot_updated"
+        ],
+        "properties": {
+          "samples_written": {
+            "type": "integer",
+            "description": "Number of traffic samples written in this sync.",
+            "minimum": 0
+          },
+          "snapshot_updated": {
+            "type": "boolean",
+            "description": "Whether the encrypted counter snapshot was updated."
+          },
+          "source": {
+            "$ref": "#/components/schemas/ProbeSourceDto",
+            "description": "The probe source after sync (with updated `last_sync_at`/status)."
           }
         }
       },

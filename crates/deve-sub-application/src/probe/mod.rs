@@ -10,9 +10,10 @@ pub mod error;
 pub mod runner;
 
 pub use commands::{
-    CreateProbeSourceParams, StartProbeRunParams, UpdateProbeSourceParams, cancel_probe_run,
-    create_probe_source, delete_probe_source, get_probe_run, get_probe_source, list_probe_sources,
-    recover_crashed_runs, start_probe_run, update_probe_source,
+    CreateProbeSourceParams, StartProbeRunParams, SyncProbeTrafficResult, UpdateProbeSourceParams,
+    cancel_probe_run, create_probe_source, delete_probe_source, get_probe_run, get_probe_source,
+    list_probe_sources, mark_sync_failed, mark_sync_stale, recover_crashed_runs, start_probe_run,
+    sync_probe_traffic, update_probe_source,
 };
 pub use error::ProbeAppError;
 pub use runner::{

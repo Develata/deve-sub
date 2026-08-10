@@ -15,11 +15,11 @@ use axum::Router;
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
     GenerationCacheRepository, LatencyProbe, LatencyRecordRepository, NodeOverrideRepository,
-    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceRepository,
-    RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
-    SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
-    TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
-    TrafficRepository, UserRepository,
+    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceAdapter,
+    ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
+    SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
+    SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
+    TotpSecretRepository, TrafficRepository, UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -78,6 +78,7 @@ pub struct AppState {
     pub probe_source_repo: Arc<dyn ProbeSourceRepository>,
     pub probe_run_repo: Arc<dyn ProbeRunRepository>,
     pub latency_repo: Arc<dyn LatencyRecordRepository>,
+    pub probe_adapter: Arc<dyn ProbeSourceAdapter>,
     pub tcp_probe: Arc<dyn LatencyProbe>,
     pub quic_probe: Arc<dyn LatencyProbe>,
     pub real_proxy_probe: Arc<dyn LatencyProbe>,

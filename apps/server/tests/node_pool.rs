@@ -68,7 +68,7 @@ impl TestApp {
         Self {
             state: deve_sub_server::AppState {
                 config,
-                master_key,
+                master_key: Arc::clone(&master_key),
                 user_repo: Arc::new(SqliteUserRepository::new(pool.clone()))
                     as Arc<dyn UserRepository>,
                 session_repo: Arc::new(SqliteSessionRepository::new(pool.clone()))
@@ -110,6 +110,14 @@ impl TestApp {
                     as Arc<dyn ProbeRunRepository>,
                 latency_repo: Arc::new(SqliteLatencyRecordRepository::new(pool.clone()))
                     as Arc<dyn LatencyRecordRepository>,
+                probe_adapter: std::sync::Arc::new(
+                    deve_sub_adapters::ProbeSourceAdapterRegistry::new().with_nezha(
+                        std::sync::Arc::new(deve_sub_adapters::NezhaProbeAdapter::new(
+                            std::sync::Arc::clone(&master_key),
+                        )),
+                    ),
+                )
+                    as std::sync::Arc<dyn deve_sub_domain::ProbeSourceAdapter>,
                 tcp_probe: Arc::new(deve_sub_adapters::TcpConnectProbe::new())
                     as Arc<dyn LatencyProbe>,
                 quic_probe: Arc::new(deve_sub_adapters::QuicHandshakeProbe::new())

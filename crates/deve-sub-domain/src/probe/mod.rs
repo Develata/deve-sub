@@ -13,7 +13,10 @@ pub mod ports;
 
 pub use entity::{
     ErrorClass, LatencyRecord, LatencyResult, ProbeRun, ProbeRunResult, ProbeRunStatus,
-    ProbeSource, ProbeSourceKind, ProbeType, SyncStatus,
+    ProbeSource, ProbeSourceKind, ProbeSyncResult, ProbeTrafficSample, ProbeType, SyncStatus,
 };
 pub use error::ProbeError;
-pub use ports::{LatencyProbe, LatencyRecordRepository, ProbeRunRepository, ProbeSourceRepository};
+pub use ports::{
+    LatencyProbe, LatencyRecordRepository, ProbeRunRepository, ProbeSourceAdapter,
+    ProbeSourceRepository,
+};

@@ -9,12 +9,16 @@
 
 pub mod geoip;
 pub mod http_fetcher;
+pub mod nezha_probe;
+pub mod probe_registry;
 pub mod quic_probe;
 pub mod real_proxy;
 pub mod tcp_probe;
 
 pub use geoip::MaxMindGeoIp;
-pub use http_fetcher::{HttpFetcher, ProductionSsrfChecker, SsrfChecker};
+pub use http_fetcher::{HttpFetcher, PermissiveSsrfChecker, ProductionSsrfChecker, SsrfChecker};
+pub use nezha_probe::NezhaProbeAdapter;
+pub use probe_registry::ProbeSourceAdapterRegistry;
 pub use quic_probe::QuicHandshakeProbe;
 pub use real_proxy::RealProxyProbe;
 pub use tcp_probe::TcpConnectProbe;

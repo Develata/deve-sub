@@ -17,11 +17,11 @@ use deve_sub_application::{
 };
 use deve_sub_domain::{
     GenerationCacheRepository, LatencyProbe, LatencyRecordRepository, NodeOverrideRepository,
-    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceRepository,
-    RecoveryCodeRepository, SessionRepository, ShortCodeRepository, SourceRepository,
-    SourceSnapshotRepository, SubscriptionRepository, SubscriptionTokenRepository,
-    TempLinkRepository, TemplateRepository, TemplateVersionRepository, TotpSecretRepository,
-    TrafficRepository, UserRepository,
+    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceAdapter,
+    ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
+    SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
+    SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
+    TotpSecretRepository, TrafficRepository, UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -122,6 +122,13 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let quic_probe: Arc<dyn LatencyProbe> = Arc::new(deve_sub_adapters::QuicHandshakeProbe::new());
     let real_proxy_probe: Arc<dyn LatencyProbe> =
         Arc::new(deve_sub_adapters::RealProxyProbe::new());
+
+    let nezha_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
+        deve_sub_adapters::NezhaProbeAdapter::new(Arc::clone(&master_key)),
+    );
+    let probe_adapter: Arc<dyn ProbeSourceAdapter> =
+        Arc::new(deve_sub_adapters::ProbeSourceAdapterRegistry::new().with_nezha(nezha_adapter));
+
     let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
     let geoip: Arc<dyn GeoIpPort> = Arc::new(deve_sub_adapters::MaxMindGeoIp::new(
         config.geoip.mmdb_path.as_deref(),
@@ -159,6 +166,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         probe_source_repo,
         probe_run_repo,
         latency_repo,
+        probe_adapter,
         tcp_probe,
         quic_probe,
         real_proxy_probe,

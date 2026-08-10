@@ -340,3 +340,32 @@ pub struct ProbeSource {
     /// When the source was last updated.
     pub updated_at: Timestamp,
 }
+
+/// A single traffic sample extracted from an external probe panel.
+///
+/// Normalized across Nezha, DStatus, and Komari to upload/download byte
+/// deltas. The `external_server_id` identifies the server within the panel
+/// (used by the adapter for cumulative-counter delta tracking).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProbeTrafficSample {
+    /// The server ID in the external panel (Nezha `id`, DStatus node ID,
+    /// Komari `uuid`).
+    pub external_server_id: String,
+    /// Upload bytes in this sample (delta since last sync for cumulative
+    /// models; current `used` for quota models).
+    pub upload: u64,
+    /// Download bytes in this sample.
+    pub download: u64,
+    /// When the sample was observed.
+    pub recorded_at: Timestamp,
+}
+
+/// Result of a probe source traffic sync.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProbeSyncResult {
+    /// Traffic samples extracted from the panel.
+    pub samples: Vec<ProbeTrafficSample>,
+    /// New encrypted counter snapshot for Nezha/Komari cumulative models.
+    /// `None` for DStatus (quota model) or if no counter state is needed.
+    pub new_counter_snapshot: Option<String>,
+}

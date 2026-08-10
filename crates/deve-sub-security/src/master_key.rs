@@ -118,6 +118,17 @@ impl MasterKey {
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
+
+    /// Construct a master key from a fixed-size byte array.
+    ///
+    /// Primarily for testing and for callers that load the key from a
+    /// non-file source (e.g. an environment variable or secret mount with a
+    /// different encoding). Production code should prefer
+    /// [`MasterKey::load`] or [`MasterKey::load_or_generate`].
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8; KEY_LEN]) -> Self {
+        Self { bytes: *bytes }
+    }
 }
 
 impl std::fmt::Debug for MasterKey {

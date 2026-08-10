@@ -99,7 +99,7 @@ OUT-011	流量超额	P0	Integration	pass
 OUT-012	Token 轮换	P0	Integration	pass
 OUT-013	短码冲突	P0	Integration	pass
 OUT-014	并发生成	P0	Concurrency	pass
-PROBE-001	Nezha	P1	Contract	planned
+PROBE-001	Nezha	P1	Contract	pass
 PROBE-002	DStatus	P1	Contract	planned
 PROBE-003	Komari	P1	Contract	planned
 PROBE-004	数据源失败	P1	Integration	planned

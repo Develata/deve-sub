@@ -94,8 +94,11 @@ impl ReadHalf {
         let mut len_buf = [0u8; 2];
         reader.read_exact(&mut len_buf).await?;
         let ct_len = u16::from_be_bytes(len_buf) as usize;
-        if ct_len == 0 {
-            return Err(std::io::ErrorKind::UnexpectedEof.into());
+        if ct_len == 0 || ct_len > MAX_PLAINTEXT + 16 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "body record length out of range",
+            ));
         }
         let mut ct = vec![0u8; ct_len];
         reader.read_exact(&mut ct).await?;

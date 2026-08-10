@@ -42,6 +42,9 @@ pub struct NodeDto {
     pub region_method: RegionMethodDto,
     /// Tags assigned to this node.
     pub tags: Vec<TagDto>,
+    /// Ordered node IDs forming this node's proxy chain. Empty means direct
+    /// connection (no chain). See NODE-017.
+    pub chain: Vec<String>,
 }
 
 /// Response body for `GET /api/v1/nodes` (cursor-paginated node list).
@@ -233,4 +236,24 @@ pub struct ListTagsResponse {
 pub struct SetNodeTagsRequest {
     /// Tag IDs to assign to this node (replaces existing assignments).
     pub tag_ids: Vec<String>,
+}
+
+/// Request body for `PUT /api/v1/nodes/{id}/chain` (NODE-017 / NODE-018).
+///
+/// `nodes` is the ordered list of node IDs to route traffic through. An
+/// empty array clears the chain (direct connection). The server validates
+/// non-emptiness is not required when clearing, but a non-empty array must
+/// not contain the node itself, duplicates, non-existent nodes, or form a
+/// cycle.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SetNodeChainRequest {
+    /// Ordered node IDs forming the chain. Empty clears the chain.
+    pub nodes: Vec<String>,
+}
+
+/// Response body for chain endpoints.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NodeChainResponse {
+    /// The node IDs forming the chain. Empty means direct connection.
+    pub nodes: Vec<String>,
 }

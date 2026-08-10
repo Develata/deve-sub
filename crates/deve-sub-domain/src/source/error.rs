@@ -9,6 +9,10 @@ pub enum SourceError {
     #[error("source not found")]
     SourceNotFound,
 
+    /// A node was not found in the pool.
+    #[error("node not found: {0}")]
+    NodeNotFound(String),
+
     /// A source name is already taken.
     #[error("source name already exists")]
     NameExists,

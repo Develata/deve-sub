@@ -919,6 +919,110 @@
         ]
       }
     },
+    "/api/v1/nodes/{id}/chain": {
+      "put": {
+        "summary": "`PUT /api/v1/nodes/{id}/chain` — set or clear a node's proxy chain\n(NODE-017 / NODE-018, admin only).",
+        "operationId": "set_node_chain",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Node ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetNodeChainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Chain updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeChainResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid node id or chain structure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Node not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Chain would create a cycle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/nodes/{id}/latency": {
       "get": {
         "summary": "`GET /api/v1/nodes/{id}/latency` — list recent latency records for a node.",
@@ -6300,6 +6404,22 @@
           }
         }
       },
+      "NodeChainResponse": {
+        "type": "object",
+        "description": "Response body for chain endpoints.",
+        "required": [
+          "nodes"
+        ],
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The node IDs forming the chain. Empty means direct connection."
+          }
+        }
+      },
       "NodeDto": {
         "type": "object",
         "description": "A node in the unified pool, as returned by list/get endpoints.\n\nPool metadata (`missing_from_source`, `is_active`, `revision`) is\nincluded alongside the canonical node fields. Sensitive fields\n(raw URI with embedded credentials) are never serialized.",
@@ -6316,9 +6436,17 @@
           "revision",
           "created_at",
           "region_method",
-          "tags"
+          "tags",
+          "chain"
         ],
         "properties": {
+          "chain": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ordered node IDs forming this node's proxy chain. Empty means direct\nconnection (no chain). See NODE-017."
+          },
           "created_at": {
             "type": "string",
             "description": "Row creation time (ISO 8601 UTC)."
@@ -6910,6 +7038,22 @@
             ],
             "format": "int64",
             "description": "Grace period in seconds. `null` or `-1` = permanent grace."
+          }
+        }
+      },
+      "SetNodeChainRequest": {
+        "type": "object",
+        "description": "Request body for `PUT /api/v1/nodes/{id}/chain` (NODE-017 / NODE-018).\n\n`nodes` is the ordered list of node IDs to route traffic through. An\nempty array clears the chain (direct connection). The server validates\nnon-emptiness is not required when clearing, but a non-empty array must\nnot contain the node itself, duplicates, non-existent nodes, or form a\ncycle.",
+        "required": [
+          "nodes"
+        ],
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ordered node IDs forming the chain. Empty clears the chain."
           }
         }
       },

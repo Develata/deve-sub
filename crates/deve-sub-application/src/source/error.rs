@@ -28,6 +28,11 @@ pub enum SourceAppError {
     #[error(transparent)]
     Source(#[from] deve_sub_domain::SourceError),
 
+    /// A node chain validation failed (empty, self-reference, duplicate,
+    /// missing node, or cycle). See NODE-017 / NODE-018.
+    #[error(transparent)]
+    NodeChain(#[from] deve_sub_domain::NodeChainError),
+
     /// A fetch operation failed (SSRF, timeout, HTTP error, etc.).
     #[error(transparent)]
     Fetch(#[from] FetchError),

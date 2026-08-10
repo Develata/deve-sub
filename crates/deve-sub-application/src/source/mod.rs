@@ -25,7 +25,7 @@ pub use filter::{apply_protocol_filter, apply_region_filter};
 pub use geoip::{GeoIpPort, RegionDetection, enrich_regions};
 pub use node_commands::{
     UpdateOverrideParams, batch_set_enabled, batch_set_tags, create_tag, delete_override,
-    delete_tag, list_tags, set_manual_region, set_node_tags, update_override,
+    delete_tag, list_tags, set_manual_region, set_node_chain, set_node_tags, update_override,
 };
 pub use parse::{ImportParseResult, ParseContentError, parse_content, parse_for_import};
 pub use scheduler::RefreshScheduler;

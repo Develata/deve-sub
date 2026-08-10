@@ -9,10 +9,11 @@ use axum::response::{IntoResponse, Json};
 use deve_sub_application::source::{self, UpdateOverrideParams};
 use deve_sub_contract::{
     BatchEnabledRequest, BatchResultDto, BatchTagsRequest, CreateTagRequest, ErrorResponse,
-    ListTagsResponse, NodeOverrideDto, NodeOverrideResponse, RegionMethodDto, RegionResponse,
-    SetNodeTagsRequest, SetRegionRequest, TagResponse, UpdateOverrideRequest,
+    ListTagsResponse, NodeChainResponse, NodeOverrideDto, NodeOverrideResponse, RegionMethodDto,
+    RegionResponse, SetNodeChainRequest, SetNodeTagsRequest, SetRegionRequest, TagResponse,
+    UpdateOverrideRequest,
 };
-use deve_sub_domain::{NodeOverride, RegionAssignment, RegionMethod, SourceError};
+use deve_sub_domain::{NodeChainError, NodeOverride, RegionAssignment, RegionMethod, SourceError};
 use deve_sub_kernel::{NodeId, TagId};
 
 use crate::AppState;
@@ -94,6 +95,36 @@ async fn set_region(
     .await
     .map_err(map_error)?;
     Ok(Json(region_to_response(&assignment)))
+}
+
+/// `PUT /api/v1/nodes/{id}/chain` — set or clear a node's proxy chain
+/// (NODE-017 / NODE-018, admin only).
+#[utoipa::path(put, path = "/api/v1/nodes/{id}/chain", security(("cookie_auth" = [])),
+    params(("id" = String, Path, description = "Node ULID")), request_body = SetNodeChainRequest,
+    responses((status = 200, description = "Chain updated", body = NodeChainResponse), (status = 400, description = "Invalid node id or chain structure", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Node not found", body = ErrorResponse), (status = 409, description = "Chain would create a cycle", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
+async fn set_node_chain(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+    Json(req): Json<SetNodeChainRequest>,
+) -> Result<Json<NodeChainResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let node_id = parse_node_id(&id)?;
+    let chain_nodes: Option<Vec<NodeId>> = if req.nodes.is_empty() {
+        None
+    } else {
+        Some(parse_ids(&req.nodes)?)
+    };
+
+    let result = source::set_node_chain(state.pool_repo.as_ref(), node_id, chain_nodes)
+        .await
+        .map_err(map_error)?;
+    Ok(Json(NodeChainResponse {
+        nodes: result
+            .unwrap_or_default()
+            .into_iter()
+            .map(|n| n.to_string())
+            .collect(),
+    }))
 }
 
 /// `POST /api/v1/nodes/batch-enabled` — batch set enabled flag (NODE-004).
@@ -252,12 +283,40 @@ fn map_error(e: source::SourceAppError) -> (StatusCode, Json<ErrorResponse>) {
         E::NodeNotFound => err(NOT_FOUND, "node_not_found", "node does not exist"),
         E::InvalidInput(msg) => err(BAD_REQUEST, "invalid_input", msg),
         E::NameExists => err(CONFLICT, "name_exists", "name is already taken"),
+        E::NodeChain(NodeChainError::Empty) => {
+            err(BAD_REQUEST, "chain_empty", "chain must not be empty")
+        }
+        E::NodeChain(NodeChainError::SelfReference) => err(
+            BAD_REQUEST,
+            "chain_self_reference",
+            "chain must not contain the node itself",
+        ),
+        E::NodeChain(NodeChainError::Duplicate(id)) => err(
+            BAD_REQUEST,
+            "chain_duplicate",
+            &format!("chain contains duplicate node: {id}"),
+        ),
+        E::NodeChain(NodeChainError::NodeNotFound(ids)) => err(
+            BAD_REQUEST,
+            "chain_node_not_found",
+            &format!("chain references non-existent nodes: {ids:?}"),
+        ),
+        E::NodeChain(NodeChainError::Cycle(path)) => err(
+            CONFLICT,
+            "chain_cycle",
+            &format!("chain cycle detected: {path}"),
+        ),
         E::Source(SourceError::TagNotFound) => {
             err(NOT_FOUND, "tag_not_found", "tag does not exist")
         }
         E::Source(SourceError::TagExists) => {
             err(CONFLICT, "tag_exists", "tag name is already taken")
         }
+        E::Source(SourceError::NodeNotFound(id)) => err(
+            NOT_FOUND,
+            "node_not_found",
+            &format!("node does not exist: {id}"),
+        ),
         other => {
             tracing::warn!(error = %other, "node override command failed");
             err(INTERNAL_SERVER_ERROR, "internal", "internal error")
@@ -274,6 +333,7 @@ pub fn register(
         .routes(routes!(update_override))
         .routes(routes!(delete_override))
         .routes(routes!(set_region))
+        .routes(routes!(set_node_chain))
         .routes(routes!(batch_set_enabled))
         .routes(routes!(set_node_tags))
         .routes(routes!(batch_set_tags))

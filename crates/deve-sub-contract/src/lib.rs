@@ -25,10 +25,10 @@ pub use auth::{
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};
 pub use node::{
     BatchEnabledRequest, BatchResultDto, BatchTagsRequest, CreateTagRequest, ImportNodesRequest,
-    ImportNodesResponse, ImportOutcomeDto, ListNodesResponse, ListTagsResponse, NodeDto,
-    NodeOverrideDto, NodeOverrideResponse, NodeResponse, NodeTagAssignmentDto, RegionMethodDto,
-    RegionResponse, SetNodeTagsRequest, SetRegionRequest, TagDto, TagResponse,
-    UpdateOverrideRequest,
+    ImportNodesResponse, ImportOutcomeDto, ListNodesResponse, ListTagsResponse, NodeChainResponse,
+    NodeDto, NodeOverrideDto, NodeOverrideResponse, NodeResponse, NodeTagAssignmentDto,
+    RegionMethodDto, RegionResponse, SetNodeChainRequest, SetNodeTagsRequest, SetRegionRequest,
+    TagDto, TagResponse, UpdateOverrideRequest,
 };
 pub use probe::{
     CreateProbeRunRequest, CreateProbeSourceRequest, ErrorClassDto, LatencyRecordDto,

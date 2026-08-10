@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use async_trait::async_trait;
 use deve_sub_domain::{
-    ImportOutcome, ImportResult, ItemParseStatus, Node, NodeFilter, NodePoolEntry,
+    ImportOutcome, ImportResult, ItemParseStatus, Node, NodeChain, NodeFilter, NodePoolEntry,
     NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
 };
 use deve_sub_kernel::{NodeId, NodeSourceBindingId, SourceItemId};
@@ -404,6 +404,52 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(result)
+    }
+
+    async fn list_node_chains(&self) -> Result<Vec<(NodeId, Vec<NodeId>)>, SourceError> {
+        let rows: Vec<(String, Option<String>)> =
+            sqlx::query_as("SELECT id, chain_json FROM nodes WHERE chain_json IS NOT NULL")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| SourceError::Storage(e.to_string()))?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for (id_str, chain_json) in rows {
+            let node_id =
+                NodeId::parse(&id_str).map_err(|e| SourceError::Storage(e.to_string()))?;
+            let chain: NodeChain = serde_json::from_str(chain_json.as_deref().unwrap_or("[]"))
+                .map_err(|e| SourceError::Storage(e.to_string()))?;
+            if !chain.nodes.is_empty() {
+                out.push((node_id, chain.nodes));
+            }
+        }
+        Ok(out)
+    }
+
+    async fn set_node_chain(
+        &self,
+        node_id: NodeId,
+        chain: Option<&[NodeId]>,
+    ) -> Result<(), SourceError> {
+        let chain_json = match chain {
+            Some(nodes) => {
+                let chain = NodeChain {
+                    nodes: nodes.to_vec(),
+                };
+                Some(to_json(&chain)?)
+            }
+            None => None,
+        };
+        let result = sqlx::query("UPDATE nodes SET chain_json = ? WHERE id = ?")
+            .bind(&chain_json)
+            .bind(node_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(SourceError::NodeNotFound(node_id.to_string()));
+        }
+        Ok(())
     }
 }
 

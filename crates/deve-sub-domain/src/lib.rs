@@ -12,6 +12,7 @@ pub mod endpoint;
 pub mod error;
 pub mod identity;
 pub mod node;
+pub mod node_chain;
 pub mod node_override;
 pub mod probe;
 pub mod protocol;
@@ -28,7 +29,8 @@ pub use identity::{
     IdentityError, RecoveryCode, RecoveryCodeRepository, Role, Session, SessionRepository,
     TotpSecret, TotpSecretRepository, User, UserRepository,
 };
-pub use node::{Authentication, ChainTarget, Node, NodeSource, RegionAssignment, RegionMethod};
+pub use node::{Authentication, Node, NodeChain, NodeSource, RegionAssignment, RegionMethod};
+pub use node_chain::{NodeChainError, NodeChainGraph, NodeCyclePath};
 pub use node_override::{NodeOverride, NodeOverrideRepository, Tag};
 pub use probe::{
     ErrorClass, LatencyProbe, LatencyRecord, LatencyRecordRepository, LatencyResult, ProbeError,

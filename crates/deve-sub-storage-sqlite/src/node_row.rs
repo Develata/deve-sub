@@ -43,6 +43,7 @@ pub(crate) struct NodeRow {
     obfuscation_json: Option<String>,
     congestion_json: Option<String>,
     region: Option<String>,
+    chain_json: Option<String>,
     extras_json: String,
     imported_at: String,
     revision: i64,
@@ -131,7 +132,7 @@ impl NodeRow {
             multiplex: from_json_opt(self.multiplex_json.as_deref())?,
             obfuscation: from_json_opt(self.obfuscation_json.as_deref())?,
             congestion: from_json_opt(self.congestion_json.as_deref())?,
-            chain: None,
+            chain: from_json_opt(self.chain_json.as_deref())?,
             source: NodeSource {
                 source_label: self.source_label.clone().unwrap_or_default(),
                 raw_uri: None,
@@ -171,7 +172,7 @@ impl NodeRow {
 pub(crate) const NODE_COLUMNS: &str = "n.id, n.display_name, n.protocol_kind, n.host, n.port, \
      n.protocol_config_json, n.authentication_json, n.tls_json, n.transport_json, \
      n.udp_capability, n.multiplex_json, n.obfuscation_json, n.congestion_json, \
-     n.region, n.extras_json, n.imported_at, n.revision, n.status, \
+     n.region, n.chain_json, n.extras_json, n.imported_at, n.revision, n.status, \
      n.missing_from_source, n.created_at, \
      COALESCE(NULLIF(n.source_label, ''), \
       (SELECT s.name FROM node_source_bindings b \

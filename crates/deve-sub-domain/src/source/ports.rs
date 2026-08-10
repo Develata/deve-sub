@@ -253,6 +253,21 @@ pub trait NodePoolRepository: Send + Sync {
     /// nodes exist in the pool without a `node_source_bindings` row.
     /// The entire batch is committed atomically.
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError>;
+
+    /// List all node chains in the pool. Returns `(node_id, chain_nodes)`
+    /// pairs for every node that has a non-null chain. Used for cycle
+    /// detection (NODE-018) before persisting a new chain.
+    async fn list_node_chains(&self) -> Result<Vec<(NodeId, Vec<NodeId>)>, SourceError>;
+
+    /// Set or clear a single node's chain (NODE-017). `chain = None` clears
+    /// the column (direct connection); `Some(vec)` persists the ordered
+    /// node IDs as a JSON array. The caller is responsible for structural
+    /// validation and cycle detection before calling.
+    async fn set_node_chain(
+        &self,
+        node_id: NodeId,
+        chain: Option<&[NodeId]>,
+    ) -> Result<(), SourceError>;
 }
 
 /// Storage boundary for the global pool revision counter.

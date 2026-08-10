@@ -1220,7 +1220,84 @@ async fn migration_0007_cascade_delete_and_single_active() {
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
 
-/// Recovery test for migration 0011 (constraint #13): subscription_traffic
+/// Recovery test for migration 0013 (constraint #13): the `chain_json` column
+/// on the `nodes` table. See `docs/plan/milestones/M7-probes-and-detection.md`
+/// §"Node chain proxy" and acceptance NODE-017 / NODE-018.
+#[tokio::test]
+async fn migration_0013_adds_chain_json_column() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let cols = get_columns(&pool, "nodes").await;
+    assert!(
+        cols.contains(&"chain_json".to_string()),
+        "expected column 'chain_json' in nodes, got {cols:?}"
+    );
+
+    // chain_json is nullable; a fresh node inserts with NULL.
+    sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port) \
+         VALUES ('01KZNOD000000000000000013', 'shadowsocks', 'example.com', 8388)",
+    )
+    .execute(&pool)
+    .await
+    .expect("insert node");
+
+    let (chain,): (Option<String>,) =
+        sqlx::query_as("SELECT chain_json FROM nodes WHERE id = '01KZNOD000000000000000013'")
+            .fetch_one(&pool)
+            .await
+            .expect("read chain_json");
+    assert!(chain.is_none(), "fresh node chain_json should be NULL");
+
+    sqlx::query("UPDATE nodes SET chain_json = ? WHERE id = ?")
+        .bind(r#"["01KZNOD0000000000000000AA","01KZNOD0000000000000000BB"]"#)
+        .bind("01KZNOD000000000000000013")
+        .execute(&pool)
+        .await
+        .expect("update chain_json");
+
+    let (chain2,): (Option<String>,) =
+        sqlx::query_as("SELECT chain_json FROM nodes WHERE id = '01KZNOD000000000000000013'")
+            .fetch_one(&pool)
+            .await
+            .expect("read chain_json");
+    assert_eq!(
+        chain2.as_deref(),
+        Some(r#"["01KZNOD0000000000000000AA","01KZNOD0000000000000000BB"]"#),
+        "chain_json should round-trip the JSON array"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+#[tokio::test]
+async fn migration_0013_is_idempotent() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+    run_migrations(&pool).await;
+
+    let cols = get_columns(&pool, "nodes").await;
+    assert!(cols.contains(&"chain_json".to_string()));
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
 /// table, the source_kind CHECK constraint, the subscription index, and ON
 /// DELETE CASCADE. See `docs/plan/milestones/M6-subscription-distribution.md`
 /// §"Traffic and expiry policy framework" (M6 Slice 5, OUT-010/OUT-011).

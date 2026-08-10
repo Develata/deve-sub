@@ -5,10 +5,12 @@
 //! depends only on [`deve_sub_kernel`] and sibling domain modules.
 
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 
 use deve_sub_kernel::{NodeId, TagId, Timestamp};
 use serde::{Deserialize, Serialize};
 
+use crate::NodeChainError;
 use crate::endpoint::Endpoint;
 use crate::protocol::{ProtocolConfig, ProtocolKind};
 use crate::tls::TlsConfig;
@@ -56,9 +58,10 @@ pub struct Node {
     pub obfuscation: Option<Obfuscation>,
     /// Congestion control configuration. `None` means protocol default.
     pub congestion: Option<CongestionConfig>,
-    /// Chain target: route traffic through another node first. `None` means
-    /// direct connection.
-    pub chain: Option<ChainTarget>,
+    /// Node-level proxy chain: route traffic through a sequence of nodes
+    /// before reaching this node's endpoint. `None` means direct connection.
+    /// See M7 plan §"Node chain proxy" and NODE-017/018.
+    pub chain: Option<NodeChain>,
     /// Provenance of the node (source label, raw URI, import timestamp).
     pub source: NodeSource,
     /// User-assigned tags for grouping and filtering.
@@ -88,11 +91,40 @@ pub enum Authentication {
     None,
 }
 
-/// Chain target: route traffic through another node first.
+/// A node-level proxy chain: an ordered list of node IDs that traffic
+/// traverses before reaching this node's endpoint. Serialized as a plain
+/// JSON array of ULID strings (`#[serde(transparent)]`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChainTarget {
-    /// Entry node of the chain.
-    pub entry_node_id: NodeId,
+#[serde(transparent)]
+pub struct NodeChain {
+    /// Ordered node IDs forming the chain. Must be non-empty.
+    pub nodes: Vec<NodeId>,
+}
+
+impl NodeChain {
+    /// Validate the chain's structural invariants (non-empty, no
+    /// self-reference, no duplicate entries). Does NOT check node existence
+    /// or cycles — those require repository context.
+    ///
+    /// # Errors
+    /// - [`NodeChainError::Empty`] — `nodes` is empty.
+    /// - [`NodeChainError::SelfReference`] — `self_id` appears in `nodes`.
+    /// - [`NodeChainError::Duplicate`] — `nodes` contains duplicate IDs.
+    pub fn validate_structure(&self, self_id: NodeId) -> Result<(), NodeChainError> {
+        if self.nodes.is_empty() {
+            return Err(NodeChainError::Empty);
+        }
+        if self.nodes.contains(&self_id) {
+            return Err(NodeChainError::SelfReference);
+        }
+        let mut seen = HashSet::new();
+        for &id in &self.nodes {
+            if !seen.insert(id) {
+                return Err(NodeChainError::Duplicate(id));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Provenance of a node within the unified pool.

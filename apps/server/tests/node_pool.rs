@@ -145,6 +145,15 @@ fn post_json(uri: &str, body: &str) -> Request<Body> {
         .expect("request")
 }
 
+fn put_json(uri: &str, body: &str) -> Request<Body> {
+    Request::builder()
+        .method("PUT")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .body(json_body(body))
+        .expect("request")
+}
+
 fn get(uri: &str) -> Request<Body> {
     Request::builder()
         .method("GET")
@@ -427,4 +436,206 @@ async fn import_unparseable_returns_400() {
         .expect("import");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// Import two nodes and return their ULIDs, logging in as admin first.
+async fn import_two_nodes(router: &axum::Router, cookie: &str) -> Vec<String> {
+    let _ = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/nodes/import", IMPORT_BODY),
+            cookie,
+        ))
+        .await
+        .expect("import");
+
+    let list_response = router
+        .clone()
+        .oneshot(with_cookie(get("/api/v1/nodes"), cookie))
+        .await
+        .expect("list");
+    let list_json = body_to_json(list_response).await;
+    list_json["nodes"]
+        .as_array()
+        .expect("nodes array")
+        .iter()
+        .map(|n| n["id"].as_str().expect("node id").to_owned())
+        .collect()
+}
+
+/// NODE-017: Admin can set a node chain via PUT /api/v1/nodes/{id}/chain,
+/// and the chain persists in subsequent GET responses.
+#[tokio::test]
+async fn node_chain_can_be_set_and_read() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let node_ids = import_two_nodes(&router, &cookie).await;
+    assert_eq!(node_ids.len(), 2);
+    let node_a = &node_ids[0];
+    let node_b = &node_ids[1];
+
+    // Set node_a's chain to route through node_b.
+    let body = format!(r#"{{"nodes":["{node_b}"]}}"#);
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_a}/chain"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("set chain");
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_to_json(response).await;
+    assert_eq!(json["nodes"].as_array().expect("nodes array").len(), 1);
+    assert_eq!(json["nodes"][0].as_str().expect("node id"), node_b);
+
+    // Verify the chain persists via GET /api/v1/nodes/{id}.
+    let get_response = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/nodes/{node_a}")),
+            &cookie,
+        ))
+        .await
+        .expect("get node");
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let get_json = body_to_json(get_response).await;
+    let chain = get_json["node"]["chain"].as_array().expect("chain array");
+    assert_eq!(chain.len(), 1);
+    assert_eq!(chain[0].as_str().expect("node id"), node_b);
+
+    // Clear the chain with an empty array.
+    let clear_response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_a}/chain"), r#"{"nodes":[]}"#),
+            &cookie,
+        ))
+        .await
+        .expect("clear chain");
+    assert_eq!(clear_response.status(), StatusCode::OK);
+    let clear_json = body_to_json(clear_response).await;
+    assert!(clear_json["nodes"].as_array().expect("empty").is_empty());
+
+    // Verify the chain is cleared.
+    let get_response2 = router
+        .clone()
+        .oneshot(with_cookie(
+            get(&format!("/api/v1/nodes/{node_a}")),
+            &cookie,
+        ))
+        .await
+        .expect("get node");
+    let get_json2 = body_to_json(get_response2).await;
+    assert!(
+        get_json2["node"]["chain"]
+            .as_array()
+            .expect("chain array")
+            .is_empty(),
+        "chain should be empty after clearing"
+    );
+}
+
+/// NODE-017: Self-reference in a chain is rejected with 400.
+#[tokio::test]
+async fn node_chain_self_reference_rejected() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let node_ids = import_two_nodes(&router, &cookie).await;
+    let node_a = &node_ids[0];
+
+    let body = format!(r#"{{"nodes":["{node_a}"]}}"#);
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_a}/chain"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("set chain");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// NODE-017: Chain referencing a non-existent node is rejected with 400.
+#[tokio::test]
+async fn node_chain_nonexistent_node_rejected() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let node_ids = import_two_nodes(&router, &cookie).await;
+    let node_a = &node_ids[0];
+    let fake_id = deve_sub_kernel::NodeId::new().to_string();
+
+    let body = format!(r#"{{"nodes":["{fake_id}"]}}"#);
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_a}/chain"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("set chain");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// NODE-018: A two-node cycle is rejected with 409.
+#[tokio::test]
+async fn node_chain_cycle_rejected() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let node_ids = import_two_nodes(&router, &cookie).await;
+    assert_eq!(node_ids.len(), 2);
+    let node_a = &node_ids[0];
+    let node_b = &node_ids[1];
+
+    // Set node_a's chain to route through node_b — valid (linear so far).
+    let body_a = format!(r#"{{"nodes":["{node_b}"]}}"#);
+    let response_a = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_a}/chain"), &body_a),
+            &cookie,
+        ))
+        .await
+        .expect("set chain a");
+    assert_eq!(response_a.status(), StatusCode::OK);
+
+    // Now try to set node_b's chain to route through node_a — creates a cycle.
+    let body_b = format!(r#"{{"nodes":["{node_a}"]}}"#);
+    let response_b = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{node_b}/chain"), &body_b),
+            &cookie,
+        ))
+        .await
+        .expect("set chain b");
+    assert_eq!(response_b.status(), StatusCode::CONFLICT);
+}
+
+/// NODE-018: Chain on a non-existent node returns 404.
+#[tokio::test]
+async fn node_chain_unknown_node_returns_404() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+
+    let fake_id = deve_sub_kernel::NodeId::new().to_string();
+    let body = format!(r#"{{"nodes":["{fake_id}"]}}"#);
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&format!("/api/v1/nodes/{fake_id}/chain"), &body),
+            &cookie,
+        ))
+        .await
+        .expect("set chain");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

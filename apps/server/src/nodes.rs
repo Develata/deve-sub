@@ -63,6 +63,12 @@ fn node_to_dto(entry: &NodePoolEntry) -> NodeDto {
         revision: entry.revision,
         created_at: ts_to_iso8601(entry.created_at),
         tags: entry.tags.iter().map(tag_to_dto).collect(),
+        chain: entry
+            .node
+            .chain
+            .as_ref()
+            .map(|c| c.nodes.iter().map(|n| n.to_string()).collect())
+            .unwrap_or_default(),
     }
 }
 

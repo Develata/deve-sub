@@ -111,6 +111,16 @@ mod tests {
         ) -> Result<deve_sub_domain::source::ImportResult, SourceError> {
             unimplemented!()
         }
+        async fn list_node_chains(&self) -> Result<Vec<(NodeId, Vec<NodeId>)>, SourceError> {
+            Ok(Vec::new())
+        }
+        async fn set_node_chain(
+            &self,
+            _node_id: NodeId,
+            _chain: Option<&[NodeId]>,
+        ) -> Result<(), SourceError> {
+            unimplemented!()
+        }
     }
 
     #[tokio::test]

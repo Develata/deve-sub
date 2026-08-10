@@ -69,7 +69,7 @@ pub struct Node {
     pub multiplex: Option<MultiplexConfig>,
     pub obfuscation: Option<Obfuscation>,
     pub congestion: Option<CongestionConfig>,
-    pub chain: Option<ChainTarget>,
+    pub chain: Option<NodeChain>,
     pub source: NodeSource,
     pub tags: Vec<TagId>,
     pub region: RegionAssignment,

@@ -1220,7 +1220,66 @@ async fn migration_0007_cascade_delete_and_single_active() {
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
 
-/// Recovery test for migration 0013 (constraint #13): the `chain_json` column
+/// Recovery test for migration 0013 (constraint #13): backup-restore preserves
+/// the `chain_json` column and its data. Mirrors the 0002 backup-restore
+/// pattern. See M7 plan §"Failure/recovery" (lines 325-327).
+#[tokio::test]
+async fn migration_0013_backup_restore_preserves_chain() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port) \
+         VALUES ('01KZNOD0000000000000000BR', 'shadowsocks', 'chain.example.com', 8388)",
+    )
+    .execute(&pool)
+    .await
+    .expect("insert node");
+
+    sqlx::query("UPDATE nodes SET chain_json = ? WHERE id = ?")
+        .bind(r#"["01KZNOD0000000000000000AA","01KZNOD0000000000000000BB"]"#)
+        .bind("01KZNOD0000000000000000BR")
+        .execute(&pool)
+        .await
+        .expect("set chain_json");
+
+    let backup_path = db_path.with_extension("db.bak");
+    std::fs::copy(&db_path, &backup_path).expect("failed to copy database");
+
+    drop(pool);
+    std::fs::remove_file(&db_path).expect("failed to remove database");
+    std::fs::copy(&backup_path, &db_path).expect("failed to restore database");
+
+    let pool = create_test_pool(&db_path).await;
+
+    let (chain,): (Option<String>,) =
+        sqlx::query_as("SELECT chain_json FROM nodes WHERE id = '01KZNOD0000000000000000BR'")
+            .fetch_one(&pool)
+            .await
+            .expect("read chain_json");
+    assert_eq!(
+        chain.as_deref(),
+        Some(r#"["01KZNOD0000000000000000AA","01KZNOD0000000000000000BB"]"#),
+        "chain_json should survive backup/restore"
+    );
+
+    let cols = get_columns(&pool, "nodes").await;
+    assert!(
+        cols.contains(&"chain_json".to_string()),
+        "chain_json column should survive backup/restore"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+    let _ = std::fs::remove_file(backup_path);
+}
 /// on the `nodes` table. See `docs/plan/milestones/M7-probes-and-detection.md`
 /// §"Node chain proxy" and acceptance NODE-017 / NODE-018.
 #[tokio::test]

@@ -11,6 +11,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 
 mod commands;
+mod health;
 mod node_cmds;
 mod serve;
 mod subscription_cmds;
@@ -46,6 +47,8 @@ enum Commands {
     Template(commands::TemplateArgs),
     /// Subscription management commands.
     Subscription(subscription_cmds::SubscriptionArgs),
+    /// HTTP health probes for Docker HEALTHCHECK.
+    Health(health::HealthArgs),
 }
 
 fn main() -> ExitCode {
@@ -111,6 +114,10 @@ fn main() -> ExitCode {
                 subscription_cmds::SubscriptionSubCommand::RotateToken(sub) => {
                     subscription_cmds::subscription_rotate(sub).await
                 }
+            },
+            Commands::Health(args) => match args.command {
+                health::HealthSubCommand::Live(a) => health::health_live(a).await,
+                health::HealthSubCommand::Ready(a) => health::health_ready(a).await,
             },
         }
     });

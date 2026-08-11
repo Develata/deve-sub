@@ -90,8 +90,10 @@ not by `plan_ref` comments.
 
 - Cargo packages: `deve-sub-*` (e.g. `deve-sub-domain`, `deve-sub-server`).
 - Crate imports: `deve_sub_*` (e.g. `deve_sub_domain`).
-- Binary: `deve-sub` with subcommands (`serve`, `doctor`, `migrate`, `source`,
-  `node`, `subscription`, `user`, `backup`, `restore`, `update`).
+- Binary: `deve-sub` with subcommands (`serve`, `doctor`, `health`, `migrate`,
+  `source`, `node`, `subscription`, `user`, `backup`, `restore`, `update`).
+  <!-- `health` sanctioned per ADR-0006 (Docker Base Image and Internalized
+  Healthcheck). -->
 - Product name: "Deve Sub". Centralized in configuration; no hardcoded
   scattering.
 - V3 template namespace: `deve-sub.io/v1`.

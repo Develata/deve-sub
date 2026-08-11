@@ -58,6 +58,10 @@ pub trait LatencyRecordRepository: Send + Sync {
         limit: u32,
     ) -> Result<Vec<LatencyRecord>, ProbeError>;
 
+    /// List recent latency records across all nodes, ordered by `measured_at`
+    /// desc. Returns up to `limit` records. Used by the dashboard latency view.
+    async fn list_recent(&self, limit: u32) -> Result<Vec<LatencyRecord>, ProbeError>;
+
     /// Delete all latency records for a probe run. Called on run cancellation
     /// to clean partial results if needed.
     async fn delete_for_run(&self, run_id: ProbeRunId) -> Result<(), ProbeError>;

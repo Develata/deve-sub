@@ -302,7 +302,25 @@ pub async fn sync_probe_traffic(
         ProbeAppError::InvalidInput("probe source has no subscription binding".to_owned())
     })?;
 
-    let sync_result: ProbeSyncResult = adapter.sync_traffic(&source).await?;
+    // PROBE-004: on adapter failure, mark the source's last sync as Failed
+    // and return the error. Previous TrafficRecord rows are preserved (the
+    // dashboard shows them as stale). No traffic data is dropped or
+    // fabricated — the dashboard surfaces the failure via last_sync_status.
+    let sync_result: ProbeSyncResult = match adapter.sync_traffic(&source).await {
+        Ok(r) => r,
+        Err(e) => {
+            let msg = e.to_string();
+            source.last_sync_at = Some(Timestamp::now());
+            source.last_sync_status = Some(SyncStatus::Failed(msg));
+            source.updated_at = Timestamp::now();
+            // Best-effort: if the status persist fails, log but still
+            // surface the original adapter error to the caller.
+            if let Err(persist_err) = source_repo.update(&source).await {
+                tracing::warn!(error = %persist_err, "failed to persist probe source failure status");
+            }
+            return Err(ProbeAppError::Domain(e));
+        }
+    };
 
     let now = Timestamp::now();
     let source_ref_prefix = source.kind.as_kebab();

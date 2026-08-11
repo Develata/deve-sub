@@ -102,8 +102,8 @@ OUT-014	并发生成	P0	Concurrency	pass
 PROBE-001	Nezha	P1	Contract	pass
 PROBE-002	DStatus	P1	Contract	pass
 PROBE-003	Komari	P1	Contract	pass
-PROBE-004	数据源失败	P1	Integration	planned
-PROBE-005	多源聚合	P1	Integration	planned
+PROBE-004	数据源失败	P1	Integration	pass
+PROBE-005	多源聚合	P1	Integration	pass
 CLI-001	Headless 启动	P0	Integration	planned
 CLI-002	stdin 导入	P0	CLI	planned
 CLI-003	stdout 导出	P0	CLI	planned

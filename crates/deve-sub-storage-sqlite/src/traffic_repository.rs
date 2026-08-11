@@ -111,6 +111,17 @@ impl TrafficRepository for SqliteTrafficRepository {
         build_summary(rows)
     }
 
+    async fn get_global_summary(&self) -> Result<TrafficSummary, SubscriptionError> {
+        let rows: Vec<AggregateRow> = sqlx::query_as(
+            "SELECT source_kind, SUM(upload) AS upload, SUM(download) AS download \
+             FROM subscription_traffic GROUP BY source_kind",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        build_summary(rows)
+    }
+
     async fn delete_for_subscription(
         &self,
         subscription_id: SubscriptionId,
@@ -121,5 +132,37 @@ impl TrafficRepository for SqliteTrafficRepository {
             .await
             .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
         Ok(())
+    }
+
+    async fn get_probe_traffic_attributions(
+        &self,
+    ) -> Result<Vec<(SubscriptionId, String, u64, u64)>, SubscriptionError> {
+        // WHY: source_ref shape is "{kind_kebab}:{external_server_id}".
+        // substr(..., 1, instr(..., ':') - 1) extracts the kind prefix; the
+        // -1 removes the trailing ':'; if there is no ':' the prefix is the
+        // full value (lenient — non-probe refs without ':' fall here too,
+        // but the WHERE clause restricts to source_kind = 'p' (Probe)).
+        let rows: Vec<(String, String, i64, i64)> = sqlx::query_as(
+            "SELECT subscription_id, \
+                    CASE WHEN instr(source_ref, ':') > 0 \
+                         THEN substr(source_ref, 1, instr(source_ref, ':') - 1) \
+                         ELSE source_ref END AS prefix, \
+                    SUM(upload) AS upload, SUM(download) AS download \
+             FROM subscription_traffic \
+             WHERE source_kind = 'P' \
+             GROUP BY subscription_id, prefix",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for (sub_id_str, prefix, up, down) in rows {
+            let sub_id = SubscriptionId::parse(&sub_id_str).map_err(|e| {
+                SubscriptionError::Storage(format!("invalid subscription id '{sub_id_str}': {e}"))
+            })?;
+            out.push((sub_id, prefix, up.max(0) as u64, down.max(0) as u64));
+        }
+        Ok(out)
     }
 }

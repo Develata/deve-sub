@@ -217,10 +217,23 @@ pub trait TrafficRepository: Send + Sync {
         user_id: UserId,
     ) -> Result<TrafficSummary, SubscriptionError>;
 
+    /// Sum all traffic records across all subscriptions, returning the
+    /// aggregate upload/download totals and a per-source-kind breakdown.
+    /// Used by the admin dashboard traffic view.
+    async fn get_global_summary(&self) -> Result<TrafficSummary, SubscriptionError>;
+
     /// Delete all traffic records for a subscription. Called on subscription
     /// delete.
     async fn delete_for_subscription(
         &self,
         subscription_id: SubscriptionId,
     ) -> Result<(), SubscriptionError>;
+
+    /// Sum probe-source traffic records grouped by `(subscription_id,
+    /// source_ref_prefix)`, where `source_ref_prefix` is the substring of
+    /// `source_ref` before the first `:` (e.g. `nezha`, `dstatus`, `komari`).
+    /// Used by the dashboard per-probe-source breakdown (PROBE-005).
+    async fn get_probe_traffic_attributions(
+        &self,
+    ) -> Result<Vec<(SubscriptionId, String, u64, u64)>, SubscriptionError>;
 }

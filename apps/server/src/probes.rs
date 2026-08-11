@@ -79,7 +79,7 @@ fn default_latency_limit() -> u32 {
     50
 }
 
-fn kind_to_dto(k: ProbeSourceKind) -> ProbeSourceKindDto {
+pub(crate) fn kind_to_dto(k: ProbeSourceKind) -> ProbeSourceKindDto {
     match k {
         ProbeSourceKind::Nezha => ProbeSourceKindDto::Nezha,
         ProbeSourceKind::DStatus => ProbeSourceKindDto::Dstatus,
@@ -104,7 +104,7 @@ fn kind_from_kebab(s: &str) -> Option<ProbeSourceKind> {
     }
 }
 
-fn probe_type_to_dto(t: ProbeType) -> ProbeTypeDto {
+pub(crate) fn probe_type_to_dto(t: ProbeType) -> ProbeTypeDto {
     match t {
         ProbeType::TcpConnect => ProbeTypeDto::TcpConnect,
         ProbeType::QuicHandshake => ProbeTypeDto::QuicHandshake,
@@ -130,7 +130,7 @@ fn run_status_to_dto(s: ProbeRunStatus) -> ProbeRunStatusDto {
     }
 }
 
-fn error_class_to_dto(c: ErrorClass) -> ErrorClassDto {
+pub(crate) fn error_class_to_dto(c: ErrorClass) -> ErrorClassDto {
     match c {
         ErrorClass::Refused => ErrorClassDto::Refused,
         ErrorClass::DnsFailed => ErrorClassDto::DnsFailed,
@@ -141,7 +141,7 @@ fn error_class_to_dto(c: ErrorClass) -> ErrorClassDto {
     }
 }
 
-fn sync_status_to_dto(s: &SyncStatus) -> SyncStatusDto {
+pub(crate) fn sync_status_to_dto(s: &SyncStatus) -> SyncStatusDto {
     match s {
         SyncStatus::Ok => SyncStatusDto::Ok,
         SyncStatus::Failed(msg) => SyncStatusDto::Failed {

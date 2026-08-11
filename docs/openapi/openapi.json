@@ -501,6 +501,152 @@
         }
       }
     },
+    "/api/v1/dashboard/latency": {
+      "get": {
+        "summary": "`GET /api/v1/dashboard/latency` — recent latency records across all nodes\n(admin). Returns the most recent records, newest first.",
+        "operationId": "get_dashboard_latency",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of records to return (1-200, default 50).",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent latency records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardLatencyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/traffic": {
+      "get": {
+        "summary": "`GET /api/v1/dashboard/traffic` — global traffic aggregate with per-source\nand per-probe-source breakdown (admin). Surfaces probe source staleness\n(PROBE-004) and traceable data provenance (PROBE-005).",
+        "operationId": "get_dashboard_traffic",
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "query",
+            "description": "If provided, restrict the aggregate to a single subscription ULID.\n`None` (default) aggregates across all subscriptions.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Traffic aggregate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardTrafficResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/nodes": {
       "get": {
         "summary": "`GET /api/v1/nodes` — list nodes with filters and cursor pagination\n(admin only).",
@@ -5768,6 +5914,184 @@
           "user": {
             "$ref": "#/components/schemas/UserDto",
             "description": "The authenticated user."
+          }
+        }
+      },
+      "DashboardLatencyRecordDto": {
+        "type": "object",
+        "description": "A single latency record in the dashboard latency view.",
+        "required": [
+          "node_id",
+          "probe_type",
+          "error_class",
+          "measured_at"
+        ],
+        "properties": {
+          "error_class": {
+            "$ref": "#/components/schemas/ErrorClassDto",
+            "description": "Error classification. `Ok` when the probe succeeded."
+          },
+          "measured_at": {
+            "type": "string",
+            "description": "When the measurement was taken (ISO 8601 UTC)."
+          },
+          "node_id": {
+            "type": "string",
+            "description": "The node ULID."
+          },
+          "probe_type": {
+            "$ref": "#/components/schemas/ProbeTypeDto",
+            "description": "The probe type."
+          },
+          "rtt_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Round-trip time in milliseconds. `None` = no response (NODE-014).",
+            "minimum": 0
+          }
+        }
+      },
+      "DashboardLatencyResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/dashboard/latency`.\n\nReturns the most recent latency records across all nodes, newest first.\nUsed by the admin dashboard to surface node health at a glance.",
+        "required": [
+          "records"
+        ],
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardLatencyRecordDto"
+            },
+            "description": "Recent latency records (up to `limit`, default 50)."
+          }
+        }
+      },
+      "DashboardProbeSourceBreakdownDto": {
+        "type": "object",
+        "description": "Per probe-source traffic contribution in the dashboard traffic view.\n\nEach entry corresponds to one configured probe source. The `upload` and\n`download` are the sum of all `TrafficRecord` rows attributed to this\nsource (via `source_ref` prefix matching). The `last_sync_status` surfaces\nstaleness so the dashboard can mark stale data (PROBE-004).",
+        "required": [
+          "source_id",
+          "kind",
+          "name",
+          "enabled",
+          "upload",
+          "download"
+        ],
+        "properties": {
+          "download": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total download bytes attributed to this source.",
+            "minimum": 0
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the source is enabled."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ProbeSourceKindDto",
+            "description": "Panel kind."
+          },
+          "last_sync_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the last sync was attempted (ISO 8601 UTC)."
+          },
+          "last_sync_status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SyncStatusDto",
+                "description": "Status of the last sync — `Ok`, `Failed { message }`, or `Stale`."
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name."
+          },
+          "source_id": {
+            "type": "string",
+            "description": "The probe source ULID."
+          },
+          "upload": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total upload bytes attributed to this source.",
+            "minimum": 0
+          }
+        }
+      },
+      "DashboardSourceKindBreakdownDto": {
+        "type": "object",
+        "description": "Per source-kind traffic breakdown in the dashboard traffic view.",
+        "required": [
+          "source_kind",
+          "upload",
+          "download"
+        ],
+        "properties": {
+          "download": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total download bytes from this source kind.",
+            "minimum": 0
+          },
+          "source_kind": {
+            "type": "string",
+            "description": "Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`."
+          },
+          "upload": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total upload bytes from this source kind.",
+            "minimum": 0
+          }
+        }
+      },
+      "DashboardTrafficResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/dashboard/traffic`.\n\nReturns the global traffic aggregate across all subscriptions, broken down\nby source kind and by individual probe source (PROBE-005 traceability).",
+        "required": [
+          "total_upload",
+          "total_download",
+          "by_source_kind",
+          "by_probe_source"
+        ],
+        "properties": {
+          "by_probe_source": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardProbeSourceBreakdownDto"
+            },
+            "description": "Per probe-source breakdown (only `source_kind = probe` traffic)."
+          },
+          "by_source_kind": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardSourceKindBreakdownDto"
+            },
+            "description": "Per source-kind breakdown."
+          },
+          "total_download": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total download bytes across all subscriptions.",
+            "minimum": 0
+          },
+          "total_upload": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total upload bytes across all subscriptions.",
+            "minimum": 0
           }
         }
       },

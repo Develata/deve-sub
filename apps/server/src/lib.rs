@@ -32,6 +32,7 @@ use deve_sub_security::MasterKey;
 
 pub mod auth;
 pub mod csrf;
+pub mod dashboard;
 pub mod delivery;
 pub mod node_overrides;
 pub mod nodes;

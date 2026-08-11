@@ -7,6 +7,7 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 pub mod auth;
+pub mod dashboard;
 pub mod health;
 pub mod node;
 pub mod probe;
@@ -21,6 +22,11 @@ pub use auth::{
     RegenerateRecoveryCodesResponse, RoleDto, SetupAdminRequest, SetupAdminResponse,
     TwoFactorDisableRequest, TwoFactorSetupResponse, TwoFactorVerifyRequest,
     TwoFactorVerifyResponse, UserDto,
+};
+pub use dashboard::{
+    DashboardLatencyQuery, DashboardLatencyRecordDto, DashboardLatencyResponse,
+    DashboardProbeSourceBreakdownDto, DashboardSourceKindBreakdownDto, DashboardTrafficQuery,
+    DashboardTrafficResponse,
 };
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};
 pub use node::{

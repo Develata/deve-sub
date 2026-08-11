@@ -364,6 +364,18 @@ impl LatencyRecordRepository for SqliteLatencyRecordRepository {
         rows.into_iter().map(row_to_record).collect()
     }
 
+    async fn list_recent(&self, limit: u32) -> Result<Vec<LatencyRecord>, ProbeError> {
+        let rows: Vec<LatencyRecordRow> = sqlx::query_as(
+            "SELECT id, run_id, node_id, probe_type, rtt_ms, error_class, measured_at \
+             FROM latency_records ORDER BY measured_at DESC LIMIT ?",
+        )
+        .bind(i64::from(limit))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ProbeError::Storage(e.to_string()))?;
+        rows.into_iter().map(row_to_record).collect()
+    }
+
     async fn delete_for_run(&self, run_id: ProbeRunId) -> Result<(), ProbeError> {
         sqlx::query("DELETE FROM latency_records WHERE run_id = ?")
             .bind(run_id.to_string())

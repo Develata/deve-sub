@@ -126,8 +126,18 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let nezha_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
         deve_sub_adapters::NezhaProbeAdapter::new(Arc::clone(&master_key)),
     );
-    let probe_adapter: Arc<dyn ProbeSourceAdapter> =
-        Arc::new(deve_sub_adapters::ProbeSourceAdapterRegistry::new().with_nezha(nezha_adapter));
+    let dstatus_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
+        deve_sub_adapters::DStatusProbeAdapter::new(Arc::clone(&master_key)),
+    );
+    let komari_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
+        deve_sub_adapters::KomariProbeAdapter::new(Arc::clone(&master_key)),
+    );
+    let probe_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
+        deve_sub_adapters::ProbeSourceAdapterRegistry::new()
+            .with_nezha(nezha_adapter)
+            .with_dstatus(dstatus_adapter)
+            .with_komari(komari_adapter),
+    );
 
     let fetcher: Arc<dyn SubscriptionFetcher> = Arc::new(deve_sub_adapters::HttpFetcher::new());
     let geoip: Arc<dyn GeoIpPort> = Arc::new(deve_sub_adapters::MaxMindGeoIp::new(

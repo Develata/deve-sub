@@ -158,8 +158,22 @@ impl TestApp {
                 Arc::clone(&master_key),
                 Arc::new(deve_sub_adapters::PermissiveSsrfChecker),
             ));
-        let probe_adapter: Arc<dyn ProbeSourceAdapter> =
-            Arc::new(deve_sub_adapters::ProbeSourceAdapterRegistry::new().with_nezha(nezha));
+        let dstatus: Arc<dyn ProbeSourceAdapter> =
+            Arc::new(deve_sub_adapters::DStatusProbeAdapter::with_checker(
+                Arc::clone(&master_key),
+                Arc::new(deve_sub_adapters::PermissiveSsrfChecker),
+            ));
+        let komari: Arc<dyn ProbeSourceAdapter> =
+            Arc::new(deve_sub_adapters::KomariProbeAdapter::with_checker(
+                Arc::clone(&master_key),
+                Arc::new(deve_sub_adapters::PermissiveSsrfChecker),
+            ));
+        let probe_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
+            deve_sub_adapters::ProbeSourceAdapterRegistry::new()
+                .with_nezha(nezha)
+                .with_dstatus(dstatus)
+                .with_komari(komari),
+        );
 
         Self {
             state: deve_sub_server::AppState {
@@ -568,4 +582,372 @@ async fn probe001_sync_disabled_source_returns_400() {
     assert_eq!(sync_resp.status(), StatusCode::BAD_REQUEST);
     let sync_json = body_to_json(sync_resp).await;
     assert_eq!(sync_json["error"], "invalid_input");
+}
+
+// ---------------------------------------------------------------------------
+// PROBE-002: DStatus traffic sync
+// ---------------------------------------------------------------------------
+
+/// Mock DStatus panel: returns JSON for `GET /api/allnode_status`.
+struct MockDStatus {
+    used_a: Arc<AtomicU64>,
+    used_b: Arc<AtomicU64>,
+}
+
+impl MockDStatus {
+    fn new() -> Self {
+        Self {
+            used_a: Arc::new(AtomicU64::new(10_000_000_000)),
+            used_b: Arc::new(AtomicU64::new(5_000_000_000)),
+        }
+    }
+
+    async fn start(&self) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let bind = format!("http://{addr}");
+
+        let used_a = self.used_a.clone();
+        let used_b = self.used_b.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let (mut sock, _) = match listener.accept().await {
+                    Ok(v) => v,
+                    Err(_) => break,
+                };
+                let used_a = used_a.clone();
+                let used_b = used_b.clone();
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 4096];
+                    let _ = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await;
+                    let ua = used_a.load(Ordering::Relaxed);
+                    let ub = used_b.load(Ordering::Relaxed);
+                    let body = format!(
+                        r#"{{"success":true,"order":["node-a","node-b"],"data":{{"node-a":{{"name":"Server A","status":1,"traffic_stats":{{"used":{ua},"limit":0,"unlimited":true}}}},"node-b":{{"name":"Server B","status":1,"traffic_stats":{{"used":{ub},"limit":0,"unlimited":true}}}}}}}}"#
+                    );
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    use tokio::io::AsyncWriteExt;
+                    let _ = sock.write_all(resp.as_bytes()).await;
+                    let _ = sock.shutdown().await;
+                });
+            }
+        });
+        bind
+    }
+
+    fn bump(&self) {
+        self.used_a.fetch_add(2_000_000_000, Ordering::Relaxed);
+        self.used_b.fetch_add(1_000_000_000, Ordering::Relaxed);
+    }
+}
+
+/// PROBE-002: DStatus traffic sync writes TrafficRecord rows and persists
+/// the encrypted counter snapshot. A second sync computes the delta.
+#[tokio::test]
+async fn probe002_dstatus_sync_writes_traffic_and_snapshot() {
+    let mock = MockDStatus::new();
+    let endpoint = mock.start().await;
+
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let template_id = create_template(&router, &cookie).await;
+    let subscription_id = create_subscription(&router, &cookie, &template_id).await;
+
+    let create_body = serde_json::json!({
+        "kind": "dstatus",
+        "name": "my-dstatus",
+        "endpoint_url": endpoint,
+        "auth_config": "",
+        "subscription_id": subscription_id,
+    })
+    .to_string();
+    let resp = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/probe-sources", &create_body),
+            &cookie,
+        ))
+        .await
+        .expect("create source");
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let source_json = body_to_json(resp).await;
+    let source_id = source_json["source"]["id"]
+        .as_str()
+        .expect("source id")
+        .to_owned();
+
+    let sync_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(&format!("/api/v1/probe-sources/{source_id}/sync"), ""),
+            &cookie,
+        ))
+        .await
+        .expect("sync");
+    assert_eq!(sync_resp.status(), StatusCode::OK);
+    let sync_json = body_to_json(sync_resp).await;
+    assert_eq!(sync_json["samples_written"], 2);
+    assert_eq!(sync_json["snapshot_updated"], true);
+
+    let traffic_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/subscriptions/{subscription_id}/traffic"))
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("traffic");
+    assert_eq!(traffic_resp.status(), StatusCode::OK);
+    let traffic_json = body_to_json(traffic_resp).await;
+    let total_download = traffic_json["download"].as_u64().expect("download");
+    assert!(
+        total_download >= 15_000_000_000,
+        "first sync download should include both nodes: {total_download}"
+    );
+
+    mock.bump();
+
+    let sync2_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(&format!("/api/v1/probe-sources/{source_id}/sync"), ""),
+            &cookie,
+        ))
+        .await
+        .expect("sync2");
+    assert_eq!(sync2_resp.status(), StatusCode::OK);
+    let sync2_json = body_to_json(sync2_resp).await;
+    assert_eq!(sync2_json["samples_written"], 2);
+    assert_eq!(sync2_json["snapshot_updated"], true);
+
+    let traffic2_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/subscriptions/{subscription_id}/traffic"))
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("traffic2");
+    let traffic2_json = body_to_json(traffic2_resp).await;
+    let download2 = traffic2_json["download"].as_u64().expect("download2");
+    assert_eq!(
+        download2,
+        total_download + 3_000_000_000,
+        "second sync delta should add exactly 3GB download"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PROBE-003: Komari traffic sync
+// ---------------------------------------------------------------------------
+
+/// Mock Komari panel: returns JSON for `GET /api/nodes` and
+/// `GET /api/records/load?uuid=...&load_type=network`.
+struct MockKomari {
+    net_up: Arc<AtomicU64>,
+    net_down: Arc<AtomicU64>,
+}
+
+impl MockKomari {
+    fn new() -> Self {
+        Self {
+            net_up: Arc::new(AtomicU64::new(10_000)),
+            net_down: Arc::new(AtomicU64::new(20_000)),
+        }
+    }
+
+    async fn start(&self) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let bind = format!("http://{addr}");
+
+        let net_up = self.net_up.clone();
+        let net_down = self.net_down.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let (mut sock, _) = match listener.accept().await {
+                    Ok(v) => v,
+                    Err(_) => break,
+                };
+                let net_up = net_up.clone();
+                let net_down = net_down.clone();
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 4096];
+                    let n = tokio::io::AsyncReadExt::read(&mut sock, &mut buf)
+                        .await
+                        .unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buf[..n]);
+
+                    let body = if request.contains("/api/nodes") {
+                        r#"{"status":"success","data":[{"uuid":"uuid-1","name":"Server 1"},{"uuid":"uuid-2","name":"Server 2"}]}"#
+                            .to_owned()
+                    } else if request.contains("/api/records/load") {
+                        let uuid = request
+                            .lines()
+                            .next()
+                            .and_then(|l| l.split("uuid=").nth(1))
+                            .and_then(|s| s.split('&').next())
+                            .unwrap_or("");
+                        let (up, down) = if uuid == "uuid-1" {
+                            (
+                                net_up.load(Ordering::Relaxed),
+                                net_down.load(Ordering::Relaxed),
+                            )
+                        } else {
+                            (5000u64, 6000u64)
+                        };
+                        format!(
+                            r#"{{"status":"success","data":{{"records":[{{"client":"{uuid}","net_total_up":{up},"net_total_down":{down}}}],"count":1,"load_type":"network"}}}}"#
+                        )
+                    } else {
+                        r#"{"status":"error","message":"not found"}"#.to_owned()
+                    };
+
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    use tokio::io::AsyncWriteExt;
+                    let _ = sock.write_all(resp.as_bytes()).await;
+                    let _ = sock.shutdown().await;
+                });
+            }
+        });
+        bind
+    }
+
+    fn bump(&self) {
+        self.net_up.fetch_add(3000, Ordering::Relaxed);
+        self.net_down.fetch_add(5000, Ordering::Relaxed);
+    }
+}
+
+/// PROBE-003: Komari traffic sync writes TrafficRecord rows and persists
+/// the encrypted counter snapshot. A second sync computes the delta.
+#[tokio::test]
+async fn probe003_komari_sync_writes_traffic_and_snapshot() {
+    let mock = MockKomari::new();
+    let endpoint = mock.start().await;
+
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let template_id = create_template(&router, &cookie).await;
+    let subscription_id = create_subscription(&router, &cookie, &template_id).await;
+
+    let create_body = serde_json::json!({
+        "kind": "komari",
+        "name": "my-komari",
+        "endpoint_url": endpoint,
+        "auth_config": "",
+        "subscription_id": subscription_id,
+    })
+    .to_string();
+    let resp = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/probe-sources", &create_body),
+            &cookie,
+        ))
+        .await
+        .expect("create source");
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let source_json = body_to_json(resp).await;
+    let source_id = source_json["source"]["id"]
+        .as_str()
+        .expect("source id")
+        .to_owned();
+
+    let sync_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(&format!("/api/v1/probe-sources/{source_id}/sync"), ""),
+            &cookie,
+        ))
+        .await
+        .expect("sync");
+    assert_eq!(sync_resp.status(), StatusCode::OK);
+    let sync_json = body_to_json(sync_resp).await;
+    assert_eq!(sync_json["samples_written"], 2);
+    assert_eq!(sync_json["snapshot_updated"], true);
+
+    let traffic_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/subscriptions/{subscription_id}/traffic"))
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("traffic");
+    assert_eq!(traffic_resp.status(), StatusCode::OK);
+    let traffic_json = body_to_json(traffic_resp).await;
+    let total_upload = traffic_json["upload"].as_u64().expect("upload");
+    let total_download = traffic_json["download"].as_u64().expect("download");
+    assert!(
+        total_upload >= 15_000,
+        "first sync upload should include both servers: {total_upload}"
+    );
+    assert!(
+        total_download >= 26_000,
+        "first sync download should include both servers: {total_download}"
+    );
+
+    mock.bump();
+
+    let sync2_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(&format!("/api/v1/probe-sources/{source_id}/sync"), ""),
+            &cookie,
+        ))
+        .await
+        .expect("sync2");
+    assert_eq!(sync2_resp.status(), StatusCode::OK);
+    let sync2_json = body_to_json(sync2_resp).await;
+    assert_eq!(sync2_json["samples_written"], 1);
+    assert_eq!(sync2_json["snapshot_updated"], true);
+
+    let traffic2_resp = router
+        .clone()
+        .oneshot(with_cookie(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/subscriptions/{subscription_id}/traffic"))
+                .body(Body::empty())
+                .expect("request"),
+            &cookie,
+        ))
+        .await
+        .expect("traffic2");
+    let traffic2_json = body_to_json(traffic2_resp).await;
+    let upload2 = traffic2_json["upload"].as_u64().expect("upload2");
+    let download2 = traffic2_json["download"].as_u64().expect("download2");
+    assert_eq!(
+        upload2,
+        total_upload + 3000,
+        "second sync delta should add exactly 3000 upload bytes"
+    );
+    assert_eq!(
+        download2,
+        total_download + 5000,
+        "second sync delta should add exactly 5000 download bytes"
+    );
 }

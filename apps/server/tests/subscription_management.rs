@@ -111,11 +111,22 @@ impl TestApp {
                 latency_repo: Arc::new(SqliteLatencyRecordRepository::new(pool.clone()))
                     as Arc<dyn LatencyRecordRepository>,
                 probe_adapter: std::sync::Arc::new(
-                    deve_sub_adapters::ProbeSourceAdapterRegistry::new().with_nezha(
-                        std::sync::Arc::new(deve_sub_adapters::NezhaProbeAdapter::new(
-                            std::sync::Arc::clone(&master_key),
+                    deve_sub_adapters::ProbeSourceAdapterRegistry::new()
+                        .with_nezha(std::sync::Arc::new(
+                            deve_sub_adapters::NezhaProbeAdapter::new(std::sync::Arc::clone(
+                                &master_key,
+                            )),
+                        ))
+                        .with_dstatus(std::sync::Arc::new(
+                            deve_sub_adapters::DStatusProbeAdapter::new(std::sync::Arc::clone(
+                                &master_key,
+                            )),
+                        ))
+                        .with_komari(std::sync::Arc::new(
+                            deve_sub_adapters::KomariProbeAdapter::new(std::sync::Arc::clone(
+                                &master_key,
+                            )),
                         )),
-                    ),
                 )
                     as std::sync::Arc<dyn deve_sub_domain::ProbeSourceAdapter>,
                 tcp_probe: Arc::new(deve_sub_adapters::TcpConnectProbe::new())

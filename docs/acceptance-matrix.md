@@ -84,10 +84,10 @@ failure, multi-source aggregation.
 CLI-001 through CLI-005. Covers headless mode, stdin import, stdout export,
 JSON output, doctor.
 
-### DEPLOY — Deployment (4 cases, P1)
+### DEPLOY — Deployment (5 cases, P1)
 
-DEPLOY-001 through DEPLOY-004. Covers SQLite Compose, Linux install, amd64/arm64
-images.
+DEPLOY-001 through DEPLOY-005. Covers SQLite Compose, Linux install, amd64/arm64
+images, Docker healthcheck via internalized `deve-sub health`.
 
 ### UPDATE — Update Mechanism (2 cases, P1)
 

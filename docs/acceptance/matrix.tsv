@@ -109,10 +109,12 @@ CLI-002	stdin 导入	P0	CLI	planned
 CLI-003	stdout 导出	P0	CLI	planned
 CLI-004	JSON 输出	P0	CLI	planned
 CLI-005	doctor	P0	CLI	planned
+CLI-006	Health live/ready subcommand	P1	CLI	planned
 DEPLOY-001	SQLite Compose	P1	Smoke	planned
 DEPLOY-002	Linux 安装	P1	VM Test	planned
 DEPLOY-003	amd64 镜像	P1	CI	planned
 DEPLOY-004	arm64 镜像	P1	CI	planned
+DEPLOY-005	Docker healthcheck via internalized health command	P1	DEPLOY	planned
 UPDATE-001	签名更新	P1	VM Test	planned
 UPDATE-002	更新失败	P1	VM Test	planned
 SEC-001	localhost SSRF	P0	Security	pass

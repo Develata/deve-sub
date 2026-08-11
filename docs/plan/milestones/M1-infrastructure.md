@@ -42,7 +42,7 @@ deve-sub serve
   `docs/openapi/openapi.json` in CI. See ADR-0004.
 - CLI: `deve-sub serve`, `deve-sub serve --headless`, `deve-sub doctor`,
   `deve-sub migrate`, `deve-sub config validate`.
-- Docker: multi-stage build, non-root user, healthcheck, amd64 + arm64.
+- Docker: multi-stage build on `debian:trixie-slim`, non-root user, healthcheck via internalized `deve-sub health`, amd64 + arm64. Amended per ADR-0006: trixie-slim replaces bookworm-slim, and the healthcheck probes `/health/live` through the CLI binary instead of a bundled `curl`.
 - Health endpoints: `/health/live`, `/health/ready`.
 
 ## Authority
@@ -59,5 +59,5 @@ deve-sub serve
 - `deve-sub doctor` checks database, directories, network, and version.
 - `deve-sub migrate` applies migrations idempotently.
 - OpenAPI spec is generated and exportable.
-- Docker image starts and healthcheck passes.
+- Docker image starts and healthcheck passes via internalized `deve-sub health`.
 - Acceptance: `CLI-001`, `CLI-005`, `DEPLOY-001`, `DEPLOY-003`, `DEPLOY-004`.

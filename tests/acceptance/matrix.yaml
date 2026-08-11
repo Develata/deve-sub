@@ -1111,6 +1111,16 @@ cases:
     assertions: ["检测数据库、目录、网络和版本"]
     fixtures: []
     evidence: planned
+  - id: CLI-006
+    title: Health live/ready subcommand
+    priority: P1
+    layer: CLI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["deve-sub health live exits 0 on 2xx, exit 1 on non-2xx or connection failure", "deve-sub health ready exits 0 on 2xx, exit 1 on non-2xx or connection failure"]
+    fixtures: []
+    evidence: planned
   - id: DEPLOY-001
     title: SQLite Compose
     priority: P1
@@ -1149,6 +1159,16 @@ cases:
     preconditions: []
     steps: []
     assertions: ["启动通过"]
+    fixtures: []
+    evidence: planned
+  - id: DEPLOY-005
+    title: Docker healthcheck via internalized health command
+    priority: P1
+    layer: DEPLOY
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["Docker HEALTHCHECK uses deve-sub health live, container becomes healthy within 60s"]
     fixtures: []
     evidence: planned
   - id: UPDATE-001

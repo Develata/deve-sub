@@ -1390,7 +1390,7 @@ cases:
     steps: []
     assertions: ["anytls:// URI round-trip 语义等价"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-023
     title: AnyTLS Mihomo/sing-box
     priority: P1
@@ -1400,7 +1400,7 @@ cases:
     steps: []
     assertions: ["AnyTLS mihomo/sing-box round-trip 语义等价"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-024
     title: Snell URI
     priority: P1

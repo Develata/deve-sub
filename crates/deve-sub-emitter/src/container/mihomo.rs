@@ -32,6 +32,7 @@ fn emit_proxy(node: &Node, lines: &mut Vec<String>) -> Result<(), EmitError> {
         ProtocolKind::Hysteria2 => emit_hysteria2(node, &server, port, name, lines),
         ProtocolKind::TuicV5 => emit_tuic_v5(node, &server, port, name, lines),
         ProtocolKind::WireGuard => emit_wireguard(node, &server, port, name, lines),
+        ProtocolKind::AnyTls => emit_anytls(node, &server, port, name, lines),
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "mihomo: unsupported protocol {other}"
@@ -242,6 +243,43 @@ fn emit_wireguard(
         }
     }
 
+    lines.push(entry);
+    Ok(())
+}
+
+fn emit_anytls(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let password = match &node.authentication {
+        Authentication::Password { password } => password,
+        _ => return Err(EmitError::MissingField("anytls password")),
+    };
+    let cfg = match &node.config {
+        ProtocolConfig::AnyTls(c) => c,
+        _ => return Err(EmitError::MissingField("anytls config")),
+    };
+    let mut entry = yaml_entry(name, "anytls", server, port);
+    entry.push_str(&format!("\n    password: \"{password}\""));
+    push_tls(node, &mut entry);
+    if let Some(d) = cfg.idle_session_check_interval {
+        entry.push_str(&format!(
+            "\n    idle-session-check-interval: {}",
+            d.whole_seconds()
+        ));
+    }
+    if let Some(d) = cfg.idle_session_timeout {
+        entry.push_str(&format!(
+            "\n    idle-session-timeout: {}",
+            d.whole_seconds()
+        ));
+    }
+    if let Some(n) = cfg.min_idle_session {
+        entry.push_str(&format!("\n    min-idle-session: {n}"));
+    }
     lines.push(entry);
     Ok(())
 }

@@ -10,10 +10,10 @@
 use serde_json::Value;
 
 use deve_sub_domain::{
-    Authentication, CongestionConfig, CongestionController, Endpoint, Hysteria2Config, Node,
-    Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig, TlsConfig, Transport, TransportKind,
-    TrojanConfig, TuicV5Config, UdpRelayMode, VMessConfig, VlessRealityConfig, WireGuardConfig,
-    WireGuardPeer,
+    AnyTlsConfig, Authentication, CongestionConfig, CongestionController, Endpoint,
+    Hysteria2Config, Node, Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig, TlsConfig,
+    Transport, TransportKind, TrojanConfig, TuicV5Config, UdpRelayMode, VMessConfig,
+    VlessRealityConfig, WireGuardConfig, WireGuardPeer,
 };
 
 use crate::error::ParseError;
@@ -63,6 +63,7 @@ fn parse_outbound(entry: &Value) -> Node {
         "hysteria2" => parse_hysteria2(entry),
         "tuic" => parse_tuic(entry),
         "wireguard" => parse_wireguard(entry),
+        "anytls" => parse_anytls(entry),
         // sing-box internal types (direct, block, dns) are not proxy nodes.
         "direct" | "block" | "dns" | "selector" | "urltest" => {
             return unsupported_entry(
@@ -450,5 +451,45 @@ fn parse_wireguard(entry: &Value) -> Result<Node, ParseError> {
     node.config = config;
     node.endpoint = endpoint;
     node.authentication = Authentication::None;
+    Ok(node)
+}
+
+fn parse_anytls(entry: &Value) -> Result<Node, ParseError> {
+    let (name, endpoint) = build_base(entry)?;
+    let password = get_str(entry, "password").ok_or(ParseError::MissingField("password"))?;
+
+    // WHY: AnyTLS always requires TLS; sing-box rejects configs without
+    // `tls.enabled = true` at dial time, so fall back to a default-enabled
+    // TLS config when no TLS block is present (matches Trojan handling).
+    let tls = extract_tls(entry).or_else(|| Some(default_tls_enabled()));
+
+    let idle_session_check_interval = entry
+        .get("idle_session_check_interval")
+        .and_then(|v| v.as_str())
+        .and_then(parse_go_duration);
+    let idle_session_timeout = entry
+        .get("idle_session_timeout")
+        .and_then(|v| v.as_str())
+        .and_then(parse_go_duration);
+    let min_idle_session = entry
+        .get("min_idle_session")
+        .and_then(|v| v.as_i64())
+        .map(|n| u32::try_from(n).unwrap_or(0));
+    let client_metadata = get_str(entry, "client_metadata");
+
+    let config = ProtocolConfig::AnyTls(AnyTlsConfig {
+        idle_session_check_interval,
+        idle_session_timeout,
+        min_idle_session,
+        client_metadata,
+    });
+
+    let mut node = node_shell_container();
+    node.display_name = name;
+    node.protocol = ProtocolKind::AnyTls;
+    node.config = config;
+    node.endpoint = endpoint;
+    node.authentication = Authentication::Password { password };
+    node.tls = tls;
     Ok(node)
 }

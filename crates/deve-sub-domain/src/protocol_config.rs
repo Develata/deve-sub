@@ -168,3 +168,30 @@ pub struct WireGuardPeer {
     /// Persistent keepalive interval.
     pub persistent_keepalive: Option<time::Duration>,
 }
+
+/// AnyTLS configuration (M9).
+///
+/// `password` is carried by [`crate::Authentication::Password`]; TLS fields
+/// (sni, alpn, skip_cert_verify, client_fingerprint) by [`crate::TlsConfig`].
+/// AnyTLS **always requires TLS** — `node.tls` must be `Some` with
+/// `enabled: true`.
+///
+/// The idle-session tuning fields are sing-box and mihomo extensions for
+/// multiplexed session pool management; both clients use the same JSON/YAML
+/// key names. `client_metadata` carries the AnyTLS protocol client hello
+/// metadata string.
+///
+/// Nested mihomo obfuscation (`shadow-tls-opts`, `restls-opts`, `jls-opts`)
+/// is projected via [`crate::Obfuscation`] or `Node.extras` in a later slice;
+/// this struct does not model it yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AnyTlsConfig {
+    /// Idle session pool check interval (sing-box/mihomo extension).
+    pub idle_session_check_interval: Option<time::Duration>,
+    /// Idle session timeout before close (sing-box/mihomo extension).
+    pub idle_session_timeout: Option<time::Duration>,
+    /// Minimum idle sessions to keep open (sing-box/mihomo extension).
+    pub min_idle_session: Option<u32>,
+    /// AnyTLS client hello metadata string (sing-box/mihomo extension).
+    pub client_metadata: Option<String>,
+}

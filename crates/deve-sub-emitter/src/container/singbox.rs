@@ -33,6 +33,7 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
         ProtocolKind::Hysteria2 => hysteria2(node)?,
         ProtocolKind::TuicV5 => tuic_v5(node)?,
         ProtocolKind::WireGuard => wireguard(node)?,
+        ProtocolKind::AnyTls => anytls(node)?,
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "singbox: unsupported protocol {other}"
@@ -52,16 +53,31 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
 }
 
 fn push_tls_fields(fields: &mut Vec<(String, Value)>, node: &Node) {
-    if let Some(tls) = &node.tls {
-        if tls.enabled {
-            fields.push(("tls".to_owned(), json!({ "enabled": true })));
-        }
-        if let Some(ref sni) = tls.server_name {
-            fields.push(("server_name".to_owned(), Value::String(sni.clone())));
-        }
-        if let Some(true) = tls.skip_cert_verify {
-            fields.push(("insecure".to_owned(), Value::Bool(true)));
-        }
+    let Some(tls) = &node.tls else { return };
+    let mut tls_obj = Map::new();
+    if tls.enabled {
+        tls_obj.insert("enabled".to_owned(), Value::Bool(true));
+    }
+    if let Some(ref sni) = tls.server_name {
+        tls_obj.insert("server_name".to_owned(), Value::String(sni.clone()));
+    }
+    if let Some(true) = tls.skip_cert_verify {
+        tls_obj.insert("insecure".to_owned(), Value::Bool(true));
+    }
+    if !tls.alpn.is_empty() {
+        tls_obj.insert(
+            "alpn".to_owned(),
+            Value::Array(tls.alpn.iter().map(|a| Value::String(a.clone())).collect()),
+        );
+    }
+    if let Some(ref fp) = tls.client_fingerprint {
+        tls_obj.insert(
+            "utls".to_owned(),
+            json!({ "enabled": true, "fingerprint": fp }),
+        );
+    }
+    if !tls_obj.is_empty() {
+        fields.push(("tls".to_owned(), Value::Object(tls_obj)));
     }
 }
 
@@ -235,6 +251,67 @@ fn wireguard(node: &Node) -> EmitResult {
     fields.push(("peers".to_owned(), Value::Array(peers?)));
 
     Ok(("wireguard", fields))
+}
+
+fn anytls(node: &Node) -> EmitResult {
+    let password = match &node.authentication {
+        Authentication::Password { password } => password.clone(),
+        _ => return Err(EmitError::MissingField("anytls password")),
+    };
+    let cfg = match &node.config {
+        ProtocolConfig::AnyTls(c) => c,
+        _ => return Err(EmitError::MissingField("anytls config")),
+    };
+    let mut fields = vec![("password".to_owned(), Value::String(password))];
+    push_tls_fields(&mut fields, node);
+    if let Some(d) = cfg.idle_session_check_interval {
+        fields.push((
+            "idle_session_check_interval".to_owned(),
+            Value::String(format_go_duration(d)),
+        ));
+    }
+    if let Some(d) = cfg.idle_session_timeout {
+        fields.push((
+            "idle_session_timeout".to_owned(),
+            Value::String(format_go_duration(d)),
+        ));
+    }
+    if let Some(n) = cfg.min_idle_session {
+        fields.push(("min_idle_session".to_owned(), json!(n)));
+    }
+    if let Some(ref cm) = cfg.client_metadata {
+        fields.push(("client_metadata".to_owned(), Value::String(cm.clone())));
+    }
+    Ok(("anytls", fields))
+}
+
+fn format_go_duration(d: time::Duration) -> String {
+    let total_ms = d.whole_milliseconds();
+    if total_ms == 0 {
+        return "0s".to_owned();
+    }
+    let abs_ms = total_ms.unsigned_abs() as i64;
+    let hours = abs_ms / 3_600_000;
+    let mins = (abs_ms % 3_600_000) / 60_000;
+    let secs = (abs_ms % 60_000) / 1_000;
+    let ms = abs_ms % 1_000;
+    let mut out = String::new();
+    if total_ms < 0 {
+        out.push('-');
+    }
+    if hours > 0 {
+        out.push_str(&format!("{hours}h"));
+    }
+    if mins > 0 {
+        out.push_str(&format!("{mins}m"));
+    }
+    if secs > 0 || (hours == 0 && mins == 0 && ms == 0) {
+        out.push_str(&format!("{secs}s"));
+    }
+    if ms > 0 {
+        out.push_str(&format!("{ms}ms"));
+    }
+    out
 }
 
 fn singbox_transport(transport: &Transport) -> Option<Value> {

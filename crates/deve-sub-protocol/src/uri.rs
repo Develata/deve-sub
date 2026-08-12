@@ -46,6 +46,7 @@ pub fn parse_uri(uri: &str) -> Result<Node, ParseError> {
         "tuic" => crate::tuic_v5::parse(&parsed, uri),
         "naive+https" | "naive+http" => crate::naive::parse(&parsed, uri),
         "wireguard" => crate::wireguard::parse(&parsed, uri),
+        "anytls" => crate::anytls::parse(&parsed, uri),
         other => Err(ParseError::UnknownScheme(other.to_owned())),
     }
 }

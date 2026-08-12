@@ -1360,7 +1360,7 @@ cases:
     steps: []
     assertions: ["wireguard:// URI round-trip 语义等价"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-020
     title: WireGuard Mihomo YAML
     priority: P1
@@ -1370,7 +1370,7 @@ cases:
     steps: []
     assertions: ["WireGuard mihomo YAML round-trip 语义等价"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-021
     title: WireGuard sing-box JSON
     priority: P1
@@ -1380,7 +1380,7 @@ cases:
     steps: []
     assertions: ["WireGuard sing-box JSON round-trip 语义等价"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-022
     title: AnyTLS URI
     priority: P1

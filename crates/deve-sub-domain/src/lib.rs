@@ -41,7 +41,7 @@ pub use probe::{
 pub use protocol::{ProtocolConfig, ProtocolKind, UnsupportedNode};
 pub use protocol_config::{
     Hysteria2Config, NaiveProxyConfig, ShadowsocksConfig, TrojanConfig, TuicV5Config, UdpRelayMode,
-    VMessConfig, VlessRealityConfig,
+    VMessConfig, VlessRealityConfig, WireGuardConfig, WireGuardPeer,
 };
 pub use source::{
     ImportOutcome, ImportResult, ItemParseStatus, NodeFilter, NodePoolEntry, NodePoolRepository,

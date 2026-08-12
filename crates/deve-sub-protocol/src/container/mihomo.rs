@@ -13,7 +13,7 @@ use deve_sub_domain::{
     Authentication, CongestionConfig, CongestionController, Endpoint, Hysteria2Config,
     NaiveProxyConfig, Node, Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig,
     ShadowsocksConfig, TlsConfig, Transport, TransportKind, TrojanConfig, TuicV5Config,
-    UdpCapability, UdpRelayMode, VMessConfig, VlessRealityConfig,
+    UdpCapability, UdpRelayMode, VMessConfig, VlessRealityConfig, WireGuardConfig, WireGuardPeer,
 };
 
 use crate::error::ParseError;
@@ -63,6 +63,7 @@ fn parse_proxy_entry(entry: &Value) -> Node {
         "hysteria2" | "hy2" => parse_hysteria2(entry),
         "tuic" => parse_tuic(entry),
         "naive" => parse_naive(entry),
+        "wireguard" => parse_wireguard(entry),
         other => Err(ParseError::UnsupportedProxyType(other.to_owned())),
     };
 
@@ -396,4 +397,107 @@ fn parse_naive(entry: &Value) -> Result<Node, ParseError> {
     node.tls = Some(tls);
     node.udp = extract_udp(entry);
     Ok(node)
+}
+
+fn parse_wireguard(entry: &Value) -> Result<Node, ParseError> {
+    let (name, endpoint) = build_base(entry)?;
+    let private_key =
+        get_str(entry, "private-key").ok_or(ParseError::MissingField("private-key"))?;
+
+    let mut address = Vec::new();
+    if let Some(ip) = get_str(entry, "ip") {
+        address.push(ip);
+    }
+    if let Some(ipv6) = get_str(entry, "ipv6") {
+        address.push(ipv6);
+    }
+
+    let mtu = entry
+        .get("mtu")
+        .and_then(|v| v.as_u64())
+        .map(|n| u32::try_from(n).unwrap_or(0));
+
+    let workers = entry
+        .get("workers")
+        .and_then(|v| v.as_u64())
+        .map(|n| u32::try_from(n).unwrap_or(0));
+
+    let dns = get_str_array(entry, "dns");
+
+    let peers = if let Some(peers_arr) = entry.get("peers").and_then(|p| p.as_array()) {
+        peers_arr
+            .iter()
+            .map(|p| parse_wireguard_peer(p, &endpoint))
+            .collect::<Result<Vec<_>, _>>()?
+    } else if let Some(pub_key) = get_str(entry, "public-key") {
+        vec![WireGuardPeer {
+            public_key: pub_key,
+            pre_shared_key: get_str(entry, "pre-shared-key"),
+            allowed_ips: get_str_array(entry, "allowed-ips"),
+            reserved: parse_reserved_array(entry.get("reserved")),
+            persistent_keepalive: entry
+                .get("persistent-keepalive")
+                .and_then(|v| v.as_u64())
+                .map(|secs| time::Duration::seconds(i64::try_from(secs).unwrap_or(0))),
+        }]
+    } else {
+        return Err(ParseError::MissingField("public-key or peers"));
+    };
+
+    let config = ProtocolConfig::WireGuard(WireGuardConfig {
+        private_key,
+        address,
+        peers,
+        mtu,
+        workers,
+        dns,
+    });
+
+    let mut node = node_shell_container();
+    node.display_name = name;
+    node.protocol = ProtocolKind::WireGuard;
+    node.config = config;
+    node.endpoint = endpoint;
+    node.authentication = Authentication::None;
+    node.udp = UdpCapability {
+        supported: Some(true),
+        xudp: None,
+    };
+    Ok(node)
+}
+
+fn parse_wireguard_peer(
+    peer: &Value,
+    node_endpoint: &Endpoint,
+) -> Result<WireGuardPeer, ParseError> {
+    let public_key =
+        get_str(peer, "public-key").ok_or(ParseError::MissingField("peer public-key"))?;
+    let pre_shared_key = get_str(peer, "pre-shared-key");
+    let allowed_ips = get_str_array(peer, "allowed-ips");
+    let reserved = parse_reserved_array(peer.get("reserved"));
+    let persistent_keepalive = peer
+        .get("persistent-keepalive")
+        .and_then(|v| v.as_u64())
+        .map(|secs| time::Duration::seconds(i64::try_from(secs).unwrap_or(0)));
+
+    let _ = node_endpoint;
+    Ok(WireGuardPeer {
+        public_key,
+        pre_shared_key,
+        allowed_ips,
+        reserved,
+        persistent_keepalive,
+    })
+}
+
+fn parse_reserved_array(val: Option<&Value>) -> Option<[u8; 3]> {
+    let arr = val?.as_array()?;
+    if arr.len() != 3 {
+        return None;
+    }
+    let mut bytes = [0u8; 3];
+    for (i, v) in arr.iter().enumerate() {
+        bytes[i] = v.as_u64()?.try_into().ok()?;
+    }
+    Some(bytes)
 }

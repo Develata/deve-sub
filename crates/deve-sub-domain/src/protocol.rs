@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::protocol_config::{
     Hysteria2Config, NaiveProxyConfig, ShadowsocksConfig, TrojanConfig, TuicV5Config, VMessConfig,
-    VlessRealityConfig,
+    VlessRealityConfig, WireGuardConfig,
 };
 
 /// Wire-level proxy protocol kind.
@@ -47,7 +47,7 @@ pub enum ProtocolKind {
     AnyTls,
     /// Snell. Non-P0.
     Snell,
-    /// WireGuard. Non-P0.
+    /// WireGuard. Typed in M9; see [`ProtocolConfig::WireGuard`].
     WireGuard,
     /// ShadowTLS. Non-P0.
     ShadowTls,
@@ -147,6 +147,8 @@ pub enum ProtocolConfig {
     VMess(VMessConfig),
     /// Trojan configuration.
     Trojan(TrojanConfig),
+    /// WireGuard configuration (M9).
+    WireGuard(WireGuardConfig),
     /// Fallback for non-P0 or unrecognized protocols. Preserves raw data;
     /// emitters must skip it. See ADR-0003.
     Unsupported(UnsupportedNode),

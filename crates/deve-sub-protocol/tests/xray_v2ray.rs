@@ -223,8 +223,8 @@ fn xray_preserves_unknown_protocol() {
     let json = r#"{
   "outbounds": [
     {
-      "protocol": "wireguard",
-      "tag": "WG",
+      "protocol": "anytls",
+      "tag": "AnyTLS-Unknown",
       "settings": {}
     }
   ]

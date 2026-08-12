@@ -15,7 +15,8 @@ use crate::error::ParseError;
 /// Parse a share URI into a canonical [`Node`].
 ///
 /// Dispatches on the URI scheme (`vless://`, `hysteria2://`, `hy2://`,
-/// `tuic://`, `naive+https://`, `ss://`, `vmess://`, `trojan://`).
+/// `tuic://`, `naive+https://`, `ss://`, `vmess://`, `trojan://`,
+/// `wireguard://`).
 ///
 /// The returned `Node` has protocol-specific fields populated from the URI.
 /// Metadata fields (`source`, `tags`, `region`) are set to defaults; the
@@ -44,6 +45,7 @@ pub fn parse_uri(uri: &str) -> Result<Node, ParseError> {
         "hysteria2" | "hy2" => crate::hysteria2::parse(&parsed, uri),
         "tuic" => crate::tuic_v5::parse(&parsed, uri),
         "naive+https" | "naive+http" => crate::naive::parse(&parsed, uri),
+        "wireguard" => crate::wireguard::parse(&parsed, uri),
         other => Err(ParseError::UnknownScheme(other.to_owned())),
     }
 }

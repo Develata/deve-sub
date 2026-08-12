@@ -23,6 +23,10 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
     let port = node.endpoint.port;
     let tag = node.display_name.clone();
 
+    if node.protocol == ProtocolKind::WireGuard {
+        return emit_wireguard(node, tag);
+    }
+
     let (protocol, settings, stream) = match node.protocol {
         ProtocolKind::Trojan => trojan(node)?,
         ProtocolKind::Shadowsocks => shadowsocks(node)?,
@@ -51,6 +55,88 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
     if let Some(s) = stream {
         obj.insert("streamSettings".to_owned(), s);
     }
+    Ok(Value::Object(obj))
+}
+
+fn emit_wireguard(node: &Node, tag: String) -> Result<Value, EmitError> {
+    let cfg = match &node.config {
+        ProtocolConfig::WireGuard(c) => c,
+        _ => return Err(EmitError::MissingField("wireguard config")),
+    };
+
+    let server = node.endpoint.host.uri_host();
+    let port = node.endpoint.port;
+
+    let peers: Vec<Value> = cfg
+        .peers
+        .iter()
+        .map(|p| {
+            let mut peer = Map::new();
+            peer.insert("publicKey".to_owned(), Value::String(p.public_key.clone()));
+            peer.insert(
+                "endpoint".to_owned(),
+                Value::String(format!("{server}:{port}")),
+            );
+            if let Some(ref psk) = p.pre_shared_key {
+                peer.insert("preSharedKey".to_owned(), Value::String(psk.clone()));
+            }
+            if !p.allowed_ips.is_empty() {
+                peer.insert(
+                    "allowedIPs".to_owned(),
+                    Value::Array(
+                        p.allowed_ips
+                            .iter()
+                            .map(|ip| Value::String(ip.clone()))
+                            .collect(),
+                    ),
+                );
+            }
+            if let Some(ka) = p.persistent_keepalive {
+                let secs = ka.whole_seconds();
+                if secs >= 0 {
+                    peer.insert("keepAlive".to_owned(), json!(secs));
+                }
+            }
+            Value::Object(peer)
+        })
+        .collect();
+
+    let mut settings = Map::new();
+    settings.insert(
+        "secretKey".to_owned(),
+        Value::String(cfg.private_key.clone()),
+    );
+    if !cfg.address.is_empty() {
+        settings.insert(
+            "address".to_owned(),
+            Value::Array(
+                cfg.address
+                    .iter()
+                    .map(|a| Value::String(a.clone()))
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(mtu) = cfg.mtu {
+        settings.insert("mtu".to_owned(), json!(mtu));
+    }
+    if let Some(reserved) = cfg.peers.first().and_then(|p| p.reserved) {
+        settings.insert(
+            "reserved".to_owned(),
+            Value::Array(
+                reserved
+                    .iter()
+                    .map(|b| Value::Number((*b).into()))
+                    .collect(),
+            ),
+        );
+    }
+    settings.insert("peers".to_owned(), Value::Array(peers));
+
+    let mut obj = Map::new();
+    obj.insert("tag".to_owned(), Value::String(tag));
+    obj.insert("protocol".to_owned(), Value::String("wireguard".to_owned()));
+    obj.insert("settings".to_owned(), Value::Object(settings));
     Ok(Value::Object(obj))
 }
 

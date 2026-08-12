@@ -1,10 +1,11 @@
-//! Typed configuration payloads for the seven P0 protocols.
+//! Typed configuration payloads for the seven P0 protocols and M9 additional
+//! protocols (WireGuard, AnyTLS, Snell, ShadowTLS).
 //!
-//! Only P0 protocols have typed config in Phase 1. Fields already lifted to
-//! the canonical [`crate::Node`] level (endpoint, authentication, transport,
-//! TLS, UDP capability, obfuscation, congestion) are not duplicated here; only
-//! protocol-specific fields that have no shared home live in these structs.
-//! See ADR-0003 and `docs/plan/05-protocol-engine.md`.
+//! Fields already lifted to the canonical [`crate::Node`] level (endpoint,
+//! authentication, transport, TLS, UDP capability, obfuscation, congestion)
+//! are not duplicated here; only protocol-specific fields that have no shared
+//! home live in these structs. See ADR-0003 and
+//! `docs/plan/05-protocol-engine.md`.
 
 use serde::{Deserialize, Serialize};
 
@@ -124,4 +125,46 @@ pub struct VMessConfig {
 pub struct TrojanConfig {
     /// `packetEncoding` query parameter.
     pub packet_encoding: Option<String>,
+}
+
+/// WireGuard configuration (M9).
+///
+/// `server`/`port` (the peer endpoint) is carried by [`crate::Endpoint`].
+/// WireGuard has **no TLS layer** — it uses Noise IK handshake (X25519 +
+/// ChaCha20-Poly1305), so [`crate::TlsConfig`] must be `None`.
+///
+/// The `private_key` is the local interface key; each peer carries its
+/// `public_key`. The `address` list holds local tunnel interface CIDRs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireGuardConfig {
+    /// Local interface private key (base64).
+    pub private_key: String,
+    /// Local tunnel interface addresses as CIDR strings (e.g. `10.0.0.1/32`).
+    pub address: Vec<String>,
+    /// Peer list. Usually a single peer for proxy use cases.
+    pub peers: Vec<WireGuardPeer>,
+    /// MTU. Defaults differ by client (mihomo 1420, sing-box 1408).
+    pub mtu: Option<u32>,
+    /// Worker count (mihomo `workers` field only).
+    pub workers: Option<u32>,
+    /// DNS resolver addresses (mihomo `dns` field only).
+    pub dns: Vec<String>,
+}
+
+/// WireGuard peer configuration.
+///
+/// The peer's `server`/`port` is the node [`crate::Endpoint`]; this struct
+/// carries only peer-specific fields not already on the node.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireGuardPeer {
+    /// Peer public key (base64).
+    pub public_key: String,
+    /// Pre-shared key (base64), if configured.
+    pub pre_shared_key: Option<String>,
+    /// Allowed IP CIDRs for this peer.
+    pub allowed_ips: Vec<String>,
+    /// Reserved bytes (mihomo/sing-box specific, for obfuscation).
+    pub reserved: Option<[u8; 3]>,
+    /// Persistent keepalive interval.
+    pub persistent_keepalive: Option<time::Duration>,
 }

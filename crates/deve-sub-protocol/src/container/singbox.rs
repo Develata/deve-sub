@@ -12,7 +12,8 @@ use serde_json::Value;
 use deve_sub_domain::{
     Authentication, CongestionConfig, CongestionController, Endpoint, Hysteria2Config, Node,
     Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig, TlsConfig, Transport, TransportKind,
-    TrojanConfig, TuicV5Config, UdpRelayMode, VMessConfig, VlessRealityConfig,
+    TrojanConfig, TuicV5Config, UdpRelayMode, VMessConfig, VlessRealityConfig, WireGuardConfig,
+    WireGuardPeer,
 };
 
 use crate::error::ParseError;
@@ -61,6 +62,7 @@ fn parse_outbound(entry: &Value) -> Node {
         "shadowsocks" => parse_shadowsocks(entry),
         "hysteria2" => parse_hysteria2(entry),
         "tuic" => parse_tuic(entry),
+        "wireguard" => parse_wireguard(entry),
         // sing-box internal types (direct, block, dns) are not proxy nodes.
         "direct" | "block" | "dns" | "selector" | "urltest" => {
             return unsupported_entry(
@@ -374,5 +376,79 @@ fn parse_tuic(entry: &Value) -> Result<Node, ParseError> {
     node.authentication = Authentication::UuidPassword { uuid, password };
     node.tls = extract_tls(entry).or_else(|| Some(default_tls_enabled()));
     node.congestion = congestion;
+    Ok(node)
+}
+
+fn parse_wireguard(entry: &Value) -> Result<Node, ParseError> {
+    let (name, endpoint) = build_base(entry)?;
+    let private_key =
+        get_str(entry, "private_key").ok_or(ParseError::MissingField("private_key"))?;
+
+    let address = get_str_array(entry, "local_address");
+
+    let mtu = entry
+        .get("mtu")
+        .and_then(|v| v.as_u64())
+        .map(|n| u32::try_from(n).unwrap_or(0));
+
+    let workers = entry
+        .get("workers")
+        .and_then(|v| v.as_u64())
+        .map(|n| u32::try_from(n).unwrap_or(0));
+
+    let peers = if let Some(peers_arr) = entry.get("peers").and_then(|p| p.as_array()) {
+        peers_arr
+            .iter()
+            .map(|p| {
+                let public_key =
+                    get_str(p, "public_key").ok_or(ParseError::MissingField("peer public_key"))?;
+                let pre_shared_key = get_str(p, "pre_shared_key");
+                let allowed_ips = get_str_array(p, "allowed_ips");
+                let reserved = p
+                    .get("reserved")
+                    .and_then(|r| r.as_array())
+                    .and_then(|arr| {
+                        if arr.len() == 3 {
+                            let mut bytes = [0u8; 3];
+                            for (i, v) in arr.iter().enumerate() {
+                                bytes[i] = v.as_u64()?.try_into().ok()?;
+                            }
+                            Some(bytes)
+                        } else {
+                            None
+                        }
+                    });
+                let persistent_keepalive = p
+                    .get("persistent_keepalive_interval")
+                    .and_then(|v| v.as_u64())
+                    .map(|secs| time::Duration::seconds(i64::try_from(secs).unwrap_or(0)));
+                Ok(WireGuardPeer {
+                    public_key,
+                    pre_shared_key,
+                    allowed_ips,
+                    reserved,
+                    persistent_keepalive,
+                })
+            })
+            .collect::<Result<Vec<_>, ParseError>>()?
+    } else {
+        return Err(ParseError::MissingField("peers"));
+    };
+
+    let config = ProtocolConfig::WireGuard(WireGuardConfig {
+        private_key,
+        address,
+        peers,
+        mtu,
+        workers,
+        dns: vec![],
+    });
+
+    let mut node = node_shell_container();
+    node.display_name = name;
+    node.protocol = ProtocolKind::WireGuard;
+    node.config = config;
+    node.endpoint = endpoint;
+    node.authentication = Authentication::None;
     Ok(node)
 }

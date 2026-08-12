@@ -31,6 +31,7 @@ fn emit_proxy(node: &Node, lines: &mut Vec<String>) -> Result<(), EmitError> {
         ProtocolKind::Vless => emit_vless(node, &server, port, name, lines),
         ProtocolKind::Hysteria2 => emit_hysteria2(node, &server, port, name, lines),
         ProtocolKind::TuicV5 => emit_tuic_v5(node, &server, port, name, lines),
+        ProtocolKind::WireGuard => emit_wireguard(node, &server, port, name, lines),
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "mihomo: unsupported protocol {other}"
@@ -170,6 +171,77 @@ fn emit_tuic_v5(
     entry.push_str(&format!("\n    uuid: \"{uuid}\""));
     entry.push_str(&format!("\n    password: \"{password}\""));
     push_tls(node, &mut entry);
+    lines.push(entry);
+    Ok(())
+}
+
+fn emit_wireguard(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let cfg = match &node.config {
+        ProtocolConfig::WireGuard(c) => c,
+        _ => return Err(EmitError::MissingField("wireguard config")),
+    };
+    let mut entry = yaml_entry(name, "wireguard", server, port);
+    entry.push_str(&format!("\n    private-key: \"{}\"", cfg.private_key));
+
+    // Mihomo splits WireGuard interface addresses into `ip` (IPv4) and
+    // `ipv6` (IPv6), each a single string. Emit by simple colon heuristic.
+    if !cfg.address.is_empty() {
+        let v4 = cfg.address.iter().find(|a| !a.contains(':'));
+        let v6 = cfg.address.iter().find(|a| a.contains(':'));
+        if let Some(ip) = v4 {
+            entry.push_str(&format!("\n    ip: \"{ip}\""));
+        }
+        if let Some(ipv6) = v6 {
+            entry.push_str(&format!("\n    ipv6: \"{ipv6}\""));
+        }
+    }
+    if let Some(mtu) = cfg.mtu {
+        entry.push_str(&format!("\n    mtu: {mtu}"));
+    }
+    if let Some(workers) = cfg.workers {
+        entry.push_str(&format!("\n    workers: {workers}"));
+    }
+    if !cfg.dns.is_empty() {
+        let dns: Vec<String> = cfg.dns.iter().map(|d| format!("\"{d}\"")).collect();
+        entry.push_str(&format!("\n    dns: [{}]", dns.join(", ")));
+    }
+
+    if let Some(peer) = cfg.peers.first() {
+        entry.push_str("\n    peers:");
+        entry.push_str(&format!("\n      - server: {server}"));
+        entry.push_str(&format!("\n        port: {port}"));
+        entry.push_str(&format!("\n        public-key: \"{}\"", peer.public_key));
+        if let Some(ref psk) = peer.pre_shared_key {
+            entry.push_str(&format!("\n        pre-shared-key: \"{psk}\""));
+        }
+        if !peer.allowed_ips.is_empty() {
+            let ips: Vec<String> = peer
+                .allowed_ips
+                .iter()
+                .map(|ip| format!("\"{ip}\""))
+                .collect();
+            entry.push_str(&format!("\n        allowed-ips: [{}]", ips.join(", ")));
+        }
+        if let Some(reserved) = peer.reserved {
+            entry.push_str(&format!(
+                "\n        reserved: [{}, {}, {}]",
+                reserved[0], reserved[1], reserved[2]
+            ));
+        }
+        if let Some(ka) = peer.persistent_keepalive {
+            let secs = ka.whole_seconds();
+            if secs >= 0 {
+                entry.push_str(&format!("\n        persistent-keepalive: {secs}"));
+            }
+        }
+    }
+
     lines.push(entry);
     Ok(())
 }

@@ -133,9 +133,9 @@ PERF-003	缓存订阅	P1	Load	planned
 PERF-004	无缓存生成	P1	Load	planned
 PERF-005	并发订阅下载	P1	Load	planned
 PERF-006	长时间运行	P1	Soak	planned
-PARSE-019	WireGuard URI	P1	Golden	planned
-PARSE-020	WireGuard Mihomo YAML	P1	Golden	planned
-PARSE-021	WireGuard sing-box JSON	P1	Golden	planned
+PARSE-019	WireGuard URI	P1	Golden	pass
+PARSE-020	WireGuard Mihomo YAML	P1	Golden	pass
+PARSE-021	WireGuard sing-box JSON	P1	Golden	pass
 PARSE-022	AnyTLS URI	P1	Golden	planned
 PARSE-023	AnyTLS Mihomo/sing-box	P1	Golden	planned
 PARSE-024	Snell URI	P1	Golden	planned

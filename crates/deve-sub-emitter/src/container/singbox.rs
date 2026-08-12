@@ -32,6 +32,7 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
         ProtocolKind::Vless => vless(node)?,
         ProtocolKind::Hysteria2 => hysteria2(node)?,
         ProtocolKind::TuicV5 => tuic_v5(node)?,
+        ProtocolKind::WireGuard => wireguard(node)?,
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "singbox: unsupported protocol {other}"
@@ -154,6 +155,86 @@ fn tuic_v5(node: &Node) -> EmitResult {
     ];
     push_tls_fields(&mut fields, node);
     Ok(("tuic", fields))
+}
+
+fn wireguard(node: &Node) -> EmitResult {
+    let cfg = match &node.config {
+        ProtocolConfig::WireGuard(c) => c,
+        _ => return Err(EmitError::MissingField("wireguard config")),
+    };
+
+    let mut fields: Vec<(String, Value)> = Vec::new();
+    fields.push((
+        "private_key".to_owned(),
+        Value::String(cfg.private_key.clone()),
+    ));
+
+    if !cfg.address.is_empty() {
+        fields.push((
+            "local_address".to_owned(),
+            Value::Array(
+                cfg.address
+                    .iter()
+                    .map(|a| Value::String(a.clone()))
+                    .collect(),
+            ),
+        ));
+    }
+    if let Some(mtu) = cfg.mtu {
+        fields.push(("mtu".to_owned(), json!(mtu)));
+    }
+    if let Some(workers) = cfg.workers {
+        fields.push(("workers".to_owned(), json!(workers)));
+    }
+
+    let peers: Result<Vec<Value>, EmitError> = cfg
+        .peers
+        .iter()
+        .map(|p| {
+            let mut peer = Map::new();
+            peer.insert(
+                "server".to_owned(),
+                Value::String(node.endpoint.host.uri_host()),
+            );
+            peer.insert("server_port".to_owned(), json!(node.endpoint.port));
+            peer.insert("public_key".to_owned(), Value::String(p.public_key.clone()));
+            if let Some(ref psk) = p.pre_shared_key {
+                peer.insert("pre_shared_key".to_owned(), Value::String(psk.clone()));
+            }
+            if !p.allowed_ips.is_empty() {
+                peer.insert(
+                    "allowed_ips".to_owned(),
+                    Value::Array(
+                        p.allowed_ips
+                            .iter()
+                            .map(|ip| Value::String(ip.clone()))
+                            .collect(),
+                    ),
+                );
+            }
+            if let Some(reserved) = p.reserved {
+                peer.insert(
+                    "reserved".to_owned(),
+                    Value::Array(
+                        reserved
+                            .iter()
+                            .map(|b| Value::Number((*b).into()))
+                            .collect(),
+                    ),
+                );
+            }
+            if let Some(ka) = p.persistent_keepalive {
+                let secs = ka.whole_seconds();
+                if secs >= 0 {
+                    peer.insert("persistent_keepalive_interval".to_owned(), json!(secs));
+                }
+            }
+            Ok(Value::Object(peer))
+        })
+        .collect();
+    fields.push(("peers".to_owned(), Value::Array(peers?)));
+
+    Ok(("wireguard", fields))
 }
 
 fn singbox_transport(transport: &Transport) -> Option<Value> {

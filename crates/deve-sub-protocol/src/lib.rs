@@ -22,6 +22,7 @@ mod tuic_v5;
 mod uri;
 mod vless_reality;
 mod vmess;
+mod wireguard;
 
 pub use error::ParseError;
 

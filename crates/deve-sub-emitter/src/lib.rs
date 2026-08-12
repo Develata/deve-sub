@@ -24,6 +24,7 @@ mod uri;
 mod uri_list;
 mod vless_reality;
 mod vmess;
+mod wireguard;
 
 pub use container::{emit_mihomo, emit_shadowrocket, emit_singbox, emit_v2ray, emit_xray};
 pub use error::EmitError;

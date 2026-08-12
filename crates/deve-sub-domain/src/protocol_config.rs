@@ -313,3 +313,68 @@ pub enum SnellObfsMode {
     /// JLS obfuscation.
     Jls,
 }
+
+/// ShadowTLS configuration (M9).
+///
+/// ShadowTLS is a TLS-camouflage wrapper: it performs a real TLS handshake
+/// against a camouflage server (SNI), then tunnels an inner protocol inside.
+/// The camouflage TLS fields (sni, alpn, skip_cert_verify, fingerprint) live
+/// on [`crate::TlsConfig`] attached to the outer `Node`.
+///
+/// `inner_protocol` + `inner_config` carry the wrapped protocol. When
+/// emitting to sing-box, the ShadowTLS outbound is standalone and the inner
+/// protocol outbound chains via `detour`. When emitting to mihomo,
+/// ShadowTLS is projected as an obfuscation layer under the inner protocol
+/// type (`shadow-tls-opts` for vless/trojan/vmess/anytls, `plugin:
+/// shadow-tls` for ss, `obfs-opts.mode: shadow-tls` for snell). Xray does
+/// not support ShadowTLS — excluded with report (constraint #7).
+///
+/// `password` is required for V2/V3 and `None` for V1.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShadowTlsConfig {
+    /// ShadowTLS protocol version.
+    pub version: ShadowTlsVersion,
+    /// ShadowTLS password (required for V2/V3, `None` for V1).
+    pub password: Option<String>,
+    /// The protocol wrapped inside ShadowTLS.
+    pub inner_protocol: crate::ProtocolKind,
+    /// Typed config of the inner protocol.
+    pub inner_config: Box<crate::ProtocolConfig>,
+}
+
+/// ShadowTLS protocol version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ShadowTlsVersion {
+    /// ShadowTLS v1 (no password).
+    V1,
+    /// ShadowTLS v2 (password required).
+    V2,
+    /// ShadowTLS v3 (password required).
+    V3,
+}
+
+impl ShadowTlsVersion {
+    /// Returns the numeric version value (1–3).
+    #[must_use]
+    pub fn as_u32(self) -> u32 {
+        match self {
+            Self::V1 => 1,
+            Self::V2 => 2,
+            Self::V3 => 3,
+        }
+    }
+
+    /// Parses a numeric version into a [`ShadowTlsVersion`].
+    ///
+    /// # Errors
+    /// Returns `None` if the value is not 1–3.
+    #[must_use]
+    pub fn from_u32(n: u32) -> Option<Self> {
+        match n {
+            1 => Some(Self::V1),
+            2 => Some(Self::V2),
+            3 => Some(Self::V3),
+            _ => None,
+        }
+    }
+}

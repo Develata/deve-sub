@@ -9,8 +9,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::protocol_config::{
-    AnyTlsConfig, Hysteria2Config, NaiveProxyConfig, ShadowsocksConfig, SnellConfig, TrojanConfig,
-    TuicV5Config, VMessConfig, VlessRealityConfig, WireGuardConfig,
+    AnyTlsConfig, Hysteria2Config, NaiveProxyConfig, ShadowTlsConfig, ShadowsocksConfig,
+    SnellConfig, TrojanConfig, TuicV5Config, VMessConfig, VlessRealityConfig, WireGuardConfig,
 };
 
 /// Wire-level proxy protocol kind.
@@ -153,6 +153,8 @@ pub enum ProtocolConfig {
     AnyTls(AnyTlsConfig),
     /// Snell configuration (M9).
     Snell(SnellConfig),
+    /// ShadowTLS configuration (M9).
+    ShadowTls(ShadowTlsConfig),
     /// Fallback for non-P0 or unrecognized protocols. Preserves raw data;
     /// emitters must skip it. See ADR-0003.
     Unsupported(UnsupportedNode),

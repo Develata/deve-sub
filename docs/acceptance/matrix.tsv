@@ -140,7 +140,7 @@ PARSE-022	AnyTLS URI	P1	Golden	pass
 PARSE-023	AnyTLS Mihomo/sing-box	P1	Golden	pass
 PARSE-024	Snell URI	P1	Golden	pass
 PARSE-025	Snell Mihomo/sing-box	P1	Golden	pass
-PARSE-026	ShadowTLS sing-box/Mihomo	P1	Golden	planned
+PARSE-026	ShadowTLS sing-box/Mihomo	P1	Golden	pass
 PARSE-027	xhttp transport	P1	Golden	planned
 OUT-015	JSON profile	P1	Compatibility	planned
 AUDIT-001	审计日志查询	P1	Integration	planned

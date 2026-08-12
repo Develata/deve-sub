@@ -11,10 +11,10 @@ use serde_json::Value;
 
 use deve_sub_domain::{
     AnyTlsConfig, Authentication, CongestionConfig, CongestionController, Endpoint,
-    Hysteria2Config, Node, Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig, SnellConfig,
-    SnellObfs, SnellObfsMode, SnellV6Mode, SnellVersion, TlsConfig, Transport, TransportKind,
-    TrojanConfig, TuicV5Config, UdpRelayMode, VMessConfig, VlessRealityConfig, WireGuardConfig,
-    WireGuardPeer,
+    Hysteria2Config, Node, Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig,
+    ShadowTlsConfig, ShadowTlsVersion, SnellConfig, SnellObfs, SnellObfsMode, SnellV6Mode,
+    SnellVersion, TlsConfig, Transport, TransportKind, TrojanConfig, TuicV5Config, UdpRelayMode,
+    VMessConfig, VlessRealityConfig, WireGuardConfig, WireGuardPeer,
 };
 
 use crate::error::ParseError;
@@ -39,7 +39,86 @@ pub fn parse_singbox_json(text: &str) -> Result<Vec<Node>, ParseError> {
         .as_array()
         .ok_or(ParseError::MissingContainerKey("outbounds (not a list)"))?;
 
-    Ok(outbounds.iter().map(parse_outbound).collect())
+    // WHY: ShadowTLS in sing-box uses two outbounds — a `shadowtls` outbound
+    // and an inner protocol outbound that chains via `detour`. The canonical
+    // model merges them into one Node with `ProtocolConfig::ShadowTls`. First
+    // pass: build a map of shadowtls tags + a set of referenced tags. Second
+    // pass: parse outbounds, absorbing referenced shadowtls outbounds into
+    // their inner node, and skipping standalone shadowtls outbounds that are
+    // referenced by a detour.
+    let shadowtls_map: std::collections::HashMap<String, &Value> = outbounds
+        .iter()
+        .filter_map(|entry| {
+            if get_str(entry, "type").as_deref() == Some("shadowtls") {
+                get_str(entry, "tag").map(|tag| (tag, entry))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let referenced_shadowtls: std::collections::HashSet<String> = outbounds
+        .iter()
+        .filter_map(|entry| {
+            let detour = get_str(entry, "detour")?;
+            shadowtls_map.contains_key(&detour).then_some(detour)
+        })
+        .collect();
+
+    let mut nodes = Vec::new();
+    for entry in outbounds {
+        let outbound_type = match get_str(entry, "type") {
+            Some(t) => t,
+            None => {
+                nodes.push(unsupported_entry(
+                    entry,
+                    "singbox-json",
+                    ProtocolKind::Unknown(String::new()),
+                    "missing 'type' field".to_owned(),
+                ));
+                continue;
+            }
+        };
+
+        // Skip shadowtls outbounds that are referenced by a detour — they're
+        // absorbed into the inner node.
+        if outbound_type == "shadowtls"
+            && let Some(tag) = get_str(entry, "tag")
+            && referenced_shadowtls.contains(&tag)
+        {
+            continue;
+        }
+
+        // If this outbound has a detour to a shadowtls outbound, parse as
+        // ShadowTLS: inner protocol from this entry, wrapper from shadowtls.
+        if let Some(detour_tag) = get_str(entry, "detour")
+            && let Some(shadowtls_entry) = shadowtls_map.get(&detour_tag)
+        {
+            nodes.push(parse_shadowtls_wrapper(entry, shadowtls_entry));
+            continue;
+        }
+
+        // WHY: standalone shadowtls outbound (not referenced by any detour)
+        // has no inner protocol — route to `parse_shadowtls_standalone`
+        // which yields a ShadowTls node with inner_protocol = Unknown.
+        // Without this branch, `parse_outbound` has no `shadowtls` case and
+        // would surface the node as `Unknown("shadowtls")`.
+        if outbound_type == "shadowtls" {
+            nodes.push(parse_shadowtls_standalone(entry).unwrap_or_else(|_| {
+                unsupported_entry(
+                    entry,
+                    "singbox-json",
+                    ProtocolKind::ShadowTls,
+                    "failed to parse standalone shadowtls outbound".to_owned(),
+                )
+            }));
+            continue;
+        }
+
+        nodes.push(parse_outbound(entry));
+    }
+
+    Ok(nodes)
 }
 
 /// Dispatch a single outbound entry to the appropriate protocol mapper.
@@ -600,5 +679,111 @@ fn parse_snell(entry: &Value) -> Result<Node, ParseError> {
         node.extras
             .insert("snell_userkey".to_owned(), serde_json::Value::String(key));
     }
+    Ok(node)
+}
+
+/// Parse a ShadowTLS-wrapped outbound by merging the inner protocol entry
+/// with its referenced `shadowtls` outbound (sing-box detour pattern).
+///
+/// `inner_entry` is the inner protocol outbound (e.g. `trojan` with
+/// `detour: "stls-tag"`); `shadowtls_entry` is the `shadowtls` outbound it
+/// chains through. The resulting Node has `ProtocolKind::ShadowTls` with
+/// `ShadowTlsConfig` carrying the wrapper params + boxed inner config.
+fn parse_shadowtls_wrapper(inner_entry: &Value, shadowtls_entry: &Value) -> Node {
+    // WHY: endpoint comes from the shadowtls outbound (the actual dial
+    // target), while the inner protocol's server/server_port are vestigial
+    // (sing-box routes through the detour). The inner entry's TLS is also
+    // vestigial — the real TLS handshake is the shadowtls camouflage.
+    let shadowtls_result = parse_shadowtls_standalone(shadowtls_entry);
+    let Ok(mut wrapper_node) = shadowtls_result else {
+        return unsupported_entry(
+            shadowtls_entry,
+            "singbox-json",
+            ProtocolKind::ShadowTls,
+            "failed to parse shadowtls outbound".to_owned(),
+        );
+    };
+
+    // Parse the inner protocol to extract its typed config + authentication.
+    // The inner entry's endpoint and TLS are discarded (see WHY above).
+    let inner_node = parse_outbound(inner_entry);
+    if matches!(inner_node.config, ProtocolConfig::Unsupported(_)) {
+        return unsupported_entry(
+            inner_entry,
+            "singbox-json",
+            ProtocolKind::ShadowTls,
+            format!(
+                "shadowtls inner protocol '{}' is unsupported or internal",
+                inner_node.protocol
+            ),
+        );
+    }
+
+    // Adopt the inner entry's display name (tag) — that's what users see.
+    wrapper_node.display_name = inner_node.display_name.clone();
+
+    // WHY: ShadowTlsConfig wraps the inner protocol config in a Box. The
+    // inner_protocol field records which ProtocolKind is wrapped so emitters
+    // can project correctly without downcasting the boxed config.
+    let ProtocolConfig::ShadowTls(ref mut stls_cfg) = wrapper_node.config else {
+        return unsupported_entry(
+            shadowtls_entry,
+            "singbox-json",
+            ProtocolKind::ShadowTls,
+            "internal: shadowtls parse did not yield ShadowTls config".to_owned(),
+        );
+    };
+    stls_cfg.inner_protocol = inner_node.protocol;
+    *stls_cfg.inner_config = inner_node.config;
+
+    // Adopt the inner protocol's authentication (e.g. trojan password).
+    wrapper_node.authentication = inner_node.authentication;
+
+    wrapper_node
+}
+
+/// Parse a standalone sing-box `shadowtls` outbound into a Node shell with
+/// `ProtocolConfig::ShadowTls`. The inner_protocol/inner_config fields are
+/// left as placeholders (`Unknown` / `Unsupported`) for the caller to fill
+/// when merging via detour; for standalone shadowtls (no detour reference),
+/// the node is returned as-is with placeholder inner.
+fn parse_shadowtls_standalone(entry: &Value) -> Result<Node, ParseError> {
+    let (name, endpoint) = build_base(entry)?;
+    let version_n = entry
+        .get("version")
+        .and_then(|v| v.as_u64())
+        .ok_or(ParseError::MissingField("version"))?;
+    let version = ShadowTlsVersion::from_u32(u32::try_from(version_n).unwrap_or(0)).ok_or(
+        ParseError::InvalidField {
+            field: "version",
+            value: version_n.to_string(),
+        },
+    )?;
+    let password = get_str(entry, "password");
+    let tls = extract_tls(entry).unwrap_or_else(default_tls_enabled);
+
+    let config = ProtocolConfig::ShadowTls(ShadowTlsConfig {
+        version,
+        password,
+        // WHY: placeholders — filled by `parse_shadowtls_wrapper` when an
+        // inner detour outbound is merged. For a standalone shadowtls
+        // outbound (no detour reference), these remain as-is and the node
+        // surfaces as a partial ShadowTls node.
+        inner_protocol: ProtocolKind::Unknown(String::new()),
+        inner_config: Box::new(ProtocolConfig::Unsupported(
+            deve_sub_domain::UnsupportedNode {
+                raw: serde_json::Value::Null,
+                raw_format: None,
+                reason: "standalone shadowtls: no inner protocol".to_owned(),
+            },
+        )),
+    });
+
+    let mut node = node_shell_container();
+    node.display_name = name;
+    node.protocol = ProtocolKind::ShadowTls;
+    node.config = config;
+    node.endpoint = endpoint;
+    node.tls = Some(tls);
     Ok(node)
 }

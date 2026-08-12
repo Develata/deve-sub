@@ -17,6 +17,7 @@ pub mod error;
 mod hysteria2;
 mod naive;
 mod shadowsocks;
+mod shadowtls;
 mod snell;
 mod transport;
 mod trojan;

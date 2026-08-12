@@ -102,6 +102,7 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 ProtocolKind::WireGuard,
                 ProtocolKind::AnyTls,
                 ProtocolKind::Snell,
+                ProtocolKind::ShadowTls,
             ]
             .into_iter()
             .collect(),
@@ -138,6 +139,7 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 ProtocolKind::WireGuard,
                 ProtocolKind::AnyTls,
                 ProtocolKind::Snell,
+                ProtocolKind::ShadowTls,
             ]
             .into_iter()
             .collect(),
@@ -242,6 +244,7 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 ProtocolKind::WireGuard,
                 ProtocolKind::AnyTls,
                 ProtocolKind::Snell,
+                ProtocolKind::ShadowTls,
             ]
             .into_iter()
             .collect(),

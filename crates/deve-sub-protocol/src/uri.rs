@@ -48,6 +48,7 @@ pub fn parse_uri(uri: &str) -> Result<Node, ParseError> {
         "wireguard" => crate::wireguard::parse(&parsed, uri),
         "anytls" => crate::anytls::parse(&parsed, uri),
         "snell" => crate::snell::parse(&parsed, uri),
+        "shadow-tls" => crate::shadowtls::parse(&parsed, uri),
         other => Err(ParseError::UnknownScheme(other.to_owned())),
     }
 }

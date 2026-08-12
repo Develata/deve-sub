@@ -34,6 +34,7 @@ fn emit_proxy(node: &Node, lines: &mut Vec<String>) -> Result<(), EmitError> {
         ProtocolKind::WireGuard => emit_wireguard(node, &server, port, name, lines),
         ProtocolKind::AnyTls => emit_anytls(node, &server, port, name, lines),
         ProtocolKind::Snell => emit_snell(node, &server, port, name, lines),
+        ProtocolKind::ShadowTls => emit_shadowtls(node, &server, port, name, lines),
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "mihomo: unsupported protocol {other}"
@@ -337,6 +338,102 @@ fn emit_snell(
     if matches!(cfg.obfs.as_ref().map(|o| o.mode), Some(SnellObfsMode::Tls)) {
         push_tls(node, &mut entry);
     }
+    lines.push(entry);
+    Ok(())
+}
+
+/// Emit a ShadowTLS node by projecting it back under the inner protocol
+/// type with a ShadowTLS obfuscation layer (mihomo pattern).
+///
+/// - inner = Shadowsocks → `type: ss` + `plugin: shadow-tls` + `plugin-opts`
+/// - inner = Snell → `type: snell` + `obfs-opts: { mode: shadow-tls }`
+/// - inner = VLESS/Trojan/VMess/AnyTLS → `type: <inner>` + `shadow-tls-opts`
+fn emit_shadowtls(
+    node: &Node,
+    _server: &str,
+    _port: u16,
+    _name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let cfg = match &node.config {
+        ProtocolConfig::ShadowTls(c) => c,
+        _ => return Err(EmitError::MissingField("shadowtls config")),
+    };
+
+    // WHY: synthesize an inner Node carrying only the inner protocol config
+    // + authentication, then delegate to the inner protocol's emitter. The
+    // ShadowTLS obfs layer is injected after, as `shadow-tls-opts` /
+    // `plugin-opts` / `obfs-opts` depending on the inner protocol type.
+    let mut inner_node = node.clone();
+    inner_node.protocol = cfg.inner_protocol.clone();
+    inner_node.config = (*cfg.inner_config).clone();
+    // Inner TLS is vestigial; shadowtls camouflage TLS lives on node.tls.
+    inner_node.tls = None;
+
+    // Capture the inner emitter's output into a temp buffer, then append
+    // the ShadowTLS obfs fields before pushing to `lines`.
+    let mut inner_lines: Vec<String> = Vec::new();
+    emit_proxy(&inner_node, &mut inner_lines)?;
+    let inner_entry = inner_lines.into_iter().next().ok_or_else(|| {
+        EmitError::NoEmitter("shadowtls: inner emitter produced no output".to_owned())
+    })?;
+
+    let mut entry = inner_entry;
+
+    // Inject ShadowTLS obfs layer based on inner protocol type.
+    match cfg.inner_protocol {
+        ProtocolKind::Shadowsocks => {
+            // ss uses `plugin: shadow-tls` + `plugin-opts`.
+            entry.push_str("\n    plugin: shadow-tls");
+            entry.push_str("\n    plugin-opts:");
+            entry.push_str(&format!("\n      version: {}", cfg.version.as_u32()));
+            if let Some(ref pw) = cfg.password {
+                entry.push_str(&format!("\n      password: \"{pw}\""));
+            }
+            if let Some(ref tls) = node.tls
+                && let Some(ref sni) = tls.server_name
+            {
+                entry.push_str(&format!("\n      host: \"{sni}\""));
+            }
+        }
+        ProtocolKind::Snell => {
+            // snell uses `obfs-opts.mode: shadow-tls`.
+            entry.push_str("\n    obfs-opts:");
+            entry.push_str("\n      mode: shadow-tls");
+            entry.push_str(&format!("\n      version: {}", cfg.version.as_u32()));
+            if let Some(ref pw) = cfg.password {
+                entry.push_str(&format!("\n      password: \"{pw}\""));
+            }
+            if let Some(ref tls) = node.tls
+                && let Some(ref sni) = tls.server_name
+            {
+                entry.push_str(&format!("\n      host: \"{sni}\""));
+            }
+        }
+        ProtocolKind::Vless | ProtocolKind::Trojan | ProtocolKind::VMess | ProtocolKind::AnyTls => {
+            // vless/trojan/vmess/anytls use `shadow-tls-opts`.
+            entry.push_str("\n    shadow-tls-opts:");
+            entry.push_str(&format!("\n      version: {}", cfg.version.as_u32()));
+            if let Some(ref pw) = cfg.password {
+                entry.push_str(&format!("\n      password: \"{pw}\""));
+            }
+            if let Some(ref tls) = node.tls
+                && let Some(ref sni) = tls.server_name
+            {
+                entry.push_str(&format!("\n      sni: \"{sni}\""));
+            }
+            // WHY: camouflage TLS fields (skip-cert-verify, alpn) are emitted
+            // at top-level via push_tls, since mihomo reads them there for
+            // the shadowtls handshake target.
+            push_tls(node, &mut entry);
+        }
+        ref other => {
+            return Err(EmitError::NoEmitter(format!(
+                "mihomo shadowtls: inner protocol {other} not supported"
+            )));
+        }
+    }
+
     lines.push(entry);
     Ok(())
 }

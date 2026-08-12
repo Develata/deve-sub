@@ -12,9 +12,9 @@ use serde_json::Value;
 use deve_sub_domain::{
     AnyTlsConfig, Authentication, CongestionConfig, CongestionController, Endpoint,
     Hysteria2Config, NaiveProxyConfig, Node, Obfuscation, ProtocolConfig, ProtocolKind,
-    RealityConfig, ShadowsocksConfig, SnellConfig, SnellObfs, SnellObfsMode, SnellVersion,
-    TlsConfig, Transport, TransportKind, TrojanConfig, TuicV5Config, UdpCapability, UdpRelayMode,
-    VMessConfig, VlessRealityConfig, WireGuardConfig, WireGuardPeer,
+    RealityConfig, ShadowTlsConfig, ShadowTlsVersion, ShadowsocksConfig, SnellConfig, SnellObfs,
+    SnellObfsMode, SnellVersion, TlsConfig, Transport, TransportKind, TrojanConfig, TuicV5Config,
+    UdpCapability, UdpRelayMode, VMessConfig, VlessRealityConfig, WireGuardConfig, WireGuardPeer,
 };
 
 use crate::error::ParseError;
@@ -71,7 +71,18 @@ fn parse_proxy_entry(entry: &Value) -> Node {
     };
 
     match result {
-        Ok(node) => node,
+        Ok(node) => {
+            // WHY: mihomo projects ShadowTLS as an obfuscation layer under
+            // the inner protocol type — detect `shadow-tls-opts` (vless/
+            // trojan/vmess/anytls), `plugin: shadow-tls` (ss), or
+            // `obfs-opts.mode: shadow-tls` (snell) and wrap the parsed
+            // inner node in `ProtocolConfig::ShadowTls`.
+            if let Some(stls_node) = try_parse_shadowtls_projection(entry, &node) {
+                stls_node
+            } else {
+                node
+            }
+        }
         Err(e) => unsupported_entry(
             entry,
             "mihomo-yaml",
@@ -79,6 +90,87 @@ fn parse_proxy_entry(entry: &Value) -> Node {
             e.to_string(),
         ),
     }
+}
+
+/// Detect mihomo ShadowTLS projection patterns and wrap the inner node.
+///
+/// Returns `Some(ShadowTls node)` if the entry carries a ShadowTLS
+/// obfuscation layer, `None` otherwise. Three patterns are recognized:
+/// - `shadow-tls-opts` on vless/trojan/vmess/anytls
+/// - `plugin: shadow-tls` + `plugin-opts` on ss
+/// - `obfs-opts.mode: shadow-tls` on snell
+fn try_parse_shadowtls_projection(entry: &Value, inner_node: &Node) -> Option<Node> {
+    let (version, password, sni) = if let Some(opts) = entry.get("shadow-tls-opts") {
+        // vless/trojan/vmess/anytls pattern
+        let v = opts
+            .get("version")
+            .and_then(|v| v.as_u64())
+            .map(|n| u32::try_from(n).unwrap_or(0))?;
+        let version = ShadowTlsVersion::from_u32(v)?;
+        let password = get_str(opts, "password");
+        let sni = get_str(opts, "sni")
+            .or_else(|| get_str(entry, "sni"))
+            .or_else(|| get_str(entry, "servername"));
+        (version, password, sni)
+    } else if get_str(entry, "plugin").as_deref() == Some("shadow-tls") {
+        // ss + plugin: shadow-tls pattern
+        let opts = entry.get("plugin-opts")?;
+        let v = opts
+            .get("version")
+            .and_then(|v| v.as_u64())
+            .map(|n| u32::try_from(n).unwrap_or(0))?;
+        let version = ShadowTlsVersion::from_u32(v)?;
+        let password = get_str(opts, "password");
+        let sni = get_str(opts, "host").or_else(|| get_str(entry, "sni"));
+        (version, password, sni)
+    } else if let Some(obfs) = entry.get("obfs-opts")
+        && get_str(obfs, "mode").as_deref() == Some("shadow-tls")
+    {
+        // snell + obfs-opts.mode: shadow-tls pattern
+        let v = obfs
+            .get("version")
+            .and_then(|v| v.as_u64())
+            .map(|n| u32::try_from(n).unwrap_or(0))?;
+        let version = ShadowTlsVersion::from_u32(v)?;
+        let password = get_str(obfs, "password");
+        let sni = get_str(obfs, "host").or_else(|| get_str(entry, "sni"));
+        (version, password, sni)
+    } else {
+        return None;
+    };
+
+    // WHY: skip wrapping if inner config is Unsupported — can't carry a
+    // meaningful inner_config. The node stays as-is (constraint #7: no
+    // silent drop, the inner surfaces as Unsupported).
+    if matches!(inner_node.config, ProtocolConfig::Unsupported(_)) {
+        return None;
+    }
+
+    let inner_protocol = inner_node.protocol.clone();
+    let inner_config = Box::new(inner_node.config.clone());
+
+    // WHY: camouflage TLS — mihomo ShadowTLS uses the entry's top-level
+    // sni/skip-cert-verify/alpn for the camouflage handshake. Build a
+    // TlsConfig from those fields, falling back to the SNI extracted from
+    // the shadow-tls-opts/plugin-opts/obfs-opts.
+    let mut tls = extract_tls(entry).unwrap_or_else(default_tls_enabled);
+    tls.enabled = true;
+    if tls.server_name.is_none() {
+        tls.server_name = sni;
+    }
+
+    let config = ProtocolConfig::ShadowTls(ShadowTlsConfig {
+        version,
+        password,
+        inner_protocol,
+        inner_config,
+    });
+
+    let mut stls_node = inner_node.clone();
+    stls_node.protocol = ProtocolKind::ShadowTls;
+    stls_node.config = config;
+    stls_node.tls = Some(tls);
+    Some(stls_node)
 }
 
 /// Extract common fields and build the endpoint + display name.

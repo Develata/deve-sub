@@ -14,9 +14,22 @@ use crate::error::EmitError;
 type EmitResult = Result<(&'static str, Vec<(String, Value)>), EmitError>;
 
 pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
-    let outbounds: Result<Vec<Value>, EmitError> = nodes.iter().map(emit_outbound).collect();
+    // WHY: ShadowTLS in sing-box expands to two outbounds — a `shadowtls`
+    // outbound and an inner protocol outbound with `detour` pointing to it.
+    // All other protocols produce exactly one outbound. Flatten the
+    // per-node `Vec<Value>` results into a single `outbounds` array.
+    let mut outbounds: Vec<Value> = Vec::new();
+    for node in nodes {
+        if node.protocol == ProtocolKind::ShadowTls {
+            let (stls, inner) = shadowtls_pair(node)?;
+            outbounds.push(stls);
+            outbounds.push(inner);
+        } else {
+            outbounds.push(emit_outbound(node)?);
+        }
+    }
     let doc = json!({
-        "outbounds": outbounds?,
+        "outbounds": outbounds,
     });
     serde_json::to_string_pretty(&doc).map_err(|e| EmitError::Encode(e.to_string()))
 }
@@ -413,4 +426,78 @@ fn singbox_transport(transport: &Transport) -> Option<Value> {
         }
     }
     Some(Value::Object(obj))
+}
+
+/// Emit a ShadowTLS node as a pair of sing-box outbounds: the `shadowtls`
+/// wrapper outbound and the inner protocol outbound with `detour`.
+///
+/// Returns `(shadowtls_outbound, inner_outbound)`.
+fn shadowtls_pair(node: &Node) -> Result<(Value, Value), EmitError> {
+    let cfg = match &node.config {
+        ProtocolConfig::ShadowTls(c) => c,
+        _ => return Err(EmitError::MissingField("shadowtls config")),
+    };
+
+    let server = node.endpoint.host.uri_host();
+    let port = node.endpoint.port;
+    let tag = node.display_name.clone();
+    // WHY: derive a stable shadowtls tag from the node tag to keep
+    // round-trip deterministic. The parser matches by `detour` reference,
+    // so the exact suffix doesn't matter as long as it's unique within the
+    // document. Suffixing avoids collisions with the inner outbound tag.
+    let shadowtls_tag = format!("{tag}-stls");
+
+    // --- shadowtls outbound ---
+    let mut stls_obj = Map::new();
+    stls_obj.insert("type".to_owned(), Value::String("shadowtls".to_owned()));
+    stls_obj.insert("tag".to_owned(), Value::String(shadowtls_tag.clone()));
+    stls_obj.insert("server".to_owned(), Value::String(server));
+    stls_obj.insert("server_port".to_owned(), json!(port));
+    stls_obj.insert("version".to_owned(), json!(cfg.version.as_u32()));
+    if let Some(ref pw) = cfg.password {
+        stls_obj.insert("password".to_owned(), Value::String(pw.clone()));
+    }
+    // Camouflage TLS fields from node.tls.
+    let mut stls_fields: Vec<(String, Value)> = Vec::new();
+    push_tls_fields(&mut stls_fields, node);
+    for (k, v) in stls_fields {
+        stls_obj.insert(k, v);
+    }
+
+    // --- inner protocol outbound ---
+    // WHY: build a synthetic inner Node that carries only the inner
+    // protocol config + authentication, then delegate to `emit_outbound`.
+    // The inner Node's endpoint/TLS are irrelevant (sing-box routes through
+    // the detour), so we reuse the outer endpoint to satisfy the emitter's
+    // server/server_port fields. The `detour` field is injected after.
+    let inner_node = synthesize_inner_node(node, cfg);
+    let mut inner_obj = match emit_outbound_map(&inner_node)? {
+        Value::Object(m) => m,
+        _ => return Err(EmitError::Encode("inner outbound not an object".to_owned())),
+    };
+    inner_obj.insert("detour".to_owned(), Value::String(shadowtls_tag));
+
+    Ok((Value::Object(stls_obj), Value::Object(inner_obj)))
+}
+
+/// Build a synthetic inner Node from a ShadowTLS node's boxed inner config.
+/// The inner Node carries the inner protocol, config, and authentication;
+/// endpoint and TLS are placeholder (sing-box routes via detour).
+fn synthesize_inner_node(outer: &Node, cfg: &deve_sub_domain::ShadowTlsConfig) -> Node {
+    let mut inner = outer.clone();
+    inner.protocol = cfg.inner_protocol.clone();
+    inner.config = (*cfg.inner_config).clone();
+    // WHY: inner endpoint is vestigial in sing-box detour mode, but the
+    // emitter requires valid server/server_port. Reuse outer endpoint so
+    // the emitted JSON is well-formed without inventing dummy data.
+    inner.display_name = outer.display_name.clone();
+    // Inner TLS is vestigial (shadowtls handles the real TLS handshake).
+    inner.tls = None;
+    inner
+}
+
+/// Emit a single outbound as a JSON object (shared logic for `emit_outbound`
+/// and `shadowtls_pair`'s inner node).
+fn emit_outbound_map(node: &Node) -> Result<Value, EmitError> {
+    emit_outbound(node)
 }

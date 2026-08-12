@@ -1430,7 +1430,7 @@ cases:
     steps: []
     assertions: ["ShadowTLS sing-box 独立类型 + mihomo obfs 投影 round-trip"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-027
     title: xhttp transport
     priority: P1

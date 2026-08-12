@@ -28,7 +28,8 @@ pub use auth::{
 pub use dashboard::{
     DashboardLatencyQuery, DashboardLatencyRecordDto, DashboardLatencyResponse,
     DashboardProbeSourceBreakdownDto, DashboardSourceKindBreakdownDto, DashboardTrafficQuery,
-    DashboardTrafficResponse,
+    DashboardTrafficResponse, TrafficHistoryPointDto, TrafficHistoryQuery, TrafficHistoryResponse,
+    TrafficHistorySourceBreakdownDto,
 };
 pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};
 pub use node::{

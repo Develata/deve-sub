@@ -107,3 +107,53 @@ pub struct DashboardTrafficQuery {
     #[serde(default)]
     pub subscription_id: Option<String>,
 }
+
+/// Per source-kind breakdown entry in a [`TrafficHistoryPointDto`].
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TrafficHistorySourceBreakdownDto {
+    /// Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`.
+    pub source_kind: String,
+    /// Upload bytes from this source kind on this day.
+    pub upload: u64,
+    /// Download bytes from this source kind on this day.
+    pub download: u64,
+}
+
+/// A single day's traffic data point in the history chart (TRAFFIC-002).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TrafficHistoryPointDto {
+    /// UTC date (`YYYY-MM-DD`).
+    pub date: String,
+    /// Total upload bytes for this day.
+    pub total_upload: u64,
+    /// Total download bytes for this day.
+    pub total_download: u64,
+    /// Per-source-kind breakdown for this day.
+    pub source_breakdown: Vec<TrafficHistorySourceBreakdownDto>,
+}
+
+/// Response body for `GET /api/v1/dashboard/traffic/history` (TRAFFIC-002).
+///
+/// Returns daily traffic history points. When `subscription_id` is omitted,
+/// points aggregate across all subscriptions. Days with no traffic are filled
+/// with zero-value entries so the chart is continuous.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TrafficHistoryResponse {
+    /// Whether the query was scoped to a single subscription.
+    pub scoped_to_subscription: bool,
+    /// Daily traffic data points, ordered by date ascending.
+    pub points: Vec<TrafficHistoryPointDto>,
+}
+
+/// Query parameters for `GET /api/v1/dashboard/traffic/history` (TRAFFIC-002).
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+pub struct TrafficHistoryQuery {
+    /// Restrict history to a single subscription ULID. `None` (default)
+    /// aggregates across all subscriptions.
+    #[serde(default)]
+    pub subscription_id: Option<String>,
+    /// Number of days of history to return (1-365, default 30). The range
+    /// ends at the current UTC date.
+    #[serde(default)]
+    pub days: Option<u32>,
+}

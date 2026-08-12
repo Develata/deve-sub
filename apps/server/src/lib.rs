@@ -19,7 +19,7 @@ use deve_sub_domain::{
     ProbeSourceAdapter, ProbeSourceRepository, RecoveryCodeRepository, SessionRepository,
     ShortCodeRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, TrafficRepository, UserRepository,
+    TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRepository, UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -78,6 +78,7 @@ pub struct AppState {
     pub short_code_repo: Arc<dyn ShortCodeRepository>,
     pub temp_link_repo: Arc<dyn TempLinkRepository>,
     pub traffic_repo: Arc<dyn TrafficRepository>,
+    pub traffic_daily_snapshot_repo: Arc<dyn TrafficDailySnapshotRepository>,
     pub probe_source_repo: Arc<dyn ProbeSourceRepository>,
     pub probe_run_repo: Arc<dyn ProbeRunRepository>,
     pub latency_repo: Arc<dyn LatencyRecordRepository>,

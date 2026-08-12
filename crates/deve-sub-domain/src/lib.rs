@@ -55,8 +55,9 @@ pub use source::{
 };
 pub use subscription::{
     ShortCode, ShortCodeRepository, Subscription, SubscriptionError, SubscriptionRepository,
-    SubscriptionToken, SubscriptionTokenRepository, TempLink, TempLinkRepository, TrafficRecord,
-    TrafficRepository, TrafficSourceKind, TrafficSummary,
+    SubscriptionToken, SubscriptionTokenRepository, TempLink, TempLinkRepository,
+    TrafficDailySnapshot, TrafficDailySnapshotRepository, TrafficRecord, TrafficRepository,
+    TrafficSourceKind, TrafficSummary,
 };
 pub use template::{
     API_VERSION, CacheKeyParams, ChainEdge, ChainGraph, ChainVertex, CompatibilityReport,

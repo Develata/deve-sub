@@ -93,6 +93,27 @@ impl TrafficRepository for SqliteTrafficRepository {
         build_summary(rows)
     }
 
+    async fn get_summary_in_range(
+        &self,
+        subscription_id: SubscriptionId,
+        start_iso: &str,
+        end_iso: &str,
+    ) -> Result<TrafficSummary, SubscriptionError> {
+        let rows: Vec<AggregateRow> = sqlx::query_as(
+            "SELECT source_kind, SUM(upload) AS upload, SUM(download) AS download \
+             FROM subscription_traffic \
+             WHERE subscription_id = ? AND recorded_at >= ? AND recorded_at < ? \
+             GROUP BY source_kind",
+        )
+        .bind(subscription_id.to_string())
+        .bind(start_iso)
+        .bind(end_iso)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        build_summary(rows)
+    }
+
     async fn get_summary_for_user(
         &self,
         user_id: UserId,
@@ -164,5 +185,28 @@ impl TrafficRepository for SqliteTrafficRepository {
             out.push((sub_id, prefix, up.max(0) as u64, down.max(0) as u64));
         }
         Ok(out)
+    }
+
+    async fn subscriptions_with_traffic_in_range(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<SubscriptionId>, SubscriptionError> {
+        let rows: Vec<(String,)> = sqlx::query_as(
+            "SELECT DISTINCT subscription_id FROM subscription_traffic \
+             WHERE recorded_at >= ? AND recorded_at < ?",
+        )
+        .bind(start_date)
+        .bind(end_date)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        rows.into_iter()
+            .map(|(s,)| {
+                SubscriptionId::parse(&s).map_err(|e| {
+                    SubscriptionError::Storage(format!("invalid subscription id: {e}"))
+                })
+            })
+            .collect()
     }
 }

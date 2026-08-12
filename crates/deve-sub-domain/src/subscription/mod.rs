@@ -17,6 +17,6 @@ pub use entity::{ShortCode, Subscription, SubscriptionToken, TempLink};
 pub use error::SubscriptionError;
 pub use ports::{
     ShortCodeRepository, SubscriptionRepository, SubscriptionTokenRepository, TempLinkRepository,
-    TrafficRepository,
+    TrafficDailySnapshotRepository, TrafficRepository,
 };
-pub use traffic::{TrafficRecord, TrafficSourceKind, TrafficSummary};
+pub use traffic::{TrafficDailySnapshot, TrafficRecord, TrafficSourceKind, TrafficSummary};

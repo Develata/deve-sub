@@ -127,3 +127,47 @@ impl TrafficSummary {
         self.upload.saturating_add(self.download)
     }
 }
+
+/// A daily traffic snapshot for one subscription.
+///
+/// Computed by the M10 aggregation job: sums all [`TrafficRecord`]s for a
+/// subscription on a given UTC day. The `(subscription_id, date)` pair is
+/// unique — re-running the aggregation upserts the row. See
+/// `docs/plan/milestones/M10-observability-and-audit.md` §"Traffic daily
+/// snapshot model".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrafficDailySnapshot {
+    pub subscription_id: SubscriptionId,
+    pub date: String,
+    pub total_upload: u64,
+    pub total_download: u64,
+    pub source_breakdown: Vec<(TrafficSourceKind, u64, u64)>,
+    pub computed_at: Timestamp,
+}
+
+impl TrafficDailySnapshot {
+    /// Create a new daily snapshot.
+    #[must_use]
+    pub fn new(
+        subscription_id: SubscriptionId,
+        date: String,
+        total_upload: u64,
+        total_download: u64,
+        source_breakdown: Vec<(TrafficSourceKind, u64, u64)>,
+    ) -> Self {
+        Self {
+            subscription_id,
+            date,
+            total_upload,
+            total_download,
+            source_breakdown,
+            computed_at: Timestamp::now(),
+        }
+    }
+
+    /// Total traffic for this day (upload + download).
+    #[must_use]
+    pub fn total(&self) -> u64 {
+        self.total_upload.saturating_add(self.total_download)
+    }
+}

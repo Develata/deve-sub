@@ -1490,7 +1490,7 @@ cases:
     steps: []
     assertions: ["聚合任务对每订阅按日 sum 流量记录，upsert traffic_daily_snapshots"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: TRAFFIC-002
     title: 流量历史查询
     priority: P1
@@ -1500,7 +1500,7 @@ cases:
     steps: []
     assertions: ["GET /api/v1/dashboard/traffic/history?days=30 返回连续日数据，缺失日填零"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: BACKUP-001
     title: 备份创建
     priority: P2

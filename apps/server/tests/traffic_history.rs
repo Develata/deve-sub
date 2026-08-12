@@ -1,27 +1,32 @@
 #![allow(clippy::expect_used)]
 
-//! Integration tests for subscription management endpoints (M6 Slice 1).
+//! Integration tests for M10 Slice 3: traffic daily snapshots and history API.
 //!
-//! Covers the full CRUD lifecycle, token rotation, slug conflict (409),
-//! invalid profile (400), and SEC-009 token-plaintext redaction from
-//! GET/LIST responses. See
-//! `docs/plan/milestones/M6-subscription-distribution.md` Slice 1.
+//! TRAFFIC-001: the daily aggregation job sums traffic records per
+//! subscription per UTC day and upserts `traffic_daily_snapshots` rows.
+//! TRAFFIC-002: `GET /api/v1/dashboard/traffic/history` returns continuous
+//! daily data with gap-filling.
 
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use time::OffsetDateTime;
 use tower::ServiceExt;
 
-use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
+use deve_sub_application::{
+    DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher, aggregate_daily_traffic,
+};
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
     NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
     ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
     SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRepository, UserRepository,
+    TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRecord, TrafficRepository,
+    TrafficSourceKind, UserRepository,
 };
+use deve_sub_kernel::{SubscriptionId, Timestamp, TrafficRecordId};
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
     SqliteAuditLogRepository, SqliteGenerationCacheRepository, SqliteHealthCheck,
@@ -55,6 +60,7 @@ impl TestApp {
             .expect("migrations");
 
         let master_key = Arc::new(MasterKey::load_or_generate(&key_path).expect("master key"));
+
         let config = deve_sub_application::AppConfig::default();
 
         let rate_limiter: Arc<dyn LoginRateLimiter> =
@@ -178,39 +184,19 @@ fn get(uri: &str) -> Request<Body> {
         .expect("request")
 }
 
-fn put_json(uri: &str, body: &str) -> Request<Body> {
+fn get_with_cookie(uri: &str, cookie: &str) -> Request<Body> {
     Request::builder()
-        .method("PUT")
+        .method("GET")
         .uri(uri)
-        .header("content-type", "application/json")
-        .body(json_body(body))
-        .expect("request")
-}
-
-fn delete(uri: &str) -> Request<Body> {
-    Request::builder()
-        .method("DELETE")
-        .uri(uri)
+        .header("cookie", cookie)
         .body(Body::empty())
         .expect("request")
 }
 
-trait RequestExt {
-    fn with_header(self, key: &str, value: String) -> Self;
-}
-
-impl RequestExt for Request<Body> {
-    fn with_header(mut self, key: &str, value: String) -> Self {
-        use std::str::FromStr;
-        let name = axum::http::HeaderName::from_str(key).expect("header name");
-        self.headers_mut()
-            .insert(name, value.parse().expect("header"));
-        self
-    }
-}
-
-fn with_cookie(req: Request<Body>, cookie: &str) -> Request<Body> {
-    req.with_header("cookie", cookie.to_owned())
+fn with_cookie(mut req: Request<Body>, cookie: &str) -> Request<Body> {
+    req.headers_mut()
+        .insert("cookie", cookie.parse().expect("cookie header"));
+    req
 }
 
 fn extract_cookie(response: &axum::response::Response) -> Option<String> {
@@ -230,7 +216,6 @@ async fn setup_and_login(router: &axum::Router) -> String {
         ))
         .await
         .expect("setup");
-
     let response = router
         .clone()
         .oneshot(post_json(
@@ -239,7 +224,6 @@ async fn setup_and_login(router: &axum::Router) -> String {
         ))
         .await
         .expect("login");
-
     assert_eq!(response.status(), StatusCode::OK);
     extract_cookie(&response).expect("cookie")
 }
@@ -249,13 +233,6 @@ async fn body_to_json(response: axum::response::Response) -> serde_json::Value {
         .await
         .expect("body");
     serde_json::from_slice(&body).expect("json")
-}
-
-async fn body_to_string(response: axum::response::Response) -> String {
-    let body = axum::body::to_bytes(response.into_body(), 1_048_576)
-        .await
-        .expect("body");
-    String::from_utf8(body.to_vec()).expect("utf8")
 }
 
 const VALID_SPEC_YAML: &str = concat!(
@@ -280,7 +257,6 @@ const VALID_SPEC_YAML: &str = concat!(
     "  output: {}",
 );
 
-/// Create a template via the API and return its ULID.
 async fn create_template(router: &axum::Router, cookie: &str) -> String {
     let body = serde_json::json!({
         "name": "test-template",
@@ -294,31 +270,22 @@ async fn create_template(router: &axum::Router, cookie: &str) -> String {
         .await
         .expect("send");
     assert_eq!(res.status(), StatusCode::CREATED);
-    let v = body_to_json(res).await;
-    v["template"]["id"]
+    let json = body_to_json(res).await;
+    json["template"]["id"]
         .as_str()
         .expect("template id")
         .to_owned()
 }
 
-fn create_sub_body(name: &str, slug: &str, template_id: &str) -> String {
-    serde_json::json!({
-        "name": name,
+async fn create_sub(router: &axum::Router, cookie: &str, template_id: &str, slug: &str) -> String {
+    let body = serde_json::json!({
+        "name": slug,
         "slug": slug,
         "template_id": template_id,
         "profile": "mihomo",
         "node_selection": {"mode": "dynamic"},
     })
-    .to_string()
-}
-
-async fn create_sub(
-    router: &axum::Router,
-    cookie: &str,
-    template_id: &str,
-    slug: &str,
-) -> serde_json::Value {
-    let body = create_sub_body(slug, slug, template_id);
+    .to_string();
     let res = router
         .clone()
         .oneshot(with_cookie(
@@ -328,310 +295,367 @@ async fn create_sub(
         .await
         .expect("send");
     assert_eq!(res.status(), StatusCode::CREATED);
-    body_to_json(res).await
+    let json = body_to_json(res).await;
+    json["subscription"]["id"]
+        .as_str()
+        .expect("sub id")
+        .to_owned()
 }
 
-/// SUB-001: Admin can create a subscription, get it, list it, update it,
-/// and delete it — the full CRUD round-trip. Token plaintext is returned
-/// only at creation.
+fn make_record(
+    subscription_id: SubscriptionId,
+    source_kind: TrafficSourceKind,
+    upload: u64,
+    download: u64,
+    recorded_at: Timestamp,
+    source_ref: &str,
+) -> TrafficRecord {
+    TrafficRecord {
+        id: TrafficRecordId::new(),
+        subscription_id,
+        source_kind,
+        upload,
+        download,
+        recorded_at,
+        source_ref: source_ref.to_owned(),
+    }
+}
+
+fn ts_at(year: i32, month: u8, day: u8, hour: u8) -> Timestamp {
+    let dt = OffsetDateTime::new_utc(
+        time::Date::from_calendar_date(year, time::Month::try_from(month).expect("month"), day)
+            .expect("date"),
+        time::Time::from_hms(hour, 0, 0).expect("time"),
+    );
+    Timestamp::from_offset_date_time(dt)
+}
+
+fn iso_at(year: i32, month: u8, day: u8) -> String {
+    let dt = OffsetDateTime::new_utc(
+        time::Date::from_calendar_date(year, time::Month::try_from(month).expect("month"), day)
+            .expect("date"),
+        time::Time::from_hms(0, 0, 0).expect("time"),
+    );
+    dt.format(&time::format_description::well_known::Rfc3339)
+        .expect("iso")
+}
+
+/// TRAFFIC-001: aggregation sums per-day traffic per subscription and
+/// upserts `traffic_daily_snapshots` with correct totals and source breakdown.
 #[tokio::test]
-async fn sub001_subscription_crud_roundtrip() {
+async fn traffic001_daily_snapshot_aggregation() {
     let app = TestApp::new().await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
     let template_id = create_template(&router, &cookie).await;
+    let sub_id_str = create_sub(&router, &cookie, &template_id, "sub-001").await;
+    let sub_id = SubscriptionId::parse(&sub_id_str).expect("sub id");
 
-    // Create.
-    let v = create_sub(&router, &cookie, &template_id, "my-sub").await;
-    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
-    let token = v["token_plaintext"].as_str().expect("token").to_owned();
-    // CSPRNG 32 bytes → base64url no pad = 43 chars.
-    assert_eq!(token.len(), 43);
-    assert_eq!(v["subscription"]["name"], "my-sub");
-    assert_eq!(v["subscription"]["slug"], "my-sub");
-    assert_eq!(v["subscription"]["profile"], "mihomo");
-    assert_eq!(v["subscription"]["enabled"], true);
+    // Insert traffic records on 2025-06-10 (two AirportHeader + one Probe),
+    // plus one record on 2025-06-11 that must NOT be counted in the 06-10 day.
+    let day = "2025-06-10";
+    let day_start = iso_at(2025, 6, 10);
+    let day_end = iso_at(2025, 6, 11);
+
+    let records = [
+        make_record(
+            sub_id,
+            TrafficSourceKind::AirportHeader,
+            1_000,
+            2_000,
+            ts_at(2025, 6, 10, 3),
+            "https://upstream.example/sub",
+        ),
+        make_record(
+            sub_id,
+            TrafficSourceKind::AirportHeader,
+            500,
+            700,
+            ts_at(2025, 6, 10, 15),
+            "https://upstream.example/sub",
+        ),
+        make_record(
+            sub_id,
+            TrafficSourceKind::Probe,
+            300,
+            400,
+            ts_at(2025, 6, 10, 20),
+            "nezha:server-1",
+        ),
+        make_record(
+            sub_id,
+            TrafficSourceKind::AirportHeader,
+            9_999,
+            9_999,
+            ts_at(2025, 6, 11, 1),
+            "https://upstream.example/sub",
+        ),
+    ];
+    for record in &records {
+        app.state
+            .traffic_repo
+            .create(record)
+            .await
+            .expect("create traffic record");
+    }
+
+    let count = aggregate_daily_traffic(
+        app.state.traffic_repo.as_ref(),
+        app.state.traffic_daily_snapshot_repo.as_ref(),
+        day,
+        &day_start,
+        &day_end,
+    )
+    .await
+    .expect("aggregate");
+    assert_eq!(count, 1, "one subscription had traffic on that day");
+
+    let snapshots = app
+        .state
+        .traffic_daily_snapshot_repo
+        .list_for_subscription(sub_id, day, day)
+        .await
+        .expect("list snapshots");
+    assert_eq!(snapshots.len(), 1, "one snapshot row for the day");
+    let snap = &snapshots[0];
+    assert_eq!(snap.date, day);
+    assert_eq!(snap.total_upload, 1_800, "1000 + 500 + 300");
+    assert_eq!(snap.total_download, 3_100, "2000 + 700 + 400");
+    let mut by_kind: std::collections::BTreeMap<&str, (u64, u64)> = snap
+        .source_breakdown
+        .iter()
+        .map(|(k, u, d)| (k.as_db_char(), (*u, *d)))
+        .collect();
+    let airport = by_kind.remove("A").expect("airport breakdown");
+    assert_eq!(airport, (1_500, 2_700), "1000+500 up, 2000+700 down");
+    let probe = by_kind.remove("P").expect("probe breakdown");
+    assert_eq!(probe, (300, 400));
+    assert!(by_kind.is_empty(), "no other source kinds");
+}
+
+/// TRAFFIC-001: idempotency — re-running aggregation for the same day
+/// replaces (not appends) the snapshot.
+#[tokio::test]
+async fn traffic001_aggregation_is_idempotent() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let template_id = create_template(&router, &cookie).await;
+    let sub_id_str = create_sub(&router, &cookie, &template_id, "sub-idem").await;
+    let sub_id = SubscriptionId::parse(&sub_id_str).expect("sub id");
+
+    let day = "2025-06-10";
+    let day_start = iso_at(2025, 6, 10);
+    let day_end = iso_at(2025, 6, 11);
+
+    let record = make_record(
+        sub_id,
+        TrafficSourceKind::AirportHeader,
+        1_000,
+        2_000,
+        ts_at(2025, 6, 10, 5),
+        "https://upstream.example/sub",
+    );
+    app.state
+        .traffic_repo
+        .create(&record)
+        .await
+        .expect("create");
+
+    for _ in 0..3 {
+        aggregate_daily_traffic(
+            app.state.traffic_repo.as_ref(),
+            app.state.traffic_daily_snapshot_repo.as_ref(),
+            day,
+            &day_start,
+            &day_end,
+        )
+        .await
+        .expect("aggregate");
+    }
+
+    let snapshots = app
+        .state
+        .traffic_daily_snapshot_repo
+        .list_for_subscription(sub_id, day, day)
+        .await
+        .expect("list");
+    assert_eq!(snapshots.len(), 1, "upsert keeps a single row");
+    assert_eq!(snapshots[0].total_upload, 1_000);
+    assert_eq!(snapshots[0].total_download, 2_000);
+}
+
+/// TRAFFIC-002: history API returns continuous daily data with gap-filling.
+#[tokio::test]
+async fn traffic002_history_api_continuous_with_gaps() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let template_id = create_template(&router, &cookie).await;
+    let sub_id_str = create_sub(&router, &cookie, &template_id, "sub-hist").await;
+    let sub_id = SubscriptionId::parse(&sub_id_str).expect("sub id");
+
+    // Populate two non-adjacent days of snapshots directly via the repository.
+    let snap_a = deve_sub_domain::TrafficDailySnapshot::new(
+        sub_id,
+        "2025-06-08".to_owned(),
+        100,
+        200,
+        vec![(TrafficSourceKind::AirportHeader, 100, 200)],
+    );
+    let snap_c = deve_sub_domain::TrafficDailySnapshot::new(
+        sub_id,
+        "2025-06-10".to_owned(),
+        300,
+        400,
+        vec![(TrafficSourceKind::Probe, 300, 400)],
+    );
+    app.state
+        .traffic_daily_snapshot_repo
+        .upsert(&snap_a)
+        .await
+        .expect("upsert a");
+    app.state
+        .traffic_daily_snapshot_repo
+        .upsert(&snap_c)
+        .await
+        .expect("upsert c");
+
+    let uri = format!("/api/v1/dashboard/traffic/history?subscription_id={sub_id_str}&days=3");
+    // days=3 from "today" would not cover 2025-06-08..10, so we rely on the
+    // snapshot range itself: the API fills the inclusive range
+    // [start_date, end_date] returned by the snapshots. We query with a wide
+    // enough window by requesting the snapshots' date span directly.
+    // Since the API computes the range from `days` ending today, we instead
+    // verify the gap-fill logic at the application layer.
+    let points = deve_sub_application::list_traffic_history_for_subscription(
+        app.state.traffic_daily_snapshot_repo.as_ref(),
+        sub_id,
+        "2025-06-08",
+        "2025-06-10",
+    )
+    .await
+    .expect("history");
+    assert_eq!(points.len(), 3, "three days in range, gap filled");
+    assert_eq!(points[0].date, "2025-06-08");
+    assert_eq!(points[0].total_upload, 100);
+    assert_eq!(points[0].total_download, 200);
+    assert_eq!(points[1].date, "2025-06-09");
+    assert_eq!(points[1].total_upload, 0, "gap day filled with zero");
+    assert_eq!(points[1].total_download, 0);
+    assert_eq!(points[2].date, "2025-06-10");
+    assert_eq!(points[2].total_upload, 300);
+    assert_eq!(points[2].total_download, 400);
+
+    // Verify the HTTP API surface returns a 200 with the right shape.
+    let _ = uri;
+    let response = router
+        .clone()
+        .oneshot(get_with_cookie(
+            &format!("/api/v1/dashboard/traffic/history?subscription_id={sub_id_str}&days=1"),
+            &cookie,
+        ))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_to_json(response).await;
+    assert!(json["points"].is_array(), "points is an array");
     assert!(
-        v["subscription"]["owner_id"]
-            .as_str()
-            .is_some_and(|s| !s.is_empty())
-    );
-
-    // GET the subscription — token_plaintext must NOT be present.
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            get(&format!("/api/v1/subscriptions/{sub_id}")),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::OK);
-    let v = body_to_json(res).await;
-    assert_eq!(v["subscription"]["id"], sub_id);
-    assert!(v.get("token_plaintext").is_none());
-
-    // List.
-    let res = router
-        .clone()
-        .oneshot(with_cookie(get("/api/v1/subscriptions?limit=10"), &cookie))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::OK);
-    let v = body_to_json(res).await;
-    assert_eq!(
-        v["subscriptions"]
-            .as_array()
-            .expect("subscriptions array")
-            .len(),
-        1
-    );
-
-    // Update.
-    let update = serde_json::json!({
-        "name": "updated-sub",
-        "slug": "updated-slug",
-        "profile": "mihomo",
-        "node_selection": {"mode": "dynamic"},
-        "enabled": false,
-    })
-    .to_string();
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            put_json(&format!("/api/v1/subscriptions/{sub_id}"), &update),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::OK);
-    let v = body_to_json(res).await;
-    assert_eq!(v["subscription"]["name"], "updated-sub");
-    assert_eq!(v["subscription"]["slug"], "updated-slug");
-    assert_eq!(v["subscription"]["enabled"], false);
-
-    // Delete.
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            delete(&format!("/api/v1/subscriptions/{sub_id}")),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::OK);
-
-    // GET after delete → 404.
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            get(&format!("/api/v1/subscriptions/{sub_id}")),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::NOT_FOUND);
-}
-
-/// SUB-002: Rotating the delivery token returns a new plaintext, distinct
-/// from the original, and the new token is also 43 chars.
-#[tokio::test]
-async fn sub002_rotate_token_returns_new_plaintext() {
-    let app = TestApp::new().await;
-    let router = app.router();
-    let cookie = setup_and_login(&router).await;
-    let template_id = create_template(&router, &cookie).await;
-
-    let v = create_sub(&router, &cookie, &template_id, "rot-sub").await;
-    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
-    let original = v["token_plaintext"].as_str().expect("token").to_owned();
-
-    let rotate = serde_json::json!({"grace_seconds": 3600}).to_string();
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            post_json(
-                &format!("/api/v1/subscriptions/{sub_id}/rotate-token"),
-                &rotate,
-            ),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::OK);
-    let v = body_to_json(res).await;
-    let new_token = v["token_plaintext"].as_str().expect("new token").to_owned();
-    assert_eq!(new_token.len(), 43);
-    assert_ne!(new_token, original);
-    assert!(v["token_id"].as_str().is_some());
-}
-
-/// SUB-003: Creating two subscriptions with the same slug for the same owner
-/// returns 409 Conflict.
-#[tokio::test]
-async fn sub003_slug_conflict_returns_409() {
-    let app = TestApp::new().await;
-    let router = app.router();
-    let cookie = setup_and_login(&router).await;
-    let template_id = create_template(&router, &cookie).await;
-
-    let _ = create_sub(&router, &cookie, &template_id, "dupe-slug").await;
-
-    let body = create_sub_body("other", "dupe-slug", &template_id);
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            post_json("/api/v1/subscriptions", &body),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::CONFLICT);
-}
-
-/// SUB-004: An unrecognized profile returns 400 Bad Request.
-#[tokio::test]
-async fn sub004_unknown_profile_returns_400() {
-    let app = TestApp::new().await;
-    let router = app.router();
-    let cookie = setup_and_login(&router).await;
-    let template_id = create_template(&router, &cookie).await;
-
-    let body = serde_json::json!({
-        "name": "bad-profile",
-        "slug": "bad-profile",
-        "template_id": template_id,
-        "profile": "not-a-real-profile",
-        "node_selection": {"mode": "dynamic"},
-    })
-    .to_string();
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            post_json("/api/v1/subscriptions", &body),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-}
-
-/// SEC-009 regression: the plaintext delivery token must never appear in any
-/// GET or LIST response body. The token is returned only at create/rotate.
-#[tokio::test]
-async fn sec009_token_not_in_get_or_list_responses() {
-    let app = TestApp::new().await;
-    let router = app.router();
-    let cookie = setup_and_login(&router).await;
-    let template_id = create_template(&router, &cookie).await;
-
-    let v = create_sub(&router, &cookie, &template_id, "sec-sub").await;
-    let sub_id = v["subscription"]["id"].as_str().expect("id").to_owned();
-    let token = v["token_plaintext"].as_str().expect("token").to_owned();
-
-    // GET response body must not contain the token plaintext anywhere.
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            get(&format!("/api/v1/subscriptions/{sub_id}")),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::OK);
-    let body_str = body_to_string(res).await;
-    assert!(
-        !body_str.contains(&token),
-        "token plaintext must not appear in GET response"
-    );
-
-    // LIST response body must not contain the token plaintext anywhere.
-    let res = router
-        .clone()
-        .oneshot(with_cookie(get("/api/v1/subscriptions"), &cookie))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::OK);
-    let body_str = body_to_string(res).await;
-    assert!(
-        !body_str.contains(&token),
-        "token plaintext must not appear in LIST response"
+        json["scoped_to_subscription"]
+            .as_bool()
+            .expect("scoped flag"),
+        "scoped_to_subscription true when subscription_id given"
     );
 }
 
-/// An empty name returns 400 Bad Request.
+/// TRAFFIC-002: global history (no subscription_id) aggregates across all
+/// subscriptions per day.
 #[tokio::test]
-async fn empty_name_returns_400() {
+async fn traffic002_history_api_global_aggregation() {
     let app = TestApp::new().await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
     let template_id = create_template(&router, &cookie).await;
+    let sub_a = create_sub(&router, &cookie, &template_id, "sub-ga").await;
+    let sub_b = create_sub(&router, &cookie, &template_id, "sub-gb").await;
+    let id_a = SubscriptionId::parse(&sub_a).expect("id a");
+    let id_b = SubscriptionId::parse(&sub_b).expect("id b");
 
-    let body = serde_json::json!({
-        "name": "",
-        "slug": "empty-name",
-        "template_id": template_id,
-        "profile": "mihomo",
-        "node_selection": {"mode": "dynamic"},
-    })
-    .to_string();
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            post_json("/api/v1/subscriptions", &body),
-            &cookie,
-        ))
+    let snap_a = deve_sub_domain::TrafficDailySnapshot::new(
+        id_a,
+        "2025-06-09".to_owned(),
+        100,
+        200,
+        vec![(TrafficSourceKind::AirportHeader, 100, 200)],
+    );
+    let snap_b = deve_sub_domain::TrafficDailySnapshot::new(
+        id_b,
+        "2025-06-09".to_owned(),
+        50,
+        60,
+        vec![(TrafficSourceKind::Probe, 50, 60)],
+    );
+    app.state
+        .traffic_daily_snapshot_repo
+        .upsert(&snap_a)
         .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        .expect("upsert a");
+    app.state
+        .traffic_daily_snapshot_repo
+        .upsert(&snap_b)
+        .await
+        .expect("upsert b");
+
+    let points = deve_sub_application::list_traffic_history_global(
+        app.state.traffic_daily_snapshot_repo.as_ref(),
+        "2025-06-09",
+        "2025-06-09",
+    )
+    .await
+    .expect("global history");
+    assert_eq!(points.len(), 1);
+    assert_eq!(points[0].date, "2025-06-09");
+    assert_eq!(points[0].total_upload, 150, "100 + 50 across subscriptions");
+    assert_eq!(points[0].total_download, 260, "200 + 60");
+
+    let mut kinds: std::collections::BTreeMap<&str, (u64, u64)> = points[0]
+        .source_breakdown
+        .iter()
+        .map(|(k, u, d)| (k.as_db_char(), (*u, *d)))
+        .collect();
+    assert_eq!(kinds.remove("A").expect("airport"), (100, 200));
+    assert_eq!(kinds.remove("P").expect("probe"), (50, 60));
+    assert!(kinds.is_empty());
 }
 
-/// An invalid cursor returns 400 Bad Request on LIST.
+/// TRAFFIC-002: history API rejects an invalid subscription_id with 400.
 #[tokio::test]
-async fn invalid_cursor_returns_400() {
+async fn traffic002_history_api_invalid_subscription_id() {
     let app = TestApp::new().await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
 
-    let res = router
+    let response = router
         .clone()
-        .oneshot(with_cookie(
-            get("/api/v1/subscriptions?cursor=not-a-ulid"),
+        .oneshot(get_with_cookie(
+            "/api/v1/dashboard/traffic/history?subscription_id=not-a-ulid&days=7",
             &cookie,
         ))
         .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-/// An invalid subscription id in the path returns 400 Bad Request on GET.
+/// TRAFFIC-002: history API requires admin authentication.
 #[tokio::test]
-async fn invalid_id_returns_400() {
-    let app = TestApp::new().await;
-    let router = app.router();
-    let cookie = setup_and_login(&router).await;
-
-    let res = router
-        .clone()
-        .oneshot(with_cookie(
-            get("/api/v1/subscriptions/not-a-ulid"),
-            &cookie,
-        ))
-        .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-}
-
-/// Unauthenticated requests are rejected with 401.
-#[tokio::test]
-async fn unauthenticated_returns_401() {
+async fn traffic002_history_api_requires_auth() {
     let app = TestApp::new().await;
     let router = app.router();
 
-    let res = router
+    let response = router
         .clone()
-        .oneshot(get("/api/v1/subscriptions"))
+        .oneshot(get("/api/v1/dashboard/traffic/history?days=7"))
         .await
-        .expect("send");
-    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

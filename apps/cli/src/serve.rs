@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 
 use deve_sub_application::{
     DbHealthPort, GeoIpPort, GraceTokenCleanupScheduler, LoginRateLimiter, RefreshScheduler,
-    SubscriptionFetcher,
+    SubscriptionFetcher, TrafficDailySnapshotScheduler,
 };
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
@@ -21,7 +21,7 @@ use deve_sub_domain::{
     ProbeSourceAdapter, ProbeSourceRepository, RecoveryCodeRepository, SessionRepository,
     ShortCodeRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, TrafficRepository, UserRepository,
+    TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRepository, UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -112,6 +112,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let traffic_repo: Arc<dyn TrafficRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteTrafficRepository::new(db.clone()),
     );
+    let traffic_daily_snapshot_repo: Arc<dyn TrafficDailySnapshotRepository> =
+        Arc::new(deve_sub_storage_sqlite::SqliteTrafficDailySnapshotRepository::new(db.clone()));
     let probe_source_repo: Arc<dyn ProbeSourceRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteProbeSourceRepository::new(db.clone()),
     );
@@ -177,6 +179,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         short_code_repo,
         temp_link_repo,
         traffic_repo,
+        traffic_daily_snapshot_repo,
         probe_source_repo,
         probe_run_repo,
         latency_repo,
@@ -223,6 +226,20 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
             .await;
     });
 
+    let traffic_snapshot_scheduler = TrafficDailySnapshotScheduler::new(
+        Arc::clone(&state.traffic_repo),
+        Arc::clone(&state.traffic_daily_snapshot_repo),
+    );
+    let traffic_snapshot_rx = shutdown_tx.subscribe();
+    let traffic_snapshot_handle = tokio::spawn(async move {
+        traffic_snapshot_scheduler
+            .run(async move {
+                let mut rx = traffic_snapshot_rx;
+                let _ = rx.recv().await;
+            })
+            .await;
+    });
+
     let router = build_router(state);
 
     let signal_tx = shutdown_tx.clone();
@@ -241,6 +258,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
 
     let _ = scheduler_handle.await;
     let _ = grace_handle.await;
+    let _ = traffic_snapshot_handle.await;
     tracing::info!("refresh scheduler stopped, server exiting");
 
     Ok(())

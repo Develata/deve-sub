@@ -32,9 +32,11 @@ pub use source::{
 pub use subscription::{
     CreateSubscriptionParams, CreateSubscriptionResult, GraceTokenCleanupScheduler,
     ManualCorrectionParams, RecordTrafficParams, RotateTokenResult, SubscriptionAppError,
-    UpdateSubscriptionParams, apply_manual_correction, create_subscription, delete_subscription,
-    get_subscription, get_traffic_summary, list_subscriptions, record_traffic, rotate_token,
-    update_subscription,
+    TrafficDailySnapshotScheduler, TrafficHistoryPoint, UpdateSubscriptionParams,
+    aggregate_daily_traffic, apply_manual_correction, create_subscription, delete_subscription,
+    get_subscription, get_traffic_summary, list_subscriptions,
+    list_traffic_history_for_subscription, list_traffic_history_global, record_traffic,
+    rotate_token, update_subscription,
 };
 pub use template::{
     CreateTemplateParams, CreateTemplateResult, TemplateAppError, UpdateTemplateParams,

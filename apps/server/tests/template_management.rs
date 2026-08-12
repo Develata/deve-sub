@@ -19,7 +19,7 @@ use deve_sub_domain::{
     ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
     SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, TrafficRepository, UserRepository,
+    TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
@@ -29,8 +29,8 @@ use deve_sub_storage_sqlite::{
     SqliteRecoveryCodeRepository, SqliteSessionRepository, SqliteShortCodeRepository,
     SqliteSourceRepository, SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
     SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
-    SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteTrafficRepository,
-    SqliteUserRepository,
+    SqliteTemplateVersionRepository, SqliteTotpSecretRepository,
+    SqliteTrafficDailySnapshotRepository, SqliteTrafficRepository, SqliteUserRepository,
 };
 
 struct TestApp {
@@ -105,6 +105,10 @@ impl TestApp {
                     as Arc<dyn TempLinkRepository>,
                 traffic_repo: Arc::new(SqliteTrafficRepository::new(pool.clone()))
                     as Arc<dyn TrafficRepository>,
+                traffic_daily_snapshot_repo: Arc::new(SqliteTrafficDailySnapshotRepository::new(
+                    pool.clone(),
+                ))
+                    as Arc<dyn TrafficDailySnapshotRepository>,
                 probe_source_repo: Arc::new(SqliteProbeSourceRepository::new(pool.clone()))
                     as Arc<dyn ProbeSourceRepository>,
                 probe_run_repo: Arc::new(SqliteProbeRunRepository::new(pool.clone()))

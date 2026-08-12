@@ -25,6 +25,7 @@ pub mod template_repository;
 pub mod template_version_repository;
 pub mod timestamp;
 pub mod totp_repository;
+pub mod traffic_daily_snapshot_repository;
 pub mod traffic_repository;
 pub mod user_repository;
 
@@ -55,6 +56,7 @@ pub use temp_link_repository::SqliteTempLinkRepository;
 pub use template_repository::SqliteTemplateRepository;
 pub use template_version_repository::SqliteTemplateVersionRepository;
 pub use totp_repository::SqliteTotpSecretRepository;
+pub use traffic_daily_snapshot_repository::SqliteTrafficDailySnapshotRepository;
 pub use traffic_repository::SqliteTrafficRepository;
 pub use user_repository::SqliteUserRepository;
 

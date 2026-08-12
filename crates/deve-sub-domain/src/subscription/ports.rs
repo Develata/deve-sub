@@ -6,7 +6,10 @@ use async_trait::async_trait;
 use deve_sub_kernel::{ShortCodeId, SubscriptionId, SubscriptionTokenId, TempLinkId, UserId};
 
 use super::error::SubscriptionError;
-use super::{ShortCode, Subscription, SubscriptionToken, TempLink, TrafficRecord, TrafficSummary};
+use super::{
+    ShortCode, Subscription, SubscriptionToken, TempLink, TrafficDailySnapshot, TrafficRecord,
+    TrafficSummary,
+};
 
 /// Storage boundary for subscription aggregates.
 #[async_trait]
@@ -209,6 +212,17 @@ pub trait TrafficRepository: Send + Sync {
         subscription_id: SubscriptionId,
     ) -> Result<TrafficSummary, SubscriptionError>;
 
+    /// Sum traffic records for a subscription within a timestamp range
+    /// `[start_iso, end_iso)`, returning the aggregate upload/download totals
+    /// and a per-source-kind breakdown. Used by the M10 daily snapshot
+    /// aggregation job.
+    async fn get_summary_in_range(
+        &self,
+        subscription_id: SubscriptionId,
+        start_iso: &str,
+        end_iso: &str,
+    ) -> Result<TrafficSummary, SubscriptionError>;
+
     /// Sum all traffic records across all subscriptions owned by a user,
     /// returning the aggregate upload/download totals. Used for user-level
     /// `traffic_quota` enforcement at delivery time (OUT-011).
@@ -236,4 +250,45 @@ pub trait TrafficRepository: Send + Sync {
     async fn get_probe_traffic_attributions(
         &self,
     ) -> Result<Vec<(SubscriptionId, String, u64, u64)>, SubscriptionError>;
+
+    /// Return the distinct subscription IDs that have traffic records in the
+    /// given date range. Used by the M10 aggregation job to know which
+    /// subscriptions need snapshot computation.
+    async fn subscriptions_with_traffic_in_range(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<SubscriptionId>, SubscriptionError>;
+}
+
+/// Storage boundary for daily traffic snapshots (M10).
+///
+/// The M10 aggregation job upserts one row per `(subscription_id, date)`.
+/// The history query reads snapshots by subscription and date range, or
+/// globally across all subscriptions. See
+/// `docs/plan/milestones/M10-observability-and-audit.md` §"Traffic daily
+/// snapshot model".
+#[async_trait]
+pub trait TrafficDailySnapshotRepository: Send + Sync {
+    /// Upsert a daily snapshot. If a row for `(subscription_id, date)`
+    /// already exists, it is replaced.
+    async fn upsert(&self, snapshot: &TrafficDailySnapshot) -> Result<(), SubscriptionError>;
+
+    /// List daily snapshots for a subscription within a date range
+    /// (inclusive), ordered by date ascending.
+    async fn list_for_subscription(
+        &self,
+        subscription_id: SubscriptionId,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<TrafficDailySnapshot>, SubscriptionError>;
+
+    /// List daily snapshots across all subscriptions within a date range
+    /// (inclusive), ordered by date ascending. Used by the global dashboard
+    /// history view.
+    async fn list_global(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<TrafficDailySnapshot>, SubscriptionError>;
 }

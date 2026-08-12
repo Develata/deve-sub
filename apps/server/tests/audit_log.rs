@@ -1,9 +1,9 @@
 #![allow(clippy::expect_used)]
 
-//! Integration tests for the auth flow: setup-admin, login, logout, me.
+//! Integration tests for the audit log feature.
 //!
-//! Covers AUTH-001 (init admin), AUTH-002 (correct login), AUTH-003 (wrong
-//! password), and SEC-009 (token redaction in logs).
+//! AUDIT-001: audit log query API (filters, pagination, auth guard).
+//! AUDIT-002: auth and user-management operations produce audit entries.
 
 use std::sync::Arc;
 
@@ -200,58 +200,8 @@ fn extract_cookie(response: &axum::response::Response) -> Option<String> {
     Some(part.trim().to_owned())
 }
 
-/// Return the full `Set-Cookie` header value for attribute assertions.
-fn full_set_cookie(response: &axum::response::Response) -> Option<String> {
-    response
-        .headers()
-        .get("set-cookie")?
-        .to_str()
-        .ok()
-        .map(str::to_owned)
-}
-
-/// AUTH-001: Initial admin creation succeeds and can only be done once.
-#[tokio::test]
-async fn setup_admin_succeeds_once() {
-    let app = TestApp::new().await;
-    let router = app.router();
-
-    let response = router
-        .clone()
-        .oneshot(post_json(
-            "/api/v1/auth/setup",
-            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
-        ))
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    let body = axum::body::to_bytes(response.into_body(), 4096)
-        .await
-        .expect("body");
-    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
-    assert_eq!(json["user"]["username"], "admin");
-    assert_eq!(json["user"]["role"], "admin");
-    assert_eq!(json["user"]["enabled"], true);
-    assert!(json["user"]["id"].as_str().is_some());
-
-    // Second setup must fail with 409.
-    let response = router
-        .oneshot(post_json(
-            "/api/v1/auth/setup",
-            r#"{"username":"admin2","password":"s3cure-pwd!"}"#,
-        ))
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-}
-
-/// AUTH-002: Correct login creates a session and sets a cookie.
-#[tokio::test]
-async fn login_with_correct_credentials() {
-    let app = TestApp::new().await;
-
-    // Setup admin first.
+/// Helper: setup admin, login, return (router, cookie, admin_id).
+async fn setup_and_login(app: &TestApp) -> (axum::Router, String, String) {
     let router = app.router();
     let _ = router
         .clone()
@@ -261,94 +211,6 @@ async fn login_with_correct_credentials() {
         ))
         .await
         .expect("setup");
-
-    // Login.
-    let response = router
-        .oneshot(post_json(
-            "/api/v1/auth/login",
-            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
-        ))
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let full_cookie = full_set_cookie(&response).expect("Set-Cookie header");
-    assert!(full_cookie.contains("HttpOnly"));
-    assert!(full_cookie.contains("SameSite=Lax"));
-    assert!(full_cookie.contains("Secure"));
-
-    let body = axum::body::to_bytes(response.into_body(), 4096)
-        .await
-        .expect("body");
-    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
-    assert_eq!(json["user"]["username"], "admin");
-}
-
-/// AUTH-003: Wrong password returns 401 without leaking user existence.
-#[tokio::test]
-async fn login_with_wrong_password() {
-    let app = TestApp::new().await;
-
-    // Setup admin first.
-    let router = app.router();
-    let _ = router
-        .clone()
-        .oneshot(post_json(
-            "/api/v1/auth/setup",
-            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
-        ))
-        .await
-        .expect("setup");
-
-    // Login with wrong password.
-    let response = router
-        .clone()
-        .oneshot(post_json(
-            "/api/v1/auth/login",
-            r#"{"username":"admin","password":"wrong-password"}"#,
-        ))
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-    let body = axum::body::to_bytes(response.into_body(), 4096)
-        .await
-        .expect("body");
-    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
-    assert_eq!(json["error"], "invalid_credentials");
-    assert!(json["message"].as_str().is_some());
-
-    // Login with non-existent user — same error to avoid leaking existence.
-    let response = router
-        .oneshot(post_json(
-            "/api/v1/auth/login",
-            r#"{"username":"ghost","password":"anything"}"#,
-        ))
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    let body = axum::body::to_bytes(response.into_body(), 4096)
-        .await
-        .expect("body");
-    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
-    assert_eq!(json["error"], "invalid_credentials");
-}
-
-/// Authenticated /me endpoint returns the current user.
-#[tokio::test]
-async fn me_with_valid_session() {
-    let app = TestApp::new().await;
-    let router = app.router();
-
-    let _ = router
-        .clone()
-        .oneshot(post_json(
-            "/api/v1/auth/setup",
-            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
-        ))
-        .await
-        .expect("setup");
-
     let response = router
         .clone()
         .oneshot(post_json(
@@ -357,72 +219,362 @@ async fn me_with_valid_session() {
         ))
         .await
         .expect("login");
-    let cookie = extract_cookie(&response).expect("cookie");
-
-    // /me with the session cookie.
-    let response = router
-        .oneshot(get_with_cookie("/api/v1/auth/me", &cookie))
-        .await
-        .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
-
+    let cookie = extract_cookie(&response).expect("cookie");
     let body = axum::body::to_bytes(response.into_body(), 4096)
         .await
         .expect("body");
     let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
-    assert_eq!(json["user"]["username"], "admin");
+    let admin_id = json["user"]["id"].as_str().expect("admin id").to_owned();
+    (router, cookie, admin_id)
 }
 
-/// /me without a session cookie returns 401.
+/// AUDIT-001: Audit log query API returns entries and supports filters.
 #[tokio::test]
-async fn me_without_session() {
+async fn audit_log_query_returns_entries() {
     let app = TestApp::new().await;
-    let router = app.router();
+    let (router, cookie, _admin_id) = setup_and_login(&app).await;
 
+    // The login above should have produced an auth.login audit entry.
     let response = router
-        .oneshot(get("/api/v1/auth/me"))
+        .clone()
+        .oneshot(get_with_cookie("/api/v1/audit-logs", &cookie))
         .await
         .expect("response");
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 8192)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let entries = json["entries"].as_array().expect("entries array");
+    assert!(!entries.is_empty(), "at least one audit entry expected");
+    let has_login = entries.iter().any(|e| e["action"] == "auth.login");
+    assert!(has_login, "auth.login entry should exist");
 }
 
-/// Logout revokes the session and clears the cookie.
+/// AUDIT-001: action filter narrows results.
 #[tokio::test]
-async fn logout_revokes_session() {
+async fn audit_log_query_filter_by_action() {
     let app = TestApp::new().await;
-    let router = app.router();
+    let (router, cookie, _admin_id) = setup_and_login(&app).await;
 
+    let response = router
+        .clone()
+        .oneshot(get_with_cookie(
+            "/api/v1/audit-logs?action=auth.login",
+            &cookie,
+        ))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 8192)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let entries = json["entries"].as_array().expect("entries array");
+    assert!(!entries.is_empty());
+    for entry in entries {
+        assert_eq!(entry["action"], "auth.login");
+    }
+}
+
+/// AUDIT-001: actor_id filter narrows results.
+#[tokio::test]
+async fn audit_log_query_filter_by_actor() {
+    let app = TestApp::new().await;
+    let (router, cookie, admin_id) = setup_and_login(&app).await;
+
+    let uri = format!("/api/v1/audit-logs?actor_id={admin_id}");
+    let response = router
+        .clone()
+        .oneshot(get_with_cookie(&uri, &cookie))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 8192)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let entries = json["entries"].as_array().expect("entries array");
+    assert!(!entries.is_empty());
+    for entry in entries {
+        assert_eq!(entry["actor_id"], admin_id);
+    }
+}
+
+/// AUDIT-001: pagination via limit + cursor.
+#[tokio::test]
+async fn audit_log_query_pagination() {
+    let app = TestApp::new().await;
+    let (router, cookie, _admin_id) = setup_and_login(&app).await;
+
+    // Logout and login again to generate at least 2+ entries.
     let _ = router
-        .clone()
-        .oneshot(post_json(
-            "/api/v1/auth/setup",
-            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
-        ))
-        .await
-        .expect("setup");
-
-    let response = router
-        .clone()
-        .oneshot(post_json(
-            "/api/v1/auth/login",
-            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
-        ))
-        .await
-        .expect("login");
-    let cookie = extract_cookie(&response).expect("cookie");
-
-    // Logout.
-    let response = router
         .clone()
         .oneshot(post_with_cookie("/api/v1/auth/logout", "{}", &cookie))
         .await
+        .expect("logout");
+    let response = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/login",
+            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
+        ))
+        .await
+        .expect("login");
+    let cookie2 = extract_cookie(&response).expect("cookie");
+
+    // Page 1 with limit=1.
+    let response = router
+        .clone()
+        .oneshot(get_with_cookie("/api/v1/audit-logs?limit=1", &cookie2))
+        .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 8192)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let entries = json["entries"].as_array().expect("entries array");
+    assert_eq!(entries.len(), 1, "limit=1 should return exactly 1 entry");
+    let cursor = json["next_cursor"]
+        .as_str()
+        .expect("next_cursor should exist when more entries remain");
 
-    // /me with the old cookie should fail.
+    // Page 2 using the cursor.
+    let uri = format!("/api/v1/audit-logs?limit=1&cursor={cursor}");
     let response = router
-        .oneshot(get_with_cookie("/api/v1/auth/me", &cookie))
+        .clone()
+        .oneshot(get_with_cookie(&uri, &cookie2))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 8192)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let entries = json["entries"].as_array().expect("entries array");
+    assert_eq!(entries.len(), 1, "page 2 should also return 1 entry");
+}
+
+/// AUDIT-001: unauthenticated request returns 401.
+#[tokio::test]
+async fn audit_log_query_requires_auth() {
+    let app = TestApp::new().await;
+    let router = app.router();
+
+    let response = router
+        .oneshot(get("/api/v1/audit-logs"))
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// AUDIT-001: non-admin user gets 403.
+#[tokio::test]
+async fn audit_log_query_requires_admin() {
+    let app = TestApp::new().await;
+    let (router, cookie, _admin_id) = setup_and_login(&app).await;
+
+    // Create a regular (non-admin) user.
+    let response = router
+        .clone()
+        .oneshot(post_with_cookie(
+            "/api/v1/users",
+            r#"{"username":"regular","password":"s3cure-pwd!","role":"user"}"#,
+            &cookie,
+        ))
+        .await
+        .expect("create user");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Login as the regular user.
+    let response = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/login",
+            r#"{"username":"regular","password":"s3cure-pwd!"}"#,
+        ))
+        .await
+        .expect("login");
+    assert_eq!(response.status(), StatusCode::OK);
+    let user_cookie = extract_cookie(&response).expect("cookie");
+
+    // Non-admin querying audit logs → 403.
+    let response = router
+        .oneshot(get_with_cookie("/api/v1/audit-logs", &user_cookie))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+/// AUDIT-002: login and logout produce audit entries.
+#[tokio::test]
+async fn auth_login_logout_audited() {
+    let app = TestApp::new().await;
+    let (router, cookie, admin_id) = setup_and_login(&app).await;
+
+    // Logout to generate auth.logout entry.
+    let _ = router
+        .clone()
+        .oneshot(post_with_cookie("/api/v1/auth/logout", "{}", &cookie))
+        .await
+        .expect("logout");
+
+    // Login again to get a fresh session for querying.
+    let response = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/login",
+            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
+        ))
+        .await
+        .expect("login");
+    let cookie2 = extract_cookie(&response).expect("cookie");
+
+    // Query all audit entries.
+    let response = router
+        .clone()
+        .oneshot(get_with_cookie("/api/v1/audit-logs", &cookie2))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 16384)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let entries = json["entries"].as_array().expect("entries array");
+
+    let actions: Vec<&str> = entries
+        .iter()
+        .map(|e| e["action"].as_str().expect("action"))
+        .collect();
+    assert!(
+        actions.contains(&"auth.login"),
+        "auth.login should be audited: {actions:?}"
+    );
+    assert!(
+        actions.contains(&"auth.logout"),
+        "auth.logout should be audited: {actions:?}"
+    );
+
+    // All entries should have the admin's actor_id.
+    for entry in entries {
+        assert_eq!(entry["actor_id"], admin_id);
+    }
+}
+
+/// AUDIT-002: user create, disable, and force-logout produce audit entries.
+#[tokio::test]
+async fn user_management_audited() {
+    let app = TestApp::new().await;
+    let (router, cookie, _admin_id) = setup_and_login(&app).await;
+
+    // Create a user — should produce user.create entry.
+    let response = router
+        .clone()
+        .oneshot(post_with_cookie(
+            "/api/v1/users",
+            r#"{"username":"alice","password":"s3cure-pwd!","role":"user"}"#,
+            &cookie,
+        ))
+        .await
+        .expect("create user");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let alice_id = json["user"]["id"].as_str().expect("alice id").to_owned();
+
+    // Login as alice so she has a session, then force-logout her.
+    let _ = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/login",
+            r#"{"username":"alice","password":"s3cure-pwd!"}"#,
+        ))
+        .await
+        .expect("alice login");
+
+    let response = router
+        .clone()
+        .oneshot(post_with_cookie(
+            &format!("/api/v1/users/{alice_id}/force-logout"),
+            "{}",
+            &cookie,
+        ))
+        .await
+        .expect("force logout");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Create a second user to disable.
+    let response = router
+        .clone()
+        .oneshot(post_with_cookie(
+            "/api/v1/users",
+            r#"{"username":"bob","password":"s3cure-pwd!","role":"user"}"#,
+            &cookie,
+        ))
+        .await
+        .expect("create bob");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let bob_id = json["user"]["id"].as_str().expect("bob id").to_owned();
+
+    let response = router
+        .clone()
+        .oneshot(post_with_cookie(
+            &format!("/api/v1/users/{bob_id}/disable"),
+            "{}",
+            &cookie,
+        ))
+        .await
+        .expect("disable bob");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Query audit logs and verify user.create, user.disable, user.force_logout.
+    let response = router
+        .clone()
+        .oneshot(get_with_cookie("/api/v1/audit-logs", &cookie))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 32768)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let entries = json["entries"].as_array().expect("entries array");
+
+    let actions: Vec<&str> = entries
+        .iter()
+        .map(|e| e["action"].as_str().expect("action"))
+        .collect();
+    assert!(
+        actions.contains(&"user.create"),
+        "user.create should be audited: {actions:?}"
+    );
+    assert!(
+        actions.contains(&"user.disable"),
+        "user.disable should be audited: {actions:?}"
+    );
+    assert!(
+        actions.contains(&"user.force_logout"),
+        "user.force_logout should be audited: {actions:?}"
+    );
+
+    // Verify target_id on the user.create entry for alice.
+    let alice_create = entries
+        .iter()
+        .find(|e| e["action"] == "user.create" && e["target_id"] == alice_id);
+    assert!(alice_create.is_some(), "user.create for alice should exist");
+    if let Some(entry) = alice_create {
+        assert_eq!(entry["target_type"], "user");
+    }
 }

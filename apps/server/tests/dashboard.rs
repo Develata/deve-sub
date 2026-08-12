@@ -23,20 +23,20 @@ use tower::ServiceExt;
 
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    GenerationCacheRepository, LatencyProbe, LatencyRecordRepository, NodeOverrideRepository,
-    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceAdapter,
-    ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
-    SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
+    AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
+    NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
+    ProbeSourceAdapter, ProbeSourceRepository, RecoveryCodeRepository, SessionRepository,
+    ShortCodeRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
     TotpSecretRepository, TrafficRepository, UserRepository,
 };
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
-    SqliteGenerationCacheRepository, SqliteHealthCheck, SqliteLatencyRecordRepository,
-    SqliteNodeOverrideRepository, SqliteNodePoolRepository, SqlitePoolMetaRepository,
-    SqliteProbeRunRepository, SqliteProbeSourceRepository, SqliteRecoveryCodeRepository,
-    SqliteSessionRepository, SqliteShortCodeRepository, SqliteSourceRepository,
-    SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
+    SqliteAuditLogRepository, SqliteGenerationCacheRepository, SqliteHealthCheck,
+    SqliteLatencyRecordRepository, SqliteNodeOverrideRepository, SqliteNodePoolRepository,
+    SqlitePoolMetaRepository, SqliteProbeRunRepository, SqliteProbeSourceRepository,
+    SqliteRecoveryCodeRepository, SqliteSessionRepository, SqliteShortCodeRepository,
+    SqliteSourceRepository, SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
     SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
     SqliteTemplateVersionRepository, SqliteTotpSecretRepository, SqliteTrafficRepository,
     SqliteUserRepository,
@@ -219,6 +219,8 @@ impl TestApp {
             state: deve_sub_server::AppState {
                 config,
                 master_key: Arc::clone(&master_key),
+                audit_log_repo: Arc::new(SqliteAuditLogRepository::new(pool.clone()))
+                    as Arc<dyn AuditLogRepository>,
                 user_repo: Arc::new(SqliteUserRepository::new(pool.clone()))
                     as Arc<dyn UserRepository>,
                 session_repo: Arc::new(SqliteSessionRepository::new(pool.clone()))

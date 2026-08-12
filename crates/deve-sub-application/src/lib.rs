@@ -7,6 +7,7 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod health;

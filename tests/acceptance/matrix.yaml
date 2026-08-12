@@ -1460,7 +1460,7 @@ cases:
     steps: []
     assertions: ["GET /api/v1/audit-logs 支持 actor/action/target/date 过滤和游标分页"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUDIT-002
     title: Auth 操作审计
     priority: P1
@@ -1470,7 +1470,7 @@ cases:
     steps: []
     assertions: ["login/logout/2FA/user CRUD 产生 audit_log 行，actor/action/target 正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUDIT-003
     title: CRUD 操作审计
     priority: P1

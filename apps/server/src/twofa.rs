@@ -6,7 +6,7 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{AppendHeaders, IntoResponse, Json};
-use deve_sub_application::auth;
+use deve_sub_application::{audit, auth};
 use deve_sub_contract::{
     ErrorResponse, LoginResponse, LoginTwoFactorRequest, RegenerateRecoveryCodesRequest,
     RegenerateRecoveryCodesResponse, TwoFactorDisableRequest, TwoFactorSetupResponse,
@@ -129,6 +129,11 @@ async fn verify(
         }
     })?;
 
+    let entry = audit::audit_2fa_enable(auth_session.user.id);
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for auth.2fa.enable");
+    }
+
     Ok(Json(TwoFactorVerifyResponse {
         recovery_codes: result.recovery_codes,
     }))
@@ -180,6 +185,11 @@ async fn disable(
             )
         }
     })?;
+
+    let entry = audit::audit_2fa_disable(auth_session.user.id);
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for auth.2fa.disable");
+    }
 
     Ok(Json(serde_json::json!({})))
 }
@@ -301,6 +311,11 @@ async fn login_2fa(
             )
         }
     })?;
+
+    let entry = audit::audit_login(user.id, true);
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for auth.login");
+    }
 
     let cookie = set_cookie_header(
         &token,

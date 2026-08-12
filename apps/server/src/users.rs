@@ -8,7 +8,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
-use deve_sub_application::auth;
+use deve_sub_application::{audit, auth};
 use deve_sub_contract::{
     CreateUserRequest, CreateUserResponse, ErrorResponse, ListUsersResponse, RoleDto, UserDto,
 };
@@ -52,7 +52,7 @@ fn default_page_size() -> u32 {
 )]
 async fn create_user(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<CreateUserResponse>), (StatusCode, Json<ErrorResponse>)> {
     let role = match req.role {
@@ -80,6 +80,11 @@ async fn create_user(
                 )
             }
         })?;
+
+    let entry = audit::audit_user_create(admin.user.id, &user.id.to_string(), &user.username);
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for user.create");
+    }
 
     Ok((
         StatusCode::CREATED,
@@ -211,6 +216,11 @@ async fn disable_user(
         }
     })?;
 
+    let entry = audit::audit_user_disable(admin.user.id, &user_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for user.disable");
+    }
+
     Ok(StatusCode::OK)
 }
 
@@ -232,7 +242,7 @@ async fn disable_user(
 )]
 async fn force_logout(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let user_id = UserId::parse(&id).map_err(|_| {
@@ -264,6 +274,11 @@ async fn force_logout(
             )
         }
     })?;
+
+    let entry = audit::audit_force_logout(admin.user.id, &user_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for user.force_logout");
+    }
 
     Ok(StatusCode::OK)
 }

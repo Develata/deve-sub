@@ -6,6 +6,7 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod audit_log_repository;
 pub mod generation_cache_repository;
 pub mod node_override_repository;
 pub mod node_pool_repository;
@@ -35,6 +36,7 @@ use deve_sub_application::{DbHealthPort, HealthError};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use thiserror::Error;
 
+pub use audit_log_repository::SqliteAuditLogRepository;
 pub use generation_cache_repository::SqliteGenerationCacheRepository;
 pub use node_override_repository::SqliteNodeOverrideRepository;
 pub use node_pool_repository::SqliteNodePoolRepository;

@@ -6,6 +6,7 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod audit;
 pub mod auth;
 pub mod dashboard;
 pub mod health;
@@ -16,6 +17,7 @@ pub mod subscription;
 pub mod template;
 pub mod traffic;
 
+pub use audit::{AuditLogDto, ListAuditLogsResponse};
 pub use auth::{
     CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse, ListUsersResponse,
     LoginRequest, LoginResponse, LoginTwoFactorRequest, RegenerateRecoveryCodesRequest,

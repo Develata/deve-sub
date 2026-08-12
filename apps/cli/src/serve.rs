@@ -16,10 +16,10 @@ use deve_sub_application::{
     SubscriptionFetcher,
 };
 use deve_sub_domain::{
-    GenerationCacheRepository, LatencyProbe, LatencyRecordRepository, NodeOverrideRepository,
-    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceAdapter,
-    ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
-    SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
+    AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
+    NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
+    ProbeSourceAdapter, ProbeSourceRepository, RecoveryCodeRepository, SessionRepository,
+    ShortCodeRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
     TotpSecretRepository, TrafficRepository, UserRepository,
 };
@@ -64,6 +64,9 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
 
     let user_repo: Arc<dyn UserRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteUserRepository::new(db.clone()),
+    );
+    let audit_log_repo: Arc<dyn AuditLogRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteAuditLogRepository::new(db.clone()),
     );
     let session_repo: Arc<dyn SessionRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteSessionRepository::new(db.clone()),
@@ -156,6 +159,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let state = AppState {
         config: config.clone(),
         master_key,
+        audit_log_repo,
         user_repo,
         session_repo,
         totp_secret_repo,

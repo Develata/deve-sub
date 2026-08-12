@@ -14,10 +14,10 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
-    GenerationCacheRepository, LatencyProbe, LatencyRecordRepository, NodeOverrideRepository,
-    NodePoolRepository, PoolMetaRepository, ProbeRunRepository, ProbeSourceAdapter,
-    ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
-    SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
+    AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
+    NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
+    ProbeSourceAdapter, ProbeSourceRepository, RecoveryCodeRepository, SessionRepository,
+    ShortCodeRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
     TotpSecretRepository, TrafficRepository, UserRepository,
 };
@@ -30,6 +30,7 @@ use utoipa_scalar::{Scalar, Servable};
 
 use deve_sub_security::MasterKey;
 
+pub mod audit;
 pub mod auth;
 pub mod csrf;
 pub mod dashboard;
@@ -59,6 +60,7 @@ pub enum ServerError {
 pub struct AppState {
     pub config: deve_sub_application::AppConfig,
     pub master_key: Arc<MasterKey>,
+    pub audit_log_repo: Arc<dyn AuditLogRepository>,
     pub user_repo: Arc<dyn UserRepository>,
     pub session_repo: Arc<dyn SessionRepository>,
     pub totp_secret_repo: Arc<dyn TotpSecretRepository>,

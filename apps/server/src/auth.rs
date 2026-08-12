@@ -7,7 +7,7 @@
 use axum::extract::{FromRequestParts, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{AppendHeaders, IntoResponse, Json};
-use deve_sub_application::auth;
+use deve_sub_application::{audit, auth};
 use deve_sub_contract::{
     CurrentUserResponse, ErrorResponse, LoginRequest, LoginResponse, RoleDto, SetupAdminRequest,
     SetupAdminResponse, UserDto,
@@ -309,6 +309,10 @@ async fn login(
 
     match outcome {
         auth::LoginOutcome::Success { user, token, .. } => {
+            let entry = audit::audit_login(user.id, true);
+            if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+                tracing::warn!(error = %e, "audit log write failed for auth.login");
+            }
             let cookie = set_cookie_header(
                 &token,
                 state.config.security.session_ttl_secs,
@@ -365,6 +369,10 @@ async fn logout(
                 "logout failed",
             )
         })?;
+    let entry = audit::audit_logout(auth_session.user.id);
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for auth.logout");
+    }
     Ok((
         StatusCode::OK,
         AppendHeaders([(

@@ -8,6 +8,7 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+pub mod audit;
 pub mod endpoint;
 pub mod error;
 pub mod identity;
@@ -23,6 +24,7 @@ pub mod template;
 pub mod tls;
 pub mod transport;
 
+pub use audit::{AuditError, AuditLog, AuditLogFilter, AuditLogRepository};
 pub use endpoint::{DomainName, Endpoint, Host};
 pub use error::DomainError;
 pub use identity::{

@@ -143,8 +143,8 @@ PARSE-025	Snell Mihomo/sing-box	P1	Golden	pass
 PARSE-026	ShadowTLS sing-box/Mihomo	P1	Golden	pass
 PARSE-027	xhttp transport	P1	Golden	pass
 OUT-015	JSON profile	P1	Compatibility	pass
-AUDIT-001	审计日志查询	P1	Integration	planned
-AUDIT-002	Auth 操作审计	P1	Integration	planned
+AUDIT-001	审计日志查询	P1	Integration	pass
+AUDIT-002	Auth 操作审计	P1	Integration	pass
 AUDIT-003	CRUD 操作审计	P1	Integration	planned
 TRAFFIC-001	每日流量快照	P1	Integration	planned
 TRAFFIC-002	流量历史查询	P1	E2E	planned

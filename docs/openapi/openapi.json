@@ -6,6 +6,127 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/audit-logs": {
+      "get": {
+        "summary": "`GET /api/v1/audit-logs` — list audit log entries with filters and\ncursor pagination (admin only). AUDIT-001.",
+        "operationId": "list_audit_logs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max entries per page (1-100, default 50)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pagination cursor (oldest entry ULID from previous page)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "description": "Filter by actor ULID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Filter by action (e.g. \"auth.login\")",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target_type",
+            "in": "query",
+            "description": "Filter by target type (e.g. \"user\")",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "query",
+            "description": "Filter by target ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit log entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAuditLogsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor or actor_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/auth/2fa/disable": {
       "post": {
         "summary": "`POST /api/v1/auth/2fa/disable` — disable 2FA.",
@@ -5543,6 +5664,57 @@
           }
         }
       },
+      "AuditLogDto": {
+        "type": "object",
+        "description": "A single audit log entry.",
+        "required": [
+          "id",
+          "action",
+          "created_at"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action string (e.g. `\"auth.login\"`, `\"user.create\"`)."
+          },
+          "actor_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The actor's ULID, or `null` for system/anonymous actions."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "When the action was recorded (ISO 8601 UTC)."
+          },
+          "details_json": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Non-sensitive metadata as a JSON string."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID identifier."
+          },
+          "target_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Target entity ULID."
+          },
+          "target_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Target entity type (e.g. `\"user\"`, `\"source\"`)."
+          }
+        }
+      },
       "BatchEnabledRequest": {
         "type": "object",
         "description": "Request body for `POST /api/v1/nodes/batch-enabled` (NODE-004).",
@@ -6471,6 +6643,29 @@
           "run_id": {
             "type": "string",
             "description": "The probe run that produced this record."
+          }
+        }
+      },
+      "ListAuditLogsResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/audit-logs` (cursor-paginated audit log).",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLogDto"
+            },
+            "description": "Audit log entries in the current page (newest first)."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cursor for the next page (`None` if no more results). The cursor is\nthe oldest entry's ULID in the current page."
           }
         }
       },

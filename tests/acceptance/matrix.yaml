@@ -1410,7 +1410,7 @@ cases:
     steps: []
     assertions: ["snell:// URI round-trip 语义等价"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-025
     title: Snell Mihomo/sing-box
     priority: P1
@@ -1420,7 +1420,7 @@ cases:
     steps: []
     assertions: ["Snell mihomo/sing-box round-trip；v4 双发，v1/2/3/5 在 sing-box 排除并报告"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-026
     title: ShadowTLS sing-box/Mihomo
     priority: P1

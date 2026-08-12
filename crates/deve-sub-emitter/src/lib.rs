@@ -18,6 +18,7 @@ pub mod error;
 mod hysteria2;
 mod naive;
 mod shadowsocks;
+mod snell;
 mod transport;
 mod trojan;
 mod tuic_v5;

@@ -26,6 +26,7 @@ pub fn emit_uri(node: &Node) -> Result<String, EmitError> {
         ProtocolKind::VMess => crate::vmess::emit(node),
         ProtocolKind::WireGuard => crate::wireguard::emit(node),
         ProtocolKind::AnyTls => crate::anytls::emit(node),
+        ProtocolKind::Snell => crate::snell::emit(node),
         ref other => Err(EmitError::NoEmitter(other.to_string())),
     }
 }

@@ -16,7 +16,7 @@ use crate::error::ParseError;
 ///
 /// Dispatches on the URI scheme (`vless://`, `hysteria2://`, `hy2://`,
 /// `tuic://`, `naive+https://`, `ss://`, `vmess://`, `trojan://`,
-/// `wireguard://`).
+/// `wireguard://`, `anytls://`, `snell://`).
 ///
 /// The returned `Node` has protocol-specific fields populated from the URI.
 /// Metadata fields (`source`, `tags`, `region`) are set to defaults; the
@@ -47,6 +47,7 @@ pub fn parse_uri(uri: &str) -> Result<Node, ParseError> {
         "naive+https" | "naive+http" => crate::naive::parse(&parsed, uri),
         "wireguard" => crate::wireguard::parse(&parsed, uri),
         "anytls" => crate::anytls::parse(&parsed, uri),
+        "snell" => crate::snell::parse(&parsed, uri),
         other => Err(ParseError::UnknownScheme(other.to_owned())),
     }
 }

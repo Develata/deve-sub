@@ -4,7 +4,8 @@
 //! document (route, DNS, inbounds) is assembled in Slice 5.
 
 use deve_sub_domain::{
-    Authentication, Node, ProtocolConfig, ProtocolKind, Transport, TransportKind,
+    Authentication, Node, ProtocolConfig, ProtocolKind, SnellObfsMode, SnellVersion, Transport,
+    TransportKind,
 };
 use serde_json::{Map, Value, json};
 
@@ -34,6 +35,7 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
         ProtocolKind::TuicV5 => tuic_v5(node)?,
         ProtocolKind::WireGuard => wireguard(node)?,
         ProtocolKind::AnyTls => anytls(node)?,
+        ProtocolKind::Snell => snell(node)?,
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "singbox: unsupported protocol {other}"
@@ -283,6 +285,77 @@ fn anytls(node: &Node) -> EmitResult {
         fields.push(("client_metadata".to_owned(), Value::String(cm.clone())));
     }
     Ok(("anytls", fields))
+}
+
+fn snell(node: &Node) -> EmitResult {
+    let psk = match &node.authentication {
+        Authentication::Password { password } => password.clone(),
+        _ => return Err(EmitError::MissingField("snell psk")),
+    };
+    let cfg = match &node.config {
+        ProtocolConfig::Snell(c) => c,
+        _ => return Err(EmitError::MissingField("snell config")),
+    };
+
+    let mut fields: Vec<(String, Value)> = vec![
+        ("psk".to_owned(), Value::String(psk)),
+        ("version".to_owned(), json!(cfg.version.as_u32())),
+    ];
+
+    if let Some(reuse) = cfg.reuse {
+        fields.push(("reuse".to_owned(), Value::Bool(reuse)));
+    }
+
+    // WHY: sing-box preserves userkey in `extras` (parser stored it under
+    // `snell_userkey`); emit it back so sing-box round-trip is lossless.
+    if let Some(userkey) = node.extras.get("snell_userkey").and_then(|v| v.as_str()) {
+        fields.push(("userkey".to_owned(), Value::String(userkey.to_owned())));
+    }
+
+    match cfg.version {
+        SnellVersion::V4 => {
+            if let Some(ref obfs) = cfg.obfs {
+                let mode_str = match obfs.mode {
+                    SnellObfsMode::Http => "http",
+                    SnellObfsMode::Tls => "tls",
+                    SnellObfsMode::ShadowTls | SnellObfsMode::Restls | SnellObfsMode::Jls => {
+                        return Err(EmitError::NoEmitter(format!(
+                            "singbox: snell obfs mode {:?} not supported by sing-box",
+                            obfs.mode
+                        )));
+                    }
+                };
+                fields.push(("obfs_mode".to_owned(), Value::String(mode_str.to_owned())));
+                if let Some(ref host) = obfs.host {
+                    fields.push(("obfs_host".to_owned(), Value::String(host.clone())));
+                }
+            }
+            if matches!(cfg.obfs.as_ref().map(|o| o.mode), Some(SnellObfsMode::Tls)) {
+                push_tls_fields(&mut fields, node);
+            }
+        }
+        SnellVersion::V6 => {
+            if let Some(mode) = cfg.v6_mode {
+                let mode_str = match mode {
+                    deve_sub_domain::SnellV6Mode::Default => "default",
+                    deve_sub_domain::SnellV6Mode::Unshaped => "unshaped",
+                    deve_sub_domain::SnellV6Mode::UnsafeRaw => "unsafe-raw",
+                };
+                fields.push(("mode".to_owned(), Value::String(mode_str.to_owned())));
+            }
+        }
+        // WHY: sing-box outbound accepts only v4/v6 (option/snell.go:71);
+        // other versions must be filtered out by the compatibility layer
+        // before reaching this emitter.
+        other => {
+            return Err(EmitError::NoEmitter(format!(
+                "singbox: snell v{} not supported (only v4/v6)",
+                other.as_u32()
+            )));
+        }
+    }
+
+    Ok(("snell", fields))
 }
 
 fn format_go_duration(d: time::Duration) -> String {

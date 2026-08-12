@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-use deve_sub_domain::{GroupType, Node, ProtocolKind, TransportKind};
+use deve_sub_domain::{GroupType, Node, ProtocolKind, SnellVersion, TransportKind};
 use thiserror::Error;
 
 /// Target output profile identifier.
@@ -78,6 +78,12 @@ pub enum CompatibilityReason {
     UnsupportedGroupType(String),
     #[error("node has no typed protocol config (unsupported)")]
     UnsupportedConfig,
+    #[error("unsupported protocol version '{version}' for {protocol}; supported: {supported}")]
+    UnsupportedProtocolVersion {
+        protocol: &'static str,
+        version: u32,
+        supported: &'static str,
+    },
 }
 
 /// Look up the capability matrix for a profile.
@@ -93,6 +99,9 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 ProtocolKind::Shadowsocks,
                 ProtocolKind::Hysteria2,
                 ProtocolKind::TuicV5,
+                ProtocolKind::WireGuard,
+                ProtocolKind::AnyTls,
+                ProtocolKind::Snell,
             ]
             .into_iter()
             .collect(),
@@ -126,6 +135,9 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 ProtocolKind::Shadowsocks,
                 ProtocolKind::Hysteria2,
                 ProtocolKind::TuicV5,
+                ProtocolKind::WireGuard,
+                ProtocolKind::AnyTls,
+                ProtocolKind::Snell,
             ]
             .into_iter()
             .collect(),
@@ -151,6 +163,7 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 ProtocolKind::VMess,
                 ProtocolKind::Trojan,
                 ProtocolKind::Shadowsocks,
+                ProtocolKind::WireGuard,
             ]
             .into_iter()
             .collect(),
@@ -226,6 +239,9 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 ProtocolKind::Hysteria2,
                 ProtocolKind::TuicV5,
                 ProtocolKind::NaiveProxy,
+                ProtocolKind::WireGuard,
+                ProtocolKind::AnyTls,
+                ProtocolKind::Snell,
             ]
             .into_iter()
             .collect(),
@@ -269,6 +285,26 @@ pub fn check_node(node: &Node, cap: &ProfileCapability) -> Result<(), Compatibil
         return Err(CompatibilityReason::UnsupportedTransport(
             transport.kind.to_string(),
         ));
+    }
+
+    // WHY: sing-box supports Snell V4 and V6 only; V1/V2/V3/V5 must be
+    // excluded with a version-specific reason (constraint #7 + M9 §Failure/
+    // recovery). Other profiles either support all Snell versions (mihomo,
+    // uri_list) or reject Snell entirely via `supported_protocols` (xray,
+    // v2ray, shadowrocket).
+    if cap.profile == ProfileKind::SingBox
+        && let deve_sub_domain::ProtocolConfig::Snell(cfg) = &node.config
+    {
+        match cfg.version {
+            SnellVersion::V4 | SnellVersion::V6 => {}
+            other => {
+                return Err(CompatibilityReason::UnsupportedProtocolVersion {
+                    protocol: "snell",
+                    version: other.as_u32(),
+                    supported: "4, 6",
+                });
+            }
+        }
     }
 
     Ok(())

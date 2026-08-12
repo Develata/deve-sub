@@ -5,7 +5,7 @@
 //! dns) is assembled in Slice 5.
 
 use deve_sub_domain::{
-    Authentication, Node, ProtocolConfig, ProtocolKind, Transport, TransportKind,
+    Authentication, Node, ProtocolConfig, ProtocolKind, SnellObfsMode, Transport, TransportKind,
 };
 
 use crate::error::EmitError;
@@ -33,6 +33,7 @@ fn emit_proxy(node: &Node, lines: &mut Vec<String>) -> Result<(), EmitError> {
         ProtocolKind::TuicV5 => emit_tuic_v5(node, &server, port, name, lines),
         ProtocolKind::WireGuard => emit_wireguard(node, &server, port, name, lines),
         ProtocolKind::AnyTls => emit_anytls(node, &server, port, name, lines),
+        ProtocolKind::Snell => emit_snell(node, &server, port, name, lines),
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "mihomo: unsupported protocol {other}"
@@ -279,6 +280,62 @@ fn emit_anytls(
     }
     if let Some(n) = cfg.min_idle_session {
         entry.push_str(&format!("\n    min-idle-session: {n}"));
+    }
+    lines.push(entry);
+    Ok(())
+}
+
+fn emit_snell(
+    node: &Node,
+    server: &str,
+    port: u16,
+    name: &str,
+    lines: &mut Vec<String>,
+) -> Result<(), EmitError> {
+    let psk = match &node.authentication {
+        Authentication::Password { password } => password,
+        _ => return Err(EmitError::MissingField("snell psk")),
+    };
+    let cfg = match &node.config {
+        ProtocolConfig::Snell(c) => c,
+        _ => return Err(EmitError::MissingField("snell config")),
+    };
+    let mut entry = yaml_entry(name, "snell", server, port);
+    entry.push_str(&format!("\n    psk: \"{psk}\""));
+    entry.push_str(&format!("\n    version: {}", cfg.version.as_u32()));
+    if let Some(supported) = node.udp.supported {
+        entry.push_str(&format!("\n    udp: {supported}"));
+    }
+    if let Some(reuse) = cfg.reuse {
+        entry.push_str(&format!("\n    reuse: {reuse}"));
+    }
+    if let Some(ref obfs) = cfg.obfs {
+        let mode_str = match obfs.mode {
+            SnellObfsMode::Tls => "tls",
+            SnellObfsMode::Http => "http",
+            SnellObfsMode::ShadowTls => "shadow-tls",
+            SnellObfsMode::Restls => "restls",
+            SnellObfsMode::Jls => "jls",
+        };
+        entry.push_str(&format!("\n    obfs-opts:\n      mode: {mode_str}"));
+        if let Some(ref host) = obfs.host {
+            entry.push_str(&format!("\n      host: \"{host}\""));
+        }
+        if let Some(ref pw) = obfs.password {
+            entry.push_str(&format!("\n      password: \"{pw}\""));
+        }
+        if let Some(v) = obfs.version {
+            entry.push_str(&format!("\n      version: {v}"));
+        }
+        if !obfs.alpn.is_empty() {
+            let alpn: Vec<String> = obfs.alpn.iter().map(|a| format!("\"{a}\"")).collect();
+            entry.push_str(&format!("\n      alpn: [{}]", alpn.join(", ")));
+        }
+    }
+    // WHY: when obfs.mode=tls the TLS-shaped fields live on `node.tls`; emit
+    // them at top-level (mihomo Snell reads sni/alpn/skip-cert-verify there).
+    if matches!(cfg.obfs.as_ref().map(|o| o.mode), Some(SnellObfsMode::Tls)) {
+        push_tls(node, &mut entry);
     }
     lines.push(entry);
     Ok(())

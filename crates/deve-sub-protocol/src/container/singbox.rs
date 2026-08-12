@@ -11,9 +11,10 @@ use serde_json::Value;
 
 use deve_sub_domain::{
     AnyTlsConfig, Authentication, CongestionConfig, CongestionController, Endpoint,
-    Hysteria2Config, Node, Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig, TlsConfig,
-    Transport, TransportKind, TrojanConfig, TuicV5Config, UdpRelayMode, VMessConfig,
-    VlessRealityConfig, WireGuardConfig, WireGuardPeer,
+    Hysteria2Config, Node, Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig, SnellConfig,
+    SnellObfs, SnellObfsMode, SnellV6Mode, SnellVersion, TlsConfig, Transport, TransportKind,
+    TrojanConfig, TuicV5Config, UdpRelayMode, VMessConfig, VlessRealityConfig, WireGuardConfig,
+    WireGuardPeer,
 };
 
 use crate::error::ParseError;
@@ -64,6 +65,7 @@ fn parse_outbound(entry: &Value) -> Node {
         "tuic" => parse_tuic(entry),
         "wireguard" => parse_wireguard(entry),
         "anytls" => parse_anytls(entry),
+        "snell" => parse_snell(entry),
         // sing-box internal types (direct, block, dns) are not proxy nodes.
         "direct" | "block" | "dns" | "selector" | "urltest" => {
             return unsupported_entry(
@@ -491,5 +493,112 @@ fn parse_anytls(entry: &Value) -> Result<Node, ParseError> {
     node.endpoint = endpoint;
     node.authentication = Authentication::Password { password };
     node.tls = tls;
+    Ok(node)
+}
+
+fn parse_snell(entry: &Value) -> Result<Node, ParseError> {
+    let (name, endpoint) = build_base(entry)?;
+    let psk = get_str(entry, "psk").ok_or(ParseError::MissingField("psk"))?;
+
+    let version_n = entry
+        .get("version")
+        .and_then(|v| v.as_u64())
+        .ok_or(ParseError::MissingField("version"))?;
+    let version = SnellVersion::from_u32(u32::try_from(version_n).unwrap_or(0)).ok_or(
+        ParseError::InvalidField {
+            field: "version",
+            value: version_n.to_string(),
+        },
+    )?;
+
+    let reuse = get_bool(entry, "reuse");
+    // WHY: `userkey` is a sing-box-only field with no canonical home; preserve
+    // it in `extras` so sing-box round-trip is lossless.
+    let userkey = get_str(entry, "userkey");
+
+    let (obfs, v6_mode) = match version {
+        SnellVersion::V4 => {
+            let obfs_mode = get_str(entry, "obfs_mode").unwrap_or_else(|| "none".to_owned());
+            let obfs = match obfs_mode.as_str() {
+                "none" => None,
+                "http" => Some(SnellObfs {
+                    mode: SnellObfsMode::Http,
+                    host: get_str(entry, "obfs_host"),
+                    password: None,
+                    version: None,
+                    alpn: vec![],
+                }),
+                "tls" => Some(SnellObfs {
+                    mode: SnellObfsMode::Tls,
+                    host: get_str(entry, "obfs_host"),
+                    password: None,
+                    version: None,
+                    alpn: vec![],
+                }),
+                other => {
+                    return Err(ParseError::InvalidField {
+                        field: "obfs_mode",
+                        value: other.to_owned(),
+                    });
+                }
+            };
+            (obfs, None)
+        }
+        SnellVersion::V6 => {
+            let mode = get_str(entry, "mode")
+                .and_then(|s| match s.as_str() {
+                    "default" => Some(SnellV6Mode::Default),
+                    "unshaped" => Some(SnellV6Mode::Unshaped),
+                    "unsafe-raw" => Some(SnellV6Mode::UnsafeRaw),
+                    _ => None,
+                })
+                .unwrap_or(SnellV6Mode::Default);
+            (None, Some(mode))
+        }
+        // WHY: sing-box outbound accepts only v4/v6 (option/snell.go line 71).
+        // v1/v2/v3/v5 surface as Unsupported here; the compatibility layer
+        // rejects them with `UnsupportedProtocolVersion` when emitting.
+        other => {
+            return Err(ParseError::InvalidField {
+                field: "version",
+                value: format!(
+                    "sing-box snell outbound does not support v{}",
+                    other.as_u32()
+                ),
+            });
+        }
+    };
+
+    // WHY: sing-box Snell v4 with `obfs_mode = tls` carries the camouflage SNI
+    // in a nested `tls` block (server_name) and obfs_host as fallback.
+    let tls = if matches!(obfs.as_ref().map(|o| o.mode), Some(SnellObfsMode::Tls)) {
+        let mut t = extract_tls(entry).unwrap_or_else(default_tls_enabled);
+        t.enabled = true;
+        if t.server_name.is_none() {
+            t.server_name = obfs.as_ref().and_then(|o| o.host.clone());
+        }
+        Some(t)
+    } else {
+        None
+    };
+
+    let config = ProtocolConfig::Snell(SnellConfig {
+        version,
+        reuse,
+        obfs,
+        v6_mode,
+    });
+
+    let mut node = node_shell_container();
+    node.display_name = name;
+    node.protocol = ProtocolKind::Snell;
+    node.config = config;
+    node.endpoint = endpoint;
+    node.authentication = Authentication::Password { password: psk };
+    node.tls = tls;
+    if let Some(key) = userkey {
+        node.extras
+            .insert("snell_userkey".to_owned(), serde_json::Value::String(key));
+    }
     Ok(node)
 }

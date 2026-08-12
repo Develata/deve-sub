@@ -195,3 +195,121 @@ pub struct AnyTlsConfig {
     /// AnyTLS client hello metadata string (sing-box/mihomo extension).
     pub client_metadata: Option<String>,
 }
+
+/// Snell configuration (M9).
+///
+/// `psk` (pre-shared key) is carried by [`crate::Authentication::Password`];
+/// `server`/`port` by [`crate::Endpoint`]. Snell has **no TLS by default** —
+/// TLS only when `obfs.mode` is `Tls`; otherwise [`crate::TlsConfig`] is
+/// `None`.
+///
+/// Version compatibility: mihomo supports V1–V5; sing-box supports V4 and V6
+/// only. Emitters must exclude incompatible versions with report (constraint
+/// #7). V6 carries an additional `v6_mode` (sing-box only).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SnellConfig {
+    /// Snell protocol version.
+    pub version: SnellVersion,
+    /// Connection reuse flag (mihomo v4/v5 only).
+    pub reuse: Option<bool>,
+    /// Obfuscation options (mihomo `obfs-opts`).
+    pub obfs: Option<SnellObfs>,
+    /// V6 mode (sing-box only: `default`, `unshaped`, `unsafe-raw`).
+    pub v6_mode: Option<SnellV6Mode>,
+}
+
+/// Snell protocol version.
+///
+/// mihomo supports V1–V5; sing-box supports V4 and V6 only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SnellVersion {
+    /// Snell v1.
+    V1,
+    /// Snell v2.
+    V2,
+    /// Snell v3.
+    V3,
+    /// Snell v4.
+    V4,
+    /// Snell v5.
+    V5,
+    /// Snell v6 (sing-box only; carries mode semantics).
+    V6,
+}
+
+impl SnellVersion {
+    /// Returns the numeric version value (1–6).
+    #[must_use]
+    pub fn as_u32(self) -> u32 {
+        match self {
+            Self::V1 => 1,
+            Self::V2 => 2,
+            Self::V3 => 3,
+            Self::V4 => 4,
+            Self::V5 => 5,
+            Self::V6 => 6,
+        }
+    }
+
+    /// Parses a numeric version string into a [`SnellVersion`].
+    ///
+    /// # Errors
+    /// Returns `None` if the value is not 1–6.
+    #[must_use]
+    pub fn from_u32(n: u32) -> Option<Self> {
+        match n {
+            1 => Some(Self::V1),
+            2 => Some(Self::V2),
+            3 => Some(Self::V3),
+            4 => Some(Self::V4),
+            5 => Some(Self::V5),
+            6 => Some(Self::V6),
+            _ => None,
+        }
+    }
+}
+
+/// Snell V6 mode (sing-box only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SnellV6Mode {
+    /// Default V6 mode.
+    Default,
+    /// Unshaped V6 mode.
+    Unshaped,
+    /// Unsafe-raw V6 mode.
+    UnsafeRaw,
+}
+
+/// Snell obfuscation options (mihomo `obfs-opts`).
+///
+/// `mode` selects the obfuscation strategy. `host` and `password` apply to
+/// TLS/HTTP/ShadowTLS/Restls/Jls modes. `version` is the ShadowTLS sub-version
+/// when `mode = ShadowTls`. `alpn` applies to TLS-shaped modes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SnellObfs {
+    /// Obfuscation mode.
+    pub mode: SnellObfsMode,
+    /// Obfuscation host (e.g. `bing.com`).
+    pub host: Option<String>,
+    /// Obfuscation password (ShadowTLS/Restls/Jls).
+    pub password: Option<String>,
+    /// ShadowTLS sub-version (when `mode = ShadowTls`).
+    pub version: Option<u32>,
+    /// ALPN list (TLS-shaped modes).
+    pub alpn: Vec<String>,
+}
+
+/// Snell obfuscation mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SnellObfsMode {
+    /// Simple TLS obfuscation.
+    Tls,
+    /// HTTP obfuscation.
+    Http,
+    /// ShadowTLS obfuscation (nested; see M9 Slice 4).
+    ShadowTls,
+    /// Restls obfuscation.
+    Restls,
+    /// JLS obfuscation.
+    Jls,
+}

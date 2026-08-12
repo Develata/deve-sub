@@ -26,6 +26,9 @@ pub enum ProfileKind {
     V2Ray,
     Shadowrocket,
     UriList,
+    /// Canonical JSON serialization of the full node model. Full-fidelity
+    /// profile: accepts all protocols and transports (see M9 Slice 5).
+    Json,
 }
 
 impl ProfileKind {
@@ -39,6 +42,7 @@ impl ProfileKind {
             "v2ray" => Some(Self::V2Ray),
             "shadowrocket" => Some(Self::Shadowrocket),
             "uri_list" => Some(Self::UriList),
+            "json" => Some(Self::Json),
             _ => None,
         }
     }
@@ -53,6 +57,7 @@ impl ProfileKind {
             Self::V2Ray => "v2ray",
             Self::Shadowrocket => "shadowrocket",
             Self::UriList => "uri_list",
+            Self::Json => "json",
         }
     }
 }
@@ -113,6 +118,7 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 TransportKind::Grpc,
                 TransportKind::Quic,
                 TransportKind::HttpUpgrade,
+                TransportKind::Xhttp,
             ]
             .into_iter()
             .collect(),
@@ -177,6 +183,7 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 TransportKind::Quic,
                 TransportKind::HttpUpgrade,
                 TransportKind::Xtls,
+                TransportKind::Xhttp,
             ]
             .into_iter()
             .collect(),
@@ -257,6 +264,43 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
                 TransportKind::HttpUpgrade,
                 TransportKind::Kcp,
                 TransportKind::Xtls,
+                TransportKind::Xhttp,
+            ]
+            .into_iter()
+            .collect(),
+            chain_support: false,
+            supported_group_types: HashSet::new(),
+        },
+        ProfileKind::Json => ProfileCapability {
+            profile,
+            // WHY: JSON profile is full-fidelity — it serializes the
+            // canonical Node model verbatim via serde, so every protocol
+            // and transport is accepted. No filtering, no exclusion.
+            supported_protocols: [
+                ProtocolKind::Vless,
+                ProtocolKind::VMess,
+                ProtocolKind::Trojan,
+                ProtocolKind::Shadowsocks,
+                ProtocolKind::Hysteria2,
+                ProtocolKind::TuicV5,
+                ProtocolKind::NaiveProxy,
+                ProtocolKind::WireGuard,
+                ProtocolKind::AnyTls,
+                ProtocolKind::Snell,
+                ProtocolKind::ShadowTls,
+            ]
+            .into_iter()
+            .collect(),
+            supported_transports: [
+                TransportKind::Tcp,
+                TransportKind::Ws,
+                TransportKind::H2,
+                TransportKind::Grpc,
+                TransportKind::Quic,
+                TransportKind::HttpUpgrade,
+                TransportKind::Kcp,
+                TransportKind::Xtls,
+                TransportKind::Xhttp,
             ]
             .into_iter()
             .collect(),
@@ -358,6 +402,7 @@ mod tests {
                 kind: k,
                 path: None,
                 host: None,
+                xhttp_mode: None,
             }),
             tls: None,
             udp: UdpCapability::default(),

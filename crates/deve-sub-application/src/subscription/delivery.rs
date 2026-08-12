@@ -382,7 +382,7 @@ fn compute_etag(content: &str) -> String {
 fn content_type_for(profile: ProfileKind) -> &'static str {
     match profile {
         ProfileKind::Mihomo => "text/yaml; charset=utf-8",
-        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray => {
+        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray | ProfileKind::Json => {
             "application/json; charset=utf-8"
         }
         ProfileKind::Shadowrocket | ProfileKind::UriList => "text/plain; charset=utf-8",
@@ -394,7 +394,7 @@ fn content_type_for(profile: ProfileKind) -> &'static str {
 fn content_disposition_for(profile: ProfileKind, slug: &str) -> String {
     let ext = match profile {
         ProfileKind::Mihomo => "yaml",
-        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray => "json",
+        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray | ProfileKind::Json => "json",
         ProfileKind::Shadowrocket | ProfileKind::UriList => "txt",
     };
     format!("attachment; filename=\"{slug}.{ext}\"")

@@ -89,6 +89,7 @@ pub(crate) fn parse(uri: &str) -> Result<Node, ParseError> {
         kind: transport_kind,
         path: vmess.path.filter(|p| !p.is_empty()),
         host: vmess.host.filter(|h| !h.is_empty()),
+        xhttp_mode: None,
     });
 
     let tls = vmess.tls.as_deref().filter(|t| !t.is_empty()).map(|t| {

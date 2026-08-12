@@ -6,6 +6,7 @@
 
 use deve_sub_domain::{
     Authentication, Node, ProtocolConfig, ProtocolKind, SnellObfsMode, Transport, TransportKind,
+    XhttpMode,
 };
 
 use crate::error::EmitError;
@@ -467,6 +468,7 @@ fn push_network(node: &Node, entry: &mut String) {
             TransportKind::HttpUpgrade => "httpupgrade",
             TransportKind::Kcp => "kcp",
             TransportKind::Xtls => "xtls",
+            TransportKind::Xhttp => "xhttp",
         };
         entry.push_str(&format!("\n    network: {network}"));
         push_transport_opts(transport, entry);
@@ -490,6 +492,24 @@ fn push_transport_opts(transport: &Transport, entry: &mut String) {
         TransportKind::H2 => {
             if let Some(ref path) = transport.path {
                 entry.push_str(&format!("\n    h2-opts:\n      path: \"{path}\""));
+            }
+        }
+        TransportKind::Xhttp => {
+            let has_path = transport.path.is_some();
+            let has_host = transport.host.is_some();
+            let mode = transport.xhttp_mode.unwrap_or_default();
+            let has_non_default_mode = mode != XhttpMode::Auto;
+            if has_path || has_host || has_non_default_mode {
+                entry.push_str("\n    xhttp-opts:");
+                if let Some(ref path) = transport.path {
+                    entry.push_str(&format!("\n      path: \"{path}\""));
+                }
+                if let Some(ref host) = transport.host {
+                    entry.push_str(&format!("\n      host: \"{host}\""));
+                }
+                if has_non_default_mode {
+                    entry.push_str(&format!("\n      mode: {}", mode.as_str()));
+                }
             }
         }
         _ => {}

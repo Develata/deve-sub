@@ -221,6 +221,7 @@ fn stream_settings(node: &Node) -> Option<Value> {
         TransportKind::HttpUpgrade => "httpupgrade",
         TransportKind::Kcp => "kcp",
         TransportKind::Xtls => "xtls",
+        TransportKind::Xhttp => "xhttp",
     };
     let mut stream = Map::new();
     stream.insert("network".to_owned(), Value::String(network.to_owned()));
@@ -269,6 +270,20 @@ fn transport_settings(transport: &Transport) -> Option<Value> {
             }
             if let Some(ref host) = transport.host {
                 obj.insert("host".to_owned(), json!([host]));
+            }
+            Some(Value::Object(obj))
+        }
+        TransportKind::Xhttp => {
+            let mut obj = Map::new();
+            if let Some(ref path) = transport.path {
+                obj.insert("path".to_owned(), Value::String(path.clone()));
+            }
+            if let Some(ref host) = transport.host {
+                obj.insert("host".to_owned(), Value::String(host.clone()));
+            }
+            let mode = transport.xhttp_mode.unwrap_or_default();
+            if mode != deve_sub_domain::XhttpMode::Auto {
+                obj.insert("mode".to_owned(), Value::String(mode.as_str().to_owned()));
             }
             Some(Value::Object(obj))
         }

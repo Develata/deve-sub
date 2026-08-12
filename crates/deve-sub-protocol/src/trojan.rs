@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use deve_sub_domain::{
     Authentication, Endpoint, Node, ProtocolConfig, ProtocolKind, TlsConfig, Transport,
-    TransportKind, TrojanConfig,
+    TransportKind, TrojanConfig, XhttpMode,
 };
 
 use crate::error::ParseError;
@@ -43,6 +43,15 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
         .map(|t| map_transport_kind(t))
         .transpose()?
         .unwrap_or(TransportKind::Tcp);
+
+    let xhttp_mode = if transport_kind == TransportKind::Xhttp {
+        query
+            .get("mode")
+            .map(|m| XhttpMode::from_str_lossy(m))
+            .unwrap_or(Some(XhttpMode::Auto))
+    } else {
+        None
+    };
 
     // WHY: Trojan always uses TLS; the `tls` field is unconditionally Some.
     let tls = build_common_tls(
@@ -76,6 +85,7 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
         kind: transport_kind,
         path: query.get("path").cloned(),
         host: query.get("host").cloned(),
+        xhttp_mode,
     });
     node.tls = Some(tls);
 

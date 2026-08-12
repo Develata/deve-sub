@@ -16,6 +16,7 @@ mod common;
 mod container;
 pub mod error;
 mod hysteria2;
+mod json;
 mod naive;
 mod shadowsocks;
 mod shadowtls;
@@ -31,6 +32,7 @@ mod wireguard;
 
 pub use container::{emit_mihomo, emit_shadowrocket, emit_singbox, emit_v2ray, emit_xray};
 pub use error::EmitError;
+pub use json::emit_json;
 
 pub use uri::emit_uri;
 pub use uri_list::emit_uri_list;

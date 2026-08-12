@@ -69,5 +69,5 @@ pub use template::{
 pub use tls::{CertificatePin, RealityConfig, TlsConfig};
 pub use transport::{
     CongestionConfig, CongestionController, MultiplexConfig, Obfuscation, Transport, TransportKind,
-    UdpCapability,
+    UdpCapability, XhttpMode,
 };

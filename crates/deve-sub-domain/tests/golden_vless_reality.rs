@@ -44,6 +44,7 @@ fn build_vless_reality_node() -> Node {
             kind: TransportKind::Tcp,
             path: None,
             host: None,
+            xhttp_mode: None,
         }),
         tls: Some(TlsConfig {
             enabled: true,

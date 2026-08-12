@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use deve_sub_domain::{
     Authentication, Endpoint, Node, ProtocolConfig, ProtocolKind, RealityConfig, TlsConfig,
-    Transport, TransportKind, UdpCapability, VlessRealityConfig,
+    Transport, TransportKind, UdpCapability, VlessRealityConfig, XhttpMode,
 };
 
 use crate::error::ParseError;
@@ -53,6 +53,15 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
         .transpose()?
         .unwrap_or(TransportKind::Tcp);
 
+    let xhttp_mode = if transport_kind == TransportKind::Xhttp {
+        query
+            .get("mode")
+            .map(|m| XhttpMode::from_str_lossy(m))
+            .unwrap_or(Some(XhttpMode::Auto))
+    } else {
+        None
+    };
+
     let tls = build_tls(&query, is_reality)?;
 
     let config = if is_reality {
@@ -86,6 +95,7 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
         kind: transport_kind,
         path: query.get("path").cloned(),
         host: query.get("host").cloned(),
+        xhttp_mode,
     });
     node.tls = tls;
     node.udp = udp;

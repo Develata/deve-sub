@@ -244,7 +244,12 @@ fn extract_transport(entry: &Value) -> Option<Transport> {
         _ => (None, None),
     };
 
-    Some(Transport { kind, path, host })
+    Some(Transport {
+        kind,
+        path,
+        host,
+        xhttp_mode: None,
+    })
 }
 
 // --- Per-protocol mappers ---

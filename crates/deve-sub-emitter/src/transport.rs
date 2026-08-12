@@ -13,5 +13,6 @@ pub(crate) fn transport_kind_str(kind: TransportKind) -> &'static str {
         TransportKind::Grpc => "grpc",
         TransportKind::HttpUpgrade => "httpupgrade",
         TransportKind::Xtls => "xtls",
+        TransportKind::Xhttp => "xhttp",
     }
 }

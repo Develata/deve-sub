@@ -1440,7 +1440,7 @@ cases:
     steps: []
     assertions: ["VLESS+xhttp URI → mihomo/Xray emit round-trip；sing-box 排除"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-015
     title: JSON profile
     priority: P1
@@ -1450,7 +1450,7 @@ cases:
     steps: []
     assertions: ["emit_json → parse JSON → 节点等价"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUDIT-001
     title: 审计日志查询
     priority: P1

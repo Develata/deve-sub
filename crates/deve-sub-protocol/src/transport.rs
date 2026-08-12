@@ -15,6 +15,7 @@ pub(crate) fn map_transport_kind(value: &str) -> Result<TransportKind, ParseErro
         "quic" => Ok(TransportKind::Quic),
         "httpupgrade" => Ok(TransportKind::HttpUpgrade),
         "xtls" => Ok(TransportKind::Xtls),
+        "xhttp" => Ok(TransportKind::Xhttp),
         _ => Err(ParseError::InvalidField {
             field: "type (transport)",
             value: value.to_owned(),

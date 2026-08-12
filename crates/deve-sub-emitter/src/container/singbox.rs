@@ -407,7 +407,9 @@ fn singbox_transport(transport: &Transport) -> Option<Value> {
         TransportKind::Grpc => "grpc",
         TransportKind::Quic => "quic",
         TransportKind::HttpUpgrade => "httpupgrade",
-        TransportKind::Tcp | TransportKind::Kcp | TransportKind::Xtls => return None,
+        TransportKind::Tcp | TransportKind::Kcp | TransportKind::Xtls | TransportKind::Xhttp => {
+            return None;
+        }
     };
     let mut obj = Map::new();
     obj.insert("type".to_owned(), Value::String(type_.to_owned()));

@@ -15,6 +15,7 @@ use deve_sub_domain::{
     RealityConfig, ShadowTlsConfig, ShadowTlsVersion, ShadowsocksConfig, SnellConfig, SnellObfs,
     SnellObfsMode, SnellVersion, TlsConfig, Transport, TransportKind, TrojanConfig, TuicV5Config,
     UdpCapability, UdpRelayMode, VMessConfig, VlessRealityConfig, WireGuardConfig, WireGuardPeer,
+    XhttpMode,
 };
 
 use crate::error::ParseError;
@@ -232,33 +233,50 @@ fn extract_transport(entry: &Value) -> Result<Option<Transport>, ParseError> {
         "kcp" => TransportKind::Kcp,
         "quic" => TransportKind::Quic,
         "httpupgrade" => TransportKind::HttpUpgrade,
+        "xhttp" => TransportKind::Xhttp,
         _ => return Ok(None),
     };
 
-    let (path, host) = match kind {
+    let (path, host, xhttp_mode) = match kind {
         TransportKind::Ws => {
             let ws_opts = entry.get("ws-opts");
             let path = ws_opts.and_then(|w| get_str(w, "path"));
             let host = ws_opts
                 .and_then(|w| w.get("headers"))
                 .and_then(|h| get_str(h, "Host"));
-            (path, host)
+            (path, host, None)
         }
         TransportKind::Grpc => {
             let grpc_opts = entry.get("grpc-opts");
             let path = grpc_opts.and_then(|g| get_str(g, "grpc-service-name"));
-            (path, None)
+            (path, None, None)
         }
         TransportKind::H2 => {
             let h2_opts = entry.get("h2-opts");
             let path = h2_opts.and_then(|h| get_str(h, "path"));
             let host = h2_opts.and_then(|h| get_str(h, "host"));
-            (path, host)
+            (path, host, None)
         }
-        _ => (None, None),
+        TransportKind::Xhttp => {
+            let xopts = entry.get("xhttp-opts");
+            let path = xopts.and_then(|x| get_str(x, "path"));
+            let host = xopts.and_then(|x| get_str(x, "host"));
+            let mode = xopts
+                .and_then(|x| get_str(x, "mode"))
+                .as_deref()
+                .and_then(XhttpMode::from_str_lossy)
+                .unwrap_or(XhttpMode::Auto);
+            (path, host, Some(mode))
+        }
+        _ => (None, None, None),
     };
 
-    Ok(Some(Transport { kind, path, host }))
+    Ok(Some(Transport {
+        kind,
+        path,
+        host,
+        xhttp_mode,
+    }))
 }
 
 /// Extract UDP capability from a Mihomo proxy entry.

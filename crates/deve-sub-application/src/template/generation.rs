@@ -26,7 +26,7 @@ use deve_sub_domain::{
     TemplateVersion,
 };
 use deve_sub_emitter::{
-    emit_mihomo, emit_shadowrocket, emit_singbox, emit_uri_list, emit_v2ray, emit_xray,
+    emit_json, emit_mihomo, emit_shadowrocket, emit_singbox, emit_uri_list, emit_v2ray, emit_xray,
 };
 use deve_sub_kernel::{GenerationCacheId, NodeId, Revision, TemplateId};
 
@@ -397,6 +397,7 @@ fn emit(profile: ProfileKind, nodes: &[Node]) -> Result<String, TemplateAppError
         ProfileKind::V2Ray => emit_v2ray(nodes),
         ProfileKind::Shadowrocket => emit_shadowrocket(nodes),
         ProfileKind::UriList => emit_uri_list(nodes),
+        ProfileKind::Json => emit_json(nodes),
     }
     .map_err(|e| TemplateAppError::Emit(e.to_string()))
 }
@@ -410,7 +411,7 @@ fn validate_output(content: &str, profile: ProfileKind) -> Result<(), TemplateAp
             serde_yaml::from_str::<serde_yaml::Value>(content)
                 .map_err(|_| TemplateAppError::EmptyOutput)?;
         }
-        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray => {
+        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray | ProfileKind::Json => {
             serde_json::from_str::<serde_json::Value>(content)
                 .map_err(|_| TemplateAppError::EmptyOutput)?;
         }

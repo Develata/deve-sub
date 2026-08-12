@@ -16,7 +16,7 @@ use serde_json::Value;
 use deve_sub_domain::{
     Authentication, Endpoint, Node, ProtocolConfig, ProtocolKind, RealityConfig, ShadowsocksConfig,
     TlsConfig, Transport, TransportKind, TrojanConfig, VMessConfig, VlessRealityConfig,
-    WireGuardConfig, WireGuardPeer,
+    WireGuardConfig, WireGuardPeer, XhttpMode,
 };
 
 use crate::error::ParseError;
@@ -193,21 +193,25 @@ fn extract_transport(stream: &Value) -> Option<Transport> {
         "kcp" => TransportKind::Kcp,
         "quic" => TransportKind::Quic,
         "httpupgrade" => TransportKind::HttpUpgrade,
+        // WHY: Xray renamed `splithttp` to `xhttp`; both network strings
+        // map to the same canonical transport kind. The settings key is
+        // `xhttpSettings` (newer) or `splithttpSettings` (legacy).
+        "xhttp" | "splithttp" => TransportKind::Xhttp,
         _ => return None,
     };
 
-    let (path, host) = match kind {
+    let (path, host, xhttp_mode) = match kind {
         TransportKind::Ws => {
             let ws = stream.get("wsSettings");
             let path = ws.and_then(|w| get_str(w, "path"));
             let host = ws
                 .and_then(|w| w.get("headers"))
                 .and_then(|h| get_str(h, "Host"));
-            (path, host)
+            (path, host, None)
         }
         TransportKind::Grpc => {
             let grpc = stream.get("grpcSettings");
-            (grpc.and_then(|g| get_str(g, "serviceName")), None)
+            (grpc.and_then(|g| get_str(g, "serviceName")), None, None)
         }
         TransportKind::H2 => {
             let h2 = stream.get("httpSettings");
@@ -218,12 +222,30 @@ fn extract_transport(stream: &Value) -> Option<Transport> {
                 .and_then(|arr| arr.first())
                 .and_then(|v| v.as_str())
                 .map(String::from);
-            (path, host)
+            (path, host, None)
         }
-        _ => (None, None),
+        TransportKind::Xhttp => {
+            let x = stream
+                .get("xhttpSettings")
+                .or_else(|| stream.get("splithttpSettings"));
+            let path = x.and_then(|s| get_str(s, "path"));
+            let host = x.and_then(|s| get_str(s, "host"));
+            let mode = x
+                .and_then(|s| get_str(s, "mode"))
+                .as_deref()
+                .and_then(XhttpMode::from_str_lossy)
+                .unwrap_or(XhttpMode::Auto);
+            (path, host, Some(mode))
+        }
+        _ => (None, None, None),
     };
 
-    Some(Transport { kind, path, host })
+    Some(Transport {
+        kind,
+        path,
+        host,
+        xhttp_mode,
+    })
 }
 
 // --- Per-protocol mappers ---

@@ -64,6 +64,9 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
         if let Some(ref host) = transport.host {
             params.push(("host".to_owned(), host.clone()));
         }
+        if let Some(mode) = transport.xhttp_mode {
+            params.push(("mode".to_owned(), mode.as_str().to_owned()));
+        }
     }
 
     if let Some(pe) = packet_encoding {

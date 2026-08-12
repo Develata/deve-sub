@@ -3,7 +3,10 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
-use deve_sub_application::template::{self, CreateTemplateParams, UpdateTemplateParams};
+use deve_sub_application::{
+    audit,
+    template::{self, CreateTemplateParams, UpdateTemplateParams},
+};
 use deve_sub_contract::{
     CreateTemplateRequest, ErrorResponse, GetTemplateResponse, ListTemplatesQuery,
     ListTemplatesResponse, ListVersionsResponse, RollbackRequest, RollbackTemplateResponse,
@@ -34,7 +37,7 @@ use super::mappers::{template_to_dto, version_to_dto};
 )]
 pub(super) async fn create_template(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<CreateTemplateRequest>,
 ) -> Result<(StatusCode, Json<TemplateResponse>), (StatusCode, Json<ErrorResponse>)> {
     let result = template::create_template(
@@ -48,6 +51,15 @@ pub(super) async fn create_template(
     )
     .await
     .map_err(|e| map_template_app_error(e, "create_template"))?;
+
+    let entry = audit::audit_template_create(
+        admin.user.id,
+        &result.template.id.to_string(),
+        &result.template.name,
+    );
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for template.create");
+    }
 
     Ok((
         StatusCode::CREATED,
@@ -189,7 +201,7 @@ pub(super) async fn get_template(
 )]
 pub(super) async fn update_template(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateTemplateRequest>,
 ) -> Result<Json<TemplateResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -214,6 +226,11 @@ pub(super) async fn update_template(
     .await
     .map_err(|e| map_template_app_error(e, "update_template"))?;
 
+    let entry = audit::audit_template_update(admin.user.id, &template_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for template.update");
+    }
+
     Ok(Json(TemplateResponse {
         template: template_to_dto(&result.template),
         version: version_to_dto(&result.version),
@@ -237,7 +254,7 @@ pub(super) async fn update_template(
 )]
 pub(super) async fn delete_template(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let template_id = TemplateId::parse(&id).map_err(|_| {
@@ -251,6 +268,11 @@ pub(super) async fn delete_template(
     template::delete_template(state.template_repo.as_ref(), template_id)
         .await
         .map_err(|e| map_template_app_error(e, "delete_template"))?;
+
+    let entry = audit::audit_template_delete(admin.user.id, &template_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for template.delete");
+    }
 
     Ok(StatusCode::OK)
 }
@@ -319,7 +341,7 @@ pub(super) async fn list_versions(
 )]
 pub(super) async fn rollback_template(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<RollbackRequest>,
 ) -> Result<Json<RollbackTemplateResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -342,6 +364,15 @@ pub(super) async fn rollback_template(
     let version = template::rollback_template(state.version_repo.as_ref(), template_id, version_id)
         .await
         .map_err(|e| map_template_app_error(e, "rollback_template"))?;
+
+    let entry = audit::audit_template_rollback(
+        admin.user.id,
+        &template_id.to_string(),
+        &version.id.to_string(),
+    );
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for template.rollback");
+    }
 
     Ok(Json(RollbackTemplateResponse {
         version: version_to_dto(&version),

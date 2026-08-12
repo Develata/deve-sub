@@ -7,7 +7,10 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
-use deve_sub_application::source::{self, CreateSourceParams, UpdateSourceParams};
+use deve_sub_application::{
+    audit,
+    source::{self, CreateSourceParams, UpdateSourceParams},
+};
 use deve_sub_contract::{
     CreateSourceRequest, ErrorResponse, ListSourcesResponse, ReconcileCountsDto,
     RefreshSourceResponse, SourceDto, SourceFilterRulesDto, SourceResponse, SourceTypeDto,
@@ -114,7 +117,7 @@ fn source_to_dto(source: &Source) -> SourceDto {
 )]
 async fn create_source(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<CreateSourceRequest>,
 ) -> Result<(StatusCode, Json<SourceResponse>), (StatusCode, Json<ErrorResponse>)> {
     let source = source::create_source(
@@ -148,6 +151,11 @@ async fn create_source(
             )
         }
     })?;
+
+    let entry = audit::audit_source_create(admin.user.id, &source.id.to_string(), &source.name);
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for source.create");
+    }
 
     Ok((
         StatusCode::CREATED,
@@ -288,7 +296,7 @@ async fn get_source(
 )]
 async fn update_source(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateSourceRequest>,
 ) -> Result<Json<SourceResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -339,6 +347,11 @@ async fn update_source(
         }
     })?;
 
+    let entry = audit::audit_source_update(admin.user.id, &source.id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for source.update");
+    }
+
     Ok(Json(SourceResponse {
         source: source_to_dto(&source),
     }))
@@ -361,7 +374,7 @@ async fn update_source(
 )]
 async fn delete_source(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let source_id = SourceId::parse(&id).map_err(|_| {
@@ -390,6 +403,11 @@ async fn delete_source(
             }
         })?;
 
+    let entry = audit::audit_source_delete(admin.user.id, &source_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for source.delete");
+    }
+
     Ok(StatusCode::OK)
 }
 
@@ -415,7 +433,7 @@ async fn delete_source(
 )]
 async fn refresh_source(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<RefreshSourceResponse>, (StatusCode, Json<ErrorResponse>)> {
     let source_id = SourceId::parse(&id).map_err(|_| {
@@ -466,6 +484,11 @@ async fn refresh_source(
             )
         }
     })?;
+
+    let entry = audit::audit_source_refresh(admin.user.id, &source_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for source.refresh");
+    }
 
     Ok(Json(RefreshSourceResponse {
         snapshot_id: result.snapshot.id.to_string(),

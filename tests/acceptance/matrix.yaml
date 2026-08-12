@@ -1480,7 +1480,7 @@ cases:
     steps: []
     assertions: ["source/subscription/template/probe source CRUD 产生 audit_log 行"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: TRAFFIC-001
     title: 每日流量快照
     priority: P1

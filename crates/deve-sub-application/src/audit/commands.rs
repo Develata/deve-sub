@@ -117,3 +117,219 @@ pub fn audit_2fa_disable(actor_id: UserId) -> AuditLog {
         None,
     )
 }
+
+/// Convenience builder for a source-create audit entry.
+#[must_use]
+pub fn audit_source_create(actor_id: UserId, target_id: &str, name: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "source.create",
+        Some("source".to_owned()),
+        Some(target_id.to_owned()),
+        Some(serde_json::json!({ "name": name }).to_string()),
+    )
+}
+
+/// Convenience builder for a source-update audit entry.
+#[must_use]
+pub fn audit_source_update(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "source.update",
+        Some("source".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a source-delete audit entry.
+#[must_use]
+pub fn audit_source_delete(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "source.delete",
+        Some("source".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a source-refresh audit entry.
+#[must_use]
+pub fn audit_source_refresh(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "source.refresh",
+        Some("source".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a subscription-create audit entry.
+#[must_use]
+pub fn audit_subscription_create(actor_id: UserId, target_id: &str, slug: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "subscription.create",
+        Some("subscription".to_owned()),
+        Some(target_id.to_owned()),
+        Some(serde_json::json!({ "slug": slug }).to_string()),
+    )
+}
+
+/// Convenience builder for a subscription-update audit entry.
+#[must_use]
+pub fn audit_subscription_update(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "subscription.update",
+        Some("subscription".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a subscription-delete audit entry.
+#[must_use]
+pub fn audit_subscription_delete(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "subscription.delete",
+        Some("subscription".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a subscription token-rotate audit entry.
+#[must_use]
+pub fn audit_subscription_token_rotate(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "subscription.token.rotate",
+        Some("subscription".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a template-create audit entry.
+#[must_use]
+pub fn audit_template_create(actor_id: UserId, target_id: &str, name: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "template.create",
+        Some("template".to_owned()),
+        Some(target_id.to_owned()),
+        Some(serde_json::json!({ "name": name }).to_string()),
+    )
+}
+
+/// Convenience builder for a template-update audit entry.
+#[must_use]
+pub fn audit_template_update(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "template.update",
+        Some("template".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a template-delete audit entry.
+#[must_use]
+pub fn audit_template_delete(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "template.delete",
+        Some("template".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a template-rollback audit entry.
+#[must_use]
+pub fn audit_template_rollback(actor_id: UserId, target_id: &str, version_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "template.rollback",
+        Some("template".to_owned()),
+        Some(target_id.to_owned()),
+        Some(serde_json::json!({ "version_id": version_id }).to_string()),
+    )
+}
+
+/// Convenience builder for a probe-source-create audit entry.
+#[must_use]
+pub fn audit_probe_source_create(actor_id: UserId, target_id: &str, name: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "probe.source.create",
+        Some("probe_source".to_owned()),
+        Some(target_id.to_owned()),
+        Some(serde_json::json!({ "name": name }).to_string()),
+    )
+}
+
+/// Convenience builder for a probe-source-update audit entry.
+#[must_use]
+pub fn audit_probe_source_update(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "probe.source.update",
+        Some("probe_source".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a probe-source-delete audit entry.
+#[must_use]
+pub fn audit_probe_source_delete(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "probe.source.delete",
+        Some("probe_source".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a probe-source-sync audit entry.
+#[must_use]
+pub fn audit_probe_source_sync(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "probe.source.sync",
+        Some("probe_source".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a probe-run-start audit entry.
+#[must_use]
+pub fn audit_probe_run_start(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "probe.run.start",
+        Some("probe_run".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}
+
+/// Convenience builder for a probe-run-cancel audit entry.
+#[must_use]
+pub fn audit_probe_run_cancel(actor_id: UserId, target_id: &str) -> AuditLog {
+    AuditLog::new(
+        Some(actor_id),
+        "probe.run.cancel",
+        Some("probe_run".to_owned()),
+        Some(target_id.to_owned()),
+        None,
+    )
+}

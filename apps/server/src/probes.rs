@@ -13,9 +13,12 @@ use std::sync::atomic::AtomicBool;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
-use deve_sub_application::probe::{
-    self, CreateProbeSourceParams, ProbeAppError, RunnerConfig, StartProbeRunParams,
-    SyncProbeTrafficResult, UpdateProbeSourceParams, execute_probe_run,
+use deve_sub_application::{
+    audit,
+    probe::{
+        self, CreateProbeSourceParams, ProbeAppError, RunnerConfig, StartProbeRunParams,
+        SyncProbeTrafficResult, UpdateProbeSourceParams, execute_probe_run,
+    },
 };
 use deve_sub_contract::{
     CreateProbeRunRequest, CreateProbeSourceRequest, ErrorClassDto, LatencyRecordDto,
@@ -271,7 +274,7 @@ fn map_probe_error(e: ProbeAppError) -> (StatusCode, Json<deve_sub_contract::Err
 )]
 async fn create_probe_source(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<CreateProbeSourceRequest>,
 ) -> Result<
     (StatusCode, Json<ProbeSourceResponse>),
@@ -304,6 +307,12 @@ async fn create_probe_source(
     )
     .await
     .map_err(map_probe_error)?;
+
+    let entry =
+        audit::audit_probe_source_create(admin.user.id, &source.id.to_string(), &source.name);
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for probe.source.create");
+    }
 
     Ok((
         StatusCode::CREATED,
@@ -421,7 +430,7 @@ async fn get_probe_source(
 )]
 async fn update_probe_source(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateProbeSourceRequest>,
 ) -> Result<Json<ProbeSourceResponse>, (StatusCode, Json<deve_sub_contract::ErrorResponse>)> {
@@ -463,6 +472,11 @@ async fn update_probe_source(
     .await
     .map_err(map_probe_error)?;
 
+    let entry = audit::audit_probe_source_update(admin.user.id, &source.id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for probe.source.update");
+    }
+
     Ok(Json(ProbeSourceResponse {
         source: source_to_dto(&source),
     }))
@@ -485,7 +499,7 @@ async fn update_probe_source(
 )]
 async fn delete_probe_source(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<deve_sub_contract::ErrorResponse>)> {
     let source_id = ProbeSourceId::parse(&id).map_err(|_| {
@@ -498,6 +512,12 @@ async fn delete_probe_source(
     probe::delete_probe_source(state.probe_source_repo.as_ref(), source_id)
         .await
         .map_err(map_probe_error)?;
+
+    let entry = audit::audit_probe_source_delete(admin.user.id, &source_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for probe.source.delete");
+    }
+
     Ok(StatusCode::OK)
 }
 
@@ -521,7 +541,7 @@ async fn delete_probe_source(
 )]
 async fn sync_probe_source(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<SyncProbeTrafficResponse>, (StatusCode, Json<deve_sub_contract::ErrorResponse>)> {
     let source_id = ProbeSourceId::parse(&id).map_err(|_| {
@@ -553,6 +573,11 @@ async fn sync_probe_source(
         .await
         .map_err(map_probe_error)?;
 
+    let entry = audit::audit_probe_source_sync(admin.user.id, &source_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for probe.source.sync");
+    }
+
     Ok(Json(SyncProbeTrafficResponse {
         source: source_to_dto(&source),
         samples_written,
@@ -580,7 +605,7 @@ async fn sync_probe_source(
 )]
 async fn create_probe_run(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<CreateProbeRunRequest>,
 ) -> Result<
     (StatusCode, Json<ProbeRunResponse>),
@@ -609,6 +634,11 @@ async fn create_probe_run(
     )
     .await
     .map_err(map_probe_error)?;
+
+    let entry = audit::audit_probe_run_start(admin.user.id, &run.id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for probe.run.start");
+    }
 
     let cancelled = Arc::new(AtomicBool::new(false));
     {
@@ -713,7 +743,7 @@ async fn get_probe_run(
 )]
 async fn cancel_probe_run(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<deve_sub_contract::ErrorResponse>)> {
     let run_id = ProbeRunId::parse(&id).map_err(|_| {
@@ -737,6 +767,12 @@ async fn cancel_probe_run(
     probe::cancel_probe_run(state.probe_run_repo.as_ref(), &flags, run_id)
         .await
         .map_err(map_probe_error)?;
+
+    let entry = audit::audit_probe_run_cancel(admin.user.id, &run_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for probe.run.cancel");
+    }
+
     Ok(StatusCode::OK)
 }
 

@@ -9,8 +9,11 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
-use deve_sub_application::subscription::{
-    self, CreateSubscriptionParams, CreateTempLinkParams, UpdateSubscriptionParams,
+use deve_sub_application::{
+    audit,
+    subscription::{
+        self, CreateSubscriptionParams, CreateTempLinkParams, UpdateSubscriptionParams,
+    },
 };
 use deve_sub_contract::{
     CreateSubscriptionRequest, CreateTempLinkRequest, CreateTempLinkResponse, ErrorResponse,
@@ -101,6 +104,15 @@ async fn create_subscription(
     )
     .await
     .map_err(|e| map_subscription_app_error(e, "create_subscription"))?;
+
+    let entry = audit::audit_subscription_create(
+        admin.user.id,
+        &result.subscription.id.to_string(),
+        &result.subscription.slug,
+    );
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for subscription.create");
+    }
 
     Ok((
         StatusCode::CREATED,
@@ -241,7 +253,7 @@ async fn get_subscription(
 )]
 async fn update_subscription(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateSubscriptionRequest>,
 ) -> Result<Json<GetSubscriptionResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -277,6 +289,11 @@ async fn update_subscription(
         .map_err(|e| map_subscription_app_error(e.into(), "update_subscription"))?
         .map(|sc| sc.code);
 
+    let entry = audit::audit_subscription_update(admin.user.id, &sub.id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for subscription.update");
+    }
+
     Ok(Json(GetSubscriptionResponse {
         subscription: subscription_to_dto(&sub, short_code),
     }))
@@ -299,7 +316,7 @@ async fn update_subscription(
 )]
 async fn delete_subscription(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let subscription_id = SubscriptionId::parse(&id).map_err(|_| {
@@ -313,6 +330,11 @@ async fn delete_subscription(
     subscription::delete_subscription(state.subscription_repo.as_ref(), subscription_id)
         .await
         .map_err(|e| map_subscription_app_error(e, "delete_subscription"))?;
+
+    let entry = audit::audit_subscription_delete(admin.user.id, &subscription_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for subscription.delete");
+    }
 
     Ok(StatusCode::OK)
 }
@@ -336,7 +358,7 @@ async fn delete_subscription(
 )]
 async fn rotate_token(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<RotateTokenRequest>,
 ) -> Result<Json<TokenRotationResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -365,6 +387,11 @@ async fn rotate_token(
     )
     .await
     .map_err(|e| map_subscription_app_error(e, "rotate_token"))?;
+
+    let entry = audit::audit_subscription_token_rotate(admin.user.id, &subscription_id.to_string());
+    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
+        tracing::warn!(error = %e, "audit log write failed for subscription.token.rotate");
+    }
 
     Ok(Json(TokenRotationResponse {
         token_id: result.token_id.to_string(),

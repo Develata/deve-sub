@@ -21,6 +21,17 @@ FlClash is a distinct profile from Mihomo, even though it typically consumes
 Mihomo configuration. This separation preserves version differences and UI
 feature limits.
 
+## Additional output profiles (M9)
+
+```text
+JSON
+```
+
+The JSON profile (M9) serializes the canonical node model as a JSON array.
+It is not tied to any specific client — useful for programmatic access, API
+responses, debugging, and inter-system exchange. See
+`docs/plan/milestones/M9-protocol-output-expansion.md`.
+
 ## Profile fields
 
 Each profile stores:
@@ -72,6 +83,7 @@ Explicit profile path takes priority over User-Agent auto-detection:
 /sub/{token}/v2rayn
 /sub/{token}/v2rayng
 /sub/{token}/shadowrocket
+/sub/{token}/json
 ```
 
 ## Incompatibility policy
@@ -84,10 +96,12 @@ Forbidden: silent corruption.
 
 - Compatibility conclusions require client validation or official format. See
   constraint #18.
-- Acceptance: `OUT-001` through `OUT-014`.
+- Acceptance: `OUT-001` through `OUT-014`, `OUT-015` (JSON profile, M9).
 
 ## Verification
 
 - Each P0 profile has a compatibility test against the target client or an
   official format fixture.
 - Round-trip: canonical model → emitter → target format → parse back.
+- JSON profile round-trip: `emit_json` → parse JSON → verify node equality.
+  Acceptance: `OUT-015` (M9).

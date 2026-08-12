@@ -133,3 +133,22 @@ PERF-003	缓存订阅	P1	Load	planned
 PERF-004	无缓存生成	P1	Load	planned
 PERF-005	并发订阅下载	P1	Load	planned
 PERF-006	长时间运行	P1	Soak	planned
+PARSE-019	WireGuard URI	P1	Golden	planned
+PARSE-020	WireGuard Mihomo YAML	P1	Golden	planned
+PARSE-021	WireGuard sing-box JSON	P1	Golden	planned
+PARSE-022	AnyTLS URI	P1	Golden	planned
+PARSE-023	AnyTLS Mihomo/sing-box	P1	Golden	planned
+PARSE-024	Snell URI	P1	Golden	planned
+PARSE-025	Snell Mihomo/sing-box	P1	Golden	planned
+PARSE-026	ShadowTLS sing-box/Mihomo	P1	Golden	planned
+PARSE-027	xhttp transport	P1	Golden	planned
+OUT-015	JSON profile	P1	Compatibility	planned
+AUDIT-001	审计日志查询	P1	Integration	planned
+AUDIT-002	Auth 操作审计	P1	Integration	planned
+AUDIT-003	CRUD 操作审计	P1	Integration	planned
+TRAFFIC-001	每日流量快照	P1	Integration	planned
+TRAFFIC-002	流量历史查询	P1	E2E	planned
+BACKUP-001	备份创建	P2	CLI	planned
+BACKUP-002	备份内容验证	P2	Integration	planned
+BACKUP-003	恢复+验证	P2	CLI	planned
+BACKUP-004	恢复时前向迁移	P2	Integration	planned

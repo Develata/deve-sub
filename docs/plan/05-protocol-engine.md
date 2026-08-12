@@ -103,9 +103,11 @@ concatenation.
 ### ProtocolKind and ProtocolConfig
 
 `ProtocolKind` is an enum with fifteen typed variants plus `Unknown(String)`.
-`ProtocolConfig` carries typed payloads for the seven P0 protocols only. Non-P0
-or unknown protocols use `UnsupportedNode`, which preserves raw data but does
-not enter emitters. See ADR-0003.
+`ProtocolConfig` carries typed payloads for the seven P0 protocols (M3) and
+four additional protocols typed in M9 (WireGuard, AnyTLS, Snell, ShadowTLS).
+Remaining non-P0 or unknown protocols use `UnsupportedNode`, which preserves
+raw data but does not enter emitters. See ADR-0003 and
+`docs/plan/milestones/M9-protocol-output-expansion.md`.
 
 ## Security fields (three-state)
 
@@ -186,6 +188,93 @@ Naive must not be downgraded to a plain HTTP node. Unsupported target clients
 exclude by default, generate a compatibility report, and may be set to strict
 fail. Silent corruption is forbidden.
 
+## WireGuard (M9)
+
+Supported fields:
+
+```text
+wireguard://, private-key (userinfo), publickey, address, presharedkey,
+reserved, mtu, peers (server, port, public-key, pre-shared-key, allowed-ips,
+persistent-keepalive)
+```
+
+WireGuard has **no TLS layer** — it uses Noise IK handshake (X25519 +
+ChaCha20-Poly1305). The `tls` field on the node must be `None`. No SNI, no
+cert-verify, no fingerprint fields exist.
+
+sing-box deprecated the `wireguard` outbound in 1.13.0 in favor of the
+`endpoint` type. The emitter emits the legacy `type: wireguard` outbound for
+wide compatibility; a future slice may add `type: endpoint` emission.
+
+## AnyTLS (M9)
+
+Supported fields:
+
+```text
+anytls://, password (userinfo), sni, insecure (insecure=1 → skip_cert_verify),
+hpkp (mihomo fingerprint extension), alpn, client-fingerprint, idle-session
+parameters (sing-box)
+```
+
+AnyTLS is always TLS. TLS fields (sni, alpn, skip_cert_verify, fingerprint)
+live on `Node.tls`. Default port 443.
+
+Compatibility: mihomo ✅, sing-box ✅, Xray ❌ (excluded with report).
+
+## Snell (M9)
+
+Supported fields:
+
+```text
+snell://, psk (userinfo), version (1–5 mihomo; 4/6 sing-box), udp, reuse,
+obfs-opts (mode: tls|http|shadow-tls|restls|jls, host, password, version, alpn),
+client-fingerprint
+```
+
+Snell has **no TLS by default**. TLS only if `obfs.mode = Tls`. The `tls` field
+on the node is `None` unless obfs-mode is TLS-shaped.
+
+No official URI standard exists; Deve Sub parses and emits the de-facto
+`snell://` format used by sublinkPro. sing-box supports v4 and v6 only; v1/2/3/5
+nodes are excluded from sing-box output with report (constraint #7).
+
+## ShadowTLS (M9)
+
+Supported fields:
+
+```text
+shadow-tls://, password (userinfo), version (1|2|3), sni (camouflage target),
+alpn, fingerprint, inner-protocol + inner-config
+```
+
+ShadowTLS is a TLS-camouflage wrapper. The canonical model carries the
+ShadowTLS handshake parameters plus a typed inner protocol config.
+
+Mihomo has no standalone `type: shadow-tls`. The emitter projects ShadowTLS
+as an obfuscation layer under the inner protocol: `plugin: shadow-tls` for ss,
+`obfs-opts.mode: shadow-tls` for snell, `shadow-tls-opts` for
+vless/trojan/vmess/anytls.
+
+sing-box has a standalone `type: shadowtls` outbound. The inner protocol runs
+as a separate outbound chaining through the ShadowTLS outbound (detour).
+
+Xray does not support ShadowTLS — excluded with report.
+
+## xhttp transport (M9)
+
+xhttp is a **transport mode** (like ws, grpc, h2), not a standalone protocol.
+It applies to VLESS and VMess. Added as `TransportKind::Xhttp`.
+
+URI: `type=xhttp` with params `path`, `host`, `mode` (auto|stream-one|
+stream-up|packet-up).
+
+Mihomo: `network: xhttp` + `xhttp-opts`. Xray: `network: xhttp` (alias →
+`splitHTTP`) + `xhttpSettings`. sing-box: not supported — excluded with report.
+
+Advanced xhttp fields (padding, xmux, session management) are preserved in
+`Node.extras` and passed through where supported; core fields (path, host,
+mode) are always typed.
+
 ## Override model
 
 Remote subscription updates must not overwrite manual edits. The effective
@@ -227,6 +316,7 @@ vless://00000000-0000-4000-8000-000000000001@[2001:db8::1]:443?security=reality&
 - Canonical node model decision: ADR-0003
 - Security field three-state: ADR-0005
 - Typed contract: `docs/contracts/data-models.md`
+- M9 protocol expansion: `docs/plan/milestones/M9-protocol-output-expansion.md`
 
 ## Verification
 
@@ -234,3 +324,5 @@ vless://00000000-0000-4000-8000-000000000001@[2001:db8::1]:443?security=reality&
   is required before claiming protocol support. See constraint #3.
 - Golden tests for each P0 protocol and input format. Acceptance: `PARSE-*`.
 - Fuzz tests for illegal input. Acceptance: `PARSE-018`.
+- M9 golden tests for WireGuard, AnyTLS, Snell, ShadowTLS, and xhttp
+  transport. Acceptance: `PARSE-019` through `PARSE-027`.

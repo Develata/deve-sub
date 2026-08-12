@@ -24,6 +24,22 @@ Do not conflate the protocol with the client.
 A single protocol may appear in multiple input formats. Parsing separates
 format detection from protocol extraction.
 
+### xhttp
+
+A transport mode (like WebSocket, gRPC, HTTP/2) used under VLESS and VMess.
+Not a standalone protocol. URI query parameter `type=xhttp` selects it.
+Mihomo uses `network: xhttp` with `xhttp-opts`; Xray uses `network: xhttp`
+(alias for `splithttp`) with `xhttpSettings`; sing-box does not support it.
+
+### ShadowTLS
+
+A TLS-camouflage protocol that wraps an inner proxy protocol (Shadowsocks,
+VLESS, Trojan, etc.) and handshakes with a real TLS server to disguise
+traffic. Versions 1 (unauthenticated), 2, and 3 (password-authenticated).
+Mihomo models it as an obfuscation layer under the inner protocol (no
+standalone `type`); sing-box models it as a standalone `type: shadowtls`
+outbound with the inner protocol chaining via detour.
+
 ## Node model
 
 ### Canonical Node Model
@@ -40,9 +56,11 @@ uses; it does not carry configuration.
 
 ### ProtocolConfig
 
-A typed payload carrying protocol-specific parameters. Only the seven P0
-protocols have typed `ProtocolConfig` variants in Phase 1: VLESS Reality,
-Hysteria2, TUIC v5, NaiveProxy, Shadowsocks, VMess, Trojan.
+A typed payload carrying protocol-specific parameters. The seven P0 protocols
+have typed `ProtocolConfig` variants in Phase 1 (VLESS Reality, Hysteria2,
+TUIC v5, NaiveProxy, Shadowsocks, VMess, Trojan). M9 adds four additional
+typed variants: WireGuard, AnyTLS, Snell, ShadowTLS. Remaining non-P0 or
+unknown protocols use `UnsupportedNode`.
 
 ### UnsupportedNode
 
@@ -160,6 +178,27 @@ The data model distinguishes: probe upload, probe download, source upload,
 source download, manual correction, and the final aggregated value. Quota
 calculations must be traceable; the dashboard must show data source.
 
+### Traffic daily snapshot (M10)
+
+A per-subscription, per-day aggregate of traffic records, stored in
+`traffic_daily_snapshots`. Computed by a daily background job that sums
+`subscription_traffic` records for the previous day, grouped by source kind.
+Used for traffic history charts (30/60/90-day views). The snapshot is
+idempotent (upsert on `(subscription_id, date)`); missing days appear as
+zero-value gaps in the history query.
+
+## Audit
+
+### Audit log (M10)
+
+An append-only record of actor actions on targets. The `audit_log` table
+(schema migration 0002) stores: `actor_id` (the user who performed the
+action, `NULL` for system/anonymous), `action` (e.g. `"auth.login"`,
+`"source.create"`), `target_type` and `target_id` (the entity affected),
+`details_json` (non-sensitive metadata), and `created_at`. No updates, no
+deletes. Audit log writes are best-effort (non-blocking); losing an entry is
+preferable to failing a user-facing operation.
+
 ## Architecture
 
 ### Port
@@ -196,11 +235,11 @@ time. See `docs/plan/milestones/M6-subscription-distribution.md`.
 ### Profile
 
 A target output format identifier: `mihomo`, `sing-box`, `xray`, `v2ray`,
-`shadowrocket`, or `uri_list`. A Subscription targets one profile; delivery
-serves the cached generation for `(template, version, profile)` or generates
-on demand on cache miss. The `ProfileKind` enum in `deve-sub-compatibility`
-enumerates the valid values; the domain stores the profile as a kebab-case
-string.
+`shadowrocket`, `uri_list`, or `json` (M9). A Subscription targets one
+profile; delivery serves the cached generation for
+`(template, version, profile)` or generates on demand on cache miss. The
+`ProfileKind` enum in `deve-sub-compatibility` enumerates the valid values;
+the domain stores the profile as a kebab-case string.
 
 ### Subscription Token
 

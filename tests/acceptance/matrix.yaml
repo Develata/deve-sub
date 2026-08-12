@@ -1351,3 +1351,193 @@ cases:
     assertions: ["WAL、内存和任务数不持续增长"]
     fixtures: []
     evidence: planned
+  - id: PARSE-019
+    title: WireGuard URI
+    priority: P1
+    layer: Golden
+    dimensions: [URI]
+    preconditions: []
+    steps: []
+    assertions: ["wireguard:// URI round-trip 语义等价"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-020
+    title: WireGuard Mihomo YAML
+    priority: P1
+    layer: Golden
+    dimensions: [Mihomo YAML]
+    preconditions: []
+    steps: []
+    assertions: ["WireGuard mihomo YAML round-trip 语义等价"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-021
+    title: WireGuard sing-box JSON
+    priority: P1
+    layer: Golden
+    dimensions: [sing-box JSON]
+    preconditions: []
+    steps: []
+    assertions: ["WireGuard sing-box JSON round-trip 语义等价"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-022
+    title: AnyTLS URI
+    priority: P1
+    layer: Golden
+    dimensions: [URI]
+    preconditions: []
+    steps: []
+    assertions: ["anytls:// URI round-trip 语义等价"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-023
+    title: AnyTLS Mihomo/sing-box
+    priority: P1
+    layer: Golden
+    dimensions: [Mihomo YAML, sing-box JSON]
+    preconditions: []
+    steps: []
+    assertions: ["AnyTLS mihomo/sing-box round-trip 语义等价"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-024
+    title: Snell URI
+    priority: P1
+    layer: Golden
+    dimensions: [URI]
+    preconditions: []
+    steps: []
+    assertions: ["snell:// URI round-trip 语义等价"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-025
+    title: Snell Mihomo/sing-box
+    priority: P1
+    layer: Golden
+    dimensions: [Mihomo YAML, sing-box JSON]
+    preconditions: []
+    steps: []
+    assertions: ["Snell mihomo/sing-box round-trip；v4 双发，v1/2/3/5 在 sing-box 排除并报告"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-026
+    title: ShadowTLS sing-box/Mihomo
+    priority: P1
+    layer: Golden
+    dimensions: [Mihomo YAML, sing-box JSON]
+    preconditions: []
+    steps: []
+    assertions: ["ShadowTLS sing-box 独立类型 + mihomo obfs 投影 round-trip"]
+    fixtures: []
+    evidence: planned
+  - id: PARSE-027
+    title: xhttp transport
+    priority: P1
+    layer: Golden
+    dimensions: [URI, Mihomo YAML, Xray JSON]
+    preconditions: []
+    steps: []
+    assertions: ["VLESS+xhttp URI → mihomo/Xray emit round-trip；sing-box 排除"]
+    fixtures: []
+    evidence: planned
+  - id: OUT-015
+    title: JSON profile
+    priority: P1
+    layer: Compatibility
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["emit_json → parse JSON → 节点等价"]
+    fixtures: []
+    evidence: planned
+  - id: AUDIT-001
+    title: 审计日志查询
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["GET /api/v1/audit-logs 支持 actor/action/target/date 过滤和游标分页"]
+    fixtures: []
+    evidence: planned
+  - id: AUDIT-002
+    title: Auth 操作审计
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["login/logout/2FA/user CRUD 产生 audit_log 行，actor/action/target 正确"]
+    fixtures: []
+    evidence: planned
+  - id: AUDIT-003
+    title: CRUD 操作审计
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["source/subscription/template/probe source CRUD 产生 audit_log 行"]
+    fixtures: []
+    evidence: planned
+  - id: TRAFFIC-001
+    title: 每日流量快照
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["聚合任务对每订阅按日 sum 流量记录，upsert traffic_daily_snapshots"]
+    fixtures: []
+    evidence: planned
+  - id: TRAFFIC-002
+    title: 流量历史查询
+    priority: P1
+    layer: E2E
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["GET /api/v1/dashboard/traffic/history?days=30 返回连续日数据，缺失日填零"]
+    fixtures: []
+    evidence: planned
+  - id: BACKUP-001
+    title: 备份创建
+    priority: P2
+    layer: CLI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["deve-sub backup --output 生成含 manifest/database/config/metadata 的 tar"]
+    fixtures: []
+    evidence: planned
+  - id: BACKUP-002
+    title: 备份内容验证
+    priority: P2
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["快照数据库行数与 manifest 一致"]
+    fixtures: []
+    evidence: planned
+  - id: BACKUP-003
+    title: 恢复+验证
+    priority: P2
+    layer: CLI
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check"]
+    fixtures: []
+    evidence: planned
+  - id: BACKUP-004
+    title: 恢复时前向迁移
+    priority: P2
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions: ["旧 schema 备份恢复后前向迁移到当前 schema，数据完整"]
+    fixtures: []
+    evidence: planned

@@ -16,8 +16,11 @@ order. It schedules approved contracts; it cannot override plans.
 | M4 | Sources and Node Pool | done | M3 | Source CRUD, snapshot, refresh, diff, node pool, override |
 | M5 | Generator and V3 Template | done | M3, M4 | Node selection, proxy groups, V3 template, generation, cache |
 | M6 | Subscription Distribution | done | M5 | Profile URL, short code, temp link, ETag, auth, traffic |
-| M7 | Probes and Detection | active | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
+| M7 | Probes and Detection | done | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
 | M8 | Deployment and Hardening | planned | M7 | Install script, self-update, backup, SSRF, perf, multi-arch |
+| M9 | Protocol and Output Expansion | planned | M3, M4, M5, M6 | WireGuard, AnyTLS, Snell, ShadowTLS, xhttp, JSON profile |
+| M10 | Observability and Audit | planned | M6, M7, M2 | Traffic history charts, audit log query API |
+| M11 | Archive and Snapshot | planned | M6, M7, M10 | `deve-sub backup`, `deve-sub restore`, snapshot format |
 
 ## Phase 1
 
@@ -78,8 +81,36 @@ xray, v2ray, shadowrocket, uri_list), generation pipeline with strict mode
 successful on failure), preview endpoint with consistency (preview ==
 published). 453 tests pass; GEN-001–016 all pass.
 
-M6 (Subscription Distribution) is next. Blueprint:
-`docs/plan/milestones/M6-subscription-distribution.md`.
+M6 (Subscription Distribution) is complete — profile URL delivery with
+token-based auth, short codes, temp links, ETag/conditional GET, traffic quota
+enforcement (upload/download/expiry), subscription token rotation, concurrent
+generation with atomic cache publish. OUT-008 through OUT-014 all pass.
+
+M7 (Probes and Detection) is complete — probe domain model (ProbeSource,
+LatencyRecord, ProbeRun), latency probe runner (TCP connect, QUIC handshake,
+real proxy) with semaphore-bounded concurrency and safe shutdown, node chain
+proxy with cycle detection, external traffic probe adapters (Nezha, DStatus,
+Komari), probe source failure handling (preserve stale stats), multi-source
+traffic aggregation with dashboard traceability. PROBE-001 through PROBE-005
+all pass; NODE-012 through NODE-018 all pass.
+
+## Next milestones
+
+M8 (Deployment and Hardening) — install script, self-update, backup, SSRF
+hardening, performance, multi-arch images. Blueprint:
+`docs/plan/milestones/M8-deployment-and-hardening.md` (to be written).
+
+M9 (Protocol and Output Expansion) — WireGuard, AnyTLS, Snell, ShadowTLS typed
+configs + URI/container parsers/emitters, xhttp transport, JSON output
+profile. Blueprint: `docs/plan/milestones/M9-protocol-output-expansion.md`.
+
+M10 (Observability and Audit) — traffic history charts (daily snapshots +
+background aggregation job), audit log query API (infrastructure + wiring).
+Blueprint: `docs/plan/milestones/M10-observability-and-audit.md`.
+
+M11 (Archive and Snapshot) — `deve-sub backup` and `deve-sub restore` CLI,
+versioned backup format, restore-verify path. Low priority. Blueprint:
+`docs/plan/milestones/M11-archive-and-snapshot.md`.
 
 ## M5 review follow-ups (M6 backlog)
 

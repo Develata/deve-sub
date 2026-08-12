@@ -23,14 +23,19 @@ Unknown(String)
 
 ### ProtocolConfig
 
-Typed payloads for the seven P0 protocols only:
+Typed payloads for the seven P0 protocols (M3) and four additional protocols
+(M9):
 
 ```text
+// M3 (P0)
 VlessRealityConfig, Hysteria2Config, TuicV5Config, NaiveProxyConfig,
 ShadowsocksConfig, VMessConfig, TrojanConfig
+
+// M9
+WireGuardConfig, AnyTlsConfig, SnellConfig, ShadowTlsConfig
 ```
 
-Non-P0 protocols do not have typed config in Phase 1.
+Non-P0 or unknown protocols not covered by M9 use `UnsupportedNode`.
 
 ### UnsupportedNode
 
@@ -55,6 +60,24 @@ Ipv4(Ipv4Addr) | Ipv6(Ipv6Addr) | Domain(DomainName)
 
 IPv6 URI output must auto-add brackets. Database must not store IPv6 as
 arbitrary strings for later concatenation.
+
+### TransportKind
+
+```text
+Tcp | Kcp | Ws | H2 | Quic | Grpc | HttpUpgrade | Xtls | Xhttp (M9)
+```
+
+`Xhttp` (M9) is a transport mode for VLESS and VMess. Mihomo: `network: xhttp`;
+Xray: `network: xhttp` (alias for `splithttp`); sing-box: not supported.
+
+### ProfileKind
+
+```text
+Mihomo | SingBox | Xray | V2Ray | Shadowrocket | UriList | Json (M9)
+```
+
+`Json` (M9) serializes the canonical node model as a JSON array — not tied
+to any specific client. See `docs/plan/06-output-profiles.md`.
 
 ## Serialization
 
@@ -81,7 +104,8 @@ Fixtures must use reserved test identifiers, never real credentials:
 
 ## Verification
 
-- Round-trip tests: `PARSE-001` through `PARSE-017`.
+- Round-trip tests: `PARSE-001` through `PARSE-027`.
 - Fuzz: `PARSE-018`.
 - Regression: `PARSE-013` (short-id string), `PARSE-014` (allowInsecure=0),
   `PARSE-015` (absent allowInsecure).
+- JSON profile round-trip: `OUT-015` (M9).

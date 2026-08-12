@@ -9,6 +9,18 @@
 //! schema is older (constraint #13), and verifies integrity.
 //!
 //! See `docs/plan/milestones/M11-archive-and-snapshot.md`.
+//!
+//! # Security notes
+//!
+//! Backup archives contain the **full production database** — users, TOTP
+//! secrets, session tokens, subscription URLs, and encrypted sensitive fields.
+//! They also include hostname and OS metadata. Treat archives as sensitive:
+//! store them with restrictive permissions and never distribute them off-box.
+//!
+//! The `check_server_not_running` guard assumes `journal_mode=WAL`. If the
+//! server uses a different journal mode (e.g. DELETE), the WAL/shm files may
+//! not exist even while the server holds the database open. Always stop the
+//! server process before restoring.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -75,6 +87,9 @@ pub struct BackupManifest {
 pub struct BackupMetadata {
     /// Deve Sub binary version.
     pub deve_sub_version: String,
+    /// Git commit hash at build time, if available.
+    #[serde(default)]
+    pub git_commit: String,
     /// Host name at backup time.
     pub host: String,
     /// OS string at backup time.
@@ -130,6 +145,28 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
     let schema_version = current_schema_version(&pool).await?;
     let row_counts = collect_row_counts(&pool).await?;
 
+    // During a normal backup with a fully-migrated DB, all COUNTED_TABLES
+    // should be accessible. A missing table signals partial migration or
+    // corruption. Skip this check when the DB schema is older than the
+    // embedded version (the DB may not have been migrated yet, so some
+    // tables legitimately don't exist).
+    if schema_version == deve_sub_storage_sqlite::embedded_schema_version()
+        && row_counts.len() < COUNTED_TABLES.len()
+    {
+        let missing: Vec<&str> = COUNTED_TABLES
+            .iter()
+            .filter(|t| !row_counts.contains_key(**t))
+            .copied()
+            .collect();
+        bail!(
+            "backup incomplete — {}/{} tables inaccessible, missing: [{}]. \
+             Run `deve-sub migrate` and retry.",
+            row_counts.len(),
+            COUNTED_TABLES.len(),
+            missing.join(", ")
+        );
+    }
+
     let snapshot_dir = tempfile::tempdir().context("failed to create temp dir for snapshot")?;
     let snapshot_path = snapshot_dir.path().join("database.sqlite");
 
@@ -144,6 +181,7 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
 
     let metadata = BackupMetadata {
         deve_sub_version: env!("CARGO_PKG_VERSION").to_owned(),
+        git_commit: option_env!("GIT_COMMIT").unwrap_or("unknown").to_owned(),
         host: hostname(),
         os: std::env::consts::OS.to_owned(),
     };
@@ -281,6 +319,12 @@ async fn vacuum_into(pool: &sqlx::sqlite::SqlitePool, target: &Path) -> Result<(
     let target_str = target
         .to_str()
         .context("snapshot path is not valid UTF-8")?;
+    // Defense-in-depth: VACUUM INTO uses single-quote string interpolation.
+    // The target is currently an internal tempfile path, but reject quotes
+    // to prevent SQL injection if the path ever becomes user-controlled.
+    if target_str.contains('\'') {
+        bail!("snapshot path contains a single quote — refusing to interpolate into VACUUM INTO");
+    }
     let sql = format!("VACUUM INTO '{target_str}'");
     sqlx::query(&sql)
         .execute(pool)
@@ -338,6 +382,19 @@ fn extract_archive(archive_path: &Path, dest: &Path) -> Result<(BackupManifest, 
         let mut entry = entry.context("failed to read archive entry")?;
         let path = entry.path().context("invalid entry path")?.into_owned();
         let name = path.to_string_lossy().into_owned();
+
+        // Defense-in-depth: reject absolute paths and parent-component
+        // traversal regardless of the allowlist match below. The exact-name
+        // allowlist is the primary guard; this ensures safety survives
+        // future allowlist edits.
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            tracing::warn!(entry = %name, "skipping entry with unsafe path");
+            continue;
+        }
 
         match &name[..] {
             "manifest.json" => {

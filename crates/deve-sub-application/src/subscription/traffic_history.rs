@@ -125,6 +125,14 @@ fn fill_gaps(
     start_date: &str,
     end_date: &str,
 ) -> Vec<TrafficHistoryPoint> {
+    // Defensive guard: an inverted range (start > end) would cause the loop
+    // to iterate until year 9999. The public API guarantees start <= end via
+    // compute_date_range, but this prevents a hang if the contract is
+    // violated.
+    if start_date > end_date {
+        return Vec::new();
+    }
+
     let mut by_date: BTreeMap<String, DayAccumulator> = BTreeMap::new();
     for snap in snapshots {
         let entry = by_date

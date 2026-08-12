@@ -10,6 +10,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+mod backup;
 mod commands;
 mod health;
 mod node_cmds;
@@ -47,6 +48,10 @@ enum Commands {
     Template(commands::TemplateArgs),
     /// Subscription management commands.
     Subscription(subscription_cmds::SubscriptionArgs),
+    /// Create a full-state backup archive.
+    Backup(backup::BackupArgs),
+    /// Restore database from a backup archive.
+    Restore(backup::RestoreArgs),
     /// HTTP health probes for Docker HEALTHCHECK.
     Health(health::HealthArgs),
 }
@@ -119,6 +124,8 @@ fn main() -> ExitCode {
                 health::HealthSubCommand::Live(a) => health::health_live(a).await,
                 health::HealthSubCommand::Ready(a) => health::health_ready(a).await,
             },
+            Commands::Backup(args) => backup::backup(args).await,
+            Commands::Restore(args) => backup::restore(args).await,
         }
     });
 

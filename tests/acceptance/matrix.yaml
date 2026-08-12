@@ -1510,7 +1510,7 @@ cases:
     steps: []
     assertions: ["deve-sub backup --output 生成含 manifest/database/config/metadata 的 tar"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: BACKUP-002
     title: 备份内容验证
     priority: P2
@@ -1520,7 +1520,7 @@ cases:
     steps: []
     assertions: ["快照数据库行数与 manifest 一致"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: BACKUP-003
     title: 恢复+验证
     priority: P2
@@ -1530,7 +1530,7 @@ cases:
     steps: []
     assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: BACKUP-004
     title: 恢复时前向迁移
     priority: P2
@@ -1540,4 +1540,4 @@ cases:
     steps: []
     assertions: ["旧 schema 备份恢复后前向迁移到当前 schema，数据完整"]
     fixtures: []
-    evidence: planned
+    evidence: pass

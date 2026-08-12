@@ -202,6 +202,19 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), StorageError> {
         .map_err(StorageError::from)
 }
 
+/// Return the highest migration version embedded in this binary (compile-time
+/// `migrations/` set). Used by the restore command to decide whether forward
+/// migrations are needed (constraint #13: forward-only).
+#[must_use]
+pub fn embedded_schema_version() -> i64 {
+    sqlx::migrate!("../../migrations")
+        .migrations
+        .iter()
+        .map(|m| m.version)
+        .max()
+        .unwrap_or(0)
+}
+
 /// Verify that the database schema is up-to-date by checking the
 /// `_sqlx_migrations` table exists and has at least one applied migration.
 ///

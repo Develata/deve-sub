@@ -28,10 +28,10 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
     }
 
     let (protocol, settings, stream) = match node.protocol {
-        ProtocolKind::Trojan => trojan(node)?,
-        ProtocolKind::Shadowsocks => shadowsocks(node)?,
-        ProtocolKind::VMess => vmess(node)?,
-        ProtocolKind::Vless => vless(node)?,
+        ProtocolKind::Trojan => trojan(node, &server, port)?,
+        ProtocolKind::Shadowsocks => shadowsocks(node, &server, port)?,
+        ProtocolKind::VMess => vmess(node, &server, port)?,
+        ProtocolKind::Vless => vless(node, &server, port)?,
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "v2ray: unsupported protocol {other}"
@@ -42,16 +42,7 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
     let mut obj = Map::new();
     obj.insert("tag".to_owned(), Value::String(tag));
     obj.insert("protocol".to_owned(), Value::String(protocol.to_owned()));
-    obj.insert(
-        "settings".to_owned(),
-        json!({
-            "servers": [{
-                "address": server,
-                "port": port,
-                "users": settings,
-            }]
-        }),
-    );
+    obj.insert("settings".to_owned(), settings);
     if let Some(s) = stream {
         obj.insert("streamSettings".to_owned(), s);
     }
@@ -140,21 +131,31 @@ fn emit_wireguard(node: &Node, tag: String) -> Result<Value, EmitError> {
     Ok(Value::Object(obj))
 }
 
-type Emit = Result<(&'static str, Vec<Value>, Option<Value>), EmitError>;
+// WHY: Xray-core uses different `settings` shapes per protocol: trojan and
+// shadowsocks store credentials directly on `servers[0]`, while vmess and
+// vless nest users under `vnext[0].users[0]`. Each per-protocol builder
+// returns the complete `settings` object so `emit_outbound` does not need
+// protocol-specific knowledge. Verified against Xray-core `infra/conf/*.go`
+// at commit 7d214f8 (constraint #18: official format).
+type Emit = Result<(&'static str, Value, Option<Value>), EmitError>;
 
-fn trojan(node: &Node) -> Emit {
+fn trojan(node: &Node, server: &str, port: u16) -> Emit {
     let password = match &node.authentication {
         Authentication::Password { password } => password.clone(),
         _ => return Err(EmitError::MissingField("trojan password")),
     };
-    let users = vec![json!({
-        "password": password,
-    })];
+    let settings = json!({
+        "servers": [{
+            "address": server,
+            "port": port,
+            "password": password,
+        }]
+    });
     let stream = stream_settings(node);
-    Ok(("trojan", users, stream))
+    Ok(("trojan", settings, stream))
 }
 
-fn shadowsocks(node: &Node) -> Emit {
+fn shadowsocks(node: &Node, server: &str, port: u16) -> Emit {
     let password = match &node.authentication {
         Authentication::Password { password } => password.clone(),
         _ => return Err(EmitError::MissingField("ss password")),
@@ -163,15 +164,18 @@ fn shadowsocks(node: &Node) -> Emit {
         ProtocolConfig::Shadowsocks(cfg) => cfg.method.clone(),
         _ => return Err(EmitError::MissingField("ss method")),
     };
-    // V2Ray/Xray shadowsocks uses a single-server settings shape (no users array).
-    let settings = vec![json!({
-        "method": method,
-        "password": password,
-    })];
+    let settings = json!({
+        "servers": [{
+            "address": server,
+            "port": port,
+            "method": method,
+            "password": password,
+        }]
+    });
     Ok(("shadowsocks", settings, None))
 }
 
-fn vmess(node: &Node) -> Emit {
+fn vmess(node: &Node, server: &str, port: u16) -> Emit {
     let uuid = match &node.authentication {
         Authentication::Uuid { uuid } => uuid.clone(),
         _ => return Err(EmitError::MissingField("vmess uuid")),
@@ -184,30 +188,45 @@ fn vmess(node: &Node) -> Emit {
         ProtocolConfig::VMess(cfg) => cfg.security.clone().unwrap_or_else(|| "auto".to_owned()),
         _ => "auto".to_owned(),
     };
-    let users = vec![json!({
-        "id": uuid,
-        "alterId": alter_id,
-        "security": security,
-    })];
+    let settings = json!({
+        "vnext": [{
+            "address": server,
+            "port": port,
+            "users": [{
+                "id": uuid,
+                "alterId": alter_id,
+                "security": security,
+            }]
+        }]
+    });
     let stream = stream_settings(node);
-    Ok(("vmess", users, stream))
+    Ok(("vmess", settings, stream))
 }
 
-fn vless(node: &Node) -> Emit {
+fn vless(node: &Node, server: &str, port: u16) -> Emit {
     let uuid = match &node.authentication {
         Authentication::Uuid { uuid } => uuid.clone(),
         _ => return Err(EmitError::MissingField("vless uuid")),
     };
     let mut user = Map::new();
     user.insert("id".to_owned(), Value::String(uuid));
+    // WHY: Xray requires `encryption: "none"` on every VLESS outbound user;
+    // `Build()` rejects the config otherwise (infra/conf/vless.go L370-L374).
+    user.insert("encryption".to_owned(), Value::String("none".to_owned()));
     if let ProtocolConfig::VlessReality(cfg) = &node.config
         && let Some(ref flow) = cfg.flow
     {
         user.insert("flow".to_owned(), Value::String(flow.clone()));
     }
-    let users = vec![Value::Object(user)];
+    let settings = json!({
+        "vnext": [{
+            "address": server,
+            "port": port,
+            "users": [Value::Object(user)],
+        }]
+    });
     let stream = stream_settings(node);
-    Ok(("vless", users, stream))
+    Ok(("vless", settings, stream))
 }
 
 fn stream_settings(node: &Node) -> Option<Value> {
@@ -226,10 +245,48 @@ fn stream_settings(node: &Node) -> Option<Value> {
     let mut stream = Map::new();
     stream.insert("network".to_owned(), Value::String(network.to_owned()));
     if let Some(ref tls) = node.tls {
-        if tls.enabled {
-            stream.insert("security".to_owned(), Value::String("tls".to_owned()));
+        if let Some(ref reality) = tls.reality {
+            stream.insert("security".to_owned(), Value::String("reality".to_owned()));
+            let mut rs = Map::new();
             if let Some(ref sni) = tls.server_name {
-                stream.insert("tlsSettings".to_owned(), json!({ "serverName": sni }));
+                rs.insert("serverName".to_owned(), Value::String(sni.clone()));
+            }
+            if !reality.public_key.is_empty() {
+                rs.insert(
+                    "publicKey".to_owned(),
+                    Value::String(reality.public_key.clone()),
+                );
+            }
+            if !reality.short_id.is_empty() {
+                rs.insert(
+                    "shortId".to_owned(),
+                    Value::String(reality.short_id.clone()),
+                );
+            }
+            if let Some(ref fp) = tls.client_fingerprint {
+                rs.insert("fingerprint".to_owned(), Value::String(fp.clone()));
+            }
+            stream.insert("realitySettings".to_owned(), Value::Object(rs));
+        } else if tls.enabled {
+            stream.insert("security".to_owned(), Value::String("tls".to_owned()));
+            let mut ts = Map::new();
+            if let Some(ref sni) = tls.server_name {
+                ts.insert("serverName".to_owned(), Value::String(sni.clone()));
+            }
+            if let Some(skip) = tls.skip_cert_verify {
+                ts.insert("allowInsecure".to_owned(), Value::Bool(skip));
+            }
+            if !tls.alpn.is_empty() {
+                ts.insert(
+                    "alpn".to_owned(),
+                    Value::Array(tls.alpn.iter().map(|a| Value::String(a.clone())).collect()),
+                );
+            }
+            if let Some(ref fp) = tls.client_fingerprint {
+                ts.insert("fingerprint".to_owned(), Value::String(fp.clone()));
+            }
+            if !ts.is_empty() {
+                stream.insert("tlsSettings".to_owned(), Value::Object(ts));
             }
         } else {
             stream.insert("security".to_owned(), Value::String("none".to_owned()));

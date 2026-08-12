@@ -221,15 +221,8 @@ fn xray_splithttp_legacy_alias() {
     assert_eq!(transport.xhttp_mode, Some(XhttpMode::StreamOne));
 }
 
-/// PARSE-027: Xray JSON xhttp emit — verify emitted JSON contains xhttp
-/// transport settings.
-///
-/// NOTE: a full parse→emit→parse round-trip for the Xray container is
-/// blocked by a pre-existing emitter/parser mismatch for trojan (emitter
-/// nests password under `servers[0].users[0]`, parser reads
-/// `servers[0].password` directly). That bug is out of scope for M9
-/// Slice 5; the mihomo container round-trip above covers the container
-/// round-trip path, and this test verifies the Xray emit side.
+/// PARSE-027: Xray JSON xhttp round-trip — parse → emit → parse produces
+/// equivalent node with xhttp transport settings preserved.
 #[test]
 fn xray_xhttp_emit_contains_settings() {
     let json = format!(
@@ -260,6 +253,14 @@ fn xray_xhttp_emit_contains_settings() {
     let parsed = deve_sub_protocol::container::parse_xray_json(&json).expect("parse");
     assert_eq!(parsed.len(), 1);
     let emitted = deve_sub_emitter::emit_xray(&parsed).expect("emit");
+    let reparsed = deve_sub_protocol::container::parse_xray_json(&emitted).expect("reparse");
+    assert_eq!(reparsed.len(), 1);
+    assert_eq!(reparsed[0].protocol, parsed[0].protocol);
+    assert_eq!(reparsed[0].endpoint, parsed[0].endpoint);
+    assert_eq!(reparsed[0].authentication, parsed[0].authentication);
+    assert_eq!(reparsed[0].tls, parsed[0].tls);
+    assert_eq!(reparsed[0].transport, parsed[0].transport);
+
     let doc: serde_json::Value = serde_json::from_str(&emitted).expect("valid json");
     let stream = doc["outbounds"][0]["streamSettings"]
         .as_object()

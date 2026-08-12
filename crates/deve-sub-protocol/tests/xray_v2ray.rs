@@ -377,3 +377,165 @@ fn xray_missing_outbounds_errors() {
         deve_sub_protocol::ParseError::MissingContainerKey("outbounds")
     ));
 }
+
+// --- Round-trip tests (emit → parse → compare) ---
+
+/// Helper: parse JSON → emit → parse emitted JSON → compare protocol,
+/// endpoint, authentication, TLS, and transport with the first parse.
+fn assert_xray_round_trip(json: &str) {
+    let parsed1 = deve_sub_protocol::container::parse_xray_json(json).expect("parse 1");
+    assert_eq!(parsed1.len(), 1);
+    let emitted = deve_sub_emitter::emit_xray(&parsed1).expect("emit");
+    let parsed2 = deve_sub_protocol::container::parse_xray_json(&emitted).expect("parse 2");
+    assert_eq!(parsed2.len(), 1);
+    let a = &parsed1[0];
+    let b = &parsed2[0];
+    assert_eq!(a.protocol, b.protocol, "protocol mismatch");
+    assert_eq!(a.endpoint, b.endpoint, "endpoint mismatch");
+    assert_eq!(
+        a.authentication, b.authentication,
+        "authentication mismatch"
+    );
+    assert_eq!(a.tls, b.tls, "tls mismatch");
+    assert_eq!(a.transport, b.transport, "transport mismatch");
+    assert_eq!(a.config, b.config, "config mismatch");
+}
+
+/// Trojan round-trip: parse → emit → parse produces equivalent node.
+#[test]
+fn xray_trojan_round_trip() {
+    let json = format!(
+        r#"{{
+  "outbounds": [
+    {{
+      "protocol": "trojan",
+      "tag": "RT-Trojan",
+      "settings": {{
+        "servers": [
+          {{ "address": "rt.example.com", "port": 443, "password": "{RESERVED_PASSWORD}" }}
+        ]
+      }},
+      "streamSettings": {{
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {{ "serverName": "rt.example.com" }}
+      }}
+    }}
+  ]
+}}"#
+    );
+    assert_xray_round_trip(&json);
+}
+
+/// Shadowsocks round-trip: parse → emit → parse produces equivalent node.
+#[test]
+fn xray_shadowsocks_round_trip() {
+    let json = format!(
+        r#"{{
+  "outbounds": [
+    {{
+      "protocol": "shadowsocks",
+      "tag": "RT-SS",
+      "settings": {{
+        "servers": [
+          {{ "address": "ss.example.com", "port": 8388, "method": "aes-256-gcm", "password": "{RESERVED_PASSWORD}" }}
+        ]
+      }}
+    }}
+  ]
+}}"#
+    );
+    assert_xray_round_trip(&json);
+}
+
+/// VMess round-trip: parse → emit → parse produces equivalent node.
+#[test]
+fn xray_vmess_round_trip() {
+    let json = format!(
+        r#"{{
+  "outbounds": [
+    {{
+      "protocol": "vmess",
+      "tag": "RT-VMess",
+      "settings": {{
+        "vnext": [
+          {{
+            "address": "vmess.example.com",
+            "port": 443,
+            "users": [{{ "id": "{RESERVED_UUID}", "alterId": 0, "security": "auto" }}]
+          }}
+        ]
+      }},
+      "streamSettings": {{ "network": "tcp", "security": "none" }}
+    }}
+  ]
+}}"#
+    );
+    assert_xray_round_trip(&json);
+}
+
+/// VLESS Reality round-trip: parse → emit → parse produces equivalent node.
+#[test]
+fn xray_vless_reality_round_trip() {
+    let json = format!(
+        r#"{{
+  "outbounds": [
+    {{
+      "protocol": "vless",
+      "tag": "RT-VLESS",
+      "settings": {{
+        "vnext": [
+          {{
+            "address": "vless.example.com",
+            "port": 443,
+            "users": [{{ "id": "{RESERVED_UUID}", "encryption": "none", "flow": "xtls-rprx-vision" }}]
+          }}
+        ]
+      }},
+      "streamSettings": {{
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {{
+          "serverName": "vless.example.com",
+          "fingerprint": "chrome",
+          "publicKey": "RT_PUBLIC_KEY",
+          "shortId": "01020304"
+        }}
+      }}
+    }}
+  ]
+}}"#
+    );
+    assert_xray_round_trip(&json);
+}
+
+/// VMess + WebSocket transport round-trip.
+#[test]
+fn xray_vmess_ws_round_trip() {
+    let json = format!(
+        r#"{{
+  "outbounds": [
+    {{
+      "protocol": "vmess",
+      "tag": "RT-VMess-WS",
+      "settings": {{
+        "vnext": [
+          {{
+            "address": "ws.example.com",
+            "port": 443,
+            "users": [{{ "id": "{RESERVED_UUID}", "alterId": 0, "security": "auto" }}]
+          }}
+        ]
+      }},
+      "streamSettings": {{
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {{ "serverName": "ws.example.com" }},
+        "wsSettings": {{ "path": "/ws", "headers": {{ "Host": "ws.example.com" }} }}
+      }}
+    }}
+  ]
+}}"#
+    );
+    assert_xray_round_trip(&json);
+}

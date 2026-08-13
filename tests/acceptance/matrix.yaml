@@ -650,7 +650,7 @@ cases:
     steps: []
     assertions: ["记录连接 RTT 和错误分类"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-013
     title: QUIC 延迟
     priority: P0
@@ -660,7 +660,7 @@ cases:
     steps: []
     assertions: ["HY2/TUIC 记录握手 RTT"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-014
     title: UDP 无响应
     priority: P0
@@ -670,7 +670,7 @@ cases:
     steps: []
     assertions: ["不伪造延迟或直接判死"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-015
     title: 真实代理测速
     priority: P0
@@ -680,7 +680,7 @@ cases:
     steps: []
     assertions: ["Runner 结果正确回传"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-016
     title: 批量取消测速
     priority: P0
@@ -690,7 +690,7 @@ cases:
     steps: []
     assertions: ["未完成任务被取消"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-017
     title: 链式代理
     priority: P0
@@ -700,7 +700,7 @@ cases:
     steps: []
     assertions: ["完整链可保存和测试"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-018
     title: 代理环
     priority: P0
@@ -710,7 +710,7 @@ cases:
     steps: []
     assertions: ["保存前拒绝并展示路径"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-001
     title: 新建 V3 模板
     priority: P0
@@ -760,7 +760,7 @@ cases:
     steps: []
     assertions: ["新节点自动进入结果"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-006
     title: 固定快照
     priority: P0
@@ -770,7 +770,7 @@ cases:
     steps: []
     assertions: ["新节点不会自动加入"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-007
     title: 按地区分组
     priority: P0
@@ -810,7 +810,7 @@ cases:
     steps: []
     assertions: ["UI 不溢出，生成正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-011
     title: 删除节点
     priority: P0
@@ -820,7 +820,7 @@ cases:
     steps: []
     assertions: ["相关组引用被提示处理"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-012
     title: 循环组依赖
     priority: P0
@@ -830,7 +830,7 @@ cases:
     steps: []
     assertions: ["服务端拒绝"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-013
     title: 目标不兼容
     priority: P0
@@ -1020,7 +1020,7 @@ cases:
     steps: []
     assertions: ["流量同步正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PROBE-002
     title: DStatus
     priority: P1
@@ -1030,7 +1030,7 @@ cases:
     steps: []
     assertions: ["流量同步正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PROBE-003
     title: Komari
     priority: P1
@@ -1040,7 +1040,7 @@ cases:
     steps: []
     assertions: ["流量同步正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PROBE-004
     title: 数据源失败
     priority: P1
@@ -1050,7 +1050,7 @@ cases:
     steps: []
     assertions: ["保留旧统计并标记过期"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PROBE-005
     title: 多源聚合
     priority: P1
@@ -1060,7 +1060,7 @@ cases:
     steps: []
     assertions: ["计算过程可追溯"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: CLI-001
     title: Headless 启动
     priority: P0

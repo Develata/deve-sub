@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used)]
 
-//! Integration tests for `refresh_source` (SRC-002, SRC-005, SRC-006, SRC-007,
-//! SRC-008, SRC-009, SRC-013, SRC-019).
+//! Integration tests for `refresh_source` (SRC-002, SRC-004, SRC-005, SRC-006,
+//! SRC-007, SRC-008, SRC-009, SRC-013, SRC-014, SRC-019).
 //!
 //! Uses a real SQLite storage layer (source + snapshot + node pool repos) and
 //! a mock fetcher to control the fetched content. Covers:
@@ -793,4 +793,93 @@ async fn timeout_then_retry_succeeds() {
     assert!(!r.not_modified);
     assert_eq!(r.snapshot.version, 1, "first successful snapshot is v1");
     assert_eq!(r.reconcile.new_nodes, 2);
+}
+
+/// SRC-014: diff counts (new, missing, duplicate, reactivated) are correct
+/// across two refreshes with different node sets.
+#[tokio::test]
+async fn src_014_diff_counts_correct() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source = create_source(&source_repo, "src-014-diff").await;
+
+    // v1: 3 nodes (A, B, C)
+    let v1_body = "trojan://PASS_A@a.example.com:443?sni=a.example.com&type=tcp#A\n\
+         trojan://PASS_B@b.example.com:443?sni=b.example.com&type=tcp#B\n\
+         trojan://PASS_C@c.example.com:443?sni=c.example.com&type=tcp#C";
+    let fetcher_v1 = MockFetcher::new(vec![MockResponse::Ok {
+        body: v1_body.as_bytes().to_vec(),
+        etag: Some("\"v1\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    let r1 = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_v1,
+        &StubGeoIp,
+        source.id,
+    )
+    .await
+    .expect("refresh v1");
+
+    assert_eq!(r1.reconcile.new_nodes, 3, "v1: 3 new nodes");
+    assert_eq!(r1.reconcile.duplicate_nodes, 0);
+    assert_eq!(r1.reconcile.missing_nodes, 0);
+    assert_eq!(r1.reconcile.reactivated_nodes, 0);
+
+    // v2: 4 nodes (A, B, D, E) — C removed, D and E new, A and B unchanged.
+    let v2_body = "trojan://PASS_A@a.example.com:443?sni=a.example.com&type=tcp#A\n\
+         trojan://PASS_B@b.example.com:443?sni=b.example.com&type=tcp#B\n\
+         trojan://PASS_D@d.example.com:443?sni=d.example.com&type=tcp#D\n\
+         trojan://PASS_E@e.example.com:443?sni=e.example.com&type=tcp#E";
+    let fetcher_v2 = MockFetcher::new(vec![MockResponse::Ok {
+        body: v2_body.as_bytes().to_vec(),
+        etag: Some("\"v2\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    let r2 = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_v2,
+        &StubGeoIp,
+        source.id,
+    )
+    .await
+    .expect("refresh v2");
+
+    assert_eq!(r2.reconcile.new_nodes, 2, "v2: D and E are new");
+    assert_eq!(r2.reconcile.duplicate_nodes, 2, "v2: A and B unchanged");
+    assert_eq!(r2.reconcile.missing_nodes, 1, "v2: C is missing");
+    assert_eq!(r2.reconcile.reactivated_nodes, 0);
+
+    // v3: 4 nodes (A, B, C, F) — C came back (reactivated), F is new,
+    // D and E are now missing.
+    let v3_body = "trojan://PASS_A@a.example.com:443?sni=a.example.com&type=tcp#A\n\
+         trojan://PASS_B@b.example.com:443?sni=b.example.com&type=tcp#B\n\
+         trojan://PASS_C@c.example.com:443?sni=c.example.com&type=tcp#C\n\
+         trojan://PASS_F@f.example.com:443?sni=f.example.com&type=tcp#F";
+    let fetcher_v3 = MockFetcher::new(vec![MockResponse::Ok {
+        body: v3_body.as_bytes().to_vec(),
+        etag: Some("\"v3\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    let r3 = source::refresh_source(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &fetcher_v3,
+        &StubGeoIp,
+        source.id,
+    )
+    .await
+    .expect("refresh v3");
+
+    assert_eq!(r3.reconcile.new_nodes, 1, "v3: F is new");
+    assert_eq!(r3.reconcile.duplicate_nodes, 2, "v3: A and B unchanged");
+    assert_eq!(r3.reconcile.missing_nodes, 2, "v3: D and E missing");
+    assert_eq!(r3.reconcile.reactivated_nodes, 1, "v3: C reactivated");
 }

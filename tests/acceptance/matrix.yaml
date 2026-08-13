@@ -250,7 +250,7 @@ cases:
     steps: []
     assertions: ["未变化返回 304 时不重复解析"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-005
     title: 抓取失败
     priority: P0
@@ -260,7 +260,7 @@ cases:
     steps: []
     assertions: ["保留上次成功节点"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SRC-006
     title: 解析为零节点
     priority: P0
@@ -350,7 +350,7 @@ cases:
     steps: []
     assertions: ["新增、删除、修改数量正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PARSE-001
     title: VLESS Reality URI
     priority: P0

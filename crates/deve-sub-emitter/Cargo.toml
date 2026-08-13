@@ -20,6 +20,7 @@ time = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 deve-sub-kernel = { workspace = true }
+deve-sub-compatibility = { workspace = true }
 
 [lints]
 workspace = true

@@ -85,10 +85,10 @@ GEN-013	目标不兼容	P0	Integration	pass
 GEN-014	严格模式	P0	Integration	pass
 GEN-015	原子发布	P0	Regression	pass
 GEN-016	预览一致性	P0	E2E	pass
-OUT-001	Mihomo	P0	Compatibility	planned
+OUT-001	Mihomo	P0	Compatibility	pass
 OUT-002	FlClash	P0	Compatibility	planned
 OUT-003	sing-box	P0	Compatibility	pass
-OUT-004	Xray	P0	Compatibility	planned
+OUT-004	Xray	P0	Compatibility	pass
 OUT-005	v2rayN	P0	Compatibility	planned
 OUT-006	v2rayNG	P0	Compatibility	planned
 OUT-007	Shadowrocket	P0	Compatibility	planned

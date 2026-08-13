@@ -880,7 +880,7 @@ cases:
     steps: []
     assertions: ["官方 Core 可加载"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-002
     title: FlClash
     priority: P0
@@ -910,7 +910,7 @@ cases:
     steps: []
     assertions: ["配置验证通过"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-005
     title: v2rayN
     priority: P0

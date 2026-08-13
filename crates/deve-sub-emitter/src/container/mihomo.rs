@@ -108,9 +108,11 @@ fn emit_vmess(
         if let Some(aid) = cfg.alter_id {
             entry.push_str(&format!("\n    alterId: {aid}"));
         }
-        if let Some(ref sec) = cfg.security {
-            entry.push_str(&format!("\n    cipher: {sec}"));
-        }
+        // WHY: mihomo requires `cipher` on every vmess proxy; default to
+        // "auto" when the source did not specify a security method (same
+        // default the xray emitter uses). Caught by OUT-001.
+        let cipher = cfg.security.clone().unwrap_or_else(|| "auto".to_owned());
+        entry.push_str(&format!("\n    cipher: {cipher}"));
     }
     push_tls(node, &mut entry);
     push_network(node, &mut entry);

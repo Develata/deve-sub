@@ -943,6 +943,7 @@ name = "deve-sub-emitter"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "deve-sub-compatibility",
  "deve-sub-domain",
  "deve-sub-kernel",
  "percent-encoding",

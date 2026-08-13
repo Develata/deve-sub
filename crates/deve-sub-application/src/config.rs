@@ -103,6 +103,20 @@ pub struct SecurityConfig {
     /// (AUTH-004).
     #[serde(default = "default_lockout_duration_secs")]
     pub lockout_duration_secs: u64,
+
+    /// Whether to trust `X-Forwarded-For` / `X-Real-IP` headers for client
+    /// IP extraction (SEC-007).
+    ///
+    /// When `false` (the default), proxy headers are **ignored** — the
+    /// server does not use them for IP-based rate limiting. This prevents
+    /// IP spoofing by clients sending fake headers directly to the server.
+    ///
+    /// When `true`, the server trusts the last hop of `X-Forwarded-For` and
+    /// the `X-Real-IP` header. Enable this only when the server is behind a
+    /// trusted reverse proxy (Caddy, nginx) that overwrites client-sent
+    /// values.
+    #[serde(default = "default_trust_proxy_headers")]
+    pub trust_proxy_headers: bool,
 }
 
 impl Default for AppConfig {
@@ -143,6 +157,7 @@ impl Default for SecurityConfig {
             cookie_secure: default_cookie_secure(),
             max_login_attempts: default_max_login_attempts(),
             lockout_duration_secs: default_lockout_duration_secs(),
+            trust_proxy_headers: default_trust_proxy_headers(),
         }
     }
 }
@@ -185,6 +200,10 @@ fn default_max_login_attempts() -> u32 {
 
 fn default_lockout_duration_secs() -> u64 {
     300
+}
+
+fn default_trust_proxy_headers() -> bool {
+    false
 }
 
 /// GeoIP configuration for auto-region detection (NODE-007/008/009).

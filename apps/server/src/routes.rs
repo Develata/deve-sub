@@ -107,7 +107,7 @@ pub fn build_api_router(state: AppState) -> (Router, OpenApi) {
 /// Serve the web shell placeholder.
 ///
 /// Returns 404 when `serve_web` is disabled (headless mode).
-async fn web_placeholder(State(state): State<AppState>) -> axum::response::Response {
+pub(crate) async fn web_placeholder(State(state): State<AppState>) -> axum::response::Response {
     if state.config.server.serve_web {
         axum::response::Html(deve_sub_web::PLACEHOLDER_HTML).into_response()
     } else {

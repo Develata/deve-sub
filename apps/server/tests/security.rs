@@ -42,6 +42,16 @@ impl TestApp {
 
     /// Create a test app with a custom rate limit threshold.
     async fn with_max_attempts(max_attempts: u32) -> Self {
+        Self::with_config(max_attempts, false).await
+    }
+
+    /// Create a test app with `trust_proxy_headers = true` for tests that
+    /// simulate requests behind a reverse proxy.
+    async fn with_trusted_proxy(max_attempts: u32) -> Self {
+        Self::with_config(max_attempts, true).await
+    }
+
+    async fn with_config(max_attempts: u32, trust_proxy_headers: bool) -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
         let db_path = dir.path().join("test.db");
         let key_path = dir.path().join("master.key");
@@ -60,6 +70,7 @@ impl TestApp {
         let mut config = deve_sub_application::AppConfig::default();
         config.security.max_login_attempts = max_attempts;
         config.security.lockout_duration_secs = 300;
+        config.security.trust_proxy_headers = trust_proxy_headers;
 
         let rate_limiter: Arc<dyn LoginRateLimiter> =
             Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(
@@ -350,7 +361,7 @@ async fn successful_login_resets_counter() {
 /// from that IP.
 #[tokio::test]
 async fn rate_limiting_per_ip() {
-    let app = TestApp::with_max_attempts(3).await;
+    let app = TestApp::with_trusted_proxy(3).await;
     let router = app.router();
     setup_admin(&router).await;
 
@@ -494,4 +505,125 @@ async fn csrf_does_not_apply_to_get() {
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+/// SEC-007: When `trust_proxy_headers` is false (default), X-Forwarded-For
+/// headers are ignored — all requests from the same connection are treated
+/// as the same IP for rate limiting.
+#[tokio::test]
+async fn sec007_untrusted_proxy_headers_ignored() {
+    let app = TestApp::with_max_attempts(3).await;
+    let router = app.router();
+    setup_admin(&router).await;
+
+    for i in 0..3 {
+        let _ = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/login")
+                    .header("host", "localhost:8080")
+                    .header("content-type", "application/json")
+                    .header("x-forwarded-for", format!("10.0.0.{i}"))
+                    .body(Body::from(
+                        r#"{"username":"admin","password":"wrong"}"#.to_owned(),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+    }
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("host", "localhost:8080")
+                .header("content-type", "application/json")
+                .header("x-forwarded-for", "99.99.99.99")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"wrong"}"#.to_owned(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+/// SEC-008: SPA routes like /nodes serve the web placeholder, not a 404
+/// or short-code lookup. The SPA fallback must not interfere with the
+/// short-code delivery route /s/{code}.
+#[tokio::test]
+async fn sec008_spa_routes_serve_web_not_short_code() {
+    let app = TestApp::new().await;
+    let router = app.router();
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/nodes")
+                .header("host", "localhost:8080")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/s/ABCD1234")
+                .header("host", "localhost:8080")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+/// SEC-006: Path traversal payloads in delivery URLs do not traverse the
+/// file system. The profile parameter is matched against database entries,
+/// not used as a file path.
+#[tokio::test]
+async fn sec006_path_traversal_in_delivery_url() {
+    let app = TestApp::new().await;
+    let router = app.router();
+
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/sub/sometoken/..%2F..%2Fetc%2Fpasswd")
+                .header("host", "localhost:8080")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let status = response.status();
+    assert!(
+        status == StatusCode::NOT_FOUND || status == StatusCode::OK,
+        "unexpected status {status}"
+    );
+    if status == StatusCode::OK {
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .expect("body");
+        let text = String::from_utf8_lossy(&body);
+        assert!(
+            !text.contains("root:"),
+            "path traversal succeeded — file contents leaked"
+        );
+    }
 }

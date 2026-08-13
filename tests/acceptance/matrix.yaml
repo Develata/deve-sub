@@ -550,7 +550,7 @@ cases:
     steps: []
     assertions: ["大文件流式处理"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: NODE-003
     title: 自动去重
     priority: P0
@@ -1070,7 +1070,7 @@ cases:
     steps: []
     assertions: ["无 Web UI，API 与订阅正常"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: CLI-002
     title: stdin 导入
     priority: P0
@@ -1080,7 +1080,7 @@ cases:
     steps: []
     assertions: ["节点正确导入"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: CLI-003
     title: stdout 导出
     priority: P0
@@ -1090,7 +1090,7 @@ cases:
     steps: []
     assertions: ["一行一个 URI"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: CLI-004
     title: JSON 输出
     priority: P0
@@ -1100,7 +1100,7 @@ cases:
     steps: []
     assertions: ["可用于自动化脚本"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: CLI-005
     title: doctor
     priority: P0
@@ -1110,7 +1110,7 @@ cases:
     steps: []
     assertions: ["检测数据库、目录、网络和版本"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: CLI-006
     title: Health live/ready subcommand
     priority: P1
@@ -1250,7 +1250,7 @@ cases:
     steps: []
     assertions: ["上传名称无法越界"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-007
     title: 真实 IP 伪造
     priority: P0
@@ -1260,7 +1260,7 @@ cases:
     steps: []
     assertions: ["非可信代理 Header 被忽略"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-008
     title: SPA 路由
     priority: P0
@@ -1270,7 +1270,7 @@ cases:
     steps: []
     assertions: ["/nodes 等不计入短码爆破"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-009
     title: Token 日志
     priority: P0

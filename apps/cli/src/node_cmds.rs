@@ -5,7 +5,8 @@
 //! `docs/plan/milestones/M4-sources-and-node-pool.md` Slice 3.
 
 use anyhow::{Context, Result};
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
+use serde::Serialize;
 
 use crate::commands::{ensure_db_dir, open_db};
 
@@ -54,9 +55,38 @@ pub struct NodeListArgs {
     #[arg(long)]
     pub include_missing: bool,
 
+    /// Output format. `table` (default) for human-readable output, `uri`
+    /// for one URI per line (CLI-003), `json` for machine-readable JSON
+    /// (CLI-004).
+    #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+    pub format: OutputFormat,
+
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
     pub db_path: String,
+}
+
+/// Output format for `node list`.
+#[derive(Clone, Debug, ValueEnum)]
+pub enum OutputFormat {
+    /// Human-readable table (default).
+    Table,
+    /// One URI per line (CLI-003).
+    Uri,
+    /// JSON array for automation scripts (CLI-004).
+    Json,
+}
+
+/// JSON-serializable node summary for `--format json` (CLI-004).
+#[derive(Serialize)]
+struct NodeJson {
+    id: String,
+    protocol: String,
+    host: String,
+    port: u16,
+    region: Option<String>,
+    active: bool,
+    missing_from_source: bool,
 }
 
 pub async fn node_import(args: NodeImportArgs) -> Result<()> {
@@ -69,17 +99,26 @@ pub async fn node_import(args: NodeImportArgs) -> Result<()> {
 
     let pool_repo = deve_sub_storage_sqlite::SqliteNodePoolRepository::new(pool);
 
-    let content = match args.input.as_deref() {
+    let content: Vec<u8> = match args.input.as_deref() {
         None | Some("-") => {
             use std::io::Read;
-            let mut buf = String::new();
+            let mut buf = Vec::new();
             std::io::stdin()
-                .read_to_string(&mut buf)
+                .read_to_end(&mut buf)
                 .context("failed to read stdin")?;
             buf
         }
-        Some(path) => std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read input file: {path}"))?,
+        Some(path) => {
+            use std::io::Read;
+            let file = std::fs::File::open(path)
+                .with_context(|| format!("failed to open input file: {path}"))?;
+            let mut reader = std::io::BufReader::new(file);
+            let mut buf = Vec::new();
+            reader
+                .read_to_end(&mut buf)
+                .with_context(|| format!("failed to read input file: {path}"))?;
+            buf
+        }
     };
 
     if content.is_empty() {
@@ -91,9 +130,8 @@ pub async fn node_import(args: NodeImportArgs) -> Result<()> {
         .parse::<deve_sub_domain::SourceType>()
         .map_err(|e| anyhow::anyhow!("invalid --source-type: {e}"))?;
 
-    let parsed =
-        deve_sub_application::source::parse_for_import(source_type, None, content.as_bytes())
-            .map_err(|e| anyhow::anyhow!("parse failed: {e}"))?;
+    let parsed = deve_sub_application::source::parse_for_import(source_type, None, &content)
+        .map_err(|e| anyhow::anyhow!("parse failed: {e}"))?;
 
     let failed_count = parsed.failed.len();
     let result = deve_sub_application::source::import_nodes(&pool_repo, parsed.nodes)
@@ -134,15 +172,28 @@ pub async fn node_list(args: NodeListArgs) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("list failed: {e}"))?;
 
     if entries.is_empty() {
-        println!("No nodes found.");
+        match args.format {
+            OutputFormat::Json => println!("[]"),
+            OutputFormat::Uri => {}
+            OutputFormat::Table => println!("No nodes found."),
+        }
         return Ok(());
     }
 
+    match args.format {
+        OutputFormat::Table => print_table(&entries),
+        OutputFormat::Uri => print_uris(&entries)?,
+        OutputFormat::Json => print_json(&entries)?,
+    }
+    Ok(())
+}
+
+fn print_table(entries: &[deve_sub_domain::NodePoolEntry]) {
     println!(
         "{:<28} {:<12} {:<28} {:<6} {:<10} {:<8}",
         "ID", "Protocol", "Host", "Port", "Region", "Active"
     );
-    for e in &entries {
+    for e in entries {
         println!(
             "{:<28} {:<12} {:<28} {:<6} {:<10} {:<8}",
             e.node.id.to_string(),
@@ -153,5 +204,38 @@ pub async fn node_list(args: NodeListArgs) -> Result<()> {
             if e.is_active { "yes" } else { "no" },
         );
     }
+}
+
+fn print_uris(entries: &[deve_sub_domain::NodePoolEntry]) -> Result<()> {
+    for e in entries {
+        match deve_sub_emitter::emit_uri(&e.node) {
+            Ok(uri) => println!("{uri}"),
+            Err(deve_sub_emitter::EmitError::NoEmitter(proto)) => {
+                tracing::warn!(protocol = %proto, "skipping node without URI emitter");
+            }
+            Err(err) => {
+                anyhow::bail!("failed to emit URI for node {}: {err}", e.node.id);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn print_json(entries: &[deve_sub_domain::NodePoolEntry]) -> Result<()> {
+    let summary: Vec<NodeJson> = entries
+        .iter()
+        .map(|e| NodeJson {
+            id: e.node.id.to_string(),
+            protocol: e.node.protocol.to_string(),
+            host: e.node.endpoint.host.uri_host().to_owned(),
+            port: e.node.endpoint.port,
+            region: e.node.region.value.clone(),
+            active: e.is_active,
+            missing_from_source: e.missing_from_source,
+        })
+        .collect();
+    let json =
+        serde_json::to_string_pretty(&summary).context("failed to serialize node list as JSON")?;
+    println!("{json}");
     Ok(())
 }

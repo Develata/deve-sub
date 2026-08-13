@@ -12,6 +12,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
@@ -108,12 +110,23 @@ pub fn build_router(state: AppState) -> Router {
     let (api_router, openapi) = routes::build_api_router(state.clone());
 
     let delivery_router =
-        crate::delivery::register_delivery_routes(Router::new()).with_state(state);
+        crate::delivery::register_delivery_routes(Router::new()).with_state(state.clone());
 
+    let fallback_state = state;
     Router::new()
         .merge(api_router.layer(axum::middleware::from_fn(crate::csrf::csrf_guard)))
         .merge(delivery_router)
         .merge(Scalar::with_url("/docs", openapi))
+        .fallback(move || {
+            let s = fallback_state.clone();
+            async move {
+                if s.config.server.serve_web {
+                    axum::response::Html(deve_sub_web::PLACEHOLDER_HTML).into_response()
+                } else {
+                    StatusCode::NOT_FOUND.into_response()
+                }
+            }
+        })
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
         .layer(PropagateRequestIdLayer::x_request_id())

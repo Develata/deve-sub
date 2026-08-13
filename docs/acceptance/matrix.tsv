@@ -52,7 +52,7 @@ PARSE-016	一行一个 URI	P0	E2E	pass
 PARSE-017	Round-trip	P0	Property	pass
 PARSE-018	非法输入 Fuzz	P0	Fuzz	pass
 NODE-001	粘贴批量节点	P0	E2E	pass
-NODE-002	文件导入	P0	Integration	planned
+NODE-002	文件导入	P0	Integration	pass
 NODE-003	自动去重	P0	Regression	pass
 NODE-004	批量启停	P0	E2E	pass
 NODE-005	批量标签	P0	E2E	pass
@@ -104,11 +104,11 @@ PROBE-002	DStatus	P1	Contract	pass
 PROBE-003	Komari	P1	Contract	pass
 PROBE-004	数据源失败	P1	Integration	pass
 PROBE-005	多源聚合	P1	Integration	pass
-CLI-001	Headless 启动	P0	Integration	planned
-CLI-002	stdin 导入	P0	CLI	planned
-CLI-003	stdout 导出	P0	CLI	planned
-CLI-004	JSON 输出	P0	CLI	planned
-CLI-005	doctor	P0	CLI	planned
+CLI-001	Headless 启动	P0	Integration	pass
+CLI-002	stdin 导入	P0	CLI	pass
+CLI-003	stdout 导出	P0	CLI	pass
+CLI-004	JSON 输出	P0	CLI	pass
+CLI-005	doctor	P0	CLI	pass
 CLI-006	Health live/ready subcommand	P1	CLI	planned
 DEPLOY-001	SQLite Compose	P1	Smoke	planned
 DEPLOY-002	Linux 安装	P1	VM Test	planned
@@ -122,9 +122,9 @@ SEC-002	私网 SSRF	P0	Security	pass
 SEC-003	DNS 重绑定	P0	Security	pass
 SEC-004	重定向到内网	P0	Security	pass
 SEC-005	YAML Bomb	P0	Security	pass
-SEC-006	路径穿越	P0	Security	planned
-SEC-007	真实 IP 伪造	P0	Security	planned
-SEC-008	SPA 路由	P0	Regression	planned
+SEC-006	路径穿越	P0	Security	pass
+SEC-007	真实 IP 伪造	P0	Security	pass
+SEC-008	SPA 路由	P0	Regression	pass
 SEC-009	Token 日志	P0	Security	pass
 SEC-010	CSRF	P0	Security	pass
 PERF-001	10k 节点解析	P1	Benchmark	planned

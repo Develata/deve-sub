@@ -794,6 +794,7 @@ dependencies = [
  "deve-sub-adapters",
  "deve-sub-application",
  "deve-sub-domain",
+ "deve-sub-emitter",
  "deve-sub-inmemory",
  "deve-sub-kernel",
  "deve-sub-observability",

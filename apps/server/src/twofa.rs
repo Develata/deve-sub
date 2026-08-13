@@ -266,7 +266,7 @@ async fn login_2fa(
     headers: axum::http::HeaderMap,
     Json(req): Json<LoginTwoFactorRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let ip = crate::auth::extract_client_ip(&headers);
+    let ip = crate::auth::extract_client_ip(&headers, state.config.security.trust_proxy_headers);
     let ttl = time::Duration::seconds(state.config.security.session_ttl_secs as i64);
     let (user, _session, token) = auth::login_2fa(auth::LoginTwoFactorParams {
         user_repo: state.user_repo.as_ref(),

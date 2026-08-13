@@ -177,7 +177,7 @@ pub use crate::template_cmds::{
 
 pub async fn doctor(args: DoctorArgs) -> Result<()> {
     let config = load_config(&args.config)?;
-    let db_path = args.db_path.unwrap_or(config.database.path);
+    let db_path = args.db_path.unwrap_or_else(|| config.database.path.clone());
 
     println!("Deve Sub — System Diagnostics");
     println!("==============================");
@@ -190,6 +190,14 @@ pub async fn doctor(args: DoctorArgs) -> Result<()> {
     println!("\n[2/4] Database");
     if Path::new(&db_path).exists() {
         println!("  database file: {db_path} (exists)");
+        match check_database(&db_path).await {
+            Ok(schema_ver) => {
+                println!("  schema version: {schema_ver}");
+            }
+            Err(e) => {
+                println!("  WARNING: failed to open database: {e}");
+            }
+        }
     } else {
         println!("  database file: {db_path} (not found — run `deve-sub migrate` first)");
     }
@@ -208,9 +216,33 @@ pub async fn doctor(args: DoctorArgs) -> Result<()> {
 
     // Network check
     println!("\n[4/4] Network");
-    println!("  network check: skipped (no external endpoints configured)");
+    let bind = &config.server.bind;
+    match check_bind_available(bind).await {
+        Ok(()) => println!("  bind {bind}: available"),
+        Err(e) => println!("  bind {bind}: WARNING — {e}"),
+    }
 
     println!("\nDiagnostics complete.");
+    Ok(())
+}
+
+async fn check_database(db_path: &str) -> Result<i64> {
+    let pool = open_db(db_path, 1).await?;
+    let row: (i64,) = sqlx::query_as("SELECT COALESCE(MAX(version), 0) FROM _sqlx_migrations")
+        .fetch_one(&pool)
+        .await
+        .context("failed to query schema version")?;
+    Ok(row.0)
+}
+
+async fn check_bind_available(bind_addr: &str) -> Result<()> {
+    let addr: std::net::SocketAddr = bind_addr
+        .parse()
+        .context("invalid bind address (expected host:port)")?;
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .with_context(|| format!("cannot bind to {bind_addr} (already in use?)"))?;
+    drop(listener);
     Ok(())
 }
 

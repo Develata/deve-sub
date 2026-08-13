@@ -126,27 +126,24 @@ fn extract_session_token(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-/// Extract the client IP address from the `X-Real-IP` header (preferred) or
-/// the last hop of `X-Forwarded-For`. Returns `None` if neither is present.
+/// Extract the client IP address from proxy headers, but only when
+/// `trust_proxy_headers` is enabled in the config (SEC-007).
 ///
-/// WHY: we prefer `X-Real-IP` because reverse proxies (Caddy, nginx) set
-/// it to the actual client IP, overwriting any client-sent value. We take
-/// the LAST hop of `X-Forwarded-For` because the proxy appends the real
-/// client IP at the end — the first hop is client-controlled and spoofable.
+/// Returns `None` when proxy headers are not trusted, preventing IP
+/// spoofing by clients sending fake `X-Forwarded-For` / `X-Real-IP`
+/// directly to the server.
 ///
-/// This assumes a single trusted reverse proxy layer. Without a proxy,
-/// clients can still send these headers to evade IP-based rate limiting,
-/// but username-based rate limiting remains effective. A
-/// `trusted_proxies` config option for multi-layer proxy chains is a
-/// future improvement.
-pub(crate) fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
+/// WHY: without a trusted reverse proxy, clients can set these headers to
+/// evade IP-based rate limiting. The `trust_proxy_headers` config gate
+/// ensures they are ignored unless the operator explicitly enables them.
+pub(crate) fn extract_client_ip(headers: &HeaderMap, trust_proxy_headers: bool) -> Option<String> {
+    if !trust_proxy_headers {
+        return None;
+    }
     if let Some(ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
         return Some(ip.trim().to_owned());
     }
     if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        // WHY: take the LAST hop, not the first. The reverse proxy appends
-        // the real client IP at the end; earlier entries may be forged by
-        // the client.
         return xff.split(',').next_back().map(|s| s.trim().to_owned());
     }
     None
@@ -273,7 +270,7 @@ async fn login(
     headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let ip = extract_client_ip(&headers);
+    let ip = extract_client_ip(&headers, state.config.security.trust_proxy_headers);
     let ttl = time::Duration::seconds(state.config.security.session_ttl_secs as i64);
     let outcome = auth::login(auth::LoginParams {
         user_repo: state.user_repo.as_ref(),

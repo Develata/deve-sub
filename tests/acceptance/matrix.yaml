@@ -780,7 +780,7 @@ cases:
     steps: []
     assertions: ["分组成员正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-008
     title: 按协议分组
     priority: P0
@@ -790,7 +790,7 @@ cases:
     steps: []
     assertions: ["分组成员正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-009
     title: 拖拽排序
     priority: P0
@@ -800,7 +800,7 @@ cases:
     steps: []
     assertions: ["保存并重新打开顺序一致"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: GEN-010
     title: 多中转组
     priority: P0

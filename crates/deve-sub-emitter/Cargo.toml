@@ -17,5 +17,9 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 time = { workspace = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+deve-sub-kernel = { workspace = true }
+
 [lints]
 workspace = true

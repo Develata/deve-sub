@@ -900,7 +900,7 @@ cases:
     steps: []
     assertions: ["check 验证通过"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-004
     title: Xray
     priority: P0

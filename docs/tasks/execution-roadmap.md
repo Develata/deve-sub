@@ -18,9 +18,9 @@ order. It schedules approved contracts; it cannot override plans.
 | M6 | Subscription Distribution | done | M5 | Profile URL, short code, temp link, ETag, auth, traffic |
 | M7 | Probes and Detection | done | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
 | M8 | Deployment and Hardening | planned | M7 | Install script, self-update, backup, SSRF, perf, multi-arch |
-| M9 | Protocol and Output Expansion | planned | M3, M4, M5, M6 | WireGuard, AnyTLS, Snell, ShadowTLS, xhttp, JSON profile |
-| M10 | Observability and Audit | planned | M6, M7, M2 | Traffic history charts, audit log query API |
-| M11 | Archive and Snapshot | planned | M6, M7, M10 | `deve-sub backup`, `deve-sub restore`, snapshot format |
+| M9 | Protocol and Output Expansion | done | M3, M4, M5, M6 | WireGuard, AnyTLS, Snell, ShadowTLS, xhttp, JSON profile |
+| M10 | Observability and Audit | done | M6, M7, M2 | Traffic history charts, audit log query API |
+| M11 | Archive and Snapshot | done | M6, M7, M10 | `deve-sub backup`, `deve-sub restore`, snapshot format |
 
 ## Phase 1
 

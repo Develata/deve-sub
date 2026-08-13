@@ -109,7 +109,7 @@ CLI-002	stdin 导入	P0	CLI	pass
 CLI-003	stdout 导出	P0	CLI	pass
 CLI-004	JSON 输出	P0	CLI	pass
 CLI-005	doctor	P0	CLI	pass
-CLI-006	Health live/ready subcommand	P1	CLI	planned
+CLI-006	Health live/ready subcommand	P1	CLI	pass
 DEPLOY-001	SQLite Compose	P1	Smoke	not-run
 DEPLOY-002	Linux 安装	P1	VM Test	not-run
 DEPLOY-003	amd64 镜像	P1	CI	not-run

@@ -1120,7 +1120,7 @@ cases:
     steps: []
     assertions: ["deve-sub health live exits 0 on 2xx, exit 1 on non-2xx or connection failure", "deve-sub health ready exits 0 on 2xx, exit 1 on non-2xx or connection failure"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: DEPLOY-001
     title: SQLite Compose
     priority: P1
@@ -1200,7 +1200,7 @@ cases:
     steps: []
     assertions: ["默认阻止"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-002
     title: 私网 SSRF
     priority: P0
@@ -1210,7 +1210,7 @@ cases:
     steps: []
     assertions: ["无白名单时阻止"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-003
     title: DNS 重绑定
     priority: P0

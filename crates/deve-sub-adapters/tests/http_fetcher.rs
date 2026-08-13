@@ -297,3 +297,46 @@ async fn redirect_to_internal_rejected() {
         "second check is for the redirect target"
     );
 }
+
+// ---------------------------------------------------------------------------
+// SEC-001 / SEC-002: Production SSRF guard blocks localhost and private IPs
+// ---------------------------------------------------------------------------
+
+/// SEC-001: an HttpFetcher with the production SSRF checker rejects localhost
+/// IP literals (IPv4 and IPv6 loopback) without attempting a connection.
+#[tokio::test]
+async fn sec_001_localhost_ssrf_blocked() {
+    let fetcher = HttpFetcher::new().timeout(3);
+    for url in [
+        "http://127.0.0.1:8080/sub",
+        "http://127.0.0.1:9999/anything",
+        "http://[::1]:8080/sub",
+    ] {
+        let result = fetcher.fetch(url, None).await;
+        assert!(
+            matches!(result, Err(FetchError::Ssrf(_))),
+            "SEC-001: localhost URL {url} should be SSRF-blocked, got {result:?}"
+        );
+    }
+}
+
+/// SEC-002: an HttpFetcher with the production SSRF checker rejects private
+/// network ranges (RFC 1918, IPv6 ULA, link-local) without attempting a
+/// connection.
+#[tokio::test]
+async fn sec_002_private_network_ssrf_blocked() {
+    let fetcher = HttpFetcher::new().timeout(3);
+    for url in [
+        "http://10.0.0.1:8080/sub",
+        "http://192.168.1.1:8080/sub",
+        "http://172.16.0.1:8080/sub",
+        "http://[fc00::1]:8080/sub",
+        "http://[fe80::1]:8080/sub",
+    ] {
+        let result = fetcher.fetch(url, None).await;
+        assert!(
+            matches!(result, Err(FetchError::Ssrf(_))),
+            "SEC-002: private URL {url} should be SSRF-blocked, got {result:?}"
+        );
+    }
+}

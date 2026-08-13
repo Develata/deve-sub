@@ -17,7 +17,7 @@ order. It schedules approved contracts; it cannot override plans.
 | M5 | Generator and V3 Template | done | M3, M4 | Node selection, proxy groups, V3 template, generation, cache |
 | M6 | Subscription Distribution | done | M5 | Profile URL, short code, temp link, ETag, auth, traffic |
 | M7 | Probes and Detection | done | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
-| M8 | Deployment and Hardening | planned | M7 | Install script, self-update, backup, SSRF, perf, multi-arch |
+| M8 | Deployment and Hardening | done | M7 | Install script, self-update, backup, SSRF, perf, multi-arch |
 | M9 | Protocol and Output Expansion | done | M3, M4, M5, M6 | WireGuard, AnyTLS, Snell, ShadowTLS, xhttp, JSON profile |
 | M10 | Observability and Audit | done | M6, M7, M2 | Traffic history charts, audit log query API |
 | M11 | Archive and Snapshot | done | M6, M7, M10 | `deve-sub backup`, `deve-sub restore`, snapshot format |
@@ -96,9 +96,20 @@ all pass; NODE-012 through NODE-018 all pass.
 
 ## Next milestones
 
-M8 (Deployment and Hardening) — install script, self-update, backup, SSRF
-hardening, performance, multi-arch images. Blueprint:
-`docs/plan/milestones/M8-deployment-and-hardening.md`.
+All milestones (M0–M11) are complete. The remaining work is closing the
+deferred P0/P1 acceptance cases (44 planned, 5 not-run). See the acceptance
+matrix for the full list. The highest-priority clusters are:
+
+- **SEC-001/002** (P0, backend-testable): localhost and private-network SSRF.
+- **CLI-006** (P1): `deve-sub health live/ready` subcommand.
+- **SRC-004/005/014, NODE-012..018, GEN-005..012** (P0, API-testable):
+  integration tests via the REST API.
+- **OUT-001..007** (P0, compatibility): round-trip validation with real proxy
+  clients (Mihomo, sing-box, Xray, v2rayN, v2rayNG, Shadowrocket, FlClash).
+- **UI-001..010, SRC-002, NODE-016, GEN-007..011** (P0, frontend): Dioxus Web
+  frontend build — the largest remaining cluster.
+- **DEPLOY-001..004, PERF-006** (P1, infra): Docker Compose smoke, VM install,
+  multi-arch CI, 30-minute soak — require Docker/VM infrastructure.
 
 M9 (Protocol and Output Expansion) — WireGuard, AnyTLS, Snell, ShadowTLS typed
 configs + URI/container parsers/emitters, xhttp transport, JSON output

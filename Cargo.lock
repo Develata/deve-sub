@@ -946,6 +946,7 @@ dependencies = [
  "deve-sub-compatibility",
  "deve-sub-domain",
  "deve-sub-kernel",
+ "deve-sub-protocol",
  "percent-encoding",
  "serde",
  "serde_json",

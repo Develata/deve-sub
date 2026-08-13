@@ -920,7 +920,7 @@ cases:
     steps: []
     assertions: ["URI 列表可导入"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-006
     title: v2rayNG
     priority: P0
@@ -930,7 +930,7 @@ cases:
     steps: []
     assertions: ["URI 列表可导入"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-007
     title: Shadowrocket
     priority: P0
@@ -940,7 +940,7 @@ cases:
     steps: []
     assertions: ["测试设备或格式 Fixture 通过"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: OUT-008
     title: ETag
     priority: P0

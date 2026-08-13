@@ -21,6 +21,7 @@ time = { workspace = true }
 tempfile = { workspace = true }
 deve-sub-kernel = { workspace = true }
 deve-sub-compatibility = { workspace = true }
+deve-sub-protocol = { workspace = true }
 
 [lints]
 workspace = true

@@ -95,6 +95,7 @@ h3-quinn = "0.0.10"
 http = "1"
 bytes = "1"
 tar = "0.4"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

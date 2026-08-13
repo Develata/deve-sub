@@ -98,7 +98,7 @@ all pass; NODE-012 through NODE-018 all pass.
 
 M8 (Deployment and Hardening) — install script, self-update, backup, SSRF
 hardening, performance, multi-arch images. Blueprint:
-`docs/plan/milestones/M8-deployment-and-hardening.md` (to be written).
+`docs/plan/milestones/M8-deployment-and-hardening.md`.
 
 M9 (Protocol and Output Expansion) — WireGuard, AnyTLS, Snell, ShadowTLS typed
 configs + URI/container parsers/emitters, xhttp transport, JSON output

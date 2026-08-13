@@ -110,13 +110,13 @@ CLI-003	stdout 导出	P0	CLI	pass
 CLI-004	JSON 输出	P0	CLI	pass
 CLI-005	doctor	P0	CLI	pass
 CLI-006	Health live/ready subcommand	P1	CLI	planned
-DEPLOY-001	SQLite Compose	P1	Smoke	planned
-DEPLOY-002	Linux 安装	P1	VM Test	planned
-DEPLOY-003	amd64 镜像	P1	CI	planned
-DEPLOY-004	arm64 镜像	P1	CI	planned
-DEPLOY-005	Docker healthcheck via internalized health command	P1	DEPLOY	planned
-UPDATE-001	签名更新	P1	VM Test	planned
-UPDATE-002	更新失败	P1	VM Test	planned
+DEPLOY-001	SQLite Compose	P1	Smoke	not-run
+DEPLOY-002	Linux 安装	P1	VM Test	not-run
+DEPLOY-003	amd64 镜像	P1	CI	not-run
+DEPLOY-004	arm64 镜像	P1	CI	not-run
+DEPLOY-005	Docker healthcheck via internalized health command	P1	DEPLOY	pass
+UPDATE-001	签名更新	P1	VM Test	pass
+UPDATE-002	更新失败	P1	VM Test	pass
 SEC-001	localhost SSRF	P0	Security	pass
 SEC-002	私网 SSRF	P0	Security	pass
 SEC-003	DNS 重绑定	P0	Security	pass
@@ -127,12 +127,12 @@ SEC-007	真实 IP 伪造	P0	Security	pass
 SEC-008	SPA 路由	P0	Regression	pass
 SEC-009	Token 日志	P0	Security	pass
 SEC-010	CSRF	P0	Security	pass
-PERF-001	10k 节点解析	P1	Benchmark	planned
-PERF-002	10k 节点列表	P1	Browser Perf	planned
-PERF-003	缓存订阅	P1	Load	planned
-PERF-004	无缓存生成	P1	Load	planned
-PERF-005	并发订阅下载	P1	Load	planned
-PERF-006	长时间运行	P1	Soak	planned
+PERF-001	10k 节点解析	P1	Benchmark	pass
+PERF-002	10k 节点列表	P1	Browser Perf	pass
+PERF-003	缓存订阅	P1	Load	pass
+PERF-004	无缓存生成	P1	Load	pass
+PERF-005	并发订阅下载	P1	Load	pass
+PERF-006	长时间运行	P1	Soak	not-run
 PARSE-019	WireGuard URI	P1	Golden	pass
 PARSE-020	WireGuard Mihomo YAML	P1	Golden	pass
 PARSE-021	WireGuard sing-box JSON	P1	Golden	pass

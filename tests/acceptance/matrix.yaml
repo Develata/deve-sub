@@ -1130,7 +1130,7 @@ cases:
     steps: []
     assertions: ["一条命令启动并健康"]
     fixtures: []
-    evidence: planned
+    evidence: not-run
   - id: DEPLOY-002
     title: Linux 安装
     priority: P1
@@ -1140,7 +1140,7 @@ cases:
     steps: []
     assertions: ["systemd 正常运行"]
     fixtures: []
-    evidence: planned
+    evidence: not-run
   - id: DEPLOY-003
     title: amd64 镜像
     priority: P1
@@ -1150,7 +1150,7 @@ cases:
     steps: []
     assertions: ["启动通过"]
     fixtures: []
-    evidence: planned
+    evidence: not-run
   - id: DEPLOY-004
     title: arm64 镜像
     priority: P1
@@ -1160,7 +1160,7 @@ cases:
     steps: []
     assertions: ["启动通过"]
     fixtures: []
-    evidence: planned
+    evidence: not-run
   - id: DEPLOY-005
     title: Docker healthcheck via internalized health command
     priority: P1
@@ -1170,7 +1170,7 @@ cases:
     steps: []
     assertions: ["Docker HEALTHCHECK uses deve-sub health live, container becomes healthy within 60s"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UPDATE-001
     title: 签名更新
     priority: P1
@@ -1180,7 +1180,7 @@ cases:
     steps: []
     assertions: ["正常更新并健康"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UPDATE-002
     title: 更新失败
     priority: P1
@@ -1190,7 +1190,7 @@ cases:
     steps: []
     assertions: ["自动回滚"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: SEC-001
     title: localhost SSRF
     priority: P0
@@ -1300,7 +1300,7 @@ cases:
     steps: []
     assertions: ["满足内存和耗时基线"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PERF-002
     title: 10k 节点列表
     priority: P1
@@ -1310,7 +1310,7 @@ cases:
     steps: []
     assertions: ["P95 交互满足预算"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PERF-003
     title: 缓存订阅
     priority: P1
@@ -1320,7 +1320,7 @@ cases:
     steps: []
     assertions: ["P95 小于 500 ms"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PERF-004
     title: 无缓存生成
     priority: P1
@@ -1330,7 +1330,7 @@ cases:
     steps: []
     assertions: ["P95 小于 3 秒，不含抓取"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PERF-005
     title: 并发订阅下载
     priority: P1
@@ -1340,7 +1340,7 @@ cases:
     steps: []
     assertions: ["不返回部分内容"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: PERF-006
     title: 长时间运行
     priority: P1
@@ -1350,7 +1350,7 @@ cases:
     steps: []
     assertions: ["WAL、内存和任务数不持续增长"]
     fixtures: []
-    evidence: planned
+    evidence: not-run
   - id: PARSE-019
     title: WireGuard URI
     priority: P1

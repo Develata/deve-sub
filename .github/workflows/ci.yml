@@ -101,3 +101,48 @@ jobs:
           docker stop deve-sub-test 2>/dev/null || true
           docker rm deve-sub-test 2>/dev/null || true
           docker volume rm deve-sub-ci-data 2>/dev/null || true
+
+  # Multi-arch build verification (DEPLOY-003/004).
+  # Runs only on push to main (not PRs) because arm64 via QEMU is slow.
+  multiarch:
+    name: multiarch (amd64 + arm64)
+    runs-on: ubuntu-latest
+    needs: rust
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - name: Build multi-arch images (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: deve-sub:multiarch
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify amd64 image boots and healthcheck passes
+        run: |
+          docker build -t deve-sub-amd64 --platform linux/amd64 .
+          docker volume create deve-sub-ma-amd64
+          docker run --rm -v deve-sub-ma-amd64:/app/data --platform linux/amd64 \
+            deve-sub-amd64 migrate --db-path /app/data/deve-sub.db
+          docker run -d --name deve-sub-ma-amd64 -p 8081:8080 \
+            -v deve-sub-ma-amd64:/app/data --platform linux/amd64 deve-sub-amd64
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' deve-sub-ma-amd64 2>/dev/null || echo "starting")
+            [ "$status" = "healthy" ] && break
+            sleep 1
+          done
+          if [ "$status" != "healthy" ]; then
+            echo "FAIL: amd64 container did not become healthy"
+            docker logs deve-sub-ma-amd64
+            exit 1
+          fi
+          echo "amd64 healthcheck: healthy (DEPLOY-003/005)"
+          docker stop deve-sub-ma-amd64 2>/dev/null || true
+          docker rm deve-sub-ma-amd64 2>/dev/null || true
+          docker volume rm deve-sub-ma-amd64 2>/dev/null || true

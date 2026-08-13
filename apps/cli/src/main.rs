@@ -17,6 +17,7 @@ mod node_cmds;
 mod serve;
 mod subscription_cmds;
 mod template_cmds;
+mod update;
 
 /// Deve Sub — self-hosted proxy subscription infrastructure manager.
 #[derive(Parser)]
@@ -54,6 +55,8 @@ enum Commands {
     Restore(backup::RestoreArgs),
     /// HTTP health probes for Docker HEALTHCHECK.
     Health(health::HealthArgs),
+    /// Self-update the binary from the latest GitHub release.
+    Update(update::UpdateArgs),
 }
 
 fn main() -> ExitCode {
@@ -126,6 +129,7 @@ fn main() -> ExitCode {
             },
             Commands::Backup(args) => backup::backup(args).await,
             Commands::Restore(args) => backup::restore(args).await,
+            Commands::Update(args) => update::update(args).await,
         }
     });
 

@@ -23,6 +23,11 @@ serde_yaml = { workspace = true }
 deve-sub-emitter = { workspace = true }
 deve-sub-compatibility = { workspace = true }
 proptest = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "parse_10k"
+harness = false
 
 [lints]
 workspace = true

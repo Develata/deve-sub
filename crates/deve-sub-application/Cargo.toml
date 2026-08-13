@@ -38,3 +38,12 @@ tokio = { workspace = true }
 sqlx = { workspace = true }
 deve-sub-storage-sqlite = { workspace = true }
 deve-sub-protocol = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "list_10k"
+harness = false
+
+[[bench]]
+name = "generate"
+harness = false

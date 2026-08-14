@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deve Sub</title>
+    <script>
+      (function () {
+        var t = localStorage.getItem("theme");
+        var dark = t === "dark" || (!t && matchMedia("(prefers-color-scheme: dark)").matches);
+        var warm = t === "warm";
+        var violet = t === "violet";
+        var html = document.documentElement;
+        if (dark) html.classList.add("dark");
+        if (warm) html.classList.add("theme-warm");
+        if (violet) html.classList.add("theme-violet");
+        if (localStorage.getItem("reduce-motion") === "true") html.classList.add("reduce-motion");
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="main"></div>
+  </body>
+</html>

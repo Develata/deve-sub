@@ -39,6 +39,11 @@ spikes/*/node_modules/
 **/test-results/
 **/playwright-report/
 **/blob-report/
+tests/e2e/screenshots/
+
+# External reference clones (not part of this repo)
+sing-box/
+xray/
 
 # OS/editor
 .DS_Store
@@ -49,3 +54,4 @@ Thumbs.db
 
 # opencode
 .opencode/
+.omo/

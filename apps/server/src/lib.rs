@@ -27,6 +27,7 @@ use thiserror::Error;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use utoipa_scalar::{Scalar, Servable};
 
@@ -112,21 +113,28 @@ pub fn build_router(state: AppState) -> Router {
     let delivery_router =
         crate::delivery::register_delivery_routes(Router::new()).with_state(state.clone());
 
-    let fallback_state = state;
-    Router::new()
+    let dist_path = std::path::PathBuf::from(&state.config.server.web_dist_dir);
+    let serve_web = state.config.server.serve_web;
+    let dist_exists = dist_path.exists();
+
+    let router = Router::new()
         .merge(api_router.layer(axum::middleware::from_fn(crate::csrf::csrf_guard)))
         .merge(delivery_router)
-        .merge(Scalar::with_url("/docs", openapi))
-        .fallback(move || {
-            let s = fallback_state.clone();
-            async move {
-                if s.config.server.serve_web {
-                    axum::response::Html(deve_sub_web::PLACEHOLDER_HTML).into_response()
-                } else {
-                    StatusCode::NOT_FOUND.into_response()
-                }
-            }
+        .merge(Scalar::with_url("/docs", openapi));
+
+    let router = if serve_web && dist_exists {
+        let serve_dir =
+            ServeDir::new(&dist_path).fallback(ServeFile::new(dist_path.join("index.html")));
+        router.fallback_service(serve_dir)
+    } else if serve_web {
+        router.fallback(|| async {
+            axum::response::Html(deve_sub_web::PLACEHOLDER_HTML).into_response()
         })
+    } else {
+        router.fallback(|| async { StatusCode::NOT_FOUND.into_response() })
+    };
+
+    router
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
         .layer(PropagateRequestIdLayer::x_request_id())

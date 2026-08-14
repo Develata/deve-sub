@@ -12,5 +12,23 @@ homepage.workspace = true
 name = "deve_sub_web"
 path = "src/lib.rs"
 
+[[bin]]
+name = "deve-sub-web"
+path = "src/main.rs"
+required-features = ["frontend"]
+
+[features]
+default = []
+frontend = []
+
 [lints]
 workspace = true
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+dioxus = { workspace = true }
+web-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

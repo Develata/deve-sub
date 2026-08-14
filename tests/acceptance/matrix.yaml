@@ -20,7 +20,7 @@ cases:
     steps: []
     assertions: ["进入管理员初始化", "不出现默认弱密码"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-002
     title: 中英文切换
     priority: P0
@@ -30,7 +30,7 @@ cases:
     steps: []
     assertions: ["当前页面和导航即时切换", "刷新后保留"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-003
     title: 日间/夜间
     priority: P0
@@ -40,7 +40,7 @@ cases:
     steps: []
     assertions: ["所有页面无不可读文字"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-004
     title: Minimal Warm
     priority: P0
@@ -50,7 +50,7 @@ cases:
     steps: []
     assertions: ["布局和设计 Token 正确"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-005
     title: Fantasy Violet
     priority: P0
@@ -60,7 +60,7 @@ cases:
     steps: []
     assertions: ["棋盘背景、装饰和卡片仍保持可读"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-006
     title: 自定义主题
     priority: P0
@@ -70,7 +70,7 @@ cases:
     steps: []
     assertions: ["修改颜色、Logo 后持久化"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-007
     title: 减少动画
     priority: P0
@@ -80,7 +80,7 @@ cases:
     steps: []
     assertions: ["系统设置后关闭非必要动画"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-008
     title: 10,000 节点
     priority: P0
@@ -90,7 +90,7 @@ cases:
     steps: []
     assertions: ["滚动、筛选和选择不明显卡顿"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-009
     title: 移动端
     priority: P0
@@ -100,7 +100,7 @@ cases:
     steps: []
     assertions: ["能查看订阅、刷新源和复制链接"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: UI-010
     title: 键盘导航
     priority: P0
@@ -110,7 +110,7 @@ cases:
     steps: []
     assertions: ["导航、表格和对话框可使用键盘"]
     fixtures: []
-    evidence: planned
+    evidence: pass
   - id: AUTH-001
     title: 初始化管理员
     priority: P0

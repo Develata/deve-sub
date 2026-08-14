@@ -8,8 +8,7 @@
 use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Json};
-use axum::routing::get;
+use axum::response::Json;
 use deve_sub_application::{HealthStatus, HealthView};
 use deve_sub_contract::{HealthLiveResponse, HealthReadyResponse};
 use utoipa::openapi::OpenApi;
@@ -97,22 +96,10 @@ pub fn build_api_router(state: AppState) -> (Router, OpenApi) {
     let openapi = build_openapi(&state.config.product_name);
 
     let (router, openapi) = register_api_routes(OpenApiRouter::with_openapi(openapi))
-        .route("/", get(web_placeholder))
         .with_state(state)
         .split_for_parts();
 
     (router, openapi)
-}
-
-/// Serve the web shell placeholder.
-///
-/// Returns 404 when `serve_web` is disabled (headless mode).
-pub(crate) async fn web_placeholder(State(state): State<AppState>) -> axum::response::Response {
-    if state.config.server.serve_web {
-        axum::response::Html(deve_sub_web::PLACEHOLDER_HTML).into_response()
-    } else {
-        StatusCode::NOT_FOUND.into_response()
-    }
 }
 
 /// Liveness probe — returns 200 if the process is alive.

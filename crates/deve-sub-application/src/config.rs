@@ -39,6 +39,12 @@ pub struct ServerConfig {
     /// Serve web UI (false for headless mode).
     #[serde(default = "default_serve_web")]
     pub serve_web: bool,
+
+    /// Path to the compiled web frontend dist directory. When `serve_web`
+    /// is true, static files are served from this directory. Falls back
+    /// to the placeholder HTML if the directory does not exist.
+    #[serde(default = "default_web_dist_dir")]
+    pub web_dist_dir: String,
 }
 
 /// Database configuration.
@@ -136,6 +142,7 @@ impl Default for ServerConfig {
         Self {
             bind: default_bind_addr(),
             serve_web: default_serve_web(),
+            web_dist_dir: default_web_dist_dir(),
         }
     }
 }
@@ -172,6 +179,10 @@ fn default_bind_addr() -> String {
 
 fn default_serve_web() -> bool {
     true
+}
+
+fn default_web_dist_dir() -> String {
+    "apps/web/dist".to_owned()
 }
 
 fn default_db_path() -> String {

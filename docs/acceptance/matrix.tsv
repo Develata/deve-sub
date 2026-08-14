@@ -1,14 +1,14 @@
 id	title	priority	layer	status
-UI-001	首次启动	P0	E2E	planned
-UI-002	中英文切换	P0	E2E	planned
-UI-003	日间/夜间	P0	E2E	planned
-UI-004	Minimal Warm	P0	Visual	planned
-UI-005	Fantasy Violet	P0	Visual	planned
-UI-006	自定义主题	P0	E2E	planned
-UI-007	减少动画	P0	E2E	planned
-UI-008	10,000 节点	P0	Performance	planned
-UI-009	移动端	P0	E2E	planned
-UI-010	键盘导航	P0	E2E	planned
+UI-001	首次启动	P0	E2E	pass
+UI-002	中英文切换	P0	E2E	pass
+UI-003	日间/夜间	P0	E2E	pass
+UI-004	Minimal Warm	P0	Visual	pass
+UI-005	Fantasy Violet	P0	Visual	pass
+UI-006	自定义主题	P0	E2E	pass
+UI-007	减少动画	P0	E2E	pass
+UI-008	10,000 节点	P0	Performance	pass
+UI-009	移动端	P0	E2E	pass
+UI-010	键盘导航	P0	E2E	pass
 AUTH-001	初始化管理员	P0	Integration	pass
 AUTH-002	正确登录	P0	E2E	pass
 AUTH-003	错误密码	P0	Integration	pass

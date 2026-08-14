@@ -88,7 +88,7 @@ pub(crate) fn tag_to_dto(tag: &Tag) -> TagDto {
     path = "/api/v1/nodes",
     security(("cookie_auth" = [])),
     params(
-        ("limit" = Option<u32>, Query, description = "Max nodes per page (1-100, default 20)"),
+        ("limit" = Option<u32>, Query, description = "Max nodes per page (1-10000, default 20)"),
         ("cursor" = Option<String>, Query, description = "Pagination cursor (last node ULID)"),
         ("protocol" = Option<String>, Query, description = "Filter by protocol kind"),
         ("region" = Option<String>, Query, description = "Filter by region"),
@@ -108,7 +108,7 @@ async fn list_nodes(
     _admin: AdminUser,
     Query(q): Query<ListNodesQuery>,
 ) -> Result<Json<ListNodesResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let limit = q.limit.clamp(1, 100);
+    let limit = q.limit.clamp(1, 10_000);
 
     let cursor = q
         .cursor

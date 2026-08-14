@@ -25,6 +25,10 @@ pub struct ServeArgs {
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH")]
     pub(crate) db_path: Option<String>,
+
+    /// Path to the compiled web frontend dist directory.
+    #[arg(long, env = "DEVE_SUB_WEB_DIST_DIR")]
+    pub(crate) web_dist_dir: Option<String>,
 }
 
 impl ServeArgs {
@@ -38,6 +42,9 @@ impl ServeArgs {
         }
         if let Some(db_path) = &self.db_path {
             config.database.path = db_path.clone();
+        }
+        if let Some(web_dist_dir) = &self.web_dist_dir {
+            config.server.web_dist_dir = web_dist_dir.clone();
         }
     }
 }

@@ -1,12 +1,19 @@
 import { spawn, spawnSync, ChildProcess } from 'child_process';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 
-const BINARY = '/home/pwh/deve-sub/target/release/deve-sub';
-const WEB_DIST = '/home/pwh/deve-sub/apps/web/dist';
-const FRESH_PORT = 18080;
-const SEEDED_PORT = 18081;
+// WHY: derive paths from this file's location so E2E works from any checkout
+// path (DS-AUD-050). The E2E dir is <repo>/tests/e2e/, so repo root is ../..
+// Allow env overrides for CI layouts that place the binary or dist elsewhere.
+declare const __dirname: string;
+const E2E_DIR = __dirname;
+const REPO_ROOT = resolve(E2E_DIR, '..', '..');
+
+const BINARY = process.env.DEVE_SUB_BINARY ?? join(REPO_ROOT, 'target', 'release', 'deve-sub');
+const WEB_DIST = process.env.DEVE_SUB_WEB_DIST ?? join(REPO_ROOT, 'apps', 'web', 'dist');
+const FRESH_PORT = parseInt(process.env.DEVE_SUB_E2E_FRESH_PORT ?? '18080', 10);
+const SEEDED_PORT = parseInt(process.env.DEVE_SUB_E2E_SEEDED_PORT ?? '18081', 10);
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'TestPassword12345';
 

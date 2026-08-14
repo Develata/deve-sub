@@ -45,5 +45,15 @@ export default defineConfig({
         ...devices['Pixel 5'],
       },
     },
+    {
+      // DS-AUD-049: real browser auth through the login form, not API cookie
+      // injection. Uses the seeded server so an admin already exists.
+      name: 'real-auth',
+      testMatch: /real-auth/,
+      use: {
+        baseURL: `http://127.0.0.1:${SEEDED_PORT}`,
+        ...devices['Desktop Chrome'],
+      },
+    },
   ],
 });

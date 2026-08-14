@@ -4,13 +4,20 @@ on:
   push:
     tags: ["v*"]
 
+# Minimal global permissions; jobs override as needed (DS-AUD-010).
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     name: Build and release
     runs-on: ubuntu-latest
+    # WHY: environment gate pauses releases until the repo owner configures
+    # the `release` environment with required reviewers (DS-AUD-055). This
+    # prevents accidental publishes while Phase B–D fixes are in progress.
+    environment: release
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -52,6 +59,10 @@ jobs:
     name: Multi-arch Docker image
     runs-on: ubuntu-latest
     needs: release
+    environment: release
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v3
@@ -69,8 +80,10 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          # WHY: immutable semver tag only — no `latest` (constraint #11,
+          # DS-AUD-012). The `latest` tag misleads users into tracking an
+          # unversioned, potentially incompatible image.
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

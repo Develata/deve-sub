@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# ── Stage 1: Rust builder ────────────────────────────────────────────
+# ── Stage 1: Rust + WASM builder ─────────────────────────────────────
 # WHY: Pinned Rust version matches CI (dtolnay/rust-toolchain@1.97.1). Trixie
 # builder per ADR-0006.
 # Constraint #11: no "latest" tag as a production release dependency.
@@ -17,7 +17,14 @@ COPY crates/ crates/
 COPY apps/ apps/
 COPY migrations/ migrations/
 
+# Build the host release binary.
 RUN cargo build --locked --release --bin deve-sub
+
+# Build the WASM frontend (DS-AUD-004): without this the runtime image only
+# has the placeholder HTML, not the real admin UI.
+RUN rustup target add wasm32-unknown-unknown
+RUN cargo install dioxus-cli --locked --version 0.7.10
+RUN dx build --release --package deve-sub-web
 
 # ── Stage 2: Minimal runtime ─────────────────────────────────────────
 # WHY: trixie-slim is the current Debian stable (per ADR-0006), not "latest".
@@ -35,6 +42,12 @@ WORKDIR /app
 
 # Copy the release binary from the builder stage.
 COPY --from=builder --chown=deve:deve /build/target/release/deve-sub /app/deve-sub
+
+# Copy the compiled web frontend dist (DS-AUD-004).
+COPY --from=builder --chown=deve:deve /build/apps/web/dist /app/web/dist
+
+# Copy the entrypoint script (DS-AUD-007: migrate before serve).
+COPY --chmod=0755 --chown=deve:deve docker-entrypoint.sh /app/entrypoint.sh
 
 # Create data directory with correct ownership for SQLite + WAL.
 RUN mkdir -p /app/data && chown deve:deve /app/data
@@ -54,5 +67,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
     CMD ["/app/deve-sub", "health", "live"]
 
-ENTRYPOINT ["/app/deve-sub"]
-CMD ["serve", "--db-path", "/app/data/deve-sub.db"]
+# WHY: entrypoint runs migrate (idempotent) then execs serve with the
+# correct web_dist_dir so `docker run` works standalone (DS-AUD-007).
+ENTRYPOINT ["/app/entrypoint.sh"]

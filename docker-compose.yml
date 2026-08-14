@@ -5,9 +5,10 @@
 #   docker compose logs -f        # follow logs
 #   docker compose down           # stop and remove
 #
-# The compose file runs migrations before starting the server. Data is
-# persisted in a named volume. The healthcheck uses the internalized
-# `deve-sub health live` command per ADR-0006.
+# The image entrypoint runs migrations before starting the server, so no
+# separate migrate step is needed here. Data is persisted in a named volume.
+# The healthcheck uses the internalized `deve-sub health live` command per
+# ADR-0006.
 
 services:
   deve-sub:
@@ -16,10 +17,6 @@ services:
       - "8080:8080"
     volumes:
       - deve-sub-data:/app/data
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      /app/deve-sub migrate --db-path /app/data/deve-sub.db
-      && exec /app/deve-sub serve --db-path /app/data/deve-sub.db
     healthcheck:
       test: ["CMD", "/app/deve-sub", "health", "live"]
       interval: 30s

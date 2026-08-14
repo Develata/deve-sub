@@ -44,6 +44,60 @@ jobs:
       - name: Docs and acceptance checks
         run: python3 scripts/check_docs.py
 
+  web-wasm:
+    name: web-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --locked --version 0.7.10
+      - name: Build WASM frontend
+        run: dx build --release --package deve-sub-web --features frontend
+      - name: Verify dist artifacts
+        run: |
+          test -f apps/web/dist/index.html
+          ls apps/web/dist/assets/*.wasm | head -1
+          ls apps/web/dist/assets/*.js | head -1
+
+  browser-e2e:
+    name: browser-e2e
+    runs-on: ubuntu-latest
+    needs: [rust, web-wasm]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release binary
+        run: cargo build --locked --release --bin deve-sub
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --locked --version 0.7.10
+      - name: Build WASM frontend
+        run: dx build --release --package deve-sub-web --features frontend
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+      - name: Install E2E dependencies
+        run: npm ci
+        working-directory: tests/e2e
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: tests/e2e
+      - name: Run E2E tests
+        run: npx playwright test --reporter=list
+        working-directory: tests/e2e
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report/
+          retention-days: 7
+
   docker:
     name: docker
     runs-on: ubuntu-latest
@@ -54,17 +108,10 @@ jobs:
         run: docker build -t deve-sub:ci .
       - name: Run container and verify health
         run: |
-          # Create a named volume so the migrate and serve containers share
-          # the same /app/data directory.
           docker volume create deve-sub-ci-data
 
-          # Run migrations in a one-shot container before starting the
-          # server. The serve command calls verify_schema and exits if
-          # migrations have not been applied, so migrate must run first.
-          docker run --rm -v deve-sub-ci-data:/app/data deve-sub:ci \
-            migrate --db-path /app/data/deve-sub.db
-
-          # Start the server with the shared volume.
+          # The image entrypoint runs migrate then serve (DS-AUD-007),
+          # so a single docker run is sufficient — no separate migrate step.
           docker run -d --name deve-sub-test -p 8080:8080 -v deve-sub-ci-data:/app/data deve-sub:ci
 
           # Poll the Docker healthcheck status until healthy
@@ -87,6 +134,15 @@ jobs:
           # Verify both health endpoints
           curl -sf http://localhost:8080/health/live
           curl -sf http://localhost:8080/health/ready
+
+          # Verify the real frontend is served, not the placeholder (DS-AUD-004).
+          # The real dist references the WASM JS bundle; the placeholder does not.
+          curl -sf http://localhost:8080/ | grep -q 'deve-sub-web' || {
+            echo "FAIL: root page does not reference the WASM bundle — placeholder served"
+            docker logs deve-sub-test
+            exit 1
+          }
+          echo "Real frontend is served"
 
           # Verify non-root user
           uid=$(docker exec deve-sub-test id -u)
@@ -128,8 +184,7 @@ jobs:
         run: |
           docker build -t deve-sub-amd64 --platform linux/amd64 .
           docker volume create deve-sub-ma-amd64
-          docker run --rm -v deve-sub-ma-amd64:/app/data --platform linux/amd64 \
-            deve-sub-amd64 migrate --db-path /app/data/deve-sub.db
+          # The image entrypoint runs migrate then serve (DS-AUD-007).
           docker run -d --name deve-sub-ma-amd64 -p 8081:8080 \
             -v deve-sub-ma-amd64:/app/data --platform linux/amd64 deve-sub-amd64
           for i in $(seq 1 30); do

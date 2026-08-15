@@ -66,6 +66,16 @@ pub async fn setup_admin(
     password: &str,
 ) -> Result<User, AuthError> {
     validate_credentials(username, password)?;
+
+    // DS-AUD-035: fast-path guard before Argon2. An attacker hitting the
+    // public setup endpoint after initialization would otherwise trigger a
+    // full Argon2id hash (~20-50ms) on every request — a cheap CPU
+    // exhaustion vector. `count()` is a single SQL SELECT; reject before
+    // spending any hashing time when users already exist.
+    if user_repo.count().await? > 0 {
+        return Err(AuthError::AlreadyInitialized);
+    }
+
     let password_hash = hash_password(password)?;
     let user = User::new(username, password_hash, Role::Admin);
     user_repo
@@ -420,4 +430,103 @@ pub async fn force_logout(
         .ok_or(AuthError::Identity(IdentityError::UserNotFound))?;
     session_repo.revoke_all_for_user(user_id).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+
+    /// `create_if_empty_called` is the regression signal for the
+    /// DS-AUD-035 guard: it must stay false when `count > 0`.
+    struct MockUserRepo {
+        count_value: AtomicI64,
+        create_succeeds: bool,
+        create_if_empty_called: AtomicBool,
+    }
+
+    impl MockUserRepo {
+        fn new(count: i64, create_succeeds: bool) -> Self {
+            Self {
+                count_value: AtomicI64::new(count),
+                create_succeeds,
+                create_if_empty_called: AtomicBool::new(false),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl UserRepository for MockUserRepo {
+        async fn create(&self, _user: &User) -> Result<(), IdentityError> {
+            Err(IdentityError::UsernameExists)
+        }
+        async fn find_by_id(&self, _id: UserId) -> Result<Option<User>, IdentityError> {
+            Ok(None)
+        }
+        async fn find_by_username(&self, _username: &str) -> Result<Option<User>, IdentityError> {
+            Ok(None)
+        }
+        async fn count(&self) -> Result<i64, IdentityError> {
+            Ok(self.count_value.load(Ordering::Relaxed))
+        }
+        async fn list(
+            &self,
+            _cursor: Option<UserId>,
+            _limit: u32,
+        ) -> Result<Vec<User>, IdentityError> {
+            Ok(Vec::new())
+        }
+        async fn create_if_empty(&self, _user: &User) -> Result<(), IdentityError> {
+            self.create_if_empty_called.store(true, Ordering::Relaxed);
+            if self.create_succeeds {
+                Ok(())
+            } else {
+                Err(IdentityError::AlreadyInitialized)
+            }
+        }
+        async fn set_enabled(&self, _id: UserId, _enabled: bool) -> Result<(), IdentityError> {
+            Ok(())
+        }
+        async fn set_two_factor_enabled(
+            &self,
+            _id: UserId,
+            _enabled: bool,
+        ) -> Result<(), IdentityError> {
+            Ok(())
+        }
+        async fn update_last_login(
+            &self,
+            _id: UserId,
+            _at: deve_sub_kernel::Timestamp,
+        ) -> Result<(), IdentityError> {
+            Ok(())
+        }
+    }
+
+    /// DS-AUD-035: when users already exist, setup_admin must reject
+    /// before reaching create_if_empty.
+    #[tokio::test]
+    async fn setup_admin_rejects_when_initialized() {
+        let repo = MockUserRepo::new(1, false);
+        let result = setup_admin(&repo, "admin", "s3cure-pwd!").await;
+        assert!(matches!(result, Err(AuthError::AlreadyInitialized)));
+        assert!(
+            !repo.create_if_empty_called.load(Ordering::Relaxed),
+            "create_if_empty must not be called when count > 0"
+        );
+    }
+
+    /// DS-AUD-035: when no users exist, setup_admin proceeds and
+    /// create_if_empty is invoked.
+    #[tokio::test]
+    async fn setup_admin_proceeds_when_empty() {
+        let repo = MockUserRepo::new(0, true);
+        let result = setup_admin(&repo, "admin", "s3cure-pwd!").await;
+        assert!(result.is_ok(), "setup_admin on empty DB should succeed");
+        assert!(
+            repo.create_if_empty_called.load(Ordering::Relaxed),
+            "create_if_empty must be called when count == 0"
+        );
+    }
 }

@@ -1,9 +1,10 @@
 //! CLI subcommand implementations.
 
+use std::io::{self, BufRead as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand};
 
 use deve_sub_application::AppConfig;
@@ -101,15 +102,32 @@ pub enum UserSubCommand {
 }
 
 /// Arguments for `user init-admin`.
+///
+/// DS-AUD-028: `--password` on the argv is visible in the process list
+/// (`ps aux`). Prefer `--password-stdin` (reads from stdin) or
+/// `--password-env VAR` (reads from an environment variable) for
+/// production use. `--password` is retained for backward compatibility
+/// but emits a warning.
 #[derive(Args)]
 pub struct UserInitAdminArgs {
     /// Admin username.
     #[arg(long)]
     pub username: String,
 
-    /// Admin password.
+    /// Admin password. Visible in the process list — prefer
+    /// `--password-stdin` or `--password-env` for production.
     #[arg(long)]
-    pub password: String,
+    pub password: Option<String>,
+
+    /// Read the admin password from stdin (one line, trailing newline
+    /// stripped). Avoids exposing the password in the process list.
+    #[arg(long)]
+    pub password_stdin: bool,
+
+    /// Read the admin password from the named environment variable.
+    /// Avoids exposing the password in the process list.
+    #[arg(long, value_name = "VAR")]
+    pub password_env: Option<String>,
 
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
@@ -291,6 +309,8 @@ pub async fn openapi(args: OpenapiArgs) -> Result<()> {
 pub async fn user_init_admin(args: UserInitAdminArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, "initializing admin user");
 
+    let password = resolve_admin_password(&args)?;
+
     ensure_db_dir(&args.db_path)?;
 
     let pool = open_db(&args.db_path, 1).await?;
@@ -298,8 +318,7 @@ pub async fn user_init_admin(args: UserInitAdminArgs) -> Result<()> {
 
     let user_repo = deve_sub_storage_sqlite::SqliteUserRepository::new(pool);
 
-    match deve_sub_application::auth::setup_admin(&user_repo, &args.username, &args.password).await
-    {
+    match deve_sub_application::auth::setup_admin(&user_repo, &args.username, &password).await {
         Ok(user) => {
             println!("Admin user created successfully:");
             println!("  id:       {}", user.id);
@@ -308,10 +327,60 @@ pub async fn user_init_admin(args: UserInitAdminArgs) -> Result<()> {
             Ok(())
         }
         Err(deve_sub_application::AuthError::AlreadyInitialized) => {
-            anyhow::bail!("admin user already exists — use the API or CLI to manage users");
+            bail!("admin user already exists — use the API or CLI to manage users");
         }
-        Err(e) => Err(anyhow::anyhow!(e)),
+        Err(e) => Err(anyhow!(e)),
     }
+}
+
+/// DS-AUD-028: keeps the admin password out of the process list by
+/// preferring stdin/env over `--password`.
+fn resolve_admin_password(args: &UserInitAdminArgs) -> Result<String> {
+    resolve_admin_password_with(args, |name: &str| std::env::var(name), read_stdin_line)
+}
+
+fn read_stdin_line() -> Result<String> {
+    let mut line = String::new();
+    io::stdin()
+        .lock()
+        .read_line(&mut line)
+        .context("failed to read password from stdin")?;
+    Ok(line)
+}
+
+fn resolve_admin_password_with<E, S>(
+    args: &UserInitAdminArgs,
+    env_lookup: E,
+    stdin_read: S,
+) -> Result<String>
+where
+    E: Fn(&str) -> Result<String, std::env::VarError>,
+    S: FnOnce() -> Result<String>,
+{
+    if args.password_stdin {
+        let line = stdin_read()?;
+        let pw = line.trim_end_matches(['\r', '\n']).to_string();
+        if pw.is_empty() {
+            bail!("no password read from stdin (stdin was empty)");
+        }
+        return Ok(pw);
+    }
+
+    if let Some(var) = &args.password_env {
+        return env_lookup(var)
+            .with_context(|| format!("failed to read password from env var `{var}`"));
+    }
+
+    if let Some(pw) = &args.password {
+        eprintln!(
+            "warning: --password is visible in the process list; prefer --password-stdin or --password-env"
+        );
+        return Ok(pw.clone());
+    }
+
+    Err(anyhow!(
+        "no password source provided; use one of --password, --password-stdin, or --password-env"
+    ))
 }
 
 pub async fn source_add(args: SourceAddArgs) -> Result<()> {
@@ -402,4 +471,165 @@ pub(crate) fn ensure_db_dir(db_path: &str) -> Result<()> {
         std::fs::create_dir_all(parent).context("failed to create database directory")?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    const NO_ENV: fn(&str) -> Result<String, std::env::VarError> =
+        |_| Err(std::env::VarError::NotPresent);
+    const EOF_STDIN: fn() -> Result<String> = || Ok(String::new());
+
+    /// DS-AUD-028: `--password-env` reads the password from the named
+    /// environment variable, keeping it out of the process list.
+    #[test]
+    fn password_env_reads_from_environment() {
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: None,
+            password_stdin: false,
+            password_env: Some("DEVE_SUB_TEST_ADMIN_PW_ENV".into()),
+            db_path: "data/deve-sub.db".into(),
+        };
+        let lookup = |name: &str| match name {
+            "DEVE_SUB_TEST_ADMIN_PW_ENV" => Ok("s3cret-from-env".to_string()),
+            _ => Err(std::env::VarError::NotPresent),
+        };
+
+        let resolved = resolve_admin_password_with(&args, lookup, EOF_STDIN).unwrap();
+        assert_eq!(resolved, "s3cret-from-env");
+    }
+
+    /// DS-AUD-028: when the named env var is missing, the CLI errors
+    /// instead of falling back to an empty password.
+    #[test]
+    fn password_env_missing_errors() {
+        let var_name = "DEVE_SUB_TEST_ADMIN_PW_MISSING";
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: None,
+            password_stdin: false,
+            password_env: Some(var_name.into()),
+            db_path: "data/deve-sub.db".into(),
+        };
+
+        let err = resolve_admin_password_with(&args, NO_ENV, EOF_STDIN).unwrap_err();
+        assert!(
+            err.to_string().contains(var_name),
+            "error should name the missing env var: {err}"
+        );
+    }
+
+    /// DS-AUD-028: when no password source is provided, the CLI errors
+    /// rather than silently using an empty password.
+    #[test]
+    fn password_no_source_errors() {
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: None,
+            password_stdin: false,
+            password_env: None,
+            db_path: "data/deve-sub.db".into(),
+        };
+
+        let err = resolve_admin_password_with(&args, NO_ENV, EOF_STDIN).unwrap_err();
+        assert!(
+            err.to_string().contains("no password source provided"),
+            "error should explain the missing source: {err}"
+        );
+    }
+
+    /// DS-AUD-028: the legacy `--password` argv form still works for
+    /// backward compatibility (with a warning to stderr).
+    #[test]
+    fn password_argv_legacy_works() {
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: Some("legacy-pw".into()),
+            password_stdin: false,
+            password_env: None,
+            db_path: "data/deve-sub.db".into(),
+        };
+
+        let resolved = resolve_admin_password_with(&args, NO_ENV, EOF_STDIN).unwrap();
+        assert_eq!(resolved, "legacy-pw");
+    }
+
+    /// DS-AUD-028: `--password-env` takes priority over `--password`.
+    #[test]
+    fn password_env_takes_priority_over_argv() {
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: Some("argv-value".into()),
+            password_stdin: false,
+            password_env: Some("DEVE_SUB_TEST_ADMIN_PW_PRIORITY".into()),
+            db_path: "data/deve-sub.db".into(),
+        };
+        let lookup = |name: &str| match name {
+            "DEVE_SUB_TEST_ADMIN_PW_PRIORITY" => Ok("env-value".to_string()),
+            _ => Err(std::env::VarError::NotPresent),
+        };
+
+        let resolved = resolve_admin_password_with(&args, lookup, EOF_STDIN).unwrap();
+        assert_eq!(resolved, "env-value");
+    }
+
+    /// DS-AUD-028: `--password-stdin` reads one line and strips the
+    /// trailing newline.
+    #[test]
+    fn password_stdin_reads_line() {
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: None,
+            password_stdin: true,
+            password_env: None,
+            db_path: "data/deve-sub.db".into(),
+        };
+        let stdin = || Ok("stdin-pw\n".to_string());
+
+        let resolved = resolve_admin_password_with(&args, NO_ENV, stdin).unwrap();
+        assert_eq!(resolved, "stdin-pw");
+    }
+
+    /// DS-AUD-028: `--password-stdin` takes priority over `--password-env`
+    /// and `--password`.
+    #[test]
+    fn password_stdin_takes_priority() {
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: Some("argv-value".into()),
+            password_stdin: true,
+            password_env: Some("DEVE_SUB_TEST_ADMIN_PW_STDIN".into()),
+            db_path: "data/deve-sub.db".into(),
+        };
+        let lookup = |name: &str| match name {
+            "DEVE_SUB_TEST_ADMIN_PW_STDIN" => Ok("env-value".to_string()),
+            _ => Err(std::env::VarError::NotPresent),
+        };
+        let stdin = || Ok("stdin-wins\n".to_string());
+
+        let resolved = resolve_admin_password_with(&args, lookup, stdin).unwrap();
+        assert_eq!(resolved, "stdin-wins");
+    }
+
+    /// DS-AUD-028: empty stdin (EOF) must error, not silently yield an
+    /// empty password.
+    #[test]
+    fn password_stdin_empty_errors() {
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: None,
+            password_stdin: true,
+            password_env: None,
+            db_path: "data/deve-sub.db".into(),
+        };
+
+        let err = resolve_admin_password_with(&args, NO_ENV, EOF_STDIN).unwrap_err();
+        assert!(
+            err.to_string().contains("stdin was empty"),
+            "error should explain empty stdin: {err}"
+        );
+    }
 }

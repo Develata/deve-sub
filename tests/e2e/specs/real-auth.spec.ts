@@ -61,18 +61,52 @@ test.describe('Real browser auth (DS-AUD-049)', () => {
     await expect(page.locator('aside')).toBeVisible({ timeout: 15000 });
   });
 
-  // DS-AUD-003: the frontend login handler treats any Ok(_) from the API as
-  // success and immediately calls on_success, even when the backend returned
-  // requires_2fa=true with a challenge_token and no session cookie. A 2FA-
-  // enabled admin is therefore pushed into the authenticated shell with no
-  // session, and every subsequent API call fails with 401.
+  // DS-AUD-003: the frontend login handler must transition to a
+  // TwoFactorChallenge stage when the backend returns requires_2fa=true,
+  // instead of calling on_success immediately (which would push the user
+  // into the authenticated shell with no session cookie).
   //
-  // This test is marked fixme until Phase C Slice 2 implements the
-  // Credentials -> TwoFactorChallenge -> Authenticated state machine.
-  test.fixme('2FA challenge is presented when admin has 2FA enabled (DS-AUD-003)', async () => {
-    // Phase C work: create a 2FA-enabled admin via API, login through the
-    // form with credentials, and assert a TOTP/recovery-code input step
-    // appears before the app shell. Currently the frontend has no 2FA UI at
-    // all (no i18n keys, no challenge handler, no /auth/login/2fa call).
+  // The seeded server's admin does not have 2FA enabled, so we mock the
+  // POST /auth/login response via page.route() to return requires_2fa=true
+  // with a challenge_token. This tests the frontend state machine directly.
+  test('2FA challenge is presented when login returns requires_2fa (DS-AUD-003)', async ({ page }) => {
+    await page.route('**/api/v1/auth/login', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          user: {
+            id: '01KZAAAAAAAAAAAAAAAAAAAA00',
+            username: 'admin',
+            role: 'admin',
+            enabled: true,
+            traffic_quota: 0,
+            two_factor_enabled: true,
+            created_at: '2025-01-01T00:00:00Z',
+          },
+          requires_2fa: true,
+          challenge_token: 'mock-challenge-token',
+        }),
+      });
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.locator('h1').filter({ hasText: /登录 Deve Sub|Sign in to Deve Sub/ }))
+      .toBeVisible({ timeout: 15000 });
+
+    await page.locator('input[type="text"]').first().fill('admin');
+    await page.locator('input[type="password"]').first().fill('TestPassword12345');
+    await page.locator('button').filter({ hasText: /^登录$|^Login$/ }).click();
+
+    // The 2FA challenge UI must appear — not the app shell.
+    await expect(page.locator('h1').filter({ hasText: /两步验证|Two-Factor Authentication/ }))
+      .toBeVisible({ timeout: 10000 });
+    await expect(page.locator('aside')).not.toBeVisible();
+
+    // A code input field and verify button must be present.
+    await expect(page.locator('input[type="text"]').first()).toBeVisible();
+    await expect(page.locator('button').filter({ hasText: /^验证$|^Verify$/ })).toBeVisible();
   });
 });

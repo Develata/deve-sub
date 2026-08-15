@@ -159,6 +159,12 @@ pub mod auth {
         pub initialized: bool,
     }
 
+    #[derive(Debug, Clone, Serialize)]
+    pub struct LoginTwoFactorRequest {
+        pub challenge_token: String,
+        pub code: String,
+    }
+
     pub async fn setup(username: &str, password: &str) -> Result<SetupAdminResponse, ApiError> {
         send(
             "POST",
@@ -193,6 +199,21 @@ pub mod auth {
 
     pub async fn status() -> Result<AuthStatusResponse, ApiError> {
         get("/auth/status").await
+    }
+
+    pub async fn login_2fa(
+        challenge_token: &str,
+        code: &str,
+    ) -> Result<LoginResponse, ApiError> {
+        send(
+            "POST",
+            "/auth/login/2fa",
+            Some(&LoginTwoFactorRequest {
+                challenge_token: challenge_token.to_string(),
+                code: code.to_string(),
+            }),
+        )
+        .await
     }
 }
 

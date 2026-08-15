@@ -17,15 +17,15 @@
 
 use std::collections::HashSet;
 
-use deve_sub_compatibility::ProfileKind;
+use deve_sub_compatibility::{ProfileKind, capability_for, check_group_type};
 use deve_sub_domain::source::NodePoolRepository;
 use deve_sub_domain::template::{
     GroupMember, ProxyGroup, TemplateRepository, TemplateVersionRepository,
 };
 use deve_sub_domain::{
     CacheKeyParams, GenerationCacheEntry, GenerationCacheRepository, GenerationError,
-    GenerationMode, GenerationRequest, GenerationResult, Node, PoolMetaRepository, SelectionMode,
-    TemplateVersion,
+    GenerationMode, GenerationRequest, GenerationResult, IncompatibleGroup, Node,
+    PoolMetaRepository, SelectionMode, TemplateVersion,
 };
 use deve_sub_emitter::{
     AssembledGroup, AssembledTemplate, emit_json, emit_mihomo_full, emit_shadowrocket,
@@ -373,6 +373,47 @@ async fn run_pipeline(
         return Err(TemplateAppError::NoCompatibleNodes);
     }
 
+    // WHY: check each proxy group's type against the profile capability
+    // matrix. Without this, a template with a `relay` group generated for
+    // sing-box (which rejects relay) would silently emit a malformed or
+    // dropped group (constraint #7: no silent dropping).
+    let cap = capability_for(profile);
+    let mut incompatible_groups: Vec<IncompatibleGroup> = Vec::new();
+    for spec_g in &doc.spec.proxy_groups {
+        if let Err(reason) = check_group_type(spec_g.group_type, &cap) {
+            incompatible_groups.push(IncompatibleGroup {
+                group_name: spec_g.name.clone(),
+                group_type: spec_g.group_type.to_string(),
+                reason: reason.to_string(),
+            });
+        }
+    }
+    if !incompatible_groups.is_empty() {
+        if mode == GenerationMode::Strict {
+            let names = incompatible_groups
+                .iter()
+                .map(|g| format!("{} ({})", g.group_name, g.group_type))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(TemplateAppError::Generation(
+                GenerationError::IncompatibleGroupTypes {
+                    count: incompatible_groups.len(),
+                    names,
+                    groups: incompatible_groups,
+                },
+            ));
+        }
+        for g in &incompatible_groups {
+            warnings.push(format!(
+                "group '{}': type {} incompatible with profile '{}': {}",
+                g.group_name,
+                g.group_type,
+                profile.as_kebab(),
+                g.reason
+            ));
+        }
+    }
+
     let groups = assemble_groups(&doc.spec.proxy_groups, &resolution.groups, &name_by_id);
 
     // WHY: profiles other than mihomo do not yet have full-template
@@ -414,12 +455,19 @@ async fn run_pipeline(
 }
 
 fn cached_result(cached: &GenerationCacheEntry) -> GenerationResult {
+    // WHY: the cache stores only `content`, not the CompatibilityReport.
+    // Returning empty `included_node_ids`/`excluded` without explanation
+    // would imply "zero nodes included, zero excluded" — a false report.
+    // The warning honestly states the report is unavailable from cache.
     GenerationResult {
         content: cached.content.clone(),
         profile: cached.profile.clone(),
         included_node_ids: Vec::new(),
         excluded: Vec::new(),
-        warnings: vec!["served from cache".to_owned()],
+        warnings: vec![
+            "served from cache".to_owned(),
+            "included/excluded report unavailable from cache".to_owned(),
+        ],
     }
 }
 
@@ -528,13 +576,33 @@ fn validate_output(content: &str, profile: ProfileKind) -> Result<(), TemplateAp
     }
     match profile {
         ProfileKind::Mihomo => {
-            serde_yaml::from_str::<serde_yaml::Value>(content)
-                .map_err(|_| TemplateAppError::EmptyOutput)?;
+            let v: serde_yaml::Value =
+                serde_yaml::from_str(content).map_err(|_| TemplateAppError::EmptyOutput)?;
+            let proxies = v.get("proxies").ok_or_else(|| {
+                TemplateAppError::InvalidStructure("missing 'proxies' key".into())
+            })?;
+            let arr = proxies.as_sequence().ok_or_else(|| {
+                TemplateAppError::InvalidStructure("'proxies' is not an array".into())
+            })?;
+            if arr.is_empty() {
+                return Err(TemplateAppError::InvalidStructure(
+                    "'proxies' array is empty".into(),
+                ));
+            }
         }
         ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray | ProfileKind::Json => {
-            serde_json::from_str::<serde_json::Value>(content)
-                .map_err(|_| TemplateAppError::EmptyOutput)?;
+            let v: serde_json::Value =
+                serde_json::from_str(content).map_err(|_| TemplateAppError::EmptyOutput)?;
+            if !v.is_array() && !v.is_object() {
+                return Err(TemplateAppError::InvalidStructure(
+                    "expected top-level array or object".into(),
+                ));
+            }
         }
+        // WHY: uri_list and shadowrocket are free-form line-oriented text.
+        // The only structural invariant is "has at least one non-empty line",
+        // which the `trim().is_empty()` check above already enforces; no
+        // further schema exists to validate.
         ProfileKind::Shadowrocket | ProfileKind::UriList => {}
     }
     Ok(())
@@ -573,6 +641,79 @@ mod tests {
     fn validate_output_skips_parse_for_uri_list() {
         assert!(validate_output("trojan://pw@host:443", ProfileKind::UriList).is_ok());
         assert!(validate_output("any non-empty text", ProfileKind::Shadowrocket).is_ok());
+    }
+
+    #[test]
+    fn validate_output_mihomo_missing_proxies_rejected() {
+        let yaml = "proxy-groups: []\nrules: []\n";
+        let err = validate_output(yaml, ProfileKind::Mihomo)
+            .expect_err("mihomo without proxies must fail structural validation");
+        assert!(
+            matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("proxies")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_output_mihomo_empty_proxies_array_rejected() {
+        let yaml = "proxies: []\n";
+        let err = validate_output(yaml, ProfileKind::Mihomo)
+            .expect_err("empty proxies array must fail");
+        assert!(
+            matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("empty")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_output_mihomo_proxies_not_array_rejected() {
+        let yaml = "proxies: notarray\n";
+        let err = validate_output(yaml, ProfileKind::Mihomo)
+            .expect_err("non-array proxies must fail");
+        assert!(
+            matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("not an array")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_output_json_scalar_rejected() {
+        let err = validate_output("\"just a string\"", ProfileKind::SingBox)
+            .expect_err("JSON scalar must fail structural validation");
+        assert!(
+            matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("array or object")),
+            "got {err:?}"
+        );
+        let err = validate_output("42", ProfileKind::Xray)
+            .expect_err("JSON number scalar must fail");
+        assert!(
+            matches!(err, TemplateAppError::InvalidStructure(_)),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_output_json_array_accepted() {
+        assert!(validate_output("[]", ProfileKind::SingBox).is_ok());
+        assert!(validate_output(r#"{"outbounds":[]}"#, ProfileKind::V2Ray).is_ok());
+    }
+
+    #[test]
+    fn validate_output_uri_list_only_blank_lines_rejected() {
+        let err = validate_output("   \n\n  \n", ProfileKind::UriList)
+            .expect_err("blank-only uri_list must fail");
+        assert!(
+            matches!(err, TemplateAppError::EmptyOutput),
+            "blank-only uri_list should be EmptyOutput, got {err:?}"
+        );
+        let err = validate_output("   \n\n  \n", ProfileKind::Shadowrocket)
+            .expect_err("blank-only shadowrocket must fail");
+        assert!(matches!(err, TemplateAppError::EmptyOutput), "got {err:?}");
+    }
+
+    #[test]
+    fn validate_output_uri_list_with_content_accepted() {
+        assert!(validate_output("trojan://a@b:1\ntrojan://c@d:2\n", ProfileKind::UriList).is_ok());
     }
 
     #[test]

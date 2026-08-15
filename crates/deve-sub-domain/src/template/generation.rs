@@ -145,12 +145,28 @@ impl std::fmt::Display for CompatibilityReport {
     }
 }
 
+/// A proxy group type incompatible with the target profile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncompatibleGroup {
+    pub group_name: String,
+    pub group_type: String,
+    pub reason: String,
+}
+
 /// Errors produced by the generation pipeline.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum GenerationError {
     /// Strict mode was requested and one or more nodes were incompatible.
     #[error("generation failed: {0} incompatible node(s)")]
     IncompatibleNodes(CompatibilityReport),
+    /// Strict mode was requested and one or more proxy group types were
+    /// incompatible with the target profile.
+    #[error("generation failed: {count} incompatible group type(s): {names}")]
+    IncompatibleGroupTypes {
+        count: usize,
+        names: String,
+        groups: Vec<IncompatibleGroup>,
+    },
 }
 
 #[cfg(test)]

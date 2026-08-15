@@ -63,10 +63,10 @@ pub use template::{
     API_VERSION, CacheKeyParams, ChainEdge, ChainGraph, ChainVertex, CompatibilityReport,
     CyclePath, ExcludedNode, FilterField, GenerationCacheEntry, GenerationCacheRepository,
     GenerationError, GenerationMode, GenerationRequest, GenerationResult, GroupMember,
-    GroupResolution, GroupType, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES, MissingNodeRef,
-    MissingReason, NodeFilterRule, NodeSelector, ProxyGroup, QuickGroupFilter, Rule, SelectionMode,
-    SortOrder, SubscriptionTemplate, TemplateDocument, TemplateError, TemplateMetadata,
-    TemplateRepository, TemplateResolution, TemplateSpec, TemplateVersion,
+    GroupResolution, GroupType, IncompatibleGroup, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES,
+    MissingNodeRef, MissingReason, NodeFilterRule, NodeSelector, ProxyGroup, QuickGroupFilter,
+    Rule, SelectionMode, SortOrder, SubscriptionTemplate, TemplateDocument, TemplateError,
+    TemplateMetadata, TemplateRepository, TemplateResolution, TemplateSpec, TemplateVersion,
     TemplateVersionRepository,
 };
 pub use tls::{CertificatePin, RealityConfig, TlsConfig};

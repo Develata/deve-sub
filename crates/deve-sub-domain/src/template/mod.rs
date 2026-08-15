@@ -21,7 +21,7 @@ pub use entity::{SubscriptionTemplate, TemplateVersion};
 pub use error::TemplateError;
 pub use generation::{
     CompatibilityReport, ExcludedNode, GenerationError, GenerationMode, GenerationRequest,
-    GenerationResult,
+    GenerationResult, IncompatibleGroup,
 };
 pub use ports::{TemplateRepository, TemplateVersionRepository};
 pub use selection::{GroupResolution, MissingNodeRef, MissingReason, TemplateResolution};

@@ -1,4 +1,5 @@
-//! DS-AUD-001 + DS-AUD-020 pipeline-level regression tests.
+//! DS-AUD-001 + DS-AUD-020 + DS-AUD-021 + DS-AUD-022 pipeline-level
+//! regression tests.
 //!
 //! Verifies:
 //! - generate() rejects a profile not declared in the template's
@@ -8,6 +9,11 @@
 //!   rules, dns, and tun when the template spec declares them.
 //! - Per-group sort_order (asc/desc) is applied to rendered members
 //!   (DS-AUD-020).
+//! - Cache-hit results honestly state "served from cache" and that the
+//!   included/excluded report is unavailable from cache, rather than
+//!   returning empty arrays that would imply "zero nodes" (DS-AUD-021).
+//! - Group types incompatible with the target profile are rejected in
+//!   strict mode and warned in lenient mode (DS-AUD-022).
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
@@ -366,5 +372,159 @@ async fn generate_applies_desc_sort_order_to_group_members() {
     assert!(
         charlie_pos < bravo_pos && bravo_pos < alpha_pos,
         "sortOrder: desc must order members reverse-alphabetically (DS-AUD-020)"
+    );
+}
+
+// WHY: xray's capability matrix only supports GroupType::Select. A url-test
+// group is incompatible and must be caught before emission.
+const SPEC_XRAY_URL_TEST_GROUP: &str = concat!(
+    "apiVersion: deve-sub.io/v1\n",
+    "kind: SubscriptionTemplate\n",
+    "\n",
+    "metadata:\n",
+    "  name: xray-url-test\n",
+    "  description: xray template with url-test group\n",
+    "  version: 1\n",
+    "\n",
+    "spec:\n",
+    "  targetProfiles:\n",
+    "    - xray\n",
+    "  variables: {}\n",
+    "  nodeSelector:\n",
+    "    mode: dynamic\n",
+    "  proxyGroups:\n",
+    "    - name: auto-select\n",
+    "      type: url-test\n",
+    "      members:\n",
+    "        - kind: node\n",
+    "          id: \"01KZAAAAAAAAAAAAAAAAAAAA00\"\n",
+    "      sortOrder: asc\n",
+    "  rules: []\n",
+    "  dns: {}\n",
+    "  tun: {}\n",
+    "  output: {}",
+);
+
+#[tokio::test]
+async fn generate_strict_mode_rejects_incompatible_group_type() {
+    let db = TestDb::new(SPEC_XRAY_URL_TEST_GROUP, "xray-url-test").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = GenerationRequest::new(db.template_id, "xray".to_owned(), GenerationMode::Strict);
+    let result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "strict mode must reject incompatible group type (DS-AUD-022)"
+    );
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("incompatible group type"),
+        "error must mention incompatible group type, got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn generate_lenient_mode_warns_on_incompatible_group_type() {
+    let db = TestDb::new(SPEC_XRAY_URL_TEST_GROUP, "xray-url-test-lenient").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_request(db.template_id, "xray");
+    let result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await
+    .expect("lenient mode must not error on incompatible group type");
+
+    let incompatible_warning = result
+        .warnings
+        .iter()
+        .find(|w| w.contains("incompatible") && w.contains("auto-select"));
+    assert!(
+        incompatible_warning.is_some(),
+        "lenient mode must warn about incompatible group 'auto-select', got warnings: {:?}",
+        result.warnings
+    );
+}
+
+#[tokio::test]
+async fn generate_cache_hit_returns_honest_cache_warnings() {
+    let db = TestDb::new(SPEC_FULL_TEMPLATE, "cache-hit").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_request(db.template_id, "mihomo");
+
+    let first = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request.clone(),
+    )
+    .await
+    .expect("first generate");
+
+    assert!(
+        !first.warnings.iter().any(|w| w == "served from cache"),
+        "first call must not be a cache hit"
+    );
+
+    let second = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await
+    .expect("second generate (cache hit)");
+
+    assert!(
+        second.warnings.iter().any(|w| w == "served from cache"),
+        "cache hit must honestly state 'served from cache' (DS-AUD-021), got warnings: {:?}",
+        second.warnings
+    );
+    assert!(
+        second
+            .warnings
+            .iter()
+            .any(|w| w == "included/excluded report unavailable from cache"),
+        "cache hit must state report is unavailable from cache (DS-AUD-021), got warnings: {:?}",
+        second.warnings
+    );
+    assert!(
+        second.included_node_ids.is_empty() && second.excluded.is_empty(),
+        "cache hit must not fabricate included/excluded data (DS-AUD-021)"
+    );
+    assert_eq!(
+        first.content, second.content,
+        "cache hit must return identical content"
     );
 }

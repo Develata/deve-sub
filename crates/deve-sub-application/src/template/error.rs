@@ -71,6 +71,12 @@ pub enum TemplateAppError {
     #[error("generated output is empty or invalid")]
     EmptyOutput,
 
+    /// The generated output parsed but failed structural validation for the
+    /// target profile (e.g. mihomo output missing the `proxies` array, JSON
+    /// profile emitting a scalar, uri_list with no lines).
+    #[error("generated output failed structural validation: {0}")]
+    InvalidStructure(String),
+
     /// No compatible nodes are available for generation. All resolved nodes
     /// were either excluded by the compatibility matrix or unavailable in the
     /// pool. Returning this error before cache mutation preserves the last

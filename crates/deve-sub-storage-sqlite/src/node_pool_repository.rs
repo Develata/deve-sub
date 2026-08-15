@@ -228,13 +228,16 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             }
 
             // Insert the source_item with the final parse status.
+            let raw_uri_encrypted = seal_json(self.master_key.as_deref(), &entry.raw_uri)?;
             sqlx::query(
-                "INSERT INTO source_items (id, snapshot_id, raw_uri, parse_status) \
-                 VALUES (?, ?, ?, ?)",
+                "INSERT INTO source_items \
+                 (id, snapshot_id, raw_uri, raw_uri_encrypted, parse_status) \
+                 VALUES (?, ?, ?, ?, ?)",
             )
             .bind(SourceItemId::new().to_string())
             .bind(input.snapshot.id.to_string())
             .bind(&entry.raw_uri)
+            .bind(&raw_uri_encrypted)
             .bind(final_status.to_string())
             .execute(&mut *tx)
             .await
@@ -243,13 +246,15 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             // Create a binding if this entry produced or matched a node.
             if let Some(node_id) = &node_id_opt {
                 sqlx::query(
-                    "INSERT INTO node_source_bindings (id, node_id, source_id, raw_uri) \
-                     VALUES (?, ?, ?, ?)",
+                    "INSERT INTO node_source_bindings \
+                     (id, node_id, source_id, raw_uri, raw_uri_encrypted) \
+                     VALUES (?, ?, ?, ?, ?)",
                 )
                 .bind(NodeSourceBindingId::new().to_string())
                 .bind(node_id)
                 .bind(input.source_id.to_string())
                 .bind(&entry.raw_uri)
+                .bind(&raw_uri_encrypted)
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| SourceError::Storage(e.to_string()))?;

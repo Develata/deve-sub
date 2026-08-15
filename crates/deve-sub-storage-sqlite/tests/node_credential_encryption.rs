@@ -247,3 +247,109 @@ async fn no_key_falls_back_to_plaintext() {
         "plaintext fallback must still expose original credentials"
     );
 }
+
+/// DS-AUD-027 (raw_uri surface): When a master key is configured, raw share
+/// URIs recorded in `source_items` and `node_source_bindings` are dual-written
+/// as secret envelopes alongside the plaintext column (transition window per
+/// ADR-0007 Phase 2). Envelopes must have the v1: prefix and must not leak
+/// the original password.
+#[tokio::test]
+async fn raw_uri_encrypted_in_items_and_bindings() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let key = Arc::new(MasterKey::from_bytes(&[0x42; 32]));
+    let pool_repo = SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&key));
+
+    let source = make_source("test-source");
+    source_repo.create(&source).await.expect("create source");
+
+    let node = trojan_node(TROJAN);
+    let entries = [entry(node)];
+    let snapshot = make_snapshot(source.id, 1, 1);
+
+    pool_repo
+        .reconcile(ReconcileInput {
+            source_id: source.id,
+            snapshot: &snapshot,
+            entries: &entries,
+        })
+        .await
+        .expect("reconcile");
+
+    let item_row: (Option<String>,) =
+        sqlx::query_as("SELECT raw_uri_encrypted FROM source_items LIMIT 1")
+            .fetch_one(&db.pool)
+            .await
+            .expect("fetch item");
+    let item_enc = item_row
+        .0
+        .expect("source_items.raw_uri_encrypted populated");
+    assert!(item_enc.starts_with("v1:"));
+    assert!(
+        !item_enc.contains("TEST_PASSWORD"),
+        "source_items envelope must not leak plaintext"
+    );
+
+    let binding_row: (Option<String>,) =
+        sqlx::query_as("SELECT raw_uri_encrypted FROM node_source_bindings LIMIT 1")
+            .fetch_one(&db.pool)
+            .await
+            .expect("fetch binding");
+    let binding_enc = binding_row
+        .0
+        .expect("node_source_bindings.raw_uri_encrypted populated");
+    assert!(binding_enc.starts_with("v1:"));
+    assert!(
+        !binding_enc.contains("TEST_PASSWORD"),
+        "node_source_bindings envelope must not leak plaintext"
+    );
+
+    let (plain_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM source_items WHERE raw_uri IS NOT NULL")
+            .fetch_one(&db.pool)
+            .await
+            .expect("count plaintext");
+    assert_eq!(
+        plain_count, 1,
+        "plaintext raw_uri retained for transition window"
+    );
+}
+
+/// DS-AUD-027 (raw_uri surface): Without a master key, raw_uri is written
+/// only to the plaintext column; the encrypted column stays NULL.
+#[tokio::test]
+async fn raw_uri_no_key_leaves_encrypted_null() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+
+    let source = make_source("test-source");
+    source_repo.create(&source).await.expect("create source");
+
+    let node = trojan_node(TROJAN);
+    let entries = [entry(node)];
+    let snapshot = make_snapshot(source.id, 1, 1);
+
+    pool_repo
+        .reconcile(ReconcileInput {
+            source_id: source.id,
+            snapshot: &snapshot,
+            entries: &entries,
+        })
+        .await
+        .expect("reconcile");
+
+    let (item_null,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM source_items WHERE raw_uri_encrypted IS NULL")
+            .fetch_one(&db.pool)
+            .await
+            .expect("count item null");
+    assert_eq!(item_null, 1);
+
+    let (binding_null,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM node_source_bindings WHERE raw_uri_encrypted IS NULL")
+            .fetch_one(&db.pool)
+            .await
+            .expect("count binding null");
+    assert_eq!(binding_null, 1);
+}

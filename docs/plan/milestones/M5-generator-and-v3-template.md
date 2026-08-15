@@ -174,7 +174,8 @@ for fixed selections.
 GenerationRequest
   → resolve NodeSelection
       dynamic: apply filters to pool → NodeSet
-      fixed: lookup nodeIds at stored revision → NodeSet
+      fixed: lookup nodeIds against the live pool (node_revision is
+             advisory metadata, not an enforcement point) → NodeSet
   → apply NodeOverride (merge upstream + manual)
   → check compatibility (ProfileCapability per node)
       compatible nodes → keep
@@ -183,8 +184,9 @@ GenerationRequest
   → sort + dedup (by sort key, then endpoint+protocol)
   → resolve chain graph (expand relay groups, detect cycles)
   → assemble ProxyGroups (populate members, apply quick-group filters)
-  → apply template (rules, dns, tun, output config)
-  → emit to target profile format
+  → assemble template IR (nodes + groups + rules + dns + tun + output)
+  → emit to target profile format (full IR for mihomo; proxy-only for
+    other profiles, with a warning when groups/rules/dns/tun are present)
   → validate output (non-empty, well-formed; zero compatible nodes → error)
   → cache lookup (key = hash of request params)
       hit: return cached content

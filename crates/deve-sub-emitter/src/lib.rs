@@ -30,7 +30,10 @@ mod vless_reality;
 mod vmess;
 mod wireguard;
 
-pub use container::{emit_mihomo, emit_shadowrocket, emit_singbox, emit_v2ray, emit_xray};
+pub use container::{
+    AssembledGroup, AssembledTemplate, emit_mihomo, emit_mihomo_full, emit_shadowrocket,
+    emit_singbox, emit_v2ray, emit_xray,
+};
 pub use error::EmitError;
 pub use json::emit_json;
 

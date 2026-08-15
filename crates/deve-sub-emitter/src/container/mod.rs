@@ -8,6 +8,7 @@
 //! See `docs/plan/milestones/M5-generator-and-v3-template.md` §"Container
 //! emitters".
 
+pub mod ir;
 pub mod mihomo;
 pub mod singbox;
 pub mod v2ray;
@@ -17,9 +18,24 @@ use deve_sub_domain::Node;
 
 use crate::error::EmitError;
 
-/// Emit a Mihomo (Clash Meta) YAML document.
+pub use ir::{AssembledGroup, AssembledTemplate};
+
+/// Emit a Mihomo (Clash Meta) YAML document with only proxy entries (no
+/// proxy-groups, rules, dns, or tun).
+///
+/// For the full template document (proxies + proxy-groups + rules + dns +
+/// tun), use [`emit_mihomo_full`].
 pub fn emit_mihomo(nodes: &[Node]) -> Result<String, EmitError> {
     mihomo::emit(nodes)
+}
+
+/// Emit a full Mihomo (Clash Meta) YAML document from an assembled template:
+/// proxies, proxy-groups, rules, dns, and tun sections.
+///
+/// Pass groups/rules/dns/tun via [`AssembledTemplate`] so the emitter maps
+/// them to the target document instead of dropping them.
+pub fn emit_mihomo_full(template: &AssembledTemplate) -> Result<String, EmitError> {
+    mihomo::emit_full(template)
 }
 
 /// Emit a sing-box JSON document.

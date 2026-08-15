@@ -33,6 +33,7 @@ pub fn sample_nodes() -> Vec<Node> {
 ///
 /// WHY: xray/v2ray do not support Hysteria2 or TUIC v5; the compatibility
 /// layer must exclude them before the emitter sees them (constraint #7).
+#[allow(dead_code)]
 pub fn compatible_nodes(profile: deve_sub_compatibility::ProfileKind) -> Vec<Node> {
     let cap = deve_sub_compatibility::capability_for(profile);
     sample_nodes()

@@ -5,10 +5,11 @@
 //! dns) is assembled in Slice 5.
 
 use deve_sub_domain::{
-    Authentication, Node, ProtocolConfig, ProtocolKind, SnellObfsMode, Transport, TransportKind,
-    XhttpMode,
+    Authentication, GroupType, Node, ProtocolConfig, ProtocolKind, SnellObfsMode, Transport,
+    TransportKind, XhttpMode,
 };
 
+use crate::container::ir::AssembledTemplate;
 use crate::error::EmitError;
 
 pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
@@ -18,6 +19,136 @@ pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
         emit_proxy(node, &mut lines)?;
     }
     Ok(lines.join("\n"))
+}
+
+pub fn emit_full(template: &AssembledTemplate) -> Result<String, EmitError> {
+    let mut sections: Vec<String> = Vec::new();
+
+    let mut proxy_lines = Vec::new();
+    proxy_lines.push("proxies:".to_owned());
+    for node in &template.nodes {
+        emit_proxy(node, &mut proxy_lines)?;
+    }
+    sections.push(proxy_lines.join("\n"));
+
+    if !template.groups.is_empty() {
+        sections.push(emit_groups(&template.groups)?);
+    }
+
+    if !template.rules.is_empty() {
+        sections.push(emit_rules(&template.rules)?);
+    }
+
+    if !template.dns.is_null() {
+        sections.push(emit_json_block("dns", &template.dns)?);
+    }
+
+    if !template.tun.is_null() {
+        sections.push(emit_json_block("tun", &template.tun)?);
+    }
+
+    Ok(sections.join("\n"))
+}
+
+/// Escape a string for a YAML double-quoted scalar.
+///
+/// WHY: mihomo proxy fields (name, password, sni, path, host) are
+/// user-controlled and may contain `"`, `\`, or control characters. Emitting
+/// them raw into a double-quoted YAML scalar produces invalid YAML or allows
+/// field injection. This helper escapes per YAML 1.1 double-quoted rules.
+fn yaml_dq(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\0' => out.push_str("\\0"),
+            c if c.is_control() => {
+                out.push_str(&format!("\\u{ch:04X}", ch = c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn emit_groups(groups: &[crate::container::ir::AssembledGroup]) -> Result<String, EmitError> {
+    let mut lines = Vec::new();
+    lines.push("proxy-groups:".to_owned());
+    for g in groups {
+        let type_str = match g.group_type {
+            GroupType::Select => "select",
+            GroupType::UrlTest => "url-test",
+            GroupType::Fallback => "fallback",
+            GroupType::LoadBalance => "load-balance",
+            GroupType::Relay => "relay",
+            GroupType::Direct => "direct",
+            GroupType::Reject => "reject",
+        };
+        lines.push(format!("  - name: {}", yaml_dq(&g.name)));
+        lines.push(format!("    type: {type_str}"));
+        if !g.members.is_empty() {
+            lines.push("    proxies:".to_owned());
+            for m in &g.members {
+                lines.push(format!("      - {}", yaml_dq(m)));
+            }
+        }
+    }
+    Ok(lines.join("\n"))
+}
+
+fn emit_rules(rules: &[serde_json::Value]) -> Result<String, EmitError> {
+    let mut lines = Vec::new();
+    lines.push("rules:".to_owned());
+    for rule in rules {
+        let yaml = json_to_yaml_line(rule)?;
+        let indented = yaml
+            .lines()
+            .enumerate()
+            .map(|(i, l)| {
+                if i == 0 {
+                    format!("  - {l}")
+                } else {
+                    format!("    {l}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        lines.push(indented);
+    }
+    Ok(lines.join("\n"))
+}
+
+fn emit_json_block(key: &str, value: &serde_json::Value) -> Result<String, EmitError> {
+    let yaml =
+        serde_yaml::to_string(value).map_err(|e| EmitError::Encode(format!("serde_yaml: {e}")))?;
+    // WHY: serde_yaml emits a leading "---\n" document marker and column-0
+    // content; we strip the marker and re-indent under the section key.
+    let body = yaml
+        .strip_prefix("---\n")
+        .unwrap_or(&yaml)
+        .trim_end_matches('\n');
+    let indented = body
+        .lines()
+        .map(|l| format!("  {l}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(format!("{key}:\n{indented}"))
+}
+
+fn json_to_yaml_line(value: &serde_json::Value) -> Result<String, EmitError> {
+    let yaml =
+        serde_yaml::to_string(value).map_err(|e| EmitError::Encode(format!("serde_yaml: {e}")))?;
+    Ok(yaml
+        .strip_prefix("---\n")
+        .unwrap_or(&yaml)
+        .trim_end()
+        .to_owned())
 }
 
 fn emit_proxy(node: &Node, lines: &mut Vec<String>) -> Result<(), EmitError> {
@@ -46,7 +177,11 @@ fn emit_proxy(node: &Node, lines: &mut Vec<String>) -> Result<(), EmitError> {
 }
 
 fn yaml_entry(name: &str, ptype: &str, server: &str, port: u16) -> String {
-    format!("  - name: \"{name}\"\n    type: {ptype}\n    server: {server}\n    port: {port}")
+    format!(
+        "  - name: {}\n    type: {ptype}\n    server: {}\n    port: {port}",
+        yaml_dq(name),
+        yaml_dq(server),
+    )
 }
 
 fn emit_trojan(
@@ -61,7 +196,7 @@ fn emit_trojan(
         _ => return Err(EmitError::MissingField("trojan password")),
     };
     let mut entry = yaml_entry(name, "trojan", server, port);
-    entry.push_str(&format!("\n    password: \"{password}\""));
+    entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
     push_tls(node, &mut entry);
     push_network(node, &mut entry);
     lines.push(entry);
@@ -84,8 +219,9 @@ fn emit_ss(
         _ => return Err(EmitError::MissingField("ss method")),
     };
     let entry = format!(
-        "{}\n    cipher: {method}\n    password: \"{password}\"",
-        yaml_entry(name, "ss", server, port)
+        "{}\n    cipher: {method}\n    password: {}",
+        yaml_entry(name, "ss", server, port),
+        yaml_dq(password),
     );
     lines.push(entry);
     Ok(())
@@ -103,7 +239,7 @@ fn emit_vmess(
         _ => return Err(EmitError::MissingField("vmess uuid")),
     };
     let mut entry = yaml_entry(name, "vmess", server, port);
-    entry.push_str(&format!("\n    uuid: \"{uuid}\""));
+    entry.push_str(&format!("\n    uuid: {}", yaml_dq(uuid)));
     if let ProtocolConfig::VMess(cfg) = &node.config {
         if let Some(aid) = cfg.alter_id {
             entry.push_str(&format!("\n    alterId: {aid}"));
@@ -132,7 +268,7 @@ fn emit_vless(
         _ => return Err(EmitError::MissingField("vless uuid")),
     };
     let mut entry = yaml_entry(name, "vless", server, port);
-    entry.push_str(&format!("\n    uuid: \"{uuid}\""));
+    entry.push_str(&format!("\n    uuid: {}", yaml_dq(uuid)));
     if let ProtocolConfig::VlessReality(cfg) = &node.config
         && let Some(ref flow) = cfg.flow
     {
@@ -156,7 +292,7 @@ fn emit_hysteria2(
         _ => return Err(EmitError::MissingField("hysteria2 password")),
     };
     let mut entry = yaml_entry(name, "hysteria2", server, port);
-    entry.push_str(&format!("\n    password: \"{password}\""));
+    entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
     push_tls(node, &mut entry);
     lines.push(entry);
     Ok(())
@@ -174,8 +310,8 @@ fn emit_tuic_v5(
         _ => return Err(EmitError::MissingField("tuic v5 uuid+password")),
     };
     let mut entry = yaml_entry(name, "tuic", server, port);
-    entry.push_str(&format!("\n    uuid: \"{uuid}\""));
-    entry.push_str(&format!("\n    password: \"{password}\""));
+    entry.push_str(&format!("\n    uuid: {}", yaml_dq(uuid)));
+    entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
     push_tls(node, &mut entry);
     lines.push(entry);
     Ok(())
@@ -193,7 +329,7 @@ fn emit_wireguard(
         _ => return Err(EmitError::MissingField("wireguard config")),
     };
     let mut entry = yaml_entry(name, "wireguard", server, port);
-    entry.push_str(&format!("\n    private-key: \"{}\"", cfg.private_key));
+    entry.push_str(&format!("\n    private-key: {}", yaml_dq(&cfg.private_key)));
 
     // Mihomo splits WireGuard interface addresses into `ip` (IPv4) and
     // `ipv6` (IPv6), each a single string. Emit by simple colon heuristic.
@@ -201,10 +337,10 @@ fn emit_wireguard(
         let v4 = cfg.address.iter().find(|a| !a.contains(':'));
         let v6 = cfg.address.iter().find(|a| a.contains(':'));
         if let Some(ip) = v4 {
-            entry.push_str(&format!("\n    ip: \"{ip}\""));
+            entry.push_str(&format!("\n    ip: {}", yaml_dq(ip)));
         }
         if let Some(ipv6) = v6 {
-            entry.push_str(&format!("\n    ipv6: \"{ipv6}\""));
+            entry.push_str(&format!("\n    ipv6: {}", yaml_dq(ipv6)));
         }
     }
     if let Some(mtu) = cfg.mtu {
@@ -214,24 +350,23 @@ fn emit_wireguard(
         entry.push_str(&format!("\n    workers: {workers}"));
     }
     if !cfg.dns.is_empty() {
-        let dns: Vec<String> = cfg.dns.iter().map(|d| format!("\"{d}\"")).collect();
+        let dns: Vec<String> = cfg.dns.iter().map(|d| yaml_dq(d)).collect();
         entry.push_str(&format!("\n    dns: [{}]", dns.join(", ")));
     }
 
     if let Some(peer) = cfg.peers.first() {
         entry.push_str("\n    peers:");
-        entry.push_str(&format!("\n      - server: {server}"));
+        entry.push_str(&format!("\n      - server: {}", yaml_dq(server)));
         entry.push_str(&format!("\n        port: {port}"));
-        entry.push_str(&format!("\n        public-key: \"{}\"", peer.public_key));
+        entry.push_str(&format!(
+            "\n        public-key: {}",
+            yaml_dq(&peer.public_key)
+        ));
         if let Some(ref psk) = peer.pre_shared_key {
-            entry.push_str(&format!("\n        pre-shared-key: \"{psk}\""));
+            entry.push_str(&format!("\n        pre-shared-key: {}", yaml_dq(psk)));
         }
         if !peer.allowed_ips.is_empty() {
-            let ips: Vec<String> = peer
-                .allowed_ips
-                .iter()
-                .map(|ip| format!("\"{ip}\""))
-                .collect();
+            let ips: Vec<String> = peer.allowed_ips.iter().map(|ip| yaml_dq(ip)).collect();
             entry.push_str(&format!("\n        allowed-ips: [{}]", ips.join(", ")));
         }
         if let Some(reserved) = peer.reserved {
@@ -268,7 +403,7 @@ fn emit_anytls(
         _ => return Err(EmitError::MissingField("anytls config")),
     };
     let mut entry = yaml_entry(name, "anytls", server, port);
-    entry.push_str(&format!("\n    password: \"{password}\""));
+    entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
     push_tls(node, &mut entry);
     if let Some(d) = cfg.idle_session_check_interval {
         entry.push_str(&format!(
@@ -305,7 +440,7 @@ fn emit_snell(
         _ => return Err(EmitError::MissingField("snell config")),
     };
     let mut entry = yaml_entry(name, "snell", server, port);
-    entry.push_str(&format!("\n    psk: \"{psk}\""));
+    entry.push_str(&format!("\n    psk: {}", yaml_dq(psk)));
     entry.push_str(&format!("\n    version: {}", cfg.version.as_u32()));
     if let Some(supported) = node.udp.supported {
         entry.push_str(&format!("\n    udp: {supported}"));
@@ -323,16 +458,16 @@ fn emit_snell(
         };
         entry.push_str(&format!("\n    obfs-opts:\n      mode: {mode_str}"));
         if let Some(ref host) = obfs.host {
-            entry.push_str(&format!("\n      host: \"{host}\""));
+            entry.push_str(&format!("\n      host: {}", yaml_dq(host)));
         }
         if let Some(ref pw) = obfs.password {
-            entry.push_str(&format!("\n      password: \"{pw}\""));
+            entry.push_str(&format!("\n      password: {}", yaml_dq(pw)));
         }
         if let Some(v) = obfs.version {
             entry.push_str(&format!("\n      version: {v}"));
         }
         if !obfs.alpn.is_empty() {
-            let alpn: Vec<String> = obfs.alpn.iter().map(|a| format!("\"{a}\"")).collect();
+            let alpn: Vec<String> = obfs.alpn.iter().map(|a| yaml_dq(a)).collect();
             entry.push_str(&format!("\n      alpn: [{}]", alpn.join(", ")));
         }
     }
@@ -383,7 +518,6 @@ fn emit_shadowtls(
 
     let mut entry = inner_entry;
 
-    // Inject ShadowTLS obfs layer based on inner protocol type.
     match cfg.inner_protocol {
         ProtocolKind::Shadowsocks => {
             // ss uses `plugin: shadow-tls` + `plugin-opts`.
@@ -391,12 +525,12 @@ fn emit_shadowtls(
             entry.push_str("\n    plugin-opts:");
             entry.push_str(&format!("\n      version: {}", cfg.version.as_u32()));
             if let Some(ref pw) = cfg.password {
-                entry.push_str(&format!("\n      password: \"{pw}\""));
+                entry.push_str(&format!("\n      password: {}", yaml_dq(pw)));
             }
             if let Some(ref tls) = node.tls
                 && let Some(ref sni) = tls.server_name
             {
-                entry.push_str(&format!("\n      host: \"{sni}\""));
+                entry.push_str(&format!("\n      host: {}", yaml_dq(sni)));
             }
         }
         ProtocolKind::Snell => {
@@ -405,12 +539,12 @@ fn emit_shadowtls(
             entry.push_str("\n      mode: shadow-tls");
             entry.push_str(&format!("\n      version: {}", cfg.version.as_u32()));
             if let Some(ref pw) = cfg.password {
-                entry.push_str(&format!("\n      password: \"{pw}\""));
+                entry.push_str(&format!("\n      password: {}", yaml_dq(pw)));
             }
             if let Some(ref tls) = node.tls
                 && let Some(ref sni) = tls.server_name
             {
-                entry.push_str(&format!("\n      host: \"{sni}\""));
+                entry.push_str(&format!("\n      host: {}", yaml_dq(sni)));
             }
         }
         ProtocolKind::Vless | ProtocolKind::Trojan | ProtocolKind::VMess | ProtocolKind::AnyTls => {
@@ -418,12 +552,12 @@ fn emit_shadowtls(
             entry.push_str("\n    shadow-tls-opts:");
             entry.push_str(&format!("\n      version: {}", cfg.version.as_u32()));
             if let Some(ref pw) = cfg.password {
-                entry.push_str(&format!("\n      password: \"{pw}\""));
+                entry.push_str(&format!("\n      password: {}", yaml_dq(pw)));
             }
             if let Some(ref tls) = node.tls
                 && let Some(ref sni) = tls.server_name
             {
-                entry.push_str(&format!("\n      sni: \"{sni}\""));
+                entry.push_str(&format!("\n      sni: {}", yaml_dq(sni)));
             }
             // WHY: camouflage TLS fields (skip-cert-verify, alpn) are emitted
             // at top-level via push_tls, since mihomo reads them there for
@@ -447,13 +581,13 @@ fn push_tls(node: &Node, entry: &mut String) {
             entry.push_str("\n    tls: true");
         }
         if let Some(ref sni) = tls.server_name {
-            entry.push_str(&format!("\n    sni: {sni}"));
+            entry.push_str(&format!("\n    sni: {}", yaml_dq(sni)));
         }
         if let Some(skip) = tls.skip_cert_verify {
             entry.push_str(&format!("\n    skip-cert-verify: {skip}"));
         }
         if !tls.alpn.is_empty() {
-            let alpn: Vec<String> = tls.alpn.iter().map(|a| format!("\"{a}\"")).collect();
+            let alpn: Vec<String> = tls.alpn.iter().map(|a| yaml_dq(a)).collect();
             entry.push_str(&format!("\n    alpn: [{}]", alpn.join(", ")));
         }
     }
@@ -481,19 +615,20 @@ fn push_transport_opts(transport: &Transport, entry: &mut String) {
     match transport.kind {
         TransportKind::Ws | TransportKind::HttpUpgrade => {
             if let Some(ref path) = transport.path {
-                entry.push_str(&format!("\n    ws-opts:\n      path: \"{path}\""));
+                entry.push_str(&format!("\n    ws-opts:\n      path: {}", yaml_dq(path)));
             }
         }
         TransportKind::Grpc => {
             if let Some(ref path) = transport.path {
                 entry.push_str(&format!(
-                    "\n    grpc-opts:\n      grpc-service-name: \"{path}\""
+                    "\n    grpc-opts:\n      grpc-service-name: {}",
+                    yaml_dq(path)
                 ));
             }
         }
         TransportKind::H2 => {
             if let Some(ref path) = transport.path {
-                entry.push_str(&format!("\n    h2-opts:\n      path: \"{path}\""));
+                entry.push_str(&format!("\n    h2-opts:\n      path: {}", yaml_dq(path)));
             }
         }
         TransportKind::Xhttp => {
@@ -504,10 +639,10 @@ fn push_transport_opts(transport: &Transport, entry: &mut String) {
             if has_path || has_host || has_non_default_mode {
                 entry.push_str("\n    xhttp-opts:");
                 if let Some(ref path) = transport.path {
-                    entry.push_str(&format!("\n      path: \"{path}\""));
+                    entry.push_str(&format!("\n      path: {}", yaml_dq(path)));
                 }
                 if let Some(ref host) = transport.host {
-                    entry.push_str(&format!("\n      host: \"{host}\""));
+                    entry.push_str(&format!("\n      host: {}", yaml_dq(host)));
                 }
                 if has_non_default_mode {
                     entry.push_str(&format!("\n      mode: {}", mode.as_str()));

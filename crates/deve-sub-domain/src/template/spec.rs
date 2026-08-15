@@ -146,7 +146,7 @@ pub enum SortOrder {
 #[serde(rename_all = "camelCase")]
 pub struct NodeSelector {
     /// `dynamic` re-evaluates filters at generation time; `fixed` pins a
-    /// snapshot of node IDs at the stored pool revision.
+    /// set of node IDs.
     #[serde(rename = "mode")]
     pub mode: SelectionMode,
     /// Filters for dynamic mode. Ignored in fixed mode.
@@ -157,6 +157,13 @@ pub struct NodeSelector {
     pub node_ids: Vec<NodeId>,
     /// Pool revision captured at save time for fixed mode. `0` in dynamic
     /// mode.
+    ///
+    /// WHY: this field is advisory metadata, not an enforcement point. Fixed
+    /// mode resolves `node_ids` against the live pool at generation time
+    /// without verifying the revision matches; a node that still exists and
+    /// is active is included regardless of how the pool has changed since
+    /// save. The revision is retained for audit/display and future
+    /// staleness detection, but does not gate generation.
     #[serde(default)]
     pub node_revision: u64,
 }
@@ -168,7 +175,8 @@ pub enum SelectionMode {
     /// Re-evaluate filters against the live pool at each generation.
     #[default]
     Dynamic,
-    /// Use the pinned node IDs at the stored pool revision.
+    /// Use the pinned node IDs, resolved against the live pool at
+    /// generation time. `node_revision` is advisory only.
     Fixed,
 }
 

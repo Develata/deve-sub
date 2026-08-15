@@ -19,14 +19,17 @@ use std::collections::HashSet;
 
 use deve_sub_compatibility::ProfileKind;
 use deve_sub_domain::source::NodePoolRepository;
-use deve_sub_domain::template::{TemplateRepository, TemplateVersionRepository};
+use deve_sub_domain::template::{
+    GroupMember, ProxyGroup, TemplateRepository, TemplateVersionRepository,
+};
 use deve_sub_domain::{
     CacheKeyParams, GenerationCacheEntry, GenerationCacheRepository, GenerationError,
     GenerationMode, GenerationRequest, GenerationResult, Node, PoolMetaRepository, SelectionMode,
     TemplateVersion,
 };
 use deve_sub_emitter::{
-    emit_json, emit_mihomo, emit_shadowrocket, emit_singbox, emit_uri_list, emit_v2ray, emit_xray,
+    AssembledGroup, AssembledTemplate, emit_json, emit_mihomo_full, emit_shadowrocket,
+    emit_singbox, emit_uri_list, emit_v2ray, emit_xray,
 };
 use deve_sub_kernel::{GenerationCacheId, NodeId, Revision, TemplateId};
 
@@ -241,6 +244,19 @@ async fn resolve_context(
     let profile = ProfileKind::from_kebab(&request.profile)
         .ok_or_else(|| TemplateAppError::UnknownProfile(request.profile.clone()))?;
 
+    // WHY: validate the requested profile is declared in the template's
+    // targetProfiles. Without this, a template authored for mihomo-only
+    // could be generated for sing-box, silently producing a proxy-only
+    // document that drops the template's groups/rules/dns/tun (constraint
+    // #7: no silent dropping).
+    if !doc.spec.target_profiles.is_empty() && !doc.spec.target_profiles.contains(&request.profile)
+    {
+        return Err(TemplateAppError::InvalidInput(format!(
+            "profile '{}' is not in template target_profiles {:?}",
+            request.profile, doc.spec.target_profiles
+        )));
+    }
+
     let pool_revision = pool_meta_repo
         .get_revision()
         .await
@@ -340,6 +356,12 @@ async fn run_pipeline(
     }
 
     sort_and_dedup(&mut nodes);
+
+    let name_by_id: std::collections::HashMap<NodeId, String> = nodes
+        .iter()
+        .map(|(n, _)| (n.id, n.display_name.clone()))
+        .collect();
+
     let node_refs: Vec<Node> = nodes.into_iter().map(|(n, _)| n).collect();
 
     // WHY: returning an error here — before `emit` and before any cache
@@ -351,7 +373,34 @@ async fn run_pipeline(
         return Err(TemplateAppError::NoCompatibleNodes);
     }
 
-    let content = emit(profile, &node_refs)?;
+    let groups = assemble_groups(&doc.spec.proxy_groups, &resolution.groups, &name_by_id);
+
+    // WHY: profiles other than mihomo do not yet have full-template
+    // emitters. Emitting only nodes would silently drop the template's
+    // groups/rules/dns/tun (constraint #7). Warn so the user knows the
+    // output is proxy-only; mihomo gets the full document.
+    if profile != ProfileKind::Mihomo
+        && (!groups.is_empty()
+            || !doc.spec.rules.is_empty()
+            || !doc.spec.dns.is_null()
+            || !doc.spec.tun.is_null())
+    {
+        warnings.push(format!(
+            "profile '{}' does not yet emit groups/rules/dns/tun; output is proxy-only",
+            profile.as_kebab()
+        ));
+    }
+
+    let template = AssembledTemplate {
+        nodes: node_refs,
+        groups,
+        rules: doc.spec.rules.iter().map(|r| r.value.clone()).collect(),
+        dns: doc.spec.dns.clone(),
+        tun: doc.spec.tun.clone(),
+        output: doc.spec.output.clone(),
+    };
+
+    let content = emit(profile, &template)?;
 
     validate_output(&content, profile)?;
 
@@ -389,15 +438,86 @@ fn sort_and_dedup(nodes: &mut Vec<(Node, i64)>) {
     nodes.retain(|(n, _)| seen.insert(n.id));
 }
 
-fn emit(profile: ProfileKind, nodes: &[Node]) -> Result<String, TemplateAppError> {
+/// Resolve proxy group specs into assembled groups with display-name members.
+fn assemble_groups(
+    spec_groups: &[ProxyGroup],
+    resolutions: &[deve_sub_domain::template::GroupResolution],
+    name_by_id: &std::collections::HashMap<NodeId, String>,
+) -> Vec<AssembledGroup> {
+    let res_by_name: std::collections::HashMap<&str, &deve_sub_domain::template::GroupResolution> =
+        resolutions
+            .iter()
+            .map(|r| (r.group_name.as_str(), r))
+            .collect();
+
+    spec_groups
+        .iter()
+        .map(|spec| {
+            let res = res_by_name.get(spec.name.as_str());
+            let mut members: Vec<String> = Vec::new();
+            let mut seen: HashSet<String> = HashSet::new();
+
+            for member in &spec.members {
+                match member {
+                    GroupMember::Node { id } => {
+                        if let Some(name) = name_by_id.get(id)
+                            && seen.insert(name.clone())
+                        {
+                            members.push(name.clone());
+                        }
+                    }
+                    GroupMember::Group { name } => {
+                        if seen.insert(name.clone()) {
+                            members.push(name.clone());
+                        }
+                    }
+                }
+            }
+
+            if let Some(r) = res {
+                for id in r
+                    .quick_group_node_ids
+                    .iter()
+                    .chain(r.explicit_node_ids.iter())
+                {
+                    if let Some(name) = name_by_id.get(id)
+                        && seen.insert(name.clone())
+                    {
+                        members.push(name.clone());
+                    }
+                }
+            }
+
+            if let Some(sort) = spec.sort_order {
+                match sort {
+                    deve_sub_domain::SortOrder::Asc | deve_sub_domain::SortOrder::Latency => {
+                        members.sort();
+                    }
+                    deve_sub_domain::SortOrder::Desc => {
+                        members.sort();
+                        members.reverse();
+                    }
+                }
+            }
+
+            AssembledGroup {
+                name: spec.name.clone(),
+                group_type: spec.group_type,
+                members,
+            }
+        })
+        .collect()
+}
+
+fn emit(profile: ProfileKind, template: &AssembledTemplate) -> Result<String, TemplateAppError> {
     match profile {
-        ProfileKind::Mihomo => emit_mihomo(nodes),
-        ProfileKind::SingBox => emit_singbox(nodes),
-        ProfileKind::Xray => emit_xray(nodes),
-        ProfileKind::V2Ray => emit_v2ray(nodes),
-        ProfileKind::Shadowrocket => emit_shadowrocket(nodes),
-        ProfileKind::UriList => emit_uri_list(nodes),
-        ProfileKind::Json => emit_json(nodes),
+        ProfileKind::Mihomo => emit_mihomo_full(template),
+        ProfileKind::SingBox => emit_singbox(&template.nodes),
+        ProfileKind::Xray => emit_xray(&template.nodes),
+        ProfileKind::V2Ray => emit_v2ray(&template.nodes),
+        ProfileKind::Shadowrocket => emit_shadowrocket(&template.nodes),
+        ProfileKind::UriList => emit_uri_list(&template.nodes),
+        ProfileKind::Json => emit_json(&template.nodes),
     }
     .map_err(|e| TemplateAppError::Emit(e.to_string()))
 }
@@ -457,11 +577,11 @@ mod tests {
 
     #[test]
     fn emit_dispatches_all_profiles() {
-        let nodes: Vec<Node> = vec![];
-        assert!(emit(ProfileKind::Mihomo, &nodes).is_ok());
-        assert!(emit(ProfileKind::SingBox, &nodes).is_ok());
-        assert!(emit(ProfileKind::Xray, &nodes).is_ok());
-        assert!(emit(ProfileKind::V2Ray, &nodes).is_ok());
-        assert!(emit(ProfileKind::UriList, &nodes).is_ok());
+        let template = AssembledTemplate::from_nodes(vec![]);
+        assert!(emit(ProfileKind::Mihomo, &template).is_ok());
+        assert!(emit(ProfileKind::SingBox, &template).is_ok());
+        assert!(emit(ProfileKind::Xray, &template).is_ok());
+        assert!(emit(ProfileKind::V2Ray, &template).is_ok());
+        assert!(emit(ProfileKind::UriList, &template).is_ok());
     }
 }

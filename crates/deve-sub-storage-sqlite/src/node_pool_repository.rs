@@ -13,6 +13,7 @@
 //! nodes with dedup but no source binding.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use deve_sub_domain::{
@@ -20,6 +21,7 @@ use deve_sub_domain::{
     NodePoolEntry, NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
 };
 use deve_sub_kernel::{NodeId, NodeSourceBindingId, SourceItemId};
+use deve_sub_security::{MasterKey, envelope};
 use sqlx::sqlite::SqlitePool;
 
 use crate::node_row::{NODE_COLUMNS, NodeRow};
@@ -28,13 +30,27 @@ use crate::timestamp::format_ts;
 /// SQLite-backed node pool repository.
 pub struct SqliteNodePoolRepository {
     pool: SqlitePool,
+    master_key: Option<Arc<MasterKey>>,
 }
 
 impl SqliteNodePoolRepository {
-    /// Create a new repository backed by the given connection pool.
+    /// Create a new repository without at-rest encryption.
     #[must_use]
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            master_key: None,
+        }
+    }
+
+    /// Create a new repository with at-rest encryption for credential fields.
+    /// See ADR-0007.
+    #[must_use]
+    pub fn new_with_key(pool: SqlitePool, master_key: Arc<MasterKey>) -> Self {
+        Self {
+            pool,
+            master_key: Some(master_key),
+        }
     }
 }
 
@@ -46,6 +62,27 @@ fn to_json<T: serde::Serialize>(value: &T) -> Result<String, SourceError> {
 /// Serialize an `Option<T>` to an optional JSON string (`None` → SQL NULL).
 fn to_json_opt<T: serde::Serialize>(value: &Option<T>) -> Result<Option<String>, SourceError> {
     value.as_ref().map(to_json).transpose()
+}
+
+/// Encrypt a JSON string into a secret envelope, if a key is set.
+fn seal_json(key: Option<&MasterKey>, json: &str) -> Result<Option<String>, SourceError> {
+    match key {
+        Some(k) => envelope::seal(k.as_bytes(), json.as_bytes())
+            .map(Some)
+            .map_err(|e| SourceError::Storage(format!("encryption failed: {e}"))),
+        None => Ok(None),
+    }
+}
+
+/// Encrypt an optional JSON string into a secret envelope.
+fn seal_json_opt(
+    key: Option<&MasterKey>,
+    json: &Option<String>,
+) -> Result<Option<String>, SourceError> {
+    match json {
+        Some(s) => seal_json(key, s),
+        None => Ok(None),
+    }
 }
 
 #[async_trait]
@@ -176,7 +213,14 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                         node_id_opt = Some(missing_id);
                         result.reactivated_nodes += 1;
                     } else {
-                        let new_id = insert_node(&mut tx, node, &proto_str, &host_str).await?;
+                        let new_id = insert_node(
+                            &mut tx,
+                            node,
+                            &proto_str,
+                            &host_str,
+                            self.master_key.as_deref(),
+                        )
+                        .await?;
                         node_id_opt = Some(new_id);
                         result.new_nodes += 1;
                     }
@@ -298,7 +342,9 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             .fetch_all(&self.pool)
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
-        rows.iter().map(NodeRow::to_pool_entry).collect()
+        rows.iter()
+            .map(|r| r.to_pool_entry(self.master_key.as_deref()))
+            .collect()
     }
 
     async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError> {
@@ -311,7 +357,8 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
-        row.map(|r| r.to_pool_entry()).transpose()
+        row.map(|r| r.to_pool_entry(self.master_key.as_deref()))
+            .transpose()
     }
 
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError> {
@@ -383,7 +430,14 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                     result.new_nodes += 1;
                     result.outcomes.push(ImportOutcome::Inserted(nid));
                 } else {
-                    let new_id = insert_node(&mut tx, &node, &proto_str, &host_str).await?;
+                    let new_id = insert_node(
+                        &mut tx,
+                        &node,
+                        &proto_str,
+                        &host_str,
+                        self.master_key.as_deref(),
+                    )
+                    .await?;
                     let nid =
                         NodeId::parse(&new_id).map_err(|e| SourceError::Storage(e.to_string()))?;
                     result.new_nodes += 1;
@@ -489,6 +543,7 @@ async fn insert_node(
     node: &Node,
     proto_str: &str,
     host_str: &str,
+    key: Option<&MasterKey>,
 ) -> Result<String, SourceError> {
     let node_id = node.id.to_string();
     let imported_at = format_ts(node.source.imported_at).map_err(SourceError::Storage)?;
@@ -502,13 +557,22 @@ async fn insert_node(
     let congestion_json = to_json_opt(&node.congestion)?;
     let extras_json = to_json(&node.extras)?;
 
+    let config_json_encrypted = seal_json(key, &config_json)?;
+    let auth_json_encrypted = seal_json(key, &auth_json)?;
+    let tls_json_encrypted = seal_json_opt(key, &tls_json)?;
+    let transport_json_encrypted = seal_json_opt(key, &transport_json)?;
+    let obfuscation_json_encrypted = seal_json_opt(key, &obfuscation_json)?;
+    let extras_json_encrypted = seal_json(key, &extras_json)?;
+
     sqlx::query(
         "INSERT INTO nodes \
          (id, display_name, protocol_kind, host, port, protocol_config_json, \
-         authentication_json, tls_json, transport_json, udp_capability, \
-         multiplex_json, obfuscation_json, congestion_json, region, extras_json, \
+         protocol_config_json_encrypted, authentication_json, authentication_json_encrypted, \
+         tls_json, tls_json_encrypted, transport_json, transport_json_encrypted, \
+         udp_capability, multiplex_json, obfuscation_json, obfuscation_json_encrypted, \
+         congestion_json, region, extras_json, extras_json_encrypted, \
          imported_at, revision, status, missing_from_source, source_label) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?)",
     )
     .bind(&node_id)
     .bind(&node.display_name)
@@ -516,15 +580,21 @@ async fn insert_node(
     .bind(host_str)
     .bind(i64::from(node.endpoint.port))
     .bind(&config_json)
+    .bind(&config_json_encrypted)
     .bind(&auth_json)
+    .bind(&auth_json_encrypted)
     .bind(&tls_json)
+    .bind(&tls_json_encrypted)
     .bind(&transport_json)
+    .bind(&transport_json_encrypted)
     .bind(&udp_json)
     .bind(&multiplex_json)
     .bind(&obfuscation_json)
+    .bind(&obfuscation_json_encrypted)
     .bind(&congestion_json)
     .bind(&node.region.value)
     .bind(&extras_json)
+    .bind(&extras_json_encrypted)
     .bind(&imported_at)
     .bind(&node.source.source_label)
     .execute(&mut **tx)

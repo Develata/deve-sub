@@ -11,6 +11,7 @@ use deve_sub_domain::{
     SourceError, Tag,
 };
 use deve_sub_kernel::{NodeId, NodeOverrideId};
+use deve_sub_security::{MasterKey, envelope};
 
 use crate::timestamp::parse_ts;
 
@@ -26,6 +27,42 @@ fn from_json_opt<T: serde::de::DeserializeOwned>(
     s.map(from_json).transpose()
 }
 
+/// Decrypt an encrypted column, falling back to the plaintext column when the
+/// encrypted column is NULL or no key is set. See ADR-0007.
+fn open_field(
+    key: Option<&MasterKey>,
+    encrypted: &Option<String>,
+    plaintext: &str,
+) -> Result<String, SourceError> {
+    match (key, encrypted) {
+        (Some(k), Some(env)) => {
+            let bytes = envelope::open(k.as_bytes(), env)
+                .map_err(|e| SourceError::Storage(format!("decryption failed: {e}")))?;
+            String::from_utf8(bytes)
+                .map_err(|e| SourceError::Storage(format!("decrypted value is not UTF-8: {e}")))
+        }
+        _ => Ok(plaintext.to_owned()),
+    }
+}
+
+/// Decrypt an optional encrypted column, falling back to the plaintext column.
+fn open_field_opt(
+    key: Option<&MasterKey>,
+    encrypted: &Option<String>,
+    plaintext: Option<&str>,
+) -> Result<Option<String>, SourceError> {
+    match (key, encrypted) {
+        (Some(k), Some(env)) => {
+            let bytes = envelope::open(k.as_bytes(), env)
+                .map_err(|e| SourceError::Storage(format!("decryption failed: {e}")))?;
+            let s = String::from_utf8(bytes)
+                .map_err(|e| SourceError::Storage(format!("decrypted value is not UTF-8: {e}")))?;
+            Ok(Some(s))
+        }
+        _ => Ok(plaintext.map(str::to_owned)),
+    }
+}
+
 /// Raw row from the `nodes` table plus a COALESCE for the source label.
 #[derive(sqlx::FromRow)]
 pub(crate) struct NodeRow {
@@ -35,16 +72,22 @@ pub(crate) struct NodeRow {
     host: String,
     port: i64,
     protocol_config_json: String,
+    protocol_config_json_encrypted: Option<String>,
     authentication_json: String,
+    authentication_json_encrypted: Option<String>,
     tls_json: Option<String>,
+    tls_json_encrypted: Option<String>,
     transport_json: Option<String>,
+    transport_json_encrypted: Option<String>,
     udp_capability: Option<String>,
     multiplex_json: Option<String>,
     obfuscation_json: Option<String>,
+    obfuscation_json_encrypted: Option<String>,
     congestion_json: Option<String>,
     region: Option<String>,
     chain_json: Option<String>,
     extras_json: String,
+    extras_json_encrypted: Option<String>,
     imported_at: String,
     revision: i64,
     status: String,
@@ -70,7 +113,10 @@ impl NodeRow {
     /// the override value when set, and `is_active` is forced by
     /// `override_enabled` when `Some` (NODE-004). Tags are parsed from the
     /// `tags_json` JSON array produced by the `json_group_array` subquery.
-    pub(crate) fn to_pool_entry(&self) -> Result<NodePoolEntry, SourceError> {
+    pub(crate) fn to_pool_entry(
+        &self,
+        key: Option<&MasterKey>,
+    ) -> Result<NodePoolEntry, SourceError> {
         let node_id = NodeId::parse(&self.id).map_err(|e| SourceError::Storage(e.to_string()))?;
 
         let override_info = match &self.override_id {
@@ -110,19 +156,42 @@ impl NodeRow {
 
         let tags: Vec<Tag> = from_json_opt(self.tags_json.as_deref())?.unwrap_or_default();
 
+        let config_json = open_field(
+            key,
+            &self.protocol_config_json_encrypted,
+            &self.protocol_config_json,
+        )?;
+        let auth_json = open_field(
+            key,
+            &self.authentication_json_encrypted,
+            &self.authentication_json,
+        )?;
+        let tls_json = open_field_opt(key, &self.tls_json_encrypted, self.tls_json.as_deref())?;
+        let transport_json = open_field_opt(
+            key,
+            &self.transport_json_encrypted,
+            self.transport_json.as_deref(),
+        )?;
+        let obfuscation_json = open_field_opt(
+            key,
+            &self.obfuscation_json_encrypted,
+            self.obfuscation_json.as_deref(),
+        )?;
+        let extras_json = open_field(key, &self.extras_json_encrypted, &self.extras_json)?;
+
         let node = Node {
             id: node_id,
             display_name: effective_display_name,
             protocol: from_json(&self.protocol_kind)?,
-            config: from_json(&self.protocol_config_json)?,
+            config: from_json(&config_json)?,
             endpoint: deve_sub_domain::Endpoint {
                 host: Host::parse_uri_host(&self.host),
                 port: u16::try_from(self.port)
                     .map_err(|_| SourceError::Storage("port out of range".to_owned()))?,
             },
-            authentication: from_json(&self.authentication_json)?,
-            transport: from_json_opt(self.transport_json.as_deref())?,
-            tls: from_json_opt(self.tls_json.as_deref())?,
+            authentication: from_json(&auth_json)?,
+            transport: from_json_opt(transport_json.as_deref())?,
+            tls: from_json_opt(tls_json.as_deref())?,
             udp: self
                 .udp_capability
                 .as_deref()
@@ -130,7 +199,7 @@ impl NodeRow {
                 .transpose()?
                 .unwrap_or_default(),
             multiplex: from_json_opt(self.multiplex_json.as_deref())?,
-            obfuscation: from_json_opt(self.obfuscation_json.as_deref())?,
+            obfuscation: from_json_opt(obfuscation_json.as_deref())?,
             congestion: from_json_opt(self.congestion_json.as_deref())?,
             chain: from_json_opt(self.chain_json.as_deref())?,
             source: NodeSource {
@@ -140,7 +209,7 @@ impl NodeRow {
             },
             tags: Vec::new(),
             region,
-            extras: from_json(&self.extras_json)?,
+            extras: from_json(&extras_json)?,
         };
 
         // WHY: override_enabled=Some forces active/inactive; None keeps the
@@ -170,9 +239,15 @@ impl NodeRow {
 /// column is empty (e.g. pre-migration rows or nodes inserted via reconcile
 /// where the protocol parser leaves `source_label` empty).
 pub(crate) const NODE_COLUMNS: &str = "n.id, n.display_name, n.protocol_kind, n.host, n.port, \
-     n.protocol_config_json, n.authentication_json, n.tls_json, n.transport_json, \
-     n.udp_capability, n.multiplex_json, n.obfuscation_json, n.congestion_json, \
-     n.region, n.chain_json, n.extras_json, n.imported_at, n.revision, n.status, \
+     n.protocol_config_json, n.protocol_config_json_encrypted, \
+     n.authentication_json, n.authentication_json_encrypted, \
+     n.tls_json, n.tls_json_encrypted, \
+     n.transport_json, n.transport_json_encrypted, \
+     n.udp_capability, n.multiplex_json, \
+     n.obfuscation_json, n.obfuscation_json_encrypted, \
+     n.congestion_json, n.region, n.chain_json, \
+     n.extras_json, n.extras_json_encrypted, \
+     n.imported_at, n.revision, n.status, \
      n.missing_from_source, n.created_at, \
      COALESCE(NULLIF(n.source_label, ''), \
       (SELECT s.name FROM node_source_bindings b \

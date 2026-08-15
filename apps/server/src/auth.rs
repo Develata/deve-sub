@@ -9,8 +9,8 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{AppendHeaders, IntoResponse, Json};
 use deve_sub_application::{audit, auth};
 use deve_sub_contract::{
-    CurrentUserResponse, ErrorResponse, LoginRequest, LoginResponse, RoleDto, SetupAdminRequest,
-    SetupAdminResponse, UserDto,
+    AuthStatusResponse, CurrentUserResponse, ErrorResponse, LoginRequest, LoginResponse, RoleDto,
+    SetupAdminRequest, SetupAdminResponse, UserDto,
 };
 use deve_sub_domain::{Role, Session, User};
 use deve_sub_kernel::Timestamp;
@@ -398,6 +398,35 @@ async fn me(
     }))
 }
 
+/// `GET /api/v1/auth/status` — check whether an admin user exists.
+///
+/// Side-effect-free probe so the client can choose between the setup wizard
+/// and the login page without probing `POST /auth/setup` with dummy
+/// credentials (DS-AUD-002). No authentication required.
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/status",
+    responses(
+        (status = 200, description = "Auth status", body = AuthStatusResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
+    )
+)]
+async fn status(
+    State(state): State<AppState>,
+) -> Result<Json<AuthStatusResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let initialized = auth::is_initialized(state.user_repo.as_ref())
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "auth status check failed");
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal",
+                "status check failed",
+            )
+        })?;
+    Ok(Json(AuthStatusResponse { initialized }))
+}
+
 /// Register all auth routes on the given `OpenApiRouter`.
 pub fn register(
     router: utoipa_axum::router::OpenApiRouter<AppState>,
@@ -408,4 +437,5 @@ pub fn register(
         .routes(routes!(login))
         .routes(routes!(logout))
         .routes(routes!(me))
+        .routes(routes!(status))
 }

@@ -622,6 +622,35 @@
         }
       }
     },
+    "/api/v1/auth/status": {
+      "get": {
+        "summary": "`GET /api/v1/auth/status` — check whether an admin user exists.",
+        "description": "Side-effect-free probe so the client can choose between the setup wizard\nand the login page without probing `POST /auth/setup` with dummy\ncredentials (DS-AUD-002). No authentication required.",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": "Auth status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatusResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/latency": {
       "get": {
         "summary": "`GET /api/v1/dashboard/latency` — recent latency records across all nodes\n(admin). Returns the most recent records, newest first.",
@@ -5804,6 +5833,19 @@
               "null"
             ],
             "description": "Target entity type (e.g. `\"user\"`, `\"source\"`)."
+          }
+        }
+      },
+      "AuthStatusResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/auth/status`.\n\nSide-effect-free probe: tells the client whether an admin user has been\ncreated yet. The client uses this to decide between the setup wizard\n(`initialized == false`) and the login page (`initialized == true`).\nUnlike probing `POST /auth/setup` with dummy credentials, this endpoint\nnever returns 400 for short passwords or 409 for existing admins — it\nreturns 200 with a boolean (DS-AUD-002).",
+        "required": [
+          "initialized"
+        ],
+        "properties": {
+          "initialized": {
+            "type": "boolean",
+            "description": "Whether at least one admin user exists."
           }
         }
       },

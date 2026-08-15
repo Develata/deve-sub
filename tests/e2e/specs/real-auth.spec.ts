@@ -4,19 +4,10 @@ import { test, expect } from '@playwright/test';
 // (fixtures/auth.ts), which bypasses the real login form, CSRF, Secure cookie,
 // session refresh, and 2FA challenge paths. This suite exercises the real
 // browser auth flow through the login form so those paths stay covered.
-//
-// The first three tests are marked fixme because they are blocked by
-// DS-AUD-002: the setup-status probe sends a password shorter than
-// MIN_PASSWORD_LEN, so the backend returns 400 (invalid password) before
-// checking whether an admin exists. The frontend interprets 400 as
-// "NeedsSetup" and shows the setup wizard instead of the login page — even
-// on an already-initialized instance. These tests will pass once Phase C
-// introduces a side-effect-free GET /auth/status endpoint and fixes the
-// probe logic. Remove `test.fixme` at that time.
 
 test.describe('Real browser auth (DS-AUD-049)', () => {
 
-  test.fixme('standard login through form enters the app', async ({ page }) => {
+  test('standard login through form enters the app', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
@@ -34,7 +25,7 @@ test.describe('Real browser auth (DS-AUD-049)', () => {
     await expect(page.locator('aside')).toBeVisible({ timeout: 15000 });
   });
 
-  test.fixme('wrong password shows error and stays on login page', async ({ page }) => {
+  test('wrong password shows error and stays on login page', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
@@ -52,7 +43,7 @@ test.describe('Real browser auth (DS-AUD-049)', () => {
     await expect(page.locator('aside')).not.toBeVisible();
   });
 
-  test.fixme('session survives a full page reload', async ({ page }) => {
+  test('session survives a full page reload', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
@@ -76,7 +67,7 @@ test.describe('Real browser auth (DS-AUD-049)', () => {
   // enabled admin is therefore pushed into the authenticated shell with no
   // session, and every subsequent API call fails with 401.
   //
-  // This test is marked fixme until Phase C implements the
+  // This test is marked fixme until Phase C Slice 2 implements the
   // Credentials -> TwoFactorChallenge -> Authenticated state machine.
   test.fixme('2FA challenge is presented when admin has 2FA enabled (DS-AUD-003)', async () => {
     // Phase C work: create a 2FA-enabled admin via API, login through the

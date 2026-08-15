@@ -19,10 +19,10 @@ pub mod traffic;
 
 pub use audit::{AuditLogDto, ListAuditLogsResponse};
 pub use auth::{
-    CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse, ListUsersResponse,
-    LoginRequest, LoginResponse, LoginTwoFactorRequest, RegenerateRecoveryCodesRequest,
-    RegenerateRecoveryCodesResponse, RoleDto, SetupAdminRequest, SetupAdminResponse,
-    TwoFactorDisableRequest, TwoFactorSetupResponse, TwoFactorVerifyRequest,
+    AuthStatusResponse, CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse,
+    ListUsersResponse, LoginRequest, LoginResponse, LoginTwoFactorRequest,
+    RegenerateRecoveryCodesRequest, RegenerateRecoveryCodesResponse, RoleDto, SetupAdminRequest,
+    SetupAdminResponse, TwoFactorDisableRequest, TwoFactorSetupResponse, TwoFactorVerifyRequest,
     TwoFactorVerifyResponse, UserDto,
 };
 pub use dashboard::{

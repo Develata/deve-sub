@@ -154,6 +154,11 @@ pub mod auth {
         pub user: UserDto,
     }
 
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    pub struct AuthStatusResponse {
+        pub initialized: bool,
+    }
+
     pub async fn setup(username: &str, password: &str) -> Result<SetupAdminResponse, ApiError> {
         send(
             "POST",
@@ -184,6 +189,10 @@ pub mod auth {
 
     pub async fn me() -> Result<CurrentUserResponse, ApiError> {
         get("/auth/me").await
+    }
+
+    pub async fn status() -> Result<AuthStatusResponse, ApiError> {
+        get("/auth/status").await
     }
 }
 

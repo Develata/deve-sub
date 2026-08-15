@@ -15,7 +15,8 @@ pub mod twofa;
 pub use challenge::{generate_challenge_token, verify_challenge_token};
 pub use commands::{
     AuthPrincipal, LoginOutcome, LoginParams, authenticate_session, create_user, disable_user,
-    find_user, force_logout, list_users, login, logout, setup_admin, user_count, verify_session,
+    find_user, force_logout, is_initialized, list_users, login, logout, setup_admin, user_count,
+    verify_session,
 };
 pub use error::AuthError;
 pub use rate_limiter::LoginRateLimiter;

@@ -90,6 +90,20 @@ pub struct CurrentUserResponse {
     pub user: UserDto,
 }
 
+/// Response body for `GET /api/v1/auth/status`.
+///
+/// Side-effect-free probe: tells the client whether an admin user has been
+/// created yet. The client uses this to decide between the setup wizard
+/// (`initialized == false`) and the login page (`initialized == true`).
+/// Unlike probing `POST /auth/setup` with dummy credentials, this endpoint
+/// never returns 400 for short passwords or 409 for existing admins — it
+/// returns 200 with a boolean (DS-AUD-002).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+pub struct AuthStatusResponse {
+    /// Whether at least one admin user exists.
+    pub initialized: bool,
+}
+
 /// Standard error response for auth endpoints.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ErrorResponse {

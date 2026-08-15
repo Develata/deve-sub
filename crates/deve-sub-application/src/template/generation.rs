@@ -657,8 +657,8 @@ mod tests {
     #[test]
     fn validate_output_mihomo_empty_proxies_array_rejected() {
         let yaml = "proxies: []\n";
-        let err = validate_output(yaml, ProfileKind::Mihomo)
-            .expect_err("empty proxies array must fail");
+        let err =
+            validate_output(yaml, ProfileKind::Mihomo).expect_err("empty proxies array must fail");
         assert!(
             matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("empty")),
             "got {err:?}"
@@ -668,8 +668,8 @@ mod tests {
     #[test]
     fn validate_output_mihomo_proxies_not_array_rejected() {
         let yaml = "proxies: notarray\n";
-        let err = validate_output(yaml, ProfileKind::Mihomo)
-            .expect_err("non-array proxies must fail");
+        let err =
+            validate_output(yaml, ProfileKind::Mihomo).expect_err("non-array proxies must fail");
         assert!(
             matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("not an array")),
             "got {err:?}"
@@ -684,8 +684,8 @@ mod tests {
             matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("array or object")),
             "got {err:?}"
         );
-        let err = validate_output("42", ProfileKind::Xray)
-            .expect_err("JSON number scalar must fail");
+        let err =
+            validate_output("42", ProfileKind::Xray).expect_err("JSON number scalar must fail");
         assert!(
             matches!(err, TemplateAppError::InvalidStructure(_)),
             "got {err:?}"

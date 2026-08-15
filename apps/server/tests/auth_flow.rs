@@ -430,3 +430,53 @@ async fn logout_revokes_session() {
         .expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
+
+/// DS-AUD-002: GET /auth/status reports initialized=false on a fresh
+/// instance and initialized=true after admin setup. This replaces the
+/// broken POST /auth/setup probe that returned 400 for short passwords
+/// before checking initialization state.
+#[tokio::test]
+async fn auth_status_reports_initialized_flag() {
+    let app = TestApp::new().await;
+    let router = app.router();
+
+    let response = router
+        .clone()
+        .oneshot(get("/api/v1/auth/status"))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(
+        json["initialized"], false,
+        "fresh instance must report initialized=false"
+    );
+
+    let _ = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/setup",
+            r#"{"username":"admin","password":"s3cure-pwd!"}"#,
+        ))
+        .await
+        .expect("setup");
+
+    let response = router
+        .oneshot(get("/api/v1/auth/status"))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(
+        json["initialized"], true,
+        "instance with admin must report initialized=true"
+    );
+}

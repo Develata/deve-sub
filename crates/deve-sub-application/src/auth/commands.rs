@@ -78,6 +78,18 @@ pub async fn setup_admin(
     Ok(user)
 }
 
+/// Check whether an admin user has been created yet.
+///
+/// Side-effect-free query used by `GET /api/v1/auth/status` to let the
+/// client decide between the setup wizard and the login page without
+/// probing `POST /auth/setup` with dummy credentials (DS-AUD-002).
+///
+/// # Errors
+/// - [`AuthError::Identity`] — storage error.
+pub async fn is_initialized(user_repo: &dyn UserRepository) -> Result<bool, AuthError> {
+    Ok(user_repo.count().await? > 0)
+}
+
 // A dummy argon2id PHC hash used to equalize login timing when the
 // username does not exist. Without this, the `None` branch returns
 // immediately while the `Some` branch spends ~20-50ms in `verify_password`,

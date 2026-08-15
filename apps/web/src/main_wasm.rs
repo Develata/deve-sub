@@ -79,20 +79,12 @@ fn app() -> Element {
         match api::auth::me().await {
             Ok(_) => auth_state.set(AuthState::Authenticated),
             Err(e) if e.status == 401 => {
-                // Distinguish "no admin yet" from "need login".
-                // POST /auth/setup returns 409 if already initialized.
-                // WHY: use a password shorter than MIN_PASSWORD_LEN (8) so the
-                // server always rejects with 400 invalid_input when the
-                // endpoint is available (no admin yet), without creating one.
-                // A 409 means admin already exists → show login.
-                match api::auth::setup("__probe__", "x").await {
-                    Err(probe_err) if probe_err.status == 409 => {
-                        auth_state.set(AuthState::Unauthenticated);
-                    }
-                    Err(probe_err) if probe_err.status == 400 => {
-                        auth_state.set(AuthState::NeedsSetup);
-                    }
-                    _ => auth_state.set(AuthState::Unauthenticated),
+                // Distinguish "no admin yet" from "need login" via the
+                // side-effect-free GET /auth/status endpoint (DS-AUD-002).
+                match api::auth::status().await {
+                    Ok(s) if s.initialized => auth_state.set(AuthState::Unauthenticated),
+                    Ok(_) => auth_state.set(AuthState::NeedsSetup),
+                    Err(_) => auth_state.set(AuthState::Unauthenticated),
                 }
             }
             Err(_) => auth_state.set(AuthState::Unauthenticated),

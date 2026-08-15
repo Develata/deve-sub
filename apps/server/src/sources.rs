@@ -18,6 +18,7 @@ use deve_sub_contract::{
 };
 use deve_sub_domain::{Source, SourceFilterRules, SourceType};
 use deve_sub_kernel::SourceId;
+use deve_sub_security::mask_url;
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
@@ -90,7 +91,7 @@ fn source_to_dto(source: &Source) -> SourceDto {
         id: source.id.to_string(),
         name: source.name.clone(),
         source_type: source_type_to_dto(source.source_type),
-        url: source.url.clone(),
+        url: mask_url(&source.url),
         auto_update: source.auto_update,
         update_interval_secs: source.update_interval_secs,
         enabled: source.enabled,

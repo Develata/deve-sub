@@ -1,6 +1,7 @@
 //! CLI subcommand implementations.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
@@ -174,6 +175,10 @@ pub struct SourceAddArgs {
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
     pub db_path: String,
+
+    /// Master key file path.
+    #[arg(long, env = "DEVE_SUB_KEY_PATH", default_value = "data/master.key")]
+    pub key_path: String,
 }
 
 pub use crate::node_cmds::{NodeArgs, NodeSubCommand, node_import, node_list};
@@ -317,7 +322,14 @@ pub async fn source_add(args: SourceAddArgs) -> Result<()> {
     let pool = open_db(&args.db_path, 1).await?;
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
-    let source_repo = deve_sub_storage_sqlite::SqliteSourceRepository::new(pool);
+    let master_key = Arc::new(
+        deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(&args.key_path))
+            .context("failed to load master key")?,
+    );
+    let source_repo = deve_sub_storage_sqlite::SqliteSourceRepository::new_with_key(
+        pool,
+        Arc::clone(&master_key),
+    );
 
     let source_type = args
         .source_type
@@ -340,7 +352,10 @@ pub async fn source_add(args: SourceAddArgs) -> Result<()> {
             println!("  id:                {}", source.id);
             println!("  name:              {}", source.name);
             println!("  source_type:       {}", source.source_type);
-            println!("  url:               {}", source.url);
+            println!(
+                "  url:               {}",
+                deve_sub_security::mask_url(&source.url)
+            );
             println!("  auto_update:       {}", source.auto_update);
             println!("  update_interval:   {}s", source.update_interval_secs);
             println!("  enabled:           {}", source.enabled);

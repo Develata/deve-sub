@@ -1330,6 +1330,7 @@ dependencies = [
  "deve-sub-domain",
  "deve-sub-kernel",
  "deve-sub-protocol",
+ "deve-sub-security",
  "serde",
  "serde_json",
  "sqlx",

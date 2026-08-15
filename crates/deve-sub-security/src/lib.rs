@@ -9,6 +9,7 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 pub mod cipher;
+pub mod envelope;
 pub mod hmac;
 pub mod master_key;
 pub mod password;
@@ -18,6 +19,7 @@ pub mod token;
 pub mod totp;
 
 pub use cipher::{decrypt, decrypt_from_b64, encrypt, encrypt_to_b64};
+pub use envelope::{is_envelope, mask_url, open, seal};
 pub use hmac::{PURPOSE_CHALLENGE, PURPOSE_RECOVERY, PURPOSE_SESSION, hmac_digest};
 pub use master_key::MasterKey;
 pub use password::{hash_password, verify_password};

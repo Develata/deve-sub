@@ -78,7 +78,10 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         deve_sub_storage_sqlite::SqliteRecoveryCodeRepository::new(db.clone()),
     );
     let source_repo: Arc<dyn SourceRepository> = Arc::new(
-        deve_sub_storage_sqlite::SqliteSourceRepository::new(db.clone()),
+        deve_sub_storage_sqlite::SqliteSourceRepository::new_with_key(
+            db.clone(),
+            Arc::clone(&master_key),
+        ),
     );
     let snapshot_repo: Arc<dyn SourceSnapshotRepository> =
         Arc::new(deve_sub_storage_sqlite::SqliteSourceSnapshotRepository::new(db.clone()));

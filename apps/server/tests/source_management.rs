@@ -259,7 +259,7 @@ async fn admin_can_create_source() {
     let json = body_to_json(response).await;
     assert_eq!(json["source"]["name"], "my-sub");
     assert_eq!(json["source"]["source_type"], "auto");
-    assert_eq!(json["source"]["url"], "https://example.com/sub");
+    assert_eq!(json["source"]["url"], "https://example.com/***");
     assert_eq!(json["source"]["auto_update"], true);
     assert_eq!(json["source"]["update_interval_secs"], 1800);
     assert_eq!(json["source"]["enabled"], true);
@@ -489,7 +489,7 @@ async fn admin_can_update_source() {
     let json = body_to_json(response).await;
     assert_eq!(json["source"]["name"], "updated-sub");
     assert_eq!(json["source"]["source_type"], "uri_list");
-    assert_eq!(json["source"]["url"], "https://example.com/new");
+    assert_eq!(json["source"]["url"], "https://example.com/***");
     assert_eq!(json["source"]["auto_update"], false);
     assert_eq!(json["source"]["update_interval_secs"], 7200);
     assert_eq!(json["source"]["enabled"], false);

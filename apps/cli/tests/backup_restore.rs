@@ -20,6 +20,8 @@ struct BackupManifest {
     version: u32,
     schema_version: i64,
     row_counts: BTreeMap<String, i64>,
+    #[serde(default)]
+    master_key_fingerprint: Option<String>,
 }
 
 /// Create a fully-migrated SQLite database at `db_path` and insert one row
@@ -39,8 +41,9 @@ async fn setup_db(db_path: &std::path::Path) {
 }
 
 /// Create a database migrated only up to migration 13 (drops the
-/// `traffic_daily_snapshots` table from migration 14 and removes its
-/// migration row), simulating an older-schema backup source.
+/// `traffic_daily_snapshots` table from migration 14, reverts the
+/// `_encrypted` columns from migration 15, and removes their migration
+/// rows), simulating an older-schema backup source.
 async fn setup_db_schema_13(db_path: &std::path::Path) {
     let url = format!("sqlite://{}?mode=rwc", db_path.display());
     let pool = sqlx::sqlite::SqlitePool::connect(&url).await.expect("pool");
@@ -52,14 +55,31 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
         .execute(&pool)
         .await
         .expect("insert user");
+
     sqlx::query("DROP TABLE IF EXISTS traffic_daily_snapshots")
         .execute(&pool)
         .await
         .expect("drop table");
-    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 14")
+
+    for stmt in [
+        "ALTER TABLE sources DROP COLUMN url_encrypted",
+        "ALTER TABLE sources DROP COLUMN headers_encrypted_v2",
+        "ALTER TABLE source_items DROP COLUMN raw_uri_encrypted",
+        "ALTER TABLE node_source_bindings DROP COLUMN raw_uri_encrypted",
+        "ALTER TABLE nodes DROP COLUMN authentication_json_encrypted",
+        "ALTER TABLE nodes DROP COLUMN protocol_config_json_encrypted",
+        "ALTER TABLE nodes DROP COLUMN tls_json_encrypted",
+        "ALTER TABLE nodes DROP COLUMN transport_json_encrypted",
+        "ALTER TABLE nodes DROP COLUMN obfuscation_json_encrypted",
+        "ALTER TABLE nodes DROP COLUMN extras_json_encrypted",
+    ] {
+        sqlx::query(stmt).execute(&pool).await.expect("drop column");
+    }
+
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
         .execute(&pool)
         .await
-        .expect("delete migration row");
+        .expect("delete migration rows");
     pool.close().await;
 }
 
@@ -292,4 +312,296 @@ async fn backup004_restore_runs_forward_migrations() {
         .expect("count");
     assert_eq!(count, 1, "user data should survive forward migration");
     pool.close().await;
+}
+
+/// BACKUP-005 (DS-AUD-031): tar archive entries use mode 0o600, not 0o644.
+/// The archive contains the full production DB — credentials, tokens, TOTP
+/// secrets — so it must not be world-readable.
+#[tokio::test(flavor = "multi_thread")]
+async fn backup005_archive_entries_use_restricted_permissions() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("test.db");
+    setup_db(&db_path).await;
+
+    let backup_path = dir.path().join("backup.tar");
+    let status = Command::new(BIN)
+        .args([
+            "backup",
+            "--output",
+            backup_path.to_str().unwrap(),
+            "--db-path",
+            db_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("spawn");
+    assert!(status.success(), "backup failed: {status:?}");
+
+    let file = std::fs::File::open(&backup_path).expect("open archive");
+    let mut archive = tar::Archive::new(file);
+    for entry in archive.entries().expect("entries") {
+        let entry = entry.expect("entry");
+        let header = entry.header();
+        let mode = header.mode().unwrap_or(0);
+        let name = entry.path().expect("path").to_string_lossy().into_owned();
+        assert_eq!(
+            mode & 0o777,
+            0o600,
+            "archive entry '{name}' has mode {mode:o}, expected 0o600"
+        );
+    }
+}
+
+/// BACKUP-006 (DS-AUD-034): when --key-path is provided, the manifest records
+/// the SHA-256 fingerprint of the master key.
+#[tokio::test(flavor = "multi_thread")]
+async fn backup006_manifest_records_key_fingerprint() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("test.db");
+    setup_db(&db_path).await;
+
+    let key_path = dir.path().join("master.key");
+    let key_bytes = [0xABu8; 32];
+    std::fs::write(&key_path, key_bytes).expect("write key");
+
+    let backup_path = dir.path().join("backup.tar");
+    let status = Command::new(BIN)
+        .args([
+            "backup",
+            "--output",
+            backup_path.to_str().unwrap(),
+            "--db-path",
+            db_path.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("spawn");
+    assert!(status.success(), "backup failed: {status:?}");
+
+    let manifest_bytes = read_tar_entry(&backup_path, "manifest.json").expect("manifest");
+    let manifest: BackupManifest = serde_json::from_slice(&manifest_bytes).expect("parse manifest");
+    let fp = manifest
+        .master_key_fingerprint
+        .expect("manifest must record fingerprint when --key-path is set");
+    assert_eq!(fp.len(), 64, "SHA-256 hex = 64 chars");
+    assert!(
+        fp.chars().all(|c| c.is_ascii_hexdigit()),
+        "fingerprint must be hex"
+    );
+
+    // Verify the fingerprint matches a fresh computation.
+    let expected_fp = {
+        use sha2::Digest;
+        let hash = sha2::Sha256::digest(&key_bytes);
+        hash.iter().map(|b| format!("{b:02x}")).collect::<String>()
+    };
+    assert_eq!(
+        fp, expected_fp,
+        "fingerprint must match SHA-256 of key bytes"
+    );
+}
+
+/// BACKUP-007 (DS-AUD-034): restore with the correct key succeeds and
+/// reports fingerprint verification.
+#[tokio::test(flavor = "multi_thread")]
+async fn backup007_restore_with_matching_key_succeeds() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src_db = dir.path().join("src.db");
+    setup_db(&src_db).await;
+
+    let key_path = dir.path().join("master.key");
+    std::fs::write(&key_path, [0xABu8; 32]).expect("write key");
+
+    let backup_path = dir.path().join("backup.tar");
+    let status = Command::new(BIN)
+        .args([
+            "backup",
+            "--output",
+            backup_path.to_str().unwrap(),
+            "--db-path",
+            src_db.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("spawn");
+    assert!(status.success(), "backup failed: {status:?}");
+
+    let restore_db = dir.path().join("restored.db");
+    let output = Command::new(BIN)
+        .args([
+            "restore",
+            "--input",
+            backup_path.to_str().unwrap(),
+            "--db-path",
+            restore_db.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn");
+    assert!(
+        output.status.success(),
+        "restore failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("key fingerprint: verified"),
+        "restore output should confirm fingerprint verification: {stdout}"
+    );
+}
+
+/// BACKUP-008 (DS-AUD-034): restore with a mismatched key is refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn backup008_restore_with_mismatched_key_refused() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src_db = dir.path().join("src.db");
+    setup_db(&src_db).await;
+
+    let backup_key_path = dir.path().join("backup.key");
+    std::fs::write(&backup_key_path, [0xABu8; 32]).expect("write backup key");
+
+    let backup_path = dir.path().join("backup.tar");
+    let status = Command::new(BIN)
+        .args([
+            "backup",
+            "--output",
+            backup_path.to_str().unwrap(),
+            "--db-path",
+            src_db.to_str().unwrap(),
+            "--key-path",
+            backup_key_path.to_str().unwrap(),
+        ])
+        .status()
+        .expect("spawn");
+    assert!(status.success(), "backup failed: {status:?}");
+
+    let wrong_key_path = dir.path().join("wrong.key");
+    std::fs::write(&wrong_key_path, [0xCDu8; 32]).expect("write wrong key");
+
+    let restore_db = dir.path().join("restored.db");
+    let output = Command::new(BIN)
+        .args([
+            "restore",
+            "--input",
+            backup_path.to_str().unwrap(),
+            "--db-path",
+            restore_db.to_str().unwrap(),
+            "--key-path",
+            wrong_key_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn");
+    assert!(
+        !output.status.success(),
+        "restore with mismatched key must fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("fingerprint mismatch"),
+        "error must mention fingerprint mismatch: {stderr}"
+    );
+    assert!(
+        !restore_db.exists(),
+        "restore DB must not be created on key mismatch"
+    );
+}
+
+/// BACKUP-009 (DS-AUD-032): a failed restore (corrupt snapshot) leaves the
+/// existing production DB intact. The restore writes to a staging file,
+/// verifies, and only renames on success.
+#[tokio::test(flavor = "multi_thread")]
+async fn backup009_failed_restore_preserves_existing_db() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src_db = dir.path().join("src.db");
+    setup_db(&src_db).await;
+
+    let backup_path = dir.path().join("backup.tar");
+    let status = Command::new(BIN)
+        .args([
+            "backup",
+            "--output",
+            backup_path.to_str().unwrap(),
+            "--db-path",
+            src_db.to_str().unwrap(),
+        ])
+        .status()
+        .expect("spawn");
+    assert!(status.success(), "backup failed: {status:?}");
+
+    // Corrupt the archive by truncating the database.sqlite entry.
+    let corrupt_path = dir.path().join("corrupt.tar");
+    {
+        let file = std::fs::File::open(&backup_path).expect("open backup");
+        let mut archive = tar::Archive::new(file);
+        let entries: Vec<tar::Entry<_>> = archive
+            .entries()
+            .expect("entries")
+            .collect::<Result<_, _>>()
+            .expect("collect entries");
+        let out_file = std::fs::File::create(&corrupt_path).expect("create corrupt");
+        let mut builder = tar::Builder::new(out_file);
+        for mut entry in entries {
+            let path = entry.path().expect("path").into_owned();
+            let name = path.to_string_lossy().into_owned();
+            let mut header = entry.header().clone();
+            if name == "database.sqlite" {
+                let garbage = b"not a database";
+                header.set_size(garbage.len() as u64);
+                header.set_cksum();
+                builder
+                    .append(&header, std::io::Cursor::new(garbage))
+                    .expect("append");
+            } else {
+                let mut buf = Vec::new();
+                entry.read_to_end(&mut buf).expect("read");
+                builder
+                    .append(&header, std::io::Cursor::new(buf))
+                    .expect("append");
+            }
+        }
+        builder.finish().expect("finish");
+    }
+
+    let prod_db = dir.path().join("prod.db");
+    setup_db(&prod_db).await;
+    let prod_url = format!("sqlite://{}", prod_db.display());
+    let prod_pool = sqlx::sqlite::SqlitePool::connect(&prod_url)
+        .await
+        .expect("pool");
+    let (prod_count_before,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(&prod_pool)
+        .await
+        .expect("count");
+    assert_eq!(prod_count_before, 1);
+    prod_pool.close().await;
+
+    let output = Command::new(BIN)
+        .args([
+            "restore",
+            "--input",
+            corrupt_path.to_str().unwrap(),
+            "--db-path",
+            prod_db.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn");
+    assert!(
+        !output.status.success(),
+        "restore of corrupt archive must fail"
+    );
+
+    let verify_pool = sqlx::sqlite::SqlitePool::connect(&prod_url)
+        .await
+        .expect("pool");
+    let (prod_count_after,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(&verify_pool)
+        .await
+        .expect("count");
+    assert_eq!(
+        prod_count_after, 1,
+        "production DB must be preserved after failed restore"
+    );
+    verify_pool.close().await;
 }

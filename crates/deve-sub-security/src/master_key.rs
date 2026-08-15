@@ -129,6 +129,21 @@ impl MasterKey {
     pub fn from_bytes(bytes: &[u8; KEY_LEN]) -> Self {
         Self { bytes: *bytes }
     }
+
+    /// Compute a non-reversible fingerprint of the key for identification.
+    ///
+    /// Returns the hex-encoded SHA-256 digest of the key bytes. The digest
+    /// is one-way: the raw key cannot be recovered from the fingerprint
+    /// (SHA-256 preimage resistance). Its purpose is to let a restore
+    /// verify that the loaded master key matches the key used at backup
+    /// time, preventing silent decryption failures when encrypted columns
+    /// are restored with the wrong key (DS-AUD-034, ADR-0007).
+    #[must_use]
+    pub fn fingerprint(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let hash = Sha256::digest(self.bytes);
+        hash.iter().map(|b| format!("{b:02x}")).collect()
+    }
 }
 
 impl std::fmt::Debug for MasterKey {
@@ -172,5 +187,33 @@ mod tests {
         let debug = format!("{key:?}");
         assert_eq!(debug, "MasterKey(<redacted>)");
         assert!(!debug.contains("bytes"));
+    }
+
+    #[test]
+    fn fingerprint_is_stable_and_distinct() {
+        let key_a = MasterKey::from_bytes(&[0x01; 32]);
+        let key_b = MasterKey::from_bytes(&[0x02; 32]);
+        let fp_a = key_a.fingerprint();
+        let fp_a2 = key_a.fingerprint();
+        let fp_b = key_b.fingerprint();
+        assert_eq!(fp_a, fp_a2, "fingerprint must be stable");
+        assert_ne!(
+            fp_a, fp_b,
+            "different keys must have different fingerprints"
+        );
+        assert_eq!(fp_a.len(), 64, "SHA-256 hex = 64 chars");
+        assert!(
+            fp_a.chars().all(|c| c.is_ascii_hexdigit()),
+            "fingerprint must be hex"
+        );
+        let raw_hex: String = key_a
+            .as_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_ne!(
+            fp_a, raw_hex,
+            "fingerprint must not equal raw key bytes hex"
+        );
     }
 }

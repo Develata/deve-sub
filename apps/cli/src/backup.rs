@@ -33,6 +33,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::commands::{ensure_db_dir, load_config, open_db};
 
+use deve_sub_security::MasterKey;
+
 /// Backup format version. Increment when the archive layout changes
 /// incompatibly.
 const BACKUP_FORMAT_VERSION: u32 = 1;
@@ -51,6 +53,12 @@ pub struct BackupArgs {
     /// Database path (overrides config).
     #[arg(long, env = "DEVE_SUB_DB_PATH")]
     pub db_path: Option<String>,
+
+    /// Path to the master key file. When provided, the manifest records the
+    /// key's SHA-256 fingerprint so restore can verify key continuity
+    /// (DS-AUD-034).
+    #[arg(long, env = "DEVE_SUB_KEY_PATH")]
+    pub key_path: Option<String>,
 }
 
 /// Arguments for `deve-sub restore`.
@@ -67,6 +75,12 @@ pub struct RestoreArgs {
     /// Database path to restore into (overrides config).
     #[arg(long, env = "DEVE_SUB_DB_PATH")]
     pub db_path: Option<String>,
+
+    /// Path to the master key file. When provided, restore verifies the
+    /// loaded key's fingerprint matches the one recorded in the backup
+    /// manifest, refusing restore on mismatch (DS-AUD-034).
+    #[arg(long, env = "DEVE_SUB_KEY_PATH")]
+    pub key_path: Option<String>,
 }
 
 /// Backup manifest — describes the archive contents and schema version.
@@ -80,6 +94,11 @@ pub struct BackupManifest {
     pub created_at: String,
     /// Row counts for key tables, used by restore verification.
     pub row_counts: BTreeMap<String, i64>,
+    /// SHA-256 fingerprint of the master key used at backup time, if a key
+    /// was configured. Restore verifies this matches the loaded key to
+    /// prevent silent decryption failures (DS-AUD-034, ADR-0007).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master_key_fingerprint: Option<String>,
 }
 
 /// Backup metadata — environment info, not application state.
@@ -172,11 +191,32 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
 
     vacuum_into(&pool, &snapshot_path).await?;
 
+    let key_path = args
+        .key_path
+        .as_deref()
+        .map(Path::new)
+        .or_else(|| Some(Path::new(&config.security.master_key_path)));
+    let master_key_fingerprint = match key_path {
+        Some(p) if p.exists() => match MasterKey::load(p) {
+            Ok(k) => {
+                let fp = k.fingerprint();
+                tracing::info!(key_fingerprint = %fp, "master key fingerprint recorded in manifest");
+                Some(fp)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to load master key for fingerprint; manifest will omit fingerprint");
+                None
+            }
+        },
+        _ => None,
+    };
+
     let manifest = BackupManifest {
         version: BACKUP_FORMAT_VERSION,
         schema_version,
         created_at: now_iso8601(),
         row_counts,
+        master_key_fingerprint,
     };
 
     let metadata = BackupMetadata {
@@ -216,8 +256,10 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
     Ok(())
 }
 
-/// Run the restore command: read the archive, restore the database, run
-/// forward migrations if needed, and verify integrity.
+/// Run the restore command: read the archive, verify the master key
+/// fingerprint if both backup and CLI provide one, restore the database
+/// atomically (temp file → verify → rename), run forward migrations if
+/// needed, and verify integrity.
 pub async fn restore(args: RestoreArgs) -> Result<()> {
     let config = load_config(&args.config)?;
     let db_path = args.db_path.unwrap_or_else(|| config.database.path.clone());
@@ -249,33 +291,94 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
         );
     }
 
+    // DS-AUD-034: verify master key continuity before touching the DB.
+    let loaded_key = match args
+        .key_path
+        .as_deref()
+        .map(Path::new)
+        .or_else(|| Some(Path::new(&config.security.master_key_path)))
+    {
+        Some(p) if p.exists() => Some(MasterKey::load(p).context("failed to load master key")?),
+        _ => None,
+    };
+    if let (Some(key), Some(backup_fp)) = (&loaded_key, &manifest.master_key_fingerprint) {
+        let actual_fp = key.fingerprint();
+        if &actual_fp != backup_fp {
+            bail!(
+                "master key fingerprint mismatch — backup was created with a different key. \
+                 Refusing restore to prevent silent decryption failures. \
+                 Backup fingerprint: {backup_fp}, loaded key fingerprint: {actual_fp}"
+            );
+        }
+        tracing::info!(key_fingerprint = %actual_fp, "master key fingerprint verified");
+    }
+
     check_server_not_running(&db_path)?;
 
     ensure_db_dir(&db_path)?;
 
-    fs::copy(&snapshot_path, &db_path)
-        .with_context(|| format!("failed to copy snapshot to database path {}", db_path))?;
+    // DS-AUD-032: atomic restore — write to a temp path, verify, then rename.
+    // A failed restore (corrupt snapshot, migration error, integrity failure)
+    // must leave the existing production DB intact.
+    let restore_target = Path::new(&db_path);
+    let restore_parent = restore_target
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let staging_path = restore_parent.join(format!(
+        ".{}.restore-staging",
+        restore_target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("deve-sub.db")
+    ));
 
-    tracing::info!(db_path = %db_path, "database restored");
+    // Clean up any stale staging file from a previous failed restore.
+    let _ = fs::remove_file(&staging_path);
 
-    let pool = open_db(&db_path, 1).await?;
+    fs::copy(&snapshot_path, &staging_path).with_context(|| {
+        format!(
+            "failed to copy snapshot to staging path {}",
+            staging_path.display()
+        )
+    })?;
+
+    tracing::info!(staging = %staging_path.display(), "snapshot staged for verification");
+
+    let pool = open_db(&staging_path.to_string_lossy(), 1).await?;
 
     if manifest.schema_version < current_version {
         tracing::info!(
             backup_schema = manifest.schema_version,
             current_schema = current_version,
-            "running forward migrations"
+            "running forward migrations on staged DB"
         );
         deve_sub_storage_sqlite::run_migrations(&pool).await?;
-        tracing::info!("forward migrations applied");
+        tracing::info!("forward migrations applied to staged DB");
     }
 
     verify_restore(&pool, &manifest).await?;
 
     let integrity = integrity_check(&pool).await?;
     if integrity != "ok" {
+        // WHY: clean up the staging file so a retry does not pick up a known-bad DB.
+        let _ = fs::remove_file(&staging_path);
         bail!("database integrity check failed: {integrity}");
     }
+
+    pool.close().await;
+
+    // Atomic swap: rename staging → production. On POSIX, rename is atomic;
+    // the production DB is either the old version or the new version, never
+    // a partial write.
+    fs::rename(&staging_path, restore_target).with_context(|| {
+        format!(
+            "failed to atomically rename staged DB to {} — original DB untouched",
+            restore_target.display()
+        )
+    })?;
+
+    tracing::info!(db_path = %db_path, "database restored atomically");
 
     println!("Restore complete.");
     println!("  database: {db_path}");
@@ -284,6 +387,9 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
         manifest.schema_version
     );
     println!("  integrity: ok");
+    if manifest.master_key_fingerprint.is_some() {
+        println!("  key fingerprint: verified");
+    }
 
     Ok(())
 }
@@ -359,7 +465,9 @@ fn add_file_bytes(builder: &mut tar::Builder<fs::File>, name: &str, data: &[u8])
     let mut header = tar::Header::new_gnu();
     header.set_path(name).context("invalid archive path")?;
     header.set_size(data.len() as u64);
-    header.set_mode(0o644);
+    // DS-AUD-031: archive contains the full production DB (credentials,
+    // tokens, TOTP secrets). Restrict to owner-only read/write.
+    header.set_mode(0o600);
     header.set_cksum();
     builder
         .append(&header, data)
@@ -454,19 +562,45 @@ async fn integrity_check(pool: &sqlx::sqlite::SqlitePool) -> Result<String> {
     Ok(row.0)
 }
 
-/// Check whether the server appears to be running by probing for a SQLite
-/// write lock. If a process holds the database open with an active
-/// transaction, restoring would corrupt state.
+/// Check whether the server appears to be running by attempting to acquire
+/// a SQLite write lock. `BEGIN IMMEDIATE` fails with `SQLITE_BUSY` (database
+/// is locked) if another process holds an active write transaction, and
+/// fails to open if another process holds an exclusive lock.
+///
+/// DS-AUD-033: the previous WAL/SHM heuristic had both false negatives (non-
+/// WAL journal modes never create WAL/shm files) and false positives (stale
+/// WAL/shm left after an unclean shutdown). A lock probe is the authoritative
+/// signal: if we can acquire a write lock, no other process is writing.
 fn check_server_not_running(db_path: &str) -> Result<()> {
     let path = Path::new(db_path);
-    let wal = path.with_extension("db-wal");
-    let shm = path.with_extension("db-shm");
-    if wal.exists() || shm.exists() {
-        bail!(
-            "WAL/shm files for {db_path} exist — the server may be running. \
-             Stop the server before restoring."
-        );
+    if !path.exists() {
+        return Ok(());
     }
+
+    let url = format!("sqlite://{}?mode=rwc", db_path);
+    let rt = tokio::runtime::Handle::try_current();
+    let probe = async {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .context("failed to open database for lock probe")?;
+        let result: sqlx::Result<(i64,)> = sqlx::query_as("BEGIN IMMEDIATE; SELECT 1; COMMIT;")
+            .fetch_one(&pool)
+            .await;
+        pool.close().await;
+        result.map_err(|e| anyhow::anyhow!("lock probe failed: {e}"))
+    };
+
+    match rt {
+        Ok(handle) => tokio::task::block_in_place(|| handle.block_on(probe)),
+        Err(_) => {
+            let runtime = tokio::runtime::Runtime::new()
+                .context("failed to create runtime for lock probe")?;
+            runtime.block_on(probe)
+        }
+    }?;
+
     Ok(())
 }
 

@@ -28,7 +28,6 @@ use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::services::{ServeDir, ServeFile};
-use tower_http::trace::TraceLayer;
 use utoipa_scalar::{Scalar, Servable};
 
 use deve_sub_security::MasterKey;
@@ -38,6 +37,7 @@ pub mod auth;
 pub mod csrf;
 pub mod dashboard;
 pub mod delivery;
+pub mod logging;
 pub mod node_overrides;
 pub mod nodes;
 pub mod probes;
@@ -138,7 +138,7 @@ pub fn build_router(state: AppState) -> Router {
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
         .layer(PropagateRequestIdLayer::x_request_id())
-        .layer(TraceLayer::new_for_http())
+        .layer(crate::logging::redacting_trace_layer())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
 }
 

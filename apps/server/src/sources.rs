@@ -461,7 +461,7 @@ async fn refresh_source(
             "source does not exist",
         ),
         source::SourceAppError::Fetch(fe) => {
-            tracing::warn!(error = %fe, "source fetch failed");
+            tracing::warn!(error = %fe.redacted(), "source fetch failed");
             err(
                 StatusCode::BAD_GATEWAY,
                 "fetch_failed",

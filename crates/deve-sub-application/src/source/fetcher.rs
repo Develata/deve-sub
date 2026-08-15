@@ -37,6 +37,23 @@ pub enum FetchError {
     TooManyRedirects,
 }
 
+impl FetchError {
+    /// Return a redacted representation safe for log output.
+    ///
+    /// The `Ssrf` variant embeds a URL that may carry credentials; the `Http`
+    /// variant embeds up to 1 KiB of the origin's response body. Both must
+    /// be stripped before writing to logs (DS-AUD-030, ADR-0007 §"Redaction
+    /// boundary").
+    #[must_use]
+    pub fn redacted(&self) -> String {
+        match self {
+            Self::Ssrf(_) => "SSRF rejected".to_owned(),
+            Self::Http { status, .. } => format!("HTTP {status}"),
+            other => other.to_string(),
+        }
+    }
+}
+
 /// The result of a successful fetch.
 #[derive(Debug, Clone)]
 pub enum FetchResult {
@@ -70,4 +87,56 @@ pub trait SubscriptionFetcher: Send + Sync {
     /// - [`FetchError::Http`] — the server returned a non-success status.
     /// - [`FetchError::Connection`] — a network error occurred.
     async fn fetch(&self, url: &str, etag: Option<&str>) -> Result<FetchResult, FetchError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// DS-AUD-030: `Ssrf` redacts the embedded URL (may carry credentials).
+    #[test]
+    fn redacted_strips_ssrf_url() {
+        let err = FetchError::Ssrf("blocked: http://user:pass@internal.example.com/sub".to_owned());
+        let r = err.redacted();
+        assert!(!r.contains("user:pass"), "redacted Ssrf must not leak URL");
+        assert!(!r.contains("internal.example.com"));
+        assert_eq!(r, "SSRF rejected");
+    }
+
+    /// DS-AUD-030: `Http` redacts the embedded response body.
+    #[test]
+    fn redacted_strips_http_body() {
+        let err = FetchError::Http {
+            status: 500,
+            body: "<html>internal server error with secret=abc123</html>".to_owned(),
+        };
+        let r = err.redacted();
+        assert!(
+            !r.contains("secret=abc123"),
+            "redacted Http must not leak body"
+        );
+        assert!(!r.contains("<html>"));
+        assert_eq!(r, "HTTP 500");
+    }
+
+    /// DS-AUD-030: non-sensitive variants pass through unchanged.
+    #[test]
+    fn redacted_preserves_safe_variants() {
+        assert_eq!(
+            FetchError::Timeout(30).redacted(),
+            "fetch timeout after 30s"
+        );
+        assert_eq!(
+            FetchError::TooLarge(11_000_000).redacted(),
+            "response too large: 11000000 bytes"
+        );
+        assert_eq!(
+            FetchError::Connection("dns lookup failed".to_owned()).redacted(),
+            "connection error: dns lookup failed"
+        );
+        assert_eq!(
+            FetchError::TooManyRedirects.redacted(),
+            "too many redirects"
+        );
+    }
 }

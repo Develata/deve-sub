@@ -129,7 +129,10 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let traffic_daily_snapshot_repo: Arc<dyn TrafficDailySnapshotRepository> =
         Arc::new(deve_sub_storage_sqlite::SqliteTrafficDailySnapshotRepository::new(db.clone()));
     let probe_source_repo: Arc<dyn ProbeSourceRepository> = Arc::new(
-        deve_sub_storage_sqlite::SqliteProbeSourceRepository::new(db.clone()),
+        deve_sub_storage_sqlite::SqliteProbeSourceRepository::new_with_key(
+            db.clone(),
+            Arc::clone(&master_key),
+        ),
     );
     let probe_run_repo: Arc<dyn ProbeRunRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteProbeRunRepository::new(db.clone()),
@@ -142,15 +145,12 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let real_proxy_probe: Arc<dyn LatencyProbe> =
         Arc::new(deve_sub_adapters::RealProxyProbe::new());
 
-    let nezha_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
-        deve_sub_adapters::NezhaProbeAdapter::new(Arc::clone(&master_key)),
-    );
-    let dstatus_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
-        deve_sub_adapters::DStatusProbeAdapter::new(Arc::clone(&master_key)),
-    );
-    let komari_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
-        deve_sub_adapters::KomariProbeAdapter::new(Arc::clone(&master_key)),
-    );
+    let nezha_adapter: Arc<dyn ProbeSourceAdapter> =
+        Arc::new(deve_sub_adapters::NezhaProbeAdapter::new());
+    let dstatus_adapter: Arc<dyn ProbeSourceAdapter> =
+        Arc::new(deve_sub_adapters::DStatusProbeAdapter::new());
+    let komari_adapter: Arc<dyn ProbeSourceAdapter> =
+        Arc::new(deve_sub_adapters::KomariProbeAdapter::new());
     let probe_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
         deve_sub_adapters::ProbeSourceAdapterRegistry::new()
             .with_nezha(nezha_adapter)

@@ -321,8 +321,9 @@ pub struct ProbeSource {
     pub name: String,
     /// Panel base URL (e.g. `https://nezha.example.com`).
     pub endpoint_url: String,
-    /// Encrypted auth config (API token for Nezha; empty for DStatus/Komari).
-    /// Encrypted with XChaCha20-Poly1305 (constitution §157-158).
+    /// Auth config (API token for Nezha; empty for DStatus/Komari). Stored
+    /// as plaintext in the domain entity; encrypted at rest by the storage
+    /// adapter with XChaCha20-Poly1305 (constitution §157-158, ADR-0007).
     pub auth_config: String,
     /// Optional subscription binding for traffic data.
     pub subscription_id: Option<SubscriptionId>,
@@ -332,8 +333,9 @@ pub struct ProbeSource {
     pub last_sync_at: Option<Timestamp>,
     /// The status of the last sync. `None` if never synced.
     pub last_sync_status: Option<SyncStatus>,
-    /// Encrypted JSON snapshot of cumulative counters for Nezha/Komari delta
-    /// computation. `None` for DStatus (quota model) or on first sync.
+    /// Plaintext JSON snapshot of cumulative counters for Nezha/Komari
+    /// delta computation. `None` for DStatus (quota model) or on first
+    /// sync. Encrypted at rest by the storage adapter (ADR-0007).
     pub last_counter_snapshot: Option<String>,
     /// When the source was created.
     pub created_at: Timestamp,

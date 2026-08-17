@@ -125,8 +125,10 @@ impl TestApp {
                     pool.clone(),
                 ))
                     as Arc<dyn TrafficDailySnapshotRepository>,
-                probe_source_repo: Arc::new(SqliteProbeSourceRepository::new(pool.clone()))
-                    as Arc<dyn ProbeSourceRepository>,
+                probe_source_repo: Arc::new(SqliteProbeSourceRepository::new_with_key(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn ProbeSourceRepository>,
                 probe_run_repo: Arc::new(SqliteProbeRunRepository::new(pool.clone()))
                     as Arc<dyn ProbeRunRepository>,
                 latency_repo: Arc::new(SqliteLatencyRecordRepository::new(pool.clone()))
@@ -134,19 +136,13 @@ impl TestApp {
                 probe_adapter: std::sync::Arc::new(
                     deve_sub_adapters::ProbeSourceAdapterRegistry::new()
                         .with_nezha(std::sync::Arc::new(
-                            deve_sub_adapters::NezhaProbeAdapter::new(std::sync::Arc::clone(
-                                &master_key,
-                            )),
+                            deve_sub_adapters::NezhaProbeAdapter::new(),
                         ))
                         .with_dstatus(std::sync::Arc::new(
-                            deve_sub_adapters::DStatusProbeAdapter::new(std::sync::Arc::clone(
-                                &master_key,
-                            )),
+                            deve_sub_adapters::DStatusProbeAdapter::new(),
                         ))
                         .with_komari(std::sync::Arc::new(
-                            deve_sub_adapters::KomariProbeAdapter::new(std::sync::Arc::clone(
-                                &master_key,
-                            )),
+                            deve_sub_adapters::KomariProbeAdapter::new(),
                         )),
                 )
                     as std::sync::Arc<dyn deve_sub_domain::ProbeSourceAdapter>,

@@ -1,8 +1,10 @@
 //! Shared utilities for probe source adapters.
 //!
-//! Extracts the common SSRF-protected HTTP client builder, encrypted snapshot
-//! helpers, and error-body capping used by [`NezhaProbeAdapter`],
-//! `DStatusProbeAdapter`, and `KomariProbeAdapter`.
+//! Extracts the common SSRF-protected HTTP client builder and error-body
+//! capping used by [`NezhaProbeAdapter`], `DStatusProbeAdapter`, and
+//! `KomariProbeAdapter`. Sensitive fields (`auth_config`,
+//! `last_counter_snapshot`) arrive as plaintext in the domain entity;
+//! encryption at rest is handled by the storage layer (ADR-0007).
 //!
 //! See `docs/plan/milestones/M7-probes-and-detection.md` §"Probe source
 //! adapter Port".
@@ -10,13 +12,9 @@
 use std::net::{IpAddr, SocketAddr};
 
 use deve_sub_domain::ProbeError;
-use deve_sub_security::{decrypt_from_b64, encrypt_to_b64};
 use url::Url;
 
 use crate::SsrfChecker;
-
-/// Separator between ciphertext and nonce in the combined encrypted format.
-pub const ENCRYPTED_SEPARATOR: char = ':';
 
 /// Maximum bytes read from an error response body for diagnostics.
 ///
@@ -27,24 +25,6 @@ pub const ERROR_BODY_CAP: usize = 1024;
 
 /// Default request timeout: 30 seconds.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
-
-/// Encrypt `plaintext` with `key` and return `{ciphertext_b64}:{nonce_b64}`.
-pub fn encrypt_secret(key: &[u8], plaintext: &[u8]) -> Result<String, ProbeError> {
-    let (ct, nonce) = encrypt_to_b64(key, plaintext)
-        .map_err(|e| ProbeError::ProbeFailed(format!("encryption failed: {e}")))?;
-    Ok(format!("{ct}{ENCRYPTED_SEPARATOR}{nonce}"))
-}
-
-/// Decrypt a `{ciphertext_b64}:{nonce_b64}` string with `key`.
-pub fn decrypt_secret(key: &[u8], combined: &str) -> Result<String, ProbeError> {
-    let (ct, nonce) = combined
-        .split_once(ENCRYPTED_SEPARATOR)
-        .ok_or_else(|| ProbeError::ProbeFailed("encrypted field missing separator".to_owned()))?;
-    let bytes = decrypt_from_b64(key, ct, nonce)
-        .map_err(|e| ProbeError::ProbeFailed(format!("decryption failed: {e}")))?;
-    String::from_utf8(bytes)
-        .map_err(|e| ProbeError::ProbeFailed(format!("decrypted value is not UTF-8: {e}")))
-}
 
 /// Read up to [`ERROR_BODY_CAP`] bytes of an error response body.
 pub async fn read_error_body(mut response: reqwest::Response) -> String {

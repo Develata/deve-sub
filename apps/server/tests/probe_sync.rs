@@ -155,17 +155,14 @@ impl TestApp {
 
         let nezha: Arc<dyn ProbeSourceAdapter> =
             Arc::new(deve_sub_adapters::NezhaProbeAdapter::with_checker(
-                Arc::clone(&master_key),
                 Arc::new(deve_sub_adapters::PermissiveSsrfChecker),
             ));
         let dstatus: Arc<dyn ProbeSourceAdapter> =
             Arc::new(deve_sub_adapters::DStatusProbeAdapter::with_checker(
-                Arc::clone(&master_key),
                 Arc::new(deve_sub_adapters::PermissiveSsrfChecker),
             ));
         let komari: Arc<dyn ProbeSourceAdapter> =
             Arc::new(deve_sub_adapters::KomariProbeAdapter::with_checker(
-                Arc::clone(&master_key),
                 Arc::new(deve_sub_adapters::PermissiveSsrfChecker),
             ));
         let probe_adapter: Arc<dyn ProbeSourceAdapter> = Arc::new(
@@ -224,8 +221,10 @@ impl TestApp {
                     pool.clone(),
                 ))
                     as Arc<dyn TrafficDailySnapshotRepository>,
-                probe_source_repo: Arc::new(SqliteProbeSourceRepository::new(pool.clone()))
-                    as Arc<dyn ProbeSourceRepository>,
+                probe_source_repo: Arc::new(SqliteProbeSourceRepository::new_with_key(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn ProbeSourceRepository>,
                 probe_run_repo: Arc::new(SqliteProbeRunRepository::new(pool.clone()))
                     as Arc<dyn ProbeRunRepository>,
                 latency_repo: Arc::new(SqliteLatencyRecordRepository::new(pool.clone()))

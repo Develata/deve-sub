@@ -3,8 +3,8 @@
 //! Implements [`ProbeSourceAdapter`] for the Nezha panel. Calls
 //! `GET {endpoint}/api/v1/server` with a Bearer PAT, parses cumulative
 //! network counters, computes deltas against the last snapshot, and returns
-//! [`ProbeTrafficSample`] values. The new counter snapshot is encrypted and
-//! returned for persistence.
+//! [`ProbeTrafficSample`] values. The new counter snapshot is returned as
+//! plaintext JSON for the storage layer to encrypt at rest (ADR-0007).
 //!
 //! See `docs/plan/milestones/M7-probes-and-detection.md` §"Probe source
 //! adapter Port" and PROBE-001.
@@ -18,13 +18,10 @@ use deve_sub_domain::{
     ProbeError, ProbeSource, ProbeSourceAdapter, ProbeSyncResult, ProbeTrafficSample,
 };
 use deve_sub_kernel::Timestamp;
-use deve_sub_security::{MasterKey, decrypt_from_b64, encrypt_to_b64};
 use serde::Deserialize;
 use url::Url;
 
 use crate::SsrfChecker;
-
-const ENCRYPTED_SEPARATOR: char = ':';
 
 /// Maximum bytes read from an error response body for diagnostics.
 ///
@@ -35,22 +32,6 @@ const ERROR_BODY_CAP: usize = 1024;
 
 /// Default request timeout: 30 seconds.
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
-
-fn encrypt_secret(key: &[u8], plaintext: &[u8]) -> Result<String, ProbeError> {
-    let (ct, nonce) = encrypt_to_b64(key, plaintext)
-        .map_err(|e| ProbeError::ProbeFailed(format!("encryption failed: {e}")))?;
-    Ok(format!("{ct}{ENCRYPTED_SEPARATOR}{nonce}"))
-}
-
-fn decrypt_secret(key: &[u8], combined: &str) -> Result<String, ProbeError> {
-    let (ct, nonce) = combined
-        .split_once(ENCRYPTED_SEPARATOR)
-        .ok_or_else(|| ProbeError::ProbeFailed("encrypted field missing separator".to_owned()))?;
-    let bytes = decrypt_from_b64(key, ct, nonce)
-        .map_err(|e| ProbeError::ProbeFailed(format!("decryption failed: {e}")))?;
-    String::from_utf8(bytes)
-        .map_err(|e| ProbeError::ProbeFailed(format!("decrypted value is not UTF-8: {e}")))
-}
 
 /// Read up to [`ERROR_BODY_CAP`] bytes of an error response body.
 async fn read_error_body(mut response: reqwest::Response) -> String {
@@ -91,49 +72,44 @@ struct CounterEntry {
 }
 
 pub struct NezhaProbeAdapter {
-    master_key: Arc<MasterKey>,
     ssrf: Arc<dyn SsrfChecker>,
+}
+
+impl Default for NezhaProbeAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NezhaProbeAdapter {
     /// Create a new Nezha adapter with production SSRF protection.
     #[must_use]
-    pub fn new(master_key: Arc<MasterKey>) -> Self {
-        Self::with_checker(master_key, Arc::new(crate::ProductionSsrfChecker))
+    pub fn new() -> Self {
+        Self::with_checker(Arc::new(crate::ProductionSsrfChecker))
     }
 
     /// Create a new Nezha adapter with a custom SSRF checker (for testing).
     #[must_use]
-    pub fn with_checker(master_key: Arc<MasterKey>, ssrf: Arc<dyn SsrfChecker>) -> Self {
-        Self { master_key, ssrf }
+    pub fn with_checker(ssrf: Arc<dyn SsrfChecker>) -> Self {
+        Self { ssrf }
     }
 
-    fn decrypt_auth(&self, source: &ProbeSource) -> Result<String, ProbeError> {
+    fn parse_snapshot(source: &ProbeSource) -> Result<CounterSnapshot, ProbeError> {
+        match &source.last_counter_snapshot {
+            None => Ok(CounterSnapshot::default()),
+            Some(json) => serde_json::from_str(json).map_err(|e| {
+                ProbeError::ProbeFailed(format!("counter snapshot parse failed: {e}"))
+            }),
+        }
+    }
+
+    fn require_token(source: &ProbeSource) -> Result<String, ProbeError> {
         if source.auth_config.is_empty() {
             return Err(ProbeError::ProbeFailed(
                 "Nezha probe source requires auth_config (Bearer token)".to_owned(),
             ));
         }
-        decrypt_secret(self.master_key.as_bytes(), &source.auth_config)
-    }
-
-    fn decrypt_snapshot(&self, source: &ProbeSource) -> Result<CounterSnapshot, ProbeError> {
-        match &source.last_counter_snapshot {
-            None => Ok(CounterSnapshot::default()),
-            Some(encrypted) => {
-                let json = decrypt_secret(self.master_key.as_bytes(), encrypted)?;
-                serde_json::from_str(&json).map_err(|e| {
-                    ProbeError::ProbeFailed(format!("counter snapshot parse failed: {e}"))
-                })
-            }
-        }
-    }
-
-    fn encrypt_snapshot(&self, snapshot: &CounterSnapshot) -> Result<String, ProbeError> {
-        let json = serde_json::to_string(snapshot).map_err(|e| {
-            ProbeError::ProbeFailed(format!("counter snapshot serialize failed: {e}"))
-        })?;
-        encrypt_secret(self.master_key.as_bytes(), json.as_bytes())
+        Ok(source.auth_config.clone())
     }
 
     async fn fetch_servers(
@@ -256,17 +232,19 @@ impl NezhaProbeAdapter {
 #[async_trait]
 impl ProbeSourceAdapter for NezhaProbeAdapter {
     async fn sync_traffic(&self, source: &ProbeSource) -> Result<ProbeSyncResult, ProbeError> {
-        let token = self.decrypt_auth(source)?;
-        let last_snapshot = self.decrypt_snapshot(source)?;
+        let token = Self::require_token(source)?;
+        let last_snapshot = Self::parse_snapshot(source)?;
 
         let servers = self.fetch_servers(&source.endpoint_url, &token).await?;
         let (samples, new_snapshot) = Self::compute_samples(&servers, &last_snapshot);
 
-        let encrypted_snapshot = self.encrypt_snapshot(&new_snapshot)?;
+        let snapshot_json = serde_json::to_string(&new_snapshot).map_err(|e| {
+            ProbeError::ProbeFailed(format!("counter snapshot serialize failed: {e}"))
+        })?;
 
         Ok(ProbeSyncResult {
             samples,
-            new_counter_snapshot: Some(encrypted_snapshot),
+            new_counter_snapshot: Some(snapshot_json),
         })
     }
 }
@@ -276,10 +254,6 @@ mod tests {
     use super::*;
     use deve_sub_domain::ProbeSourceKind;
     use deve_sub_kernel::{ProbeSourceId, SubscriptionId};
-
-    fn mk_master_key() -> Arc<MasterKey> {
-        Arc::new(MasterKey::from_bytes(&[0x42u8; 32]))
-    }
 
     fn mk_server(id: u64, net_in: u64, net_out: u64) -> NezhaServer {
         NezhaServer {
@@ -382,19 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn encrypt_decrypt_secret_round_trip() {
-        let key = mk_master_key();
-        let plaintext = "nzp_secret_token_abc123";
-        let encrypted = encrypt_secret(key.as_bytes(), plaintext.as_bytes()).expect("encrypt");
-        assert_ne!(encrypted, plaintext);
-        assert!(encrypted.contains(ENCRYPTED_SEPARATOR));
-        let decrypted = decrypt_secret(key.as_bytes(), &encrypted).expect("decrypt");
-        assert_eq!(decrypted, plaintext);
-    }
-
-    #[test]
-    fn snapshot_encryption_round_trip() {
-        let adapter = NezhaProbeAdapter::new(mk_master_key());
+    fn snapshot_parse_round_trip() {
         let mut snapshot = CounterSnapshot::default();
         snapshot.servers.insert(
             "42".to_owned(),
@@ -403,41 +365,32 @@ mod tests {
                 net_out: 888,
             },
         );
-        let encrypted = adapter.encrypt_snapshot(&snapshot).expect("encrypt");
-        assert!(encrypted.contains(ENCRYPTED_SEPARATOR));
-        let source = mk_source(String::new(), Some(encrypted));
-        let decrypted = adapter.decrypt_snapshot(&source).expect("decrypt");
-        assert_eq!(decrypted.servers.get("42").expect("server 42").net_in, 999);
-        assert_eq!(decrypted.servers.get("42").expect("server 42").net_out, 888);
+        let json = serde_json::to_string(&snapshot).expect("serialize");
+        let source = mk_source(String::new(), Some(json));
+        let parsed = NezhaProbeAdapter::parse_snapshot(&source).expect("parse");
+        assert_eq!(parsed.servers.get("42").expect("server 42").net_in, 999);
+        assert_eq!(parsed.servers.get("42").expect("server 42").net_out, 888);
     }
 
     #[test]
-    fn decrypt_secret_wrong_key_fails() {
-        let key1 = mk_master_key();
-        let key2 = Arc::new(MasterKey::from_bytes(&[0x99u8; 32]));
-        let encrypted = encrypt_secret(key1.as_bytes(), b"secret").expect("encrypt");
-        let result = decrypt_secret(key2.as_bytes(), &encrypted);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn decrypt_auth_empty_fails() {
-        let adapter = NezhaProbeAdapter::new(mk_master_key());
+    fn require_token_empty_fails() {
         let source = mk_source(String::new(), None);
-        let result = adapter.decrypt_auth(&source);
+        let result = NezhaProbeAdapter::require_token(&source);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn require_token_nonempty_returns_clone() {
+        let source = mk_source("nzp_test_token".to_owned(), None);
+        let token = NezhaProbeAdapter::require_token(&source).expect("token");
+        assert_eq!(token, "nzp_test_token");
     }
 
     #[tokio::test]
-    async fn sync_traffic_missing_snapshot_encrypts_new_one() {
-        let key = mk_master_key();
-        let adapter = NezhaProbeAdapter::with_checker(
-            Arc::clone(&key),
-            Arc::new(crate::PermissiveSsrfChecker),
-        );
+    async fn sync_traffic_missing_snapshot_returns_new_one() {
+        let adapter = NezhaProbeAdapter::with_checker(Arc::new(crate::PermissiveSsrfChecker));
         let token = "nzp_test_token";
-        let encrypted_token = encrypt_secret(key.as_bytes(), token.as_bytes()).expect("encrypt");
-        let source = mk_source(encrypted_token, None);
+        let source = mk_source(token.to_owned(), None);
 
         let result = adapter.sync_traffic(&source).await;
         let err = result.expect_err("should fail on network");

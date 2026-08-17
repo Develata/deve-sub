@@ -18,11 +18,10 @@ use deve_sub_domain::{
     ProbeError, ProbeSource, ProbeSourceAdapter, ProbeSyncResult, ProbeTrafficSample,
 };
 use deve_sub_kernel::Timestamp;
-use deve_sub_security::MasterKey;
 use serde::Deserialize;
 
 use crate::SsrfChecker;
-use crate::probe_common::{build_ssrf_client, decrypt_secret, encrypt_secret, read_error_body};
+use crate::probe_common::{build_ssrf_client, read_error_body};
 
 #[derive(Deserialize)]
 struct KomariNodesResponse {
@@ -68,40 +67,35 @@ struct CounterEntry {
 }
 
 pub struct KomariProbeAdapter {
-    master_key: Arc<MasterKey>,
     ssrf: Arc<dyn SsrfChecker>,
+}
+
+impl Default for KomariProbeAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl KomariProbeAdapter {
     /// Create a new Komari adapter with production SSRF protection.
     #[must_use]
-    pub fn new(master_key: Arc<MasterKey>) -> Self {
-        Self::with_checker(master_key, Arc::new(crate::ProductionSsrfChecker))
+    pub fn new() -> Self {
+        Self::with_checker(Arc::new(crate::ProductionSsrfChecker))
     }
 
     /// Create a new Komari adapter with a custom SSRF checker (for testing).
     #[must_use]
-    pub fn with_checker(master_key: Arc<MasterKey>, ssrf: Arc<dyn SsrfChecker>) -> Self {
-        Self { master_key, ssrf }
+    pub fn with_checker(ssrf: Arc<dyn SsrfChecker>) -> Self {
+        Self { ssrf }
     }
 
-    fn decrypt_snapshot(&self, source: &ProbeSource) -> Result<CounterSnapshot, ProbeError> {
+    fn parse_snapshot(source: &ProbeSource) -> Result<CounterSnapshot, ProbeError> {
         match &source.last_counter_snapshot {
             None => Ok(CounterSnapshot::default()),
-            Some(encrypted) => {
-                let json = decrypt_secret(self.master_key.as_bytes(), encrypted)?;
-                serde_json::from_str(&json).map_err(|e| {
-                    ProbeError::ProbeFailed(format!("counter snapshot parse failed: {e}"))
-                })
-            }
+            Some(json) => serde_json::from_str(json).map_err(|e| {
+                ProbeError::ProbeFailed(format!("counter snapshot parse failed: {e}"))
+            }),
         }
-    }
-
-    fn encrypt_snapshot(&self, snapshot: &CounterSnapshot) -> Result<String, ProbeError> {
-        let json = serde_json::to_string(snapshot).map_err(|e| {
-            ProbeError::ProbeFailed(format!("counter snapshot serialize failed: {e}"))
-        })?;
-        encrypt_secret(self.master_key.as_bytes(), json.as_bytes())
     }
 
     async fn fetch_nodes(&self, endpoint: &str) -> Result<Vec<KomariNode>, ProbeError> {
@@ -175,7 +169,7 @@ impl KomariProbeAdapter {
 #[async_trait]
 impl ProbeSourceAdapter for KomariProbeAdapter {
     async fn sync_traffic(&self, source: &ProbeSource) -> Result<ProbeSyncResult, ProbeError> {
-        let last_snapshot = self.decrypt_snapshot(source)?;
+        let last_snapshot = Self::parse_snapshot(source)?;
         let nodes = self.fetch_nodes(&source.endpoint_url).await?;
 
         let now = Timestamp::now();
@@ -223,10 +217,12 @@ impl ProbeSourceAdapter for KomariProbeAdapter {
             }
         }
 
-        let encrypted_snapshot = self.encrypt_snapshot(&new_snapshot)?;
+        let snapshot_json = serde_json::to_string(&new_snapshot).map_err(|e| {
+            ProbeError::ProbeFailed(format!("counter snapshot serialize failed: {e}"))
+        })?;
         Ok(ProbeSyncResult {
             samples,
-            new_counter_snapshot: Some(encrypted_snapshot),
+            new_counter_snapshot: Some(snapshot_json),
         })
     }
 }
@@ -236,10 +232,6 @@ mod tests {
     use super::*;
     use deve_sub_domain::ProbeSourceKind;
     use deve_sub_kernel::{ProbeSourceId, SubscriptionId};
-
-    fn mk_master_key() -> Arc<MasterKey> {
-        Arc::new(MasterKey::from_bytes(&[0x42u8; 32]))
-    }
 
     fn mk_source(snapshot: Option<String>) -> ProbeSource {
         let now = Timestamp::now();
@@ -260,8 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_encryption_round_trip() {
-        let adapter = KomariProbeAdapter::new(mk_master_key());
+    fn snapshot_parse_round_trip() {
         let mut snapshot = CounterSnapshot::default();
         snapshot.servers.insert(
             "uuid-abc".to_owned(),
@@ -270,25 +261,23 @@ mod tests {
                 net_out: 88_888,
             },
         );
-        let encrypted = adapter.encrypt_snapshot(&snapshot).expect("encrypt");
-        assert!(encrypted.contains(':'));
-        let source = mk_source(Some(encrypted));
-        let decrypted = adapter.decrypt_snapshot(&source).expect("decrypt");
+        let json = serde_json::to_string(&snapshot).expect("serialize");
+        let source = mk_source(Some(json));
+        let parsed = KomariProbeAdapter::parse_snapshot(&source).expect("parse");
         assert_eq!(
-            decrypted.servers.get("uuid-abc").expect("uuid-abc").net_in,
+            parsed.servers.get("uuid-abc").expect("uuid-abc").net_in,
             99_999
         );
         assert_eq!(
-            decrypted.servers.get("uuid-abc").expect("uuid-abc").net_out,
+            parsed.servers.get("uuid-abc").expect("uuid-abc").net_out,
             88_888
         );
     }
 
     #[test]
-    fn decrypt_snapshot_none_returns_default() {
-        let adapter = KomariProbeAdapter::new(mk_master_key());
+    fn parse_snapshot_none_returns_default() {
         let source = mk_source(None);
-        let snapshot = adapter.decrypt_snapshot(&source).expect("decrypt");
+        let snapshot = KomariProbeAdapter::parse_snapshot(&source).expect("parse");
         assert!(snapshot.servers.is_empty());
     }
 }

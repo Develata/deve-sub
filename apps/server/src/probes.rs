@@ -35,29 +35,6 @@ use deve_sub_kernel::{NodeId, ProbeRunId, ProbeSourceId, SubscriptionId};
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
 
-const ENCRYPTED_SEPARATOR: char = ':';
-
-fn encrypt_auth_config(
-    master_key: &deve_sub_security::MasterKey,
-    plaintext: &str,
-) -> Result<String, (StatusCode, Json<deve_sub_contract::ErrorResponse>)> {
-    if plaintext.is_empty() {
-        return Ok(String::new());
-    }
-    let (ct, nonce) =
-        deve_sub_security::encrypt_to_b64(master_key.as_bytes(), plaintext.as_bytes()).map_err(
-            |e| {
-                tracing::warn!(error = %e, "auth_config encryption failed");
-                err(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "encryption_failed",
-                    "failed to encrypt auth_config",
-                )
-            },
-        )?;
-    Ok(format!("{ct}{ENCRYPTED_SEPARATOR}{nonce}"))
-}
-
 /// Query parameters for `GET /api/v1/probe-sources`.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct ListProbeSourcesQuery {
@@ -293,15 +270,13 @@ async fn create_probe_source(
             )
         })?;
 
-    let auth_config = encrypt_auth_config(state.master_key.as_ref(), &req.auth_config)?;
-
     let source = probe::create_probe_source(
         state.probe_source_repo.as_ref(),
         CreateProbeSourceParams {
             kind: kind_from_dto(req.kind),
             name: req.name,
             endpoint_url: req.endpoint_url,
-            auth_config,
+            auth_config: req.auth_config,
             subscription_id,
         },
     )
@@ -453,18 +428,13 @@ async fn update_probe_source(
         None => None,
     };
 
-    let auth_config = match req.auth_config {
-        Some(plaintext) => Some(encrypt_auth_config(state.master_key.as_ref(), &plaintext)?),
-        None => None,
-    };
-
     let source = probe::update_probe_source(
         state.probe_source_repo.as_ref(),
         UpdateProbeSourceParams {
             id: source_id,
             name: req.name,
             endpoint_url: req.endpoint_url,
-            auth_config,
+            auth_config: req.auth_config,
             subscription_id,
             enabled: req.enabled,
         },

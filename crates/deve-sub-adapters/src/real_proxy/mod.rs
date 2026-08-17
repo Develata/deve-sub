@@ -86,7 +86,12 @@ impl LatencyProbe for RealProxyProbe {
             }
         };
 
-        match self.http_round_trip(stream, timeout).await {
+        // WHY: dial already consumed part of the `timeout` budget. Pass only
+        // the remaining slice to http_round_trip so the total probe respects
+        // a single deadline — otherwise dial + http_round_trip can each take
+        // the full `timeout`, doubling the effective wall-clock bound (W-Y).
+        let remaining = timeout.saturating_sub(start.elapsed());
+        match self.http_round_trip(stream, remaining).await {
             Ok(()) => {
                 let rtt = start.elapsed().as_millis().min(u32::MAX as u128) as u32;
                 LatencyResult {

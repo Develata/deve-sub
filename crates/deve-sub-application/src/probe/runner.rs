@@ -153,14 +153,13 @@ pub async fn execute_probe_run(
                     };
                 }
             };
-            // Probe with timeout.
-            tokio::time::timeout(timeout, async { probe.probe(&node, timeout).await })
-                .await
-                .unwrap_or(LatencyResult {
-                    node_id,
-                    rtt_ms: None,
-                    error_class: ErrorClass::Timeout,
-                })
+            // WHY: no outer tokio::time::timeout wrapper here — each
+            // LatencyProbe implementation applies its own internal timeout
+            // to every I/O step (dial, handshake, HTTP round-trip) using the
+            // same `timeout` budget, so a wrapper would double-count the
+            // deadline and race with the inner timeout's classification
+            // (W-Y). The probe is the single deadline authority.
+            probe.probe(&node, timeout).await
         });
     }
 

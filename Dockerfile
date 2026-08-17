@@ -16,15 +16,18 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY apps/ apps/
 COPY migrations/ migrations/
+COPY scripts/ scripts/
 
 # Build the host release binary.
 RUN cargo build --locked --release --bin deve-sub
 
-# Build the WASM frontend (DS-AUD-004): without this the runtime image only
-# has the placeholder HTML, not the real admin UI.
+# Build the WASM frontend (DS-AUD-004): the build script normalizes Dioxus
+# output to apps/web/dist/ and verifies the index.html + WASM + JS contract
+# so the runtime image always has the real admin UI, not the placeholder
+# (DS-AUD-007/053).
 RUN rustup target add wasm32-unknown-unknown
 RUN cargo install dioxus-cli --locked --version 0.7.10
-RUN dx build --release --package deve-sub-web
+RUN bash scripts/build-web-release.sh
 
 # ── Stage 2: Minimal runtime ─────────────────────────────────────────
 # WHY: trixie-slim is the current Debian stable (per ADR-0006), not "latest".

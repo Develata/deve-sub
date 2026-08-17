@@ -4,7 +4,10 @@
 //! commands/queries but contain no business rules. See
 //! `docs/plan/03-architecture.md` and ADR-0004 for the API boundary policy.
 
-#![cfg_attr(test, allow(clippy::expect_used))]
+// WHY: test harnesses use unwrap/expect for infallible fixtures (Uri/Request
+// builders, temp dirs). Denying them in test code adds noise without catching
+// real bugs. Non-test code remains deny-by-default per workspace lints.
+#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use std::collections::HashMap;
 use std::net::SocketAddr;

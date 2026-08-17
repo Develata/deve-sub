@@ -55,13 +55,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --locked --version 0.7.10
-      - name: Build WASM frontend
-        run: dx build --release --package deve-sub-web --features frontend
-      - name: Verify dist artifacts
-        run: |
-          test -f apps/web/dist/index.html
-          ls apps/web/dist/assets/*.wasm | head -1
-          ls apps/web/dist/assets/*.js | head -1
+      - name: Build and verify WASM frontend
+        run: bash scripts/build-web-release.sh
 
   browser-e2e:
     name: browser-e2e
@@ -77,8 +72,8 @@ jobs:
         run: cargo build --locked --release --bin deve-sub
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --locked --version 0.7.10
-      - name: Build WASM frontend
-        run: dx build --release --package deve-sub-web --features frontend
+      - name: Build and verify WASM frontend
+        run: bash scripts/build-web-release.sh
       - uses: actions/setup-node@v7
         with:
           node-version: "20"

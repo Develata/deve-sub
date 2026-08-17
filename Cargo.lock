@@ -1124,6 +1124,7 @@ dependencies = [
  "deve-sub-protocol",
  "deve-sub-security",
  "deve-sub-storage-sqlite",
+ "futures-util",
  "serde",
  "serde_json",
  "serde_yaml",

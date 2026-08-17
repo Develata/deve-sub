@@ -54,6 +54,7 @@ ulid = { version = "1", features = ["serde"] }
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 proptest = "1"
 tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
 axum = { version = "0.8", features = ["macros"] }
 tower-http = { version = "0.6", features = ["cors", "compression-gzip", "trace", "request-id", "fs"] }
 clap = { version = "4", features = ["derive", "env"] }

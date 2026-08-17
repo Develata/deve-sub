@@ -8,6 +8,7 @@
 use std::net::IpAddr;
 
 use async_trait::async_trait;
+use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 
 use deve_sub_domain::{ReconcileEntry, RegionAssignment, RegionMethod};
@@ -42,11 +43,40 @@ pub trait GeoIpPort: Send + Sync {
 /// the node's endpoint host. Sets `node.region` to `Auto` with the detected
 /// value, and records candidate IPs in `node.extras["candidate_ips"]` as a
 /// JSON array of strings.
+///
+/// Lookups run concurrently with a bounded [`tokio::sync::Semaphore`] (8 by
+/// default) to avoid hammering DNS/resolver when a source has hundreds of
+/// nodes (W-FF). Mutations are applied in entry order after all lookups
+/// resolve so the output order matches the input.
 pub async fn enrich_regions(entries: &mut [ReconcileEntry], geoip: &dyn GeoIpPort) {
-    for entry in entries.iter_mut() {
-        if let Some(node) = &mut entry.node {
-            let host = node.endpoint.host.uri_host().to_owned();
-            let detection = geoip.detect_region(&host).await;
+    const MAX_CONCURRENT_LOOKUPS: usize = 8;
+
+    let hosts: Vec<Option<String>> = entries
+        .iter()
+        .map(|e| {
+            e.node
+                .as_ref()
+                .map(|n| n.endpoint.host.uri_host().to_owned())
+        })
+        .collect();
+
+    let lookups = hosts.into_iter().map(|host_opt| async move {
+        match host_opt {
+            Some(host) => Some(geoip.detect_region(&host).await),
+            None => None,
+        }
+    });
+
+    // WHY: `buffered` polls up to N futures concurrently without spawning,
+    // so borrowed (non-'static) futures that capture `geoip` by reference
+    // work here. Results come back in input order, matching entry order.
+    let results: Vec<Option<RegionDetection>> = stream::iter(lookups)
+        .buffered(MAX_CONCURRENT_LOOKUPS)
+        .collect()
+        .await;
+
+    for (entry, detection) in entries.iter_mut().zip(results) {
+        if let (Some(node), Some(detection)) = (&mut entry.node, detection) {
             node.region = RegionAssignment {
                 method: RegionMethod::Auto,
                 value: detection.region,

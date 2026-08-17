@@ -23,12 +23,23 @@ This ADR extends their use to all sensitive at-rest fields.
 
 ### 1. Secret envelope format
 
-Define a versioned envelope: `v1:{ciphertext_b64url}:{nonce_b64url}`. The
-`v1:` prefix enables future algorithm migration without ambiguity. The
-`deve-sub-security` crate exposes `seal(key, plaintext) -> String` and
-`open(key, envelope) -> Vec<u8>` as the canonical API. Existing probe adapter
-encryption (`{ct}:{nonce}` without prefix) is migrated to the versioned
-format in the same slice.
+Define a versioned envelope: `v2:{ciphertext_b64url}:{nonce_b64url}`. The
+`v2:` prefix distinguishes this from the never-released `v1` format (which
+lacked AAD and HKDF subkey derivation; `v1` was superseded before any tagged
+release, so no production data carries it). Each `seal` call derives a
+column-bound subkey from the master key via HKDF-SHA256 with a domain tag,
+then encrypts with XChaCha20-Poly1305 using AAD bound to the column context
+(table + column + purpose). The column-bound AAD prevents ciphertext
+cut-and-paste across columns; the HKDF subkey limits blast radius if a
+per-column nonce is ever reused. The `deve-sub-security` crate exposes
+`seal(master_key, context, plaintext) -> String` and
+`open(master_key, context, envelope) -> Vec<u8>` as the canonical API.
+
+Existing probe adapter and TOTP encryption (`{ct}:{nonce}` without prefix or
+AAD) is **deferred** from this slice — they use raw `cipher::encrypt`/
+`decrypt` directly and remain on the pre-envelope path. Migrating them to the
+versioned envelope is tracked separately; the `v2:` prefix lets a future
+reader distinguish envelope-protected from raw-cipher fields unambiguously.
 
 ### 2. Encrypted fields at rest
 
@@ -53,22 +64,31 @@ and index efficiency.
 
 ### 3. Migration strategy
 
-Forward-only, two-phase:
+Forward-only, single-step:
 
-1. **Migration 0015** (schema): add `_encrypted` columns alongside existing
-   plaintext columns. The application writes to both during the transition
-   window. A CLI command `deve-sub secrets encrypt` backfills encrypted
-   columns from plaintext for existing rows.
-2. **Migration 0016** (cleanup, deferred): drop plaintext columns after all
-   deployments have verified encrypted-column reads. Rollback is by
-   restoring the pre-migration backup (constraint #13).
+1. **Migration 0015** (schema): add `_encrypted` columns and drop the
+   corresponding plaintext columns in the same migration. No dual-write
+   window, no backfill command.
+
+This is safe because no tagged release has been published — no production
+database holds data that needs backfilling. A pre-release database that
+still has plaintext columns is disposable; rollback is by restoring the
+pre-migration backup (constraint #13). Skipping the dual-write phase avoids
+the complexity of a temporary read-fallback path and a deferred cleanup
+migration.
 
 ### 4. Key fingerprint
 
 Compute `key_fingerprint = HMAC-SHA256(key, "deve-sub-key-fingerprint-v1")`,
 store the hex digest in the backup manifest. The fingerprint proves the
 backup and the current master key are paired without exposing the key
-itself. Restore warns if the fingerprint does not match.
+itself. Restore **fails closed** when a fingerprint is present in the
+manifest but the loaded key's fingerprint does not match — a mismatched key
+would silently produce unreadable encrypted columns, so refusing the restore
+is safer than warning. When the manifest has no fingerprint (backup predates
+at-rest encryption) and no key is loaded, restore proceeds with a warning;
+when the manifest has no fingerprint but a key is loaded, restore also
+proceeds (the key is simply unused by the unencrypted backup).
 
 ### 5. Redaction boundary
 
@@ -91,14 +111,23 @@ system is already initialized.
 
 ### 7. Backup/restore hardening (DS-AUD-031/032/033/034)
 
-- Backup archive entries use mode 0600; the archive file itself is 0600.
-- Restore writes to a temp path, verifies integrity and row counts, then
-  atomically renames to the target. A timestamped rollback file is preserved
-  until the new service passes versioned readiness.
-- Service-not-running detection replaces the WAL/SHM heuristic with a SQLite
-  exclusive-lock probe.
+- Backup archive entries use mode 0600; the archive file itself is written
+  via `NamedTempFile` (0600), `fsync`ed, then `persist`ed atomically.
+- Restore writes to a staging file, `fsync`s the staged DB, hard-links the
+  existing DB to a `.pre-restore` rollback file (keeping the production
+  entry in place), atomically renames staging to the target, then `fsync`s
+  the parent directory. A crash at any point leaves either the old or new
+  DB at the production path — never missing.
 - `allow_master_key_generation` config defaults to `false`; auto-generation
   requires explicit opt-in.
+- **Process-level lifecycle lock**: an exclusive `flock` (via `fs2`, a safe
+  wrapper around `flock(2)`) on the DB file, acquired at `serve` startup and
+  held for the process lifetime. `restore` acquires the same lock before
+  staging, guaranteeing no `serve` process is running. This complements the
+  SQLite `BEGIN IMMEDIATE` probe in `backup` (which detects concurrent write
+  transactions but not idle processes between transactions). The workspace
+  `unsafe_code = "forbid"` policy is unaffected — `fs2` encapsulates the
+  `unsafe` syscall inside its own crate boundary.
 
 ## Consequences
 

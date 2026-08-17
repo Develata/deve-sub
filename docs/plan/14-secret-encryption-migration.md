@@ -3,12 +3,12 @@
 ## Scope
 
 This chapter defines the migration plan for encrypting sensitive fields at
-rest, per ADR-0007. It covers schema changes, backfill, canary scanning,
-rollback, and the test plan. The physical schema source of truth is
-`migrations/`; this chapter is the design authority for the migration
-sequence.
+rest, per ADR-0007. It covers schema changes, rollback, and the test plan.
+The physical schema source of truth is `migrations/`; this chapter is the
+design authority for the migration sequence.
 
-See ADR-0007 for the envelope format and field selection rationale.
+See ADR-0007 for the envelope format (`v2:` prefix, HKDF-SHA256 subkey,
+column-bound AAD) and field selection rationale.
 
 ## Authority
 
@@ -18,143 +18,121 @@ See ADR-0007 for the envelope format and field selection rationale.
 
 ## Migration sequence
 
-### Phase 1 — Schema addition (migration 0015)
+### Single-step migration (migration 0015)
 
-Add `_encrypted` columns alongside existing plaintext columns. All new
-application writes go to the `_encrypted` columns; reads prefer `_encrypted`
-and fall back to plaintext if the encrypted column is NULL (transition
-window).
+Migration 0015 adds `_encrypted` columns and drops the corresponding
+plaintext columns in one step. No dual-write window, no backfill CLI, no
+deferred cleanup migration.
+
+This is safe because no tagged release has been published — no production
+database holds data that needs backfilling. A pre-release database that
+still has plaintext columns is disposable; rollback is by restoring the
+pre-migration backup (constraint #13).
 
 ```sql
--- sources
+-- sources: subscription URL and custom headers
 ALTER TABLE sources ADD COLUMN url_encrypted TEXT;
 ALTER TABLE sources ADD COLUMN headers_encrypted_v2 TEXT;
--- source_items
+ALTER TABLE sources DROP COLUMN url;
+ALTER TABLE sources DROP COLUMN headers_encrypted;
+ALTER TABLE sources RENAME COLUMN headers_encrypted_v2 TO headers_encrypted;
+
+-- source_items: raw share URIs from snapshots
 ALTER TABLE source_items ADD COLUMN raw_uri_encrypted TEXT;
--- node_source_bindings
+ALTER TABLE source_items DROP COLUMN raw_uri;
+
+-- node_source_bindings: raw share URIs per binding
 ALTER TABLE node_source_bindings ADD COLUMN raw_uri_encrypted TEXT;
--- nodes
-ALTER TABLE nodes ADD COLUMN authentication_json_encrypted TEXT;
+ALTER TABLE node_source_bindings DROP COLUMN raw_uri;
+
+-- nodes: credential-bearing JSON columns
 ALTER TABLE nodes ADD COLUMN protocol_config_json_encrypted TEXT;
+ALTER TABLE nodes ADD COLUMN authentication_json_encrypted TEXT;
 ALTER TABLE nodes ADD COLUMN tls_json_encrypted TEXT;
 ALTER TABLE nodes ADD COLUMN transport_json_encrypted TEXT;
 ALTER TABLE nodes ADD COLUMN obfuscation_json_encrypted TEXT;
 ALTER TABLE nodes ADD COLUMN extras_json_encrypted TEXT;
+ALTER TABLE nodes DROP COLUMN protocol_config_json;
+ALTER TABLE nodes DROP COLUMN authentication_json;
+ALTER TABLE nodes DROP COLUMN tls_json;
+ALTER TABLE nodes DROP COLUMN transport_json;
+ALTER TABLE nodes DROP COLUMN obfuscation_json;
+ALTER TABLE nodes DROP COLUMN extras_json;
 ```
 
-The `headers_encrypted` column already exists but is unused. The new
-`headers_encrypted_v2` column holds the versioned envelope; the old column
-is retained for one migration cycle and dropped in 0016.
+After migration 0015, repository adapters encrypt on write and decrypt on
+read using the envelope v2 API (`seal(master_key, context, plaintext)` /
+`open(master_key, context, envelope)`). Reads are fail-closed: a NULL
+`_encrypted` column or a missing master key produces an error, not a
+silent fallback to plaintext.
 
-### Phase 2 — Application dual-write
+### Deferred: probe adapter and TOTP encryption
 
-After migration 0015, the repository layer writes to both plaintext and
-`_encrypted` columns. This ensures that a rollback to pre-0015 does not lose
-data written after the migration. Reads prefer `_encrypted`, falling back
-to plaintext when the encrypted column is NULL.
-
-### Phase 3 — Backfill (CLI command)
-
-```text
-deve-sub secrets encrypt [--dry-run] [--limit N]
-```
-
-Reads plaintext columns, encrypts with the master key, writes the envelope
-to `_encrypted` columns. Idempotent: rows with non-NULL `_encrypted` are
-skipped. Resumable: processes in batches of `--limit` rows per table.
-`--dry-run` reports counts without writing.
-
-The command must be run after migration 0015 and before migration 0016.
-
-### Phase 4 — Plaintext column drop (migration 0016, deferred)
-
-After all deployments have verified encrypted-column reads and the backfill
-is complete, migration 0016 drops the plaintext columns. This migration is
-deferred until the next release cycle after Phase D ships.
-
-## Canary scanning
-
-A canary scan verifies zero plaintext secrets remain in persisted artifacts.
-
-### Scan targets
-
-1. **DB dump**: `sqlite3 .dump` output must not contain recognizable URI
-   schemes with credentials (`vless://`, `vmess://`, `trojan://`, etc.) or
-   `password` JSON keys with non-encrypted values.
-2. **Backup archive**: the tar must not contain plaintext secrets; the
-   manifest must include `key_fingerprint`.
-3. **CLI output**: `deve-sub source list`, `deve-sub node list` output must
-   not contain full URLs or credential values.
-4. **Trace logs**: a test tracing subscriber captures all output and
-   asserts no raw subscription tokens, URLs, or passwords appear.
-
-### Scan tool
-
-`deve-sub secrets scan` — scans the DB, backup, and a captured log sample
-for recognizable secret patterns. Returns non-zero if any plaintext secret
-is found. Used in CI and as a post-migration verification step.
-
-Patterns scanned:
-
-- URI schemes: `ss://`, `ssr://`, `vmess://`, `vless://`, `trojan://`,
-  `hysteria2://`, `hy2://`, `tuic://`, `naive+https://`, `socks5://`,
-  `http://` with credentials.
-- JSON keys: `"password"`, `"uuid"`, `"secret"`, `"token"` with non-envelope
-  values (values not starting with `v1:`).
-- Subscription token pattern: 32+ char base64url in `/sub/` paths.
+Probe adapter auth and TOTP secret encryption use the raw `cipher::encrypt`/
+`decrypt` API (not the versioned envelope). These predate the envelope and
+are not migrated in this slice. The `v2:` prefix on envelope-protected
+fields lets a future reader distinguish envelope-protected from raw-cipher
+fields unambiguously. Migration is tracked separately.
 
 ## Rollback
 
-Rollback is by restoring the pre-migration backup (constraint #13). The
-dual-write phase ensures data written after 0015 survives a rollback to
-pre-0015 because the plaintext columns are still populated.
+Rollback is by restoring the pre-migration backup (constraint #13). There
+is no dual-write phase, so data written after 0015 cannot be rolled back to
+a pre-0015 schema — the plaintext columns no longer exist. This is
+acceptable for pre-release: a failed migration means restoring the backup
+and re-running.
 
 If the master key is lost after encryption, the encrypted columns are
-unrecoverable. Mitigation: the backup manifest records the key fingerprint,
-and `allow_master_key_generation` defaults to `false` to prevent silent key
-rotation.
+unrecoverable. Mitigation: the backup manifest records the key fingerprint
+(HMAC-SHA256), and `allow_master_key_generation` defaults to `false` to
+prevent silent key rotation on a lost key.
 
 ## Test plan
 
 ### Recovery test (constraint #13)
 
-1. Start with a pre-0015 DB containing plaintext sources and nodes.
-2. Run migration 0015.
-3. Run `deve-sub secrets encrypt`.
-4. Verify `_encrypted` columns are non-NULL and contain `v1:` envelopes.
-5. Run `deve-sub secrets scan` — must report zero plaintext secrets.
-6. Restore the pre-migration backup — must produce a working DB with
-   plaintext columns intact.
+`apps/cli/tests/backup_restore.rs::backup004_restore_runs_forward_migrations`
+covers the forward migration path (schema 13 → 15 via restore). A dedicated
+`migration_0015_applies_and_schema_is_correct` test in
+`migration_recovery.rs` verifies column existence and plaintext column
+absence.
 
 ### Round-trip test
 
-1. Create a source with a URL containing credentials.
-2. Read it back — the domain layer receives the original plaintext URL.
-3. Inspect the DB — the `url_encrypted` column contains `v1:...`, the `url`
-   column contains the plaintext (dual-write phase) or is NULL (post-0016).
+`crates/deve-sub-security/src/envelope.rs` tests verify the envelope v2
+seal/open round-trip, wrong-key rejection, wrong-context rejection, and
+`v1:` prefix rejection. `crates/deve-sub-storage-sqlite/tests/node_credential_encryption.rs`
+verifies that node JSON columns are encrypted at rest and decrypted on read.
 
-### Canary test
+### Fail-closed test
 
-1. Generate a DB with known secret patterns.
-2. Run `deve-sub secrets encrypt`.
-3. Run `deve-sub secrets scan` — must exit zero.
-4. Capture `deve-sub source list` output — must not contain the full URL.
-5. Capture trace logs from a subscription delivery — must not contain the
-   raw token.
+`source_repository.rs` and `node_credential_encryption.rs` tests verify
+that reading an encrypted column without a master key produces an error,
+and that a NULL encrypted column with a key produces an error.
 
 ### Key fingerprint test
 
-1. Create a backup.
-2. Verify the manifest contains `key_fingerprint`.
-3. Restore with a different master key — must warn about fingerprint
-   mismatch.
+`backup_restore.rs::backup006_manifest_records_key_fingerprint` verifies
+the manifest records the HMAC-SHA256 fingerprint.
+`backup_restore.rs::backup008_restore_with_mismatched_key_refused` verifies
+restore fails closed on fingerprint mismatch.
 
 ## Failure/recovery
 
-- **Backfill interrupted**: re-run `deve-sub secrets encrypt`; idempotent.
-- **Master key changed after backfill**: encrypted columns are unreadable.
-  Restore from pre-key-change backup and re-backfill with the new key.
-- **Migration 0015 applied but backfill not run**: reads fall back to
-  plaintext; the system works but secrets are not yet protected. The
-  `doctor` command warns if `_encrypted` columns are NULL for rows that
-  have plaintext.
+- **Migration 0015 applied but key lost**: encrypted columns are
+  unrecoverable. Restore from a pre-migration backup and re-run with a new
+  key. This is why `allow_master_key_generation` defaults to `false`.
+- **Master key changed after deployment**: all encrypted columns become
+  unreadable. Restore from a pre-key-change backup and re-encrypt with the
+  new key. There is no re-encryption CLI (pre-release; no production data
+  to re-encrypt).
+- **Restore with wrong key**: the fingerprint check fails closed, refusing
+  the restore and leaving the existing production DB intact (DS-AUD-034).
+
+## Canary scanning (deferred)
+
+ADR-0007 §5 describes a canary scan that asserts zero plaintext secrets in
+DB dumps, backup archives, CLI output, and trace logs. This is not yet
+implemented. The redaction boundary (masked URLs, token redaction in
+logging) is in place, but the end-to-end canary assertion is deferred to a
+future slice.

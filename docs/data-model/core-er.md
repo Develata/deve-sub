@@ -110,7 +110,7 @@ erDiagram
         ulid id PK
         string name
         string source_type
-        string url
+        string url_encrypted
         string http_method
         string headers_encrypted
         bool auto_update
@@ -134,7 +134,7 @@ erDiagram
     SOURCE_ITEM {
         ulid id PK
         ulid snapshot_id FK
-        string raw_uri
+        string raw_uri_encrypted
         string parse_status
     }
 
@@ -144,16 +144,16 @@ erDiagram
         string protocol_kind
         string host
         int port
-        string protocol_config_json
-        string authentication_json
-        string tls_json
-        string transport_json
+        string protocol_config_json_encrypted
+        string authentication_json_encrypted
+        string tls_json_encrypted
+        string transport_json_encrypted
         string udp_capability
         string multiplex_json
-        string obfuscation_json
+        string obfuscation_json_encrypted
         string congestion_json
         string region
-        string extras_json
+        string extras_json_encrypted
         datetime imported_at
         int revision
         string status
@@ -177,7 +177,7 @@ erDiagram
         ulid id PK
         ulid node_id FK
         ulid source_id FK
-        string raw_uri
+        string raw_uri_encrypted
     }
 
     TAG {
@@ -270,6 +270,8 @@ erDiagram
 - `AUDIT_LOG` and `OUTBOX_EVENT` are infrastructure entities that do not
   participate in business relationships but are persisted alongside domain
   state.
-- Encrypted fields (headers, cookies, TOTP secrets) are stored as ciphertext;
+- Encrypted fields (subscription URLs, custom headers, raw share URIs,
+  node credential JSON, TOTP secrets) are stored as envelope v2 ciphertext;
   the master key comes from a file or secret mount, never from the database.
+  See ADR-0007 and `migrations/0015_secret_envelope.sql`.
 - Token fields (`token_hash`) store HMAC-SHA256 digests, never plaintext tokens.

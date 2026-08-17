@@ -7,7 +7,8 @@
 use deve_sub_domain::{IdentityError, Role, Session, SessionRepository, User, UserRepository};
 use deve_sub_kernel::{SessionId, Timestamp, UserId};
 use deve_sub_security::{
-    MasterKey, PURPOSE_SESSION, generate_session_token, hash_password, hmac_digest, verify_password,
+    MasterKey, PURPOSE_SESSION, generate_session_token, hash_password_async, hmac_digest,
+    verify_password_async,
 };
 use std::sync::LazyLock;
 use tokio::sync::Semaphore;
@@ -90,7 +91,7 @@ pub async fn setup_admin(
         return Err(AuthError::AlreadyInitialized);
     }
 
-    let password_hash = hash_password(password)?;
+    let password_hash = hash_password_async(password.to_owned()).await?;
     let user = User::new(username, password_hash, Role::Admin);
     user_repo
         .create_if_empty(&user)
@@ -199,18 +200,19 @@ pub async fn login(params: LoginParams<'_>) -> Result<LoginOutcome, AuthError> {
             if !u.is_active() {
                 // WHY: still verify against the real hash to keep timing
                 // uniform across disabled vs wrong-password vs unknown-user.
-                let _ = verify_password(password, &u.password_hash);
+                let _ = verify_password_async(password.to_owned(), u.password_hash.clone()).await;
                 rate_limiter.record_failure(username, ip);
                 return Err(AuthError::InvalidCredentials);
             }
-            if !verify_password(password, &u.password_hash)? {
+            if !verify_password_async(password.to_owned(), u.password_hash.clone()).await? {
                 rate_limiter.record_failure(username, ip);
                 return Err(AuthError::InvalidCredentials);
             }
             u
         }
         None => {
-            let _ = verify_password(password, DUMMY_PASSWORD_HASH);
+            let _ =
+                verify_password_async(password.to_owned(), DUMMY_PASSWORD_HASH.to_owned()).await;
             rate_limiter.record_failure(username, ip);
             return Err(AuthError::InvalidCredentials);
         }
@@ -402,7 +404,7 @@ pub async fn create_user(
     role: Role,
 ) -> Result<User, AuthError> {
     validate_credentials(username, password)?;
-    let password_hash = hash_password(password)?;
+    let password_hash = hash_password_async(password.to_owned()).await?;
     let user = User::new(username, password_hash, role);
     user_repo.create(&user).await?;
     Ok(user)

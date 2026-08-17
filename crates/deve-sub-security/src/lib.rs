@@ -23,7 +23,7 @@ pub use cipher::{decrypt, decrypt_aad, decrypt_from_b64, encrypt, encrypt_aad, e
 pub use envelope::{is_envelope, mask_url, open, seal};
 pub use hmac::{PURPOSE_CHALLENGE, PURPOSE_RECOVERY, PURPOSE_SESSION, hmac_digest};
 pub use master_key::MasterKey;
-pub use password::{hash_password, verify_password};
+pub use password::{hash_password, hash_password_async, verify_password, verify_password_async};
 pub use recovery::{
     generate_codes as generate_recovery_codes, normalize_code as normalize_recovery_code,
 };

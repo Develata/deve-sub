@@ -13,7 +13,7 @@ use deve_sub_kernel::{Timestamp, UserId};
 use deve_sub_security::{
     MasterKey, PURPOSE_RECOVERY, PURPOSE_SESSION, decrypt, encrypt, generate_recovery_codes,
     generate_session_token, hmac_digest, normalize_recovery_code, totp_generate_secret,
-    totp_otpauth_uri, totp_verify_code, verify_password,
+    totp_otpauth_uri, totp_verify_code, verify_password_async,
 };
 
 use super::challenge::verify_challenge_token;
@@ -175,7 +175,7 @@ pub async fn disable_2fa(
         return Err(AuthError::TwoFactorNotEnabled);
     }
 
-    if !verify_password(password, &user.password_hash)? {
+    if !verify_password_async(password.to_owned(), user.password_hash.clone()).await? {
         return Err(AuthError::InvalidCredentials);
     }
 
@@ -219,7 +219,7 @@ pub async fn regenerate_recovery_codes(
         return Err(AuthError::TwoFactorNotEnabled);
     }
 
-    if !verify_password(password, &user.password_hash)? {
+    if !verify_password_async(password.to_owned(), user.password_hash.clone()).await? {
         return Err(AuthError::InvalidCredentials);
     }
 

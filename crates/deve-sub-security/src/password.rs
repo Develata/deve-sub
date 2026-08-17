@@ -42,6 +42,38 @@ pub fn verify_password(plain: &str, phc_hash: &str) -> Result<bool, SecurityErro
         .is_ok())
 }
 
+/// Async wrapper for [`hash_password`] that runs Argon2 on a blocking pool.
+///
+/// WHY: Argon2 is CPU-intensive (~20-50ms with default params) and blocks the
+/// calling thread. Calling it directly in an async function parks the tokio
+/// worker for that duration, starving other futures on the same worker. This
+/// wrapper offloads the hashing to `tokio::task::spawn_blocking` so the worker
+/// is free to poll other tasks.
+///
+/// # Errors
+/// Returns [`SecurityError::PasswordHash`] if hashing fails (propagated from
+/// [`hash_password`]).
+pub async fn hash_password_async(plain: String) -> Result<String, SecurityError> {
+    tokio::task::spawn_blocking(move || hash_password(&plain))
+        .await
+        .map_err(|e| SecurityError::Crypto(format!("argon2 task join failed: {e}")))?
+}
+
+/// Async wrapper for [`verify_password`] that runs Argon2 on a blocking pool.
+///
+/// WHY: same as [`hash_password_async`] — `verify_password` is CPU-intensive
+/// and would block the tokio worker if called directly from an async function.
+///
+/// # Errors
+/// Returns [`SecurityError::PasswordHash`] if the stored hash is malformed
+/// (propagated from [`verify_password`]). Returns
+/// [`SecurityError::Crypto`] if the blocking task panics or is cancelled.
+pub async fn verify_password_async(plain: String, phc_hash: String) -> Result<bool, SecurityError> {
+    tokio::task::spawn_blocking(move || verify_password(&plain, &phc_hash))
+        .await
+        .map_err(|e| SecurityError::Crypto(format!("argon2 task join failed: {e}")))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

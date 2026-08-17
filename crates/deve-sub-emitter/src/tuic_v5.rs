@@ -13,7 +13,7 @@ use deve_sub_domain::{
     Authentication, CongestionController, Node, ProtocolConfig, TuicV5Config, UdpRelayMode,
 };
 
-use crate::common::{format_fragment, format_query};
+use crate::common::{encode_userinfo, format_fragment, format_query};
 use crate::error::EmitError;
 
 /// Emit a TUIC v5 [`Node`] as a `tuic://` share URI.
@@ -91,8 +91,10 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
 
     let query = format_query(&params);
 
+    let uuid_enc = encode_userinfo(uuid);
+    let pwd_enc = encode_userinfo(password);
     let mut result = format!(
-        "tuic://{uuid}:{password}@{host}:{port}?{query}",
+        "tuic://{uuid_enc}:{pwd_enc}@{host}:{port}?{query}",
         host = node.endpoint.host.uri_host(),
         port = node.endpoint.port,
     );

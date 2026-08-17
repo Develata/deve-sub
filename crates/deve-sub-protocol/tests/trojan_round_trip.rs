@@ -148,3 +148,29 @@ fn trojan_grpc_round_trip() {
     let reparsed = deve_sub_protocol::parse_uri(&emitted).expect("reparse");
     assert_eq!(reparsed.transport, node.transport);
 }
+
+/// W-B: password with URI-reserved characters (`@`, `:`, `/`, `?`, `#`, `%`)
+/// must round-trip without corrupting the URI structure. Emitters percent-
+/// encode userinfo (RFC 3986 §3.2.1); parsers percent-decode it back.
+#[test]
+fn trojan_reserved_password_round_trip() {
+    // WHY: all reserved chars are percent-encoded in the URI so `url::Url`
+    // does not split on a literal `:` (trojan uses `password@host`, not
+    // `user:password@host`).
+    let uri = "trojan://p%40ss%3Aword%2Fq%3Fr%23e@example.com:443?type=tcp#Reserved";
+    let node = deve_sub_protocol::parse_uri(uri).expect("parse");
+    let Authentication::Password { password } = &node.authentication else {
+        panic!("expected Password authentication");
+    };
+    assert_eq!(password, "p@ss:word/q?r#e");
+    let emitted = deve_sub_emitter::emit_uri(&node).expect("emit");
+    assert!(
+        !emitted.contains("p@ss:word/q?r#e@"),
+        "emitted URI must percent-encode reserved chars: {emitted}"
+    );
+    let reparsed = deve_sub_protocol::parse_uri(&emitted).expect("reparse");
+    let Authentication::Password { password: pwd2 } = &reparsed.authentication else {
+        panic!("expected Password authentication on reparse");
+    };
+    assert_eq!(pwd2, "p@ss:word/q?r#e");
+}

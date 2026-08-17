@@ -13,7 +13,9 @@ use deve_sub_domain::{
     Authentication, CongestionController, Hysteria2Config, Node, ProtocolConfig,
 };
 
-use crate::common::{format_bandwidth, format_fragment, format_pins, format_query};
+use crate::common::{
+    encode_userinfo, format_bandwidth, format_fragment, format_pins, format_query,
+};
 use crate::error::EmitError;
 
 /// Emit a Hysteria2 [`Node`] as a `hysteria2://` share URI.
@@ -104,8 +106,9 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
 
     let query = format_query(&params);
 
+    let pwd = encode_userinfo(password);
     let mut result = format!(
-        "hysteria2://{password}@{host}:{port}?{query}",
+        "hysteria2://{pwd}@{host}:{port}?{query}",
         host = node.endpoint.host.uri_host(),
         port = node.endpoint.port,
     );

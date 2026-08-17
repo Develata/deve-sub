@@ -10,7 +10,7 @@
 
 use deve_sub_domain::{Authentication, Node, ProtocolConfig, WireGuardConfig};
 
-use crate::common::{format_fragment, format_query};
+use crate::common::{encode_userinfo, format_fragment, format_query};
 use crate::error::EmitError;
 
 /// Emit a WireGuard [`Node`] as a `wireguard://` share URI.
@@ -66,8 +66,9 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
 
     let query = format_query(&params);
 
+    let key_enc = encode_userinfo(private_key);
     let mut result = format!(
-        "wireguard://{private_key}@{host}:{port}?{query}",
+        "wireguard://{key_enc}@{host}:{port}?{query}",
         host = node.endpoint.host.uri_host(),
         port = node.endpoint.port,
     );

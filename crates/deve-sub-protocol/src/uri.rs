@@ -334,6 +334,20 @@ pub(crate) fn decode_fragment(url: &url::Url) -> String {
         .unwrap_or_default()
 }
 
+/// Percent-decode a URI userinfo credential.
+///
+/// WHY: `url::Url::username()` and `url::Url::password()` return the
+/// percent-ENCODED form (e.g. `p%40ss` for `p@ss`). Storing that form in the
+/// domain model would corrupt container emitters (JSON/YAML), which need the
+/// raw credential. This helper decodes userinfo to its true value so the
+/// canonical node holds the raw password, and URI emitters re-encode on
+/// output (RFC 3986 §3.2.1).
+pub(crate) fn decode_userinfo(s: &str) -> String {
+    percent_encoding::percent_decode_str(s)
+        .decode_utf8_lossy()
+        .into_owned()
+}
+
 /// Decode an optional raw fragment string (already split from the URI) into a
 /// display name.
 pub(crate) fn decode_fragment_parts(fragment: Option<&str>) -> String {

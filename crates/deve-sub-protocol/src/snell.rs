@@ -24,10 +24,12 @@ use deve_sub_domain::{
 };
 
 use crate::error::ParseError;
-use crate::uri::{collect_query, decode_fragment, node_shell, parse_bool, parse_host};
+use crate::uri::{
+    collect_query, decode_fragment, decode_userinfo, node_shell, parse_bool, parse_host,
+};
 
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
-    let userinfo_psk = url.username();
+    let userinfo_psk = decode_userinfo(url.username());
     let display_name = decode_fragment(url);
     let query: HashMap<String, String> = collect_query(url);
 
@@ -38,7 +40,7 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
             .filter(|s| !s.is_empty())
             .ok_or(ParseError::MissingField("psk"))?
     } else {
-        userinfo_psk.to_owned()
+        userinfo_psk
     };
 
     let host_str = url

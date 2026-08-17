@@ -25,10 +25,10 @@ use deve_sub_domain::{
 };
 
 use crate::error::ParseError;
-use crate::uri::{collect_query, decode_fragment, node_shell, parse_host};
+use crate::uri::{collect_query, decode_fragment, decode_userinfo, node_shell, parse_host};
 
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
-    let password = url.username();
+    let password = decode_userinfo(url.username());
     if password.is_empty() {
         return Err(ParseError::MissingField("password"));
     }

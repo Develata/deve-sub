@@ -20,17 +20,17 @@ use deve_sub_domain::{
 
 use crate::error::ParseError;
 use crate::uri::{
-    build_common_tls, collect_query, decode_fragment, node_shell, parse_bool,
+    build_common_tls, collect_query, decode_fragment, decode_userinfo, node_shell, parse_bool,
     parse_duration_millis, parse_host,
 };
 
 /// Parse a parsed `tuic://` URL into a canonical [`Node`].
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
-    let uuid = url.username();
+    let uuid = decode_userinfo(url.username());
     if uuid.is_empty() {
         return Err(ParseError::MissingField("uuid"));
     }
-    let password = url.password().ok_or(ParseError::MissingField("password"))?;
+    let password = decode_userinfo(url.password().ok_or(ParseError::MissingField("password"))?);
 
     let host_str = url
         .host_str()

@@ -23,12 +23,13 @@ use deve_sub_domain::{
 use crate::error::ParseError;
 use crate::transport::map_transport_kind;
 use crate::uri::{
-    collect_query, decode_fragment, node_shell, parse_alpn, parse_bool, parse_host, query_insecure,
+    collect_query, decode_fragment, decode_userinfo, node_shell, parse_alpn, parse_bool,
+    parse_host, query_insecure,
 };
 
 /// Parse a parsed `vless://` URL into a canonical [`Node`].
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
-    let uuid = url.username();
+    let uuid = decode_userinfo(url.username());
     if uuid.is_empty() {
         return Err(ParseError::MissingField("uuid"));
     }

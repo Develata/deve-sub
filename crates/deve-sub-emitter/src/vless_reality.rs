@@ -14,7 +14,7 @@
 
 use deve_sub_domain::{Authentication, Node, ProtocolConfig, TransportKind, VlessRealityConfig};
 
-use crate::common::{format_fragment, format_query};
+use crate::common::{encode_userinfo, format_fragment, format_query};
 use crate::error::EmitError;
 use crate::transport::transport_kind_str;
 
@@ -132,8 +132,9 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
 
     let query = format_query(&params);
 
+    let uuid_enc = encode_userinfo(uuid);
     let mut result = format!(
-        "vless://{uuid}@{host}:{port}?{query}",
+        "vless://{uuid_enc}@{host}:{port}?{query}",
         host = node.endpoint.host.uri_host(),
         port = node.endpoint.port,
     );

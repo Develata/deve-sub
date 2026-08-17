@@ -20,13 +20,13 @@ use deve_sub_domain::{
 
 use crate::error::ParseError;
 use crate::uri::{
-    build_common_tls, collect_query, decode_fragment, node_shell, parse_bandwidth, parse_bool,
-    parse_duration_secs, parse_host,
+    build_common_tls, collect_query, decode_fragment, decode_userinfo, node_shell, parse_bandwidth,
+    parse_bool, parse_duration_secs, parse_host,
 };
 
 /// Parse a parsed `hysteria2://` or `hy2://` URL into a canonical [`Node`].
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
-    let password = url.username();
+    let password = decode_userinfo(url.username());
     if password.is_empty() {
         return Err(ParseError::MissingField("password"));
     }

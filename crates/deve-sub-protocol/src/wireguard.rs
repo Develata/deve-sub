@@ -20,11 +20,11 @@ use deve_sub_domain::{
 };
 
 use crate::error::ParseError;
-use crate::uri::{collect_query, decode_fragment, node_shell, parse_host};
+use crate::uri::{collect_query, decode_fragment, decode_userinfo, node_shell, parse_host};
 
 /// Parse a parsed `wireguard://` URL into a canonical [`Node`].
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
-    let private_key = url.username();
+    let private_key = decode_userinfo(url.username());
     if private_key.is_empty() {
         return Err(ParseError::MissingField("private-key"));
     }

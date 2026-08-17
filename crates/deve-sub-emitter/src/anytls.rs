@@ -10,7 +10,7 @@
 
 use deve_sub_domain::{AnyTlsConfig, Authentication, Node, ProtocolConfig};
 
-use crate::common::{format_fragment, format_query};
+use crate::common::{encode_userinfo, format_fragment, format_query};
 use crate::error::EmitError;
 
 pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
@@ -51,15 +51,16 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
 
     let query = format_query(&params);
 
+    let pwd = encode_userinfo(password);
     let mut result = if params.is_empty() {
         format!(
-            "anytls://{password}@{host}:{port}",
+            "anytls://{pwd}@{host}:{port}",
             host = node.endpoint.host.uri_host(),
             port = node.endpoint.port,
         )
     } else {
         format!(
-            "anytls://{password}@{host}:{port}?{query}",
+            "anytls://{pwd}@{host}:{port}?{query}",
             host = node.endpoint.host.uri_host(),
             port = node.endpoint.port,
         )

@@ -19,11 +19,13 @@ use deve_sub_domain::{
 
 use crate::error::ParseError;
 use crate::transport::map_transport_kind;
-use crate::uri::{build_common_tls, collect_query, decode_fragment, node_shell, parse_host};
+use crate::uri::{
+    build_common_tls, collect_query, decode_fragment, decode_userinfo, node_shell, parse_host,
+};
 
 /// Parse a parsed `trojan://` URL into a canonical [`Node`].
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
-    let password = url.username();
+    let password = decode_userinfo(url.username());
     if password.is_empty() {
         return Err(ParseError::MissingField("password"));
     }

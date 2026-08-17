@@ -7,6 +7,27 @@ use percent_encoding::{AsciiSet, CONTROLS};
 
 use deve_sub_domain::CertificatePin;
 
+/// Percent-encode set for URI userinfo (RFC 3986 §3.2.1). Encodes all
+/// structural delimiters that would break URI parsing: `@` (userinfo/host
+/// boundary), `:` (username/password boundary), `/` (path), `?` (query),
+/// `#` (fragment), `[` `]` (IPv6), `%` (escape char), plus control chars
+/// and other sub-delimiters that are unsafe in userinfo.
+pub(crate) const USERINFO_ENCODE: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'<')
+    .add(b'>')
+    .add(b'`')
+    .add(b'#')
+    .add(b'&')
+    .add(b'?')
+    .add(b'/')
+    .add(b'@')
+    .add(b':')
+    .add(b'[')
+    .add(b']')
+    .add(b'%');
+
 /// Percent-encode set for URI fragments: control chars plus characters that
 /// would break the URI structure.
 pub(crate) const FRAGMENT_ENCODE: &AsciiSet = &CONTROLS
@@ -34,6 +55,11 @@ pub(crate) const QUERY_VALUE_ENCODE: &AsciiSet = &CONTROLS
     .add(b'+')
     .add(b'=')
     .add(b'%');
+
+/// Percent-encode a credential for the URI userinfo component.
+pub(crate) fn encode_userinfo(s: &str) -> String {
+    percent_encoding::utf8_percent_encode(s, USERINFO_ENCODE).to_string()
+}
 
 /// Build a query string from ordered key-value pairs, percent-encoding values.
 pub(crate) fn format_query(params: &[(String, String)]) -> String {

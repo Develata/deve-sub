@@ -11,7 +11,7 @@
 
 use deve_sub_domain::{Authentication, Node, ProtocolConfig, TransportKind, TrojanConfig};
 
-use crate::common::{format_fragment, format_query};
+use crate::common::{encode_userinfo, format_fragment, format_query};
 use crate::error::EmitError;
 use crate::transport::transport_kind_str;
 
@@ -75,8 +75,9 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
 
     let query = format_query(&params);
 
+    let pwd = encode_userinfo(password);
     let mut result = format!(
-        "trojan://{password}@{host}:{port}?{query}",
+        "trojan://{pwd}@{host}:{port}?{query}",
         host = node.endpoint.host.uri_host(),
         port = node.endpoint.port,
     );

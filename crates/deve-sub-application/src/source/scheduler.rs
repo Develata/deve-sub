@@ -174,49 +174,67 @@ impl RefreshScheduler {
     /// refresh (auto_update && enabled && interval elapsed since last
     /// snapshot, or no snapshot yet).
     async fn collect_due_sources(&self) -> Vec<deve_sub_kernel::SourceId> {
-        let mut due = Vec::new();
-        let mut cursor: Option<deve_sub_kernel::SourceId> = None;
         let now = deve_sub_kernel::Timestamp::now();
         let page_size: u32 = 100;
 
+        let mut candidates: Vec<deve_sub_domain::source::Source> = Vec::new();
+        let mut cursor: Option<deve_sub_kernel::SourceId> = None;
         loop {
             let page = match self.source_repo.list(cursor, page_size).await {
                 Ok(sources) => sources,
                 Err(e) => {
                     tracing::warn!(error = %e, "scheduler: failed to list sources");
-                    return due;
+                    return Vec::new();
                 }
             };
             if page.is_empty() {
                 break;
             }
             let next_cursor = page.last().map(|s| s.id);
-            for source in &page {
-                if !source.auto_update || !source.enabled {
-                    continue;
-                }
-                match self.snapshot_repo.find_active(source.id).await {
-                    Ok(Some(snapshot)) => {
-                        let elapsed =
-                            now.as_offset_date_time() - snapshot.fetched_at.as_offset_date_time();
-                        if elapsed.whole_seconds().max(0) as u64 >= source.update_interval_secs {
-                            due.push(source.id);
-                        }
-                    }
-                    Ok(None) => due.push(source.id),
-                    Err(e) => {
-                        tracing::warn!(
-                            source = %source.id,
-                            error = %e,
-                            "scheduler: failed to find active snapshot"
-                        );
-                    }
+            for source in page {
+                if source.auto_update && source.enabled {
+                    candidates.push(source);
                 }
             }
-            if page.len() < page_size as usize {
+            if next_cursor.is_none() {
                 break;
             }
             cursor = next_cursor;
+        }
+
+        if candidates.is_empty() {
+            return Vec::new();
+        }
+
+        let candidate_ids: Vec<deve_sub_kernel::SourceId> =
+            candidates.iter().map(|s| s.id).collect();
+        // WHY: batch-fetch all active snapshots in one query instead of N
+        // find_active calls (W-EE). Sources absent from the map have no
+        // snapshot yet and are due immediately.
+        let snapshots = match self
+            .snapshot_repo
+            .find_active_for_sources(&candidate_ids)
+            .await
+        {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(error = %e, "scheduler: failed to batch-fetch active snapshots");
+                return Vec::new();
+            }
+        };
+
+        let mut due = Vec::new();
+        for source in &candidates {
+            match snapshots.get(&source.id) {
+                Some(snapshot) => {
+                    let elapsed =
+                        now.as_offset_date_time() - snapshot.fetched_at.as_offset_date_time();
+                    if elapsed.whole_seconds().max(0) as u64 >= source.update_interval_secs {
+                        due.push(source.id);
+                    }
+                }
+                None => due.push(source.id),
+            }
         }
         due
     }

@@ -66,16 +66,11 @@ async fn fetch_nodes(
     node_ids: &[NodeId],
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<std::collections::HashMap<NodeId, NodePoolEntry>, TemplateAppError> {
-    let mut map = std::collections::HashMap::new();
-    for id in node_ids {
-        match pool_repo.get_node(*id).await {
-            Ok(Some(entry)) => {
-                map.insert(*id, entry);
-            }
-            Ok(None) => {}
-            Err(e) => return Err(TemplateAppError::Storage(e.to_string())),
-        }
-    }
+    let entries = pool_repo
+        .get_nodes(node_ids)
+        .await
+        .map_err(|e| TemplateAppError::Storage(e.to_string()))?;
+    let map = entries.into_iter().map(|e| (e.node.id, e)).collect();
     Ok(map)
 }
 
@@ -104,6 +99,9 @@ mod tests {
         }
         async fn get_node(&self, _id: NodeId) -> Result<Option<NodePoolEntry>, SourceError> {
             Ok(None)
+        }
+        async fn get_nodes(&self, _ids: &[NodeId]) -> Result<Vec<NodePoolEntry>, SourceError> {
+            Ok(Vec::new())
         }
         async fn import_nodes(
             &self,

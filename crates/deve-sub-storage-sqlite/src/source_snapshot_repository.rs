@@ -112,6 +112,38 @@ impl SourceSnapshotRepository for SqliteSourceSnapshotRepository {
         row.map(|r| r.to_domain()).transpose()
     }
 
+    async fn find_active_for_sources(
+        &self,
+        source_ids: &[SourceId],
+    ) -> Result<std::collections::HashMap<SourceId, SourceSnapshot>, SourceError> {
+        if source_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let placeholders = std::iter::repeat_n("?,", source_ids.len())
+            .collect::<String>()
+            .trim_end_matches(',')
+            .to_owned();
+        let sql = format!(
+            "SELECT id, source_id, version, fetched_at, etag, node_count, is_active \
+             FROM source_snapshots \
+             WHERE is_active = 1 AND source_id IN ({placeholders})"
+        );
+        let mut query = sqlx::query_as::<_, SnapshotRow>(&sql);
+        for id in source_ids {
+            query = query.bind(id.to_string());
+        }
+        let rows: Vec<SnapshotRow> = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        let mut map = std::collections::HashMap::with_capacity(rows.len());
+        for row in rows {
+            let snapshot = row.to_domain()?;
+            map.insert(snapshot.source_id, snapshot);
+        }
+        Ok(map)
+    }
+
     async fn list_for_source(
         &self,
         source_id: SourceId,

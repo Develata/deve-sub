@@ -386,6 +386,32 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             .transpose()
     }
 
+    async fn get_nodes(&self, ids: &[NodeId]) -> Result<Vec<NodePoolEntry>, SourceError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = std::iter::repeat_n("?,", ids.len())
+            .collect::<String>()
+            .trim_end_matches(',')
+            .to_owned();
+        let sql = format!(
+            "SELECT {NODE_COLUMNS} FROM nodes n \
+             LEFT JOIN node_overrides o ON o.node_id = n.id \
+             WHERE n.id IN ({placeholders})"
+        );
+        let mut query = sqlx::query_as::<_, NodeRow>(&sql);
+        for id in ids {
+            query = query.bind(id.to_string());
+        }
+        let rows: Vec<NodeRow> = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        rows.iter()
+            .map(|r| r.to_pool_entry(self.master_key.as_deref()))
+            .collect()
+    }
+
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError> {
         let mut tx = self
             .pool

@@ -48,6 +48,17 @@ pub trait SourceSnapshotRepository: Send + Sync {
     async fn find_active(&self, source_id: SourceId)
     -> Result<Option<SourceSnapshot>, SourceError>;
 
+    /// Find the active snapshot for each of the given source IDs in a single
+    /// query (batch fetch).
+    ///
+    /// Returns a map keyed by [`SourceId`]. Sources without an active snapshot
+    /// are absent from the result. Used by the scheduler to check all due
+    /// sources in one query instead of N `find_active` calls.
+    async fn find_active_for_sources(
+        &self,
+        source_ids: &[SourceId],
+    ) -> Result<std::collections::HashMap<SourceId, SourceSnapshot>, SourceError>;
+
     /// List snapshots for a source, newest first.
     async fn list_for_source(
         &self,
@@ -243,6 +254,14 @@ pub trait NodePoolRepository: Send + Sync {
     ///
     /// Returns `None` if no node with the given ID exists.
     async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError>;
+
+    /// Get multiple nodes by ID in a single query (batch fetch).
+    ///
+    /// Returns one [`NodePoolEntry`] per found ID. IDs that do not exist are
+    /// simply absent from the result. The result order is not guaranteed;
+    /// callers that need order should index by [`NodeId`]. Used to avoid
+    /// N+1 queries in compatibility checks and generation pipelines.
+    async fn get_nodes(&self, ids: &[NodeId]) -> Result<Vec<NodePoolEntry>, SourceError>;
 
     /// Import a batch of pre-parsed nodes manually (NODE-001/002/003).
     ///

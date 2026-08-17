@@ -43,12 +43,34 @@ pub async fn resolve_template(
     doc: &TemplateDocument,
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<TemplateResolution, TemplateAppError> {
+    let active_pool = list_active_nodes(pool_repo).await?;
+
+    // WHY: collect every explicit/pinned NodeId across the selector and all
+    // proxy groups, then issue a single batch `get_nodes` query instead of
+    // one `get_node` per reference (W-D: K+1 pool listing + N get_node →
+    // 1 list + 1 batch fetch).
+    let mut explicit_ids: Vec<NodeId> = doc.spec.node_selector.node_ids.clone();
+    for group in &doc.spec.proxy_groups {
+        for member in &group.members {
+            if let GroupMember::Node { id } = member {
+                explicit_ids.push(*id);
+            }
+        }
+    }
+    explicit_ids.sort_unstable();
+    explicit_ids.dedup();
+    let explicit_entries = fetch_explicit_entries(pool_repo, &explicit_ids).await?;
+    let view = PoolView {
+        active: &active_pool,
+        explicit: &explicit_entries,
+    };
+
     let (selected_node_ids, selection_missing) =
-        resolve_selection(&doc.spec.node_selector, pool_repo).await?;
+        resolve_selection_impl(&doc.spec.node_selector, &view);
 
     let mut groups = Vec::with_capacity(doc.spec.proxy_groups.len());
     for group in &doc.spec.proxy_groups {
-        let resolution = resolve_group(group, pool_repo).await?;
+        let resolution = resolve_group_impl(group, &view);
         groups.push(resolution);
     }
 
@@ -69,48 +91,13 @@ pub async fn resolve_selection(
     selector: &NodeSelector,
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<(Vec<NodeId>, Vec<MissingNodeRef>), TemplateAppError> {
-    match selector.mode {
-        SelectionMode::Dynamic => {
-            let entries = list_active_nodes(pool_repo).await?;
-            let filtered: Vec<NodeId> = entries
-                .iter()
-                .filter(|e| matches_all_filters(e, &selector.filters))
-                .map(|e| e.node.id)
-                .collect();
-            Ok((filtered, Vec::new()))
-        }
-        SelectionMode::Fixed => {
-            let mut found = Vec::with_capacity(selector.node_ids.len());
-            let mut missing = Vec::new();
-            for id in &selector.node_ids {
-                match pool_repo.get_node(*id).await {
-                    Ok(Some(entry)) if entry.is_active && !entry.missing_from_source => {
-                        found.push(*id);
-                    }
-                    Ok(Some(entry)) if entry.missing_from_source => {
-                        missing.push(MissingNodeRef {
-                            node_id: *id,
-                            reason: MissingReason::MissingFromSource,
-                        });
-                    }
-                    Ok(Some(_entry)) => {
-                        missing.push(MissingNodeRef {
-                            node_id: *id,
-                            reason: MissingReason::Inactive,
-                        });
-                    }
-                    Ok(None) => {
-                        missing.push(MissingNodeRef {
-                            node_id: *id,
-                            reason: MissingReason::NotFound,
-                        });
-                    }
-                    Err(e) => return Err(TemplateAppError::Storage(e.to_string())),
-                }
-            }
-            Ok((found, missing))
-        }
-    }
+    let active_pool = list_active_nodes(pool_repo).await?;
+    let explicit_entries = fetch_explicit_entries(pool_repo, &selector.node_ids).await?;
+    let view = PoolView {
+        active: &active_pool,
+        explicit: &explicit_entries,
+    };
+    Ok(resolve_selection_impl(selector, &view))
 }
 
 /// Resolve a single proxy group's membership against the pool.
@@ -123,44 +110,119 @@ pub async fn resolve_group(
     group: &ProxyGroup,
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<GroupResolution, TemplateAppError> {
+    let active_pool = list_active_nodes(pool_repo).await?;
+    let explicit_ids: Vec<NodeId> = group
+        .members
+        .iter()
+        .filter_map(|m| match m {
+            GroupMember::Node { id } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    let explicit_entries = fetch_explicit_entries(pool_repo, &explicit_ids).await?;
+    let view = PoolView {
+        active: &active_pool,
+        explicit: &explicit_entries,
+    };
+    Ok(resolve_group_impl(group, &view))
+}
+
+/// Pre-fetched pool data shared by the synchronous `_impl` resolvers.
+///
+/// `active` is the full list of active, non-missing pool entries (for dynamic
+/// selection and quick-group filtering). `explicit` is a lookup of specific
+/// node IDs requested by name (for fixed selection and explicit group members).
+/// Both are fetched once by the async entry points and reused across all
+/// groups, avoiding K+1 pool listings and N individual `get_node` calls.
+struct PoolView<'a> {
+    active: &'a [NodePoolEntry],
+    explicit: &'a std::collections::HashMap<NodeId, NodePoolEntry>,
+}
+
+fn resolve_selection_impl(
+    selector: &NodeSelector,
+    view: &PoolView<'_>,
+) -> (Vec<NodeId>, Vec<MissingNodeRef>) {
+    match selector.mode {
+        SelectionMode::Dynamic => {
+            let filtered: Vec<NodeId> = view
+                .active
+                .iter()
+                .filter(|e| matches_all_filters(e, &selector.filters))
+                .map(|e| e.node.id)
+                .collect();
+            (filtered, Vec::new())
+        }
+        SelectionMode::Fixed => {
+            let mut found = Vec::with_capacity(selector.node_ids.len());
+            let mut missing = Vec::new();
+            for id in &selector.node_ids {
+                match view.explicit.get(id) {
+                    Some(entry) if entry.is_active && !entry.missing_from_source => {
+                        found.push(*id);
+                    }
+                    Some(entry) if entry.missing_from_source => {
+                        missing.push(MissingNodeRef {
+                            node_id: *id,
+                            reason: MissingReason::MissingFromSource,
+                        });
+                    }
+                    Some(_) => {
+                        missing.push(MissingNodeRef {
+                            node_id: *id,
+                            reason: MissingReason::Inactive,
+                        });
+                    }
+                    None => {
+                        missing.push(MissingNodeRef {
+                            node_id: *id,
+                            reason: MissingReason::NotFound,
+                        });
+                    }
+                }
+            }
+            (found, missing)
+        }
+    }
+}
+
+fn resolve_group_impl(group: &ProxyGroup, view: &PoolView<'_>) -> GroupResolution {
     let mut explicit_node_ids = Vec::new();
     let mut missing = Vec::new();
     let mut explicit_set: std::collections::HashSet<NodeId> = std::collections::HashSet::new();
 
     for member in &group.members {
         if let GroupMember::Node { id } = member {
-            match pool_repo.get_node(*id).await {
-                Ok(Some(entry)) if entry.is_active && !entry.missing_from_source => {
+            match view.explicit.get(id) {
+                Some(entry) if entry.is_active && !entry.missing_from_source => {
                     explicit_node_ids.push(*id);
                     explicit_set.insert(*id);
                 }
-                Ok(Some(entry)) if entry.missing_from_source => {
+                Some(entry) if entry.missing_from_source => {
                     missing.push(MissingNodeRef {
                         node_id: *id,
                         reason: MissingReason::MissingFromSource,
                     });
                 }
-                Ok(Some(_)) => {
+                Some(_) => {
                     missing.push(MissingNodeRef {
                         node_id: *id,
                         reason: MissingReason::Inactive,
                     });
                 }
-                Ok(None) => {
+                None => {
                     missing.push(MissingNodeRef {
                         node_id: *id,
                         reason: MissingReason::NotFound,
                     });
                 }
-                Err(e) => return Err(TemplateAppError::Storage(e.to_string())),
             }
         }
     }
 
     let mut quick_group_node_ids = Vec::new();
     if let Some(filter) = &group.filter {
-        let entries = list_active_nodes(pool_repo).await?;
-        for entry in &entries {
+        for entry in view.active {
             if explicit_set.contains(&entry.node.id) {
                 continue;
             }
@@ -170,12 +232,29 @@ pub async fn resolve_group(
         }
     }
 
-    Ok(GroupResolution {
+    GroupResolution {
         group_name: group.name.clone(),
         explicit_node_ids,
         quick_group_node_ids,
         missing,
-    })
+    }
+}
+
+/// Batch-fetch node entries by ID, returning a lookup map.
+///
+/// Empty input returns an empty map without hitting the repository.
+async fn fetch_explicit_entries(
+    pool_repo: &dyn NodePoolRepository,
+    ids: &[NodeId],
+) -> Result<std::collections::HashMap<NodeId, NodePoolEntry>, TemplateAppError> {
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let entries = pool_repo
+        .get_nodes(ids)
+        .await
+        .map_err(|e| TemplateAppError::Storage(e.to_string()))?;
+    Ok(entries.into_iter().map(|e| (e.node.id, e)).collect())
 }
 
 /// Apply sort order to a list of node IDs using the display names from the

@@ -18,6 +18,7 @@
 use std::collections::HashSet;
 
 use deve_sub_compatibility::{ProfileKind, capability_for, check_group_type};
+use deve_sub_domain::source::NodePoolEntry;
 use deve_sub_domain::source::NodePoolRepository;
 use deve_sub_domain::template::{
     GroupMember, ProxyGroup, TemplateRepository, TemplateVersionRepository,
@@ -337,21 +338,26 @@ async fn run_pipeline(
         }
     }
 
+    let entries = pool_repo
+        .get_nodes(&report.included_node_ids)
+        .await
+        .map_err(|e| TemplateAppError::Storage(e.to_string()))?;
+    let entry_by_id: std::collections::HashMap<NodeId, NodePoolEntry> =
+        entries.into_iter().map(|e| (e.node.id, e)).collect();
+
     let mut nodes: Vec<(Node, i64)> = Vec::with_capacity(report.included_node_ids.len());
     for id in &report.included_node_ids {
-        match pool_repo.get_node(*id).await {
-            Ok(Some(entry)) => {
-                if entry.is_active && !entry.missing_from_source {
-                    let sort_order = entry.override_info.as_ref().map_or(0, |o| o.sort_order);
-                    nodes.push((entry.node, sort_order));
-                } else {
-                    warnings.push(format!("node {} became unavailable during generation", id));
-                }
+        match entry_by_id.get(id) {
+            Some(entry) if entry.is_active && !entry.missing_from_source => {
+                let sort_order = entry.override_info.as_ref().map_or(0, |o| o.sort_order);
+                nodes.push((entry.node.clone(), sort_order));
             }
-            Ok(None) => {
+            Some(_) => {
+                warnings.push(format!("node {} became unavailable during generation", id));
+            }
+            None => {
                 warnings.push(format!("node {} not found in pool during fetch", id));
             }
-            Err(e) => return Err(TemplateAppError::Storage(e.to_string())),
         }
     }
 

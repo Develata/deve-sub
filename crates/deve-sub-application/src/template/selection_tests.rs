@@ -279,6 +279,14 @@ impl NodePoolRepository for MockPool {
     async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError> {
         Ok(self.entries.iter().find(|e| e.node.id == id).cloned())
     }
+    async fn get_nodes(&self, ids: &[NodeId]) -> Result<Vec<NodePoolEntry>, SourceError> {
+        Ok(self
+            .entries
+            .iter()
+            .filter(|e| ids.contains(&e.node.id))
+            .cloned()
+            .collect())
+    }
     async fn import_nodes(
         &self,
         _nodes: Vec<Node>,

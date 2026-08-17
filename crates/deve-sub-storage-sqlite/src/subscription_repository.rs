@@ -62,10 +62,22 @@ impl SubscriptionRow {
                 .map_err(|e| SubscriptionError::Storage(e.to_string()))?,
             template_version_pin: self
                 .template_version_pin
-                .map(|v| u64::try_from(v).unwrap_or(0)),
+                .map(|v| {
+                    u64::try_from(v).map_err(|e| {
+                        SubscriptionError::Storage(format!("negative template_version_pin: {e}"))
+                    })
+                })
+                .transpose()?,
             profile: self.profile.clone(),
             node_selection,
-            traffic_limit: self.traffic_limit.map(|v| u64::try_from(v).unwrap_or(0)),
+            traffic_limit: self
+                .traffic_limit
+                .map(|v| {
+                    u64::try_from(v).map_err(|e| {
+                        SubscriptionError::Storage(format!("negative traffic_limit: {e}"))
+                    })
+                })
+                .transpose()?,
             expires_at: self
                 .expires_at
                 .as_deref()

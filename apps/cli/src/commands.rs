@@ -357,6 +357,26 @@ where
     E: Fn(&str) -> Result<String, std::env::VarError>,
     S: FnOnce() -> Result<String>,
 {
+    // DS-AUD-028: the three password sources are mutually exclusive. An
+    // unused --password in argv still leaks in the process list, so
+    // rejecting the combination is a security measure, not just CLI
+    // ergonomics.
+    let provided = [
+        args.password_stdin,
+        args.password_env.is_some(),
+        args.password.is_some(),
+    ]
+    .iter()
+    .filter(|&&x| x)
+    .count();
+    if provided > 1 {
+        bail!(
+            "only one password source may be provided: --password, --password-stdin, \
+             and --password-env are mutually exclusive (DS-AUD-028: an unused --password \
+             still leaks in the process list)"
+        );
+    }
+
     if args.password_stdin {
         let line = stdin_read()?;
         let pw = line.trim_end_matches(['\r', '\n']).to_string();
@@ -557,9 +577,10 @@ mod tests {
         assert_eq!(resolved, "legacy-pw");
     }
 
-    /// DS-AUD-028: `--password-env` takes priority over `--password`.
+    /// DS-AUD-028: `--password-env` and `--password` are mutually exclusive —
+    /// an unused --password still leaks in argv.
     #[test]
-    fn password_env_takes_priority_over_argv() {
+    fn password_env_and_argv_both_rejected() {
         let args = UserInitAdminArgs {
             username: "admin".into(),
             password: Some("argv-value".into()),
@@ -572,8 +593,11 @@ mod tests {
             _ => Err(std::env::VarError::NotPresent),
         };
 
-        let resolved = resolve_admin_password_with(&args, lookup, EOF_STDIN).unwrap();
-        assert_eq!(resolved, "env-value");
+        let err = resolve_admin_password_with(&args, lookup, EOF_STDIN).unwrap_err();
+        assert!(
+            err.to_string().contains("mutually exclusive"),
+            "error should explain mutual exclusion: {err}"
+        );
     }
 
     /// DS-AUD-028: `--password-stdin` reads one line and strips the
@@ -593,13 +617,13 @@ mod tests {
         assert_eq!(resolved, "stdin-pw");
     }
 
-    /// DS-AUD-028: `--password-stdin` takes priority over `--password-env`
-    /// and `--password`.
+    /// DS-AUD-028: `--password-stdin` and `--password-env` are mutually
+    /// exclusive — only one source is accepted to prevent argv leakage.
     #[test]
-    fn password_stdin_takes_priority() {
+    fn password_stdin_and_env_both_rejected() {
         let args = UserInitAdminArgs {
             username: "admin".into(),
-            password: Some("argv-value".into()),
+            password: None,
             password_stdin: true,
             password_env: Some("DEVE_SUB_TEST_ADMIN_PW_STDIN".into()),
             db_path: "data/deve-sub.db".into(),
@@ -610,8 +634,11 @@ mod tests {
         };
         let stdin = || Ok("stdin-wins\n".to_string());
 
-        let resolved = resolve_admin_password_with(&args, lookup, stdin).unwrap();
-        assert_eq!(resolved, "stdin-wins");
+        let err = resolve_admin_password_with(&args, lookup, stdin).unwrap_err();
+        assert!(
+            err.to_string().contains("mutually exclusive"),
+            "error should explain mutual exclusion: {err}"
+        );
     }
 
     /// DS-AUD-028: empty stdin (EOF) must error, not silently yield an
@@ -630,6 +657,24 @@ mod tests {
         assert!(
             err.to_string().contains("stdin was empty"),
             "error should explain empty stdin: {err}"
+        );
+    }
+
+    /// DS-AUD-028: providing multiple password sources must error — an
+    /// unused --password still leaks in argv even if stdin is picked.
+    #[test]
+    fn password_multiple_sources_rejected() {
+        let args = UserInitAdminArgs {
+            username: "admin".into(),
+            password: Some("argv-leak".into()),
+            password_stdin: true,
+            password_env: None,
+            db_path: "data/deve-sub.db".into(),
+        };
+        let err = resolve_admin_password_with(&args, NO_ENV, EOF_STDIN).unwrap_err();
+        assert!(
+            err.to_string().contains("mutually exclusive"),
+            "error should explain mutual exclusion: {err}"
         );
     }
 }

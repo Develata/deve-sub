@@ -9,10 +9,20 @@ use deve_sub_kernel::{SessionId, Timestamp, UserId};
 use deve_sub_security::{
     MasterKey, PURPOSE_SESSION, generate_session_token, hash_password, hmac_digest, verify_password,
 };
+use std::sync::LazyLock;
+use tokio::sync::Semaphore;
 
 use super::challenge::generate_challenge_token;
 use super::error::AuthError;
 use super::rate_limiter::LoginRateLimiter;
+
+/// Serializes setup_admin across concurrent callers. WHY: without this,
+/// multiple pre-init requests all observe `count()==0` and each spends
+/// ~20-50ms on Argon2 before the atomic `create_if_empty` rejects the
+/// losers — a cheap CPU exhaustion vector. The permit spans count+hash+create
+/// so only the first request pays the Argon2 cost; later callers see
+/// `count()>0` and return immediately (DS-AUD-035).
+static SETUP_PERMIT: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
 
 /// Minimum password length. Accounts created with shorter passwords are
 /// rejected at the application boundary.
@@ -67,11 +77,15 @@ pub async fn setup_admin(
 ) -> Result<User, AuthError> {
     validate_credentials(username, password)?;
 
-    // DS-AUD-035: fast-path guard before Argon2. An attacker hitting the
-    // public setup endpoint after initialization would otherwise trigger a
-    // full Argon2id hash (~20-50ms) on every request — a cheap CPU
-    // exhaustion vector. `count()` is a single SQL SELECT; reject before
-    // spending any hashing time when users already exist.
+    // DS-AUD-035: the permit serializes count+hash+create so only one
+    // concurrent caller reaches Argon2. Later callers see count()>0 and
+    // return before hashing.
+    let _permit = SETUP_PERMIT.acquire().await.map_err(|e| {
+        AuthError::Security(deve_sub_security::SecurityError::Crypto(format!(
+            "setup semaphore closed: {e}"
+        )))
+    })?;
+
     if user_repo.count().await? > 0 {
         return Err(AuthError::AlreadyInitialized);
     }

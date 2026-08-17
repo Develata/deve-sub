@@ -100,6 +100,7 @@ pub(super) fn map_subscription_error(e: SubscriptionError) -> SubscriptionAppErr
         SubscriptionError::ShortCodeNotFound => SubscriptionAppError::ShortCodeNotFound,
         SubscriptionError::TempLinkNotFound => SubscriptionAppError::TempLinkNotFound,
         SubscriptionError::TempLinkInvalid => SubscriptionAppError::TempLinkInvalid,
+        SubscriptionError::ConcurrentModification => SubscriptionAppError::Subscription(e),
         SubscriptionError::ShortCodeExists | SubscriptionError::Storage(_) => {
             SubscriptionAppError::Subscription(e)
         }

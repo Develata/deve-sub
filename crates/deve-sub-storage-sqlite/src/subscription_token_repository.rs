@@ -144,13 +144,14 @@ impl SubscriptionTokenRepository for SqliteSubscriptionTokenRepository {
         // WHY: load the current row first to capture the old digest as
         // previous_token_digest, then update in place. This keeps a single
         // token row per subscription with a stable id, so the Subscription's
-        // token_id reference stays valid across rotations. The whole operation
-        // runs in a transaction so concurrent rotations serialize.
-        let current = self
-            .find_active_for_subscription(subscription_id)
-            .await?
-            .ok_or(SubscriptionError::TokenNotFound)?;
-
+        // token_id reference stays valid across rotations.
+        //
+        // W-G: the SELECT and UPDATE run inside the same transaction, and the
+        // UPDATE carries an optimistic guard (`WHERE token_digest = ?` on the
+        // old digest). If a concurrent rotate committed between our SELECT and
+        // UPDATE, `rows_affected = 0` and we return ConcurrentModification
+        // instead of silently overwriting the intermediate token (which would
+        // orphan the token the concurrent caller just issued).
         let grace_str = grace_until
             .map(format_ts)
             .transpose()
@@ -163,22 +164,46 @@ impl SubscriptionTokenRepository for SqliteSubscriptionTokenRepository {
             .await
             .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
 
-        sqlx::query(
+        let current: TokenRow = sqlx::query_as(
+            "SELECT id, subscription_id, token_digest, previous_token_digest, \
+             rotation_grace_until, issued_at \
+             FROM subscription_tokens WHERE subscription_id = ?",
+        )
+        .bind(subscription_id.to_string())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?
+        .ok_or(SubscriptionError::TokenNotFound)?;
+        let current = current.to_domain()?;
+        let old_digest = current.token_digest.clone();
+
+        let result = sqlx::query(
             "UPDATE subscription_tokens SET \
                token_digest = ?, \
                previous_token_digest = ?, \
                rotation_grace_until = ?, \
                issued_at = ? \
-             WHERE subscription_id = ?",
+             WHERE subscription_id = ? AND token_digest = ?",
         )
         .bind(&new_token.token_digest)
-        .bind(&current.token_digest)
+        .bind(&old_digest)
         .bind(&grace_str)
         .bind(issued_at)
         .bind(subscription_id.to_string())
+        .bind(&old_digest)
         .execute(&mut *tx)
         .await
         .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            // WHY: another rotate committed between our SELECT and UPDATE.
+            // Roll back and surface as ConcurrentModification so the caller
+            // can retry with a fresh token.
+            tx.rollback()
+                .await
+                .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+            return Err(SubscriptionError::ConcurrentModification);
+        }
 
         tx.commit()
             .await
@@ -188,7 +213,7 @@ impl SubscriptionTokenRepository for SqliteSubscriptionTokenRepository {
             id: current.id,
             subscription_id,
             token_digest: new_token.token_digest.clone(),
-            previous_token_digest: Some(current.token_digest.clone()),
+            previous_token_digest: Some(old_digest),
             rotation_grace_until: grace_until,
             issued_at: new_token.issued_at,
         })

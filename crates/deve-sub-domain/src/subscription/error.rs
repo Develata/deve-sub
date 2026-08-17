@@ -34,6 +34,14 @@ pub enum SubscriptionError {
     #[error("temp link revoked or expired")]
     TempLinkInvalid,
 
+    /// Concurrent modification detected — another writer changed the row
+    /// between this caller's read and write. WHY: `rotate` uses optimistic
+    /// concurrency (compare-and-swap on `token_digest`); a concurrent rotate
+    /// invalidates the first caller's snapshot and must surface as a retryable
+    /// error rather than silently overwriting the intermediate token.
+    #[error("concurrent modification detected")]
+    ConcurrentModification,
+
     /// A storage operation failed.
     #[error("storage error: {0}")]
     Storage(String),

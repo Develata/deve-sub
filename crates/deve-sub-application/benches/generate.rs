@@ -13,6 +13,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use deve_sub_application::template::{CreateTemplateParams, create_template, generate};
@@ -22,6 +23,7 @@ use deve_sub_domain::{
     TrojanConfig, UdpCapability,
 };
 use deve_sub_kernel::Timestamp;
+use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
     SqliteGenerationCacheRepository, SqliteNodePoolRepository, SqlitePoolMetaRepository,
     SqliteTemplateRepository, SqliteTemplateVersionRepository,
@@ -53,6 +55,7 @@ const SPEC_YAML: &str = concat!(
 /// A temporary SQLite database with nodes, a template, and all repos wired.
 struct BenchDb {
     pool: sqlx::SqlitePool,
+    master_key: Arc<MasterKey>,
     template_id: deve_sub_kernel::TemplateId,
     _dir: tempfile::TempDir,
 }
@@ -70,7 +73,9 @@ impl BenchDb {
             .expect("migrations");
 
         // Populate nodes.
-        let pool_repo = SqliteNodePoolRepository::new(pool.clone());
+        let master_key = Arc::new(MasterKey::from_bytes(&[0x42u8; 32]));
+        let pool_repo =
+            SqliteNodePoolRepository::new_with_key(pool.clone(), Arc::clone(&master_key));
         let batch = 500;
         let mut made = 0;
         while made < node_count {
@@ -97,6 +102,7 @@ impl BenchDb {
 
         Self {
             pool,
+            master_key,
             template_id: result.template.id,
             _dir: dir,
         }
@@ -162,7 +168,8 @@ fn bench_generate(c: &mut Criterion) {
 
     let template_repo = SqliteTemplateRepository::new(db.pool.clone());
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
     let request = make_request(db.template_id);

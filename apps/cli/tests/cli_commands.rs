@@ -26,7 +26,11 @@ impl Drop for ChildGuard {
     }
 }
 
-async fn setup_db(db_path: &std::path::Path) {
+/// Create a fully-migrated SQLite database at `db_path` and a master key at
+/// `key_path`, then insert one row into `users` so row counts are non-
+/// trivial. Node import/list tests require a master key because node
+/// credentials are encrypted at rest (migration 0015, ADR-0007).
+async fn setup_db(db_path: &std::path::Path, key_path: &std::path::Path) {
     let url = format!("sqlite://{}?mode=rwc", db_path.display());
     let pool = sqlx::sqlite::SqlitePool::connect(&url).await.expect("pool");
     sqlx::migrate!("../../migrations")
@@ -34,13 +38,15 @@ async fn setup_db(db_path: &std::path::Path) {
         .await
         .expect("migrations");
     pool.close().await;
+    std::fs::write(key_path, [0x42u8; 32]).expect("write master key");
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn cli005_doctor_checks_all_sections() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("test.db");
-    setup_db(&db_path).await;
+    let key_path = dir.path().join("master.key");
+    setup_db(&db_path, &key_path).await;
 
     let output = Command::new(BIN)
         .args(["doctor", "--db-path", db_path.to_str().unwrap()])
@@ -74,9 +80,18 @@ async fn cli005_doctor_checks_all_sections() {
 async fn cli002_stdin_import() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("test.db");
+    let key_path = dir.path().join("master.key");
+    setup_db(&db_path, &key_path).await;
 
     let mut child = Command::new(BIN)
-        .args(["node", "import", "--db-path", db_path.to_str().unwrap()])
+        .args([
+            "node",
+            "import",
+            "--db-path",
+            db_path.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -110,6 +125,8 @@ async fn cli002_stdin_import() {
 async fn node002_file_import() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("test.db");
+    let key_path = dir.path().join("master.key");
+    setup_db(&db_path, &key_path).await;
     let input_path = dir.path().join("nodes.txt");
     std::fs::write(&input_path, TROJAN_URI).expect("write input");
 
@@ -121,6 +138,8 @@ async fn node002_file_import() {
             input_path.to_str().unwrap(),
             "--db-path",
             db_path.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
         ])
         .output()
         .expect("spawn");
@@ -146,9 +165,18 @@ async fn node002_file_import() {
 async fn cli003_stdout_uri_export() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("test.db");
+    let key_path = dir.path().join("master.key");
+    setup_db(&db_path, &key_path).await;
 
     let mut import = Command::new(BIN)
-        .args(["node", "import", "--db-path", db_path.to_str().unwrap()])
+        .args([
+            "node",
+            "import",
+            "--db-path",
+            db_path.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -173,6 +201,8 @@ async fn cli003_stdout_uri_export() {
             "uri",
             "--db-path",
             db_path.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
         ])
         .output()
         .expect("spawn");
@@ -192,9 +222,18 @@ async fn cli003_stdout_uri_export() {
 async fn cli004_json_output() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("test.db");
+    let key_path = dir.path().join("master.key");
+    setup_db(&db_path, &key_path).await;
 
     let mut import = Command::new(BIN)
-        .args(["node", "import", "--db-path", db_path.to_str().unwrap()])
+        .args([
+            "node",
+            "import",
+            "--db-path",
+            db_path.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -219,6 +258,8 @@ async fn cli004_json_output() {
             "json",
             "--db-path",
             db_path.to_str().unwrap(),
+            "--key-path",
+            key_path.to_str().unwrap(),
         ])
         .output()
         .expect("spawn");
@@ -253,7 +294,7 @@ async fn cli001_headless_startup() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("test.db");
     let key_path = dir.path().join("master.key");
-    setup_db(&db_path).await;
+    setup_db(&db_path, &key_path).await;
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
     let port = listener.local_addr().expect("addr").port();

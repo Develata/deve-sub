@@ -16,6 +16,7 @@ use deve_sub_storage_sqlite::{SqliteNodePoolRepository, SqliteSourceRepository};
 
 struct TestDb {
     pool: sqlx::sqlite::SqlitePool,
+    master_key: std::sync::Arc<deve_sub_security::MasterKey>,
     _dir: tempfile::TempDir,
 }
 
@@ -31,7 +32,13 @@ impl TestDb {
             .run(&pool)
             .await
             .expect("migrations");
-        Self { pool, _dir: dir }
+        Self {
+            pool,
+            master_key: std::sync::Arc::new(deve_sub_security::MasterKey::from_bytes(
+                &[0x42u8; 32],
+            )),
+            _dir: dir,
+        }
     }
 }
 
@@ -116,8 +123,14 @@ async fn count_bindings(pool: &sqlx::sqlite::SqlitePool, source_id: &str) -> i64
 #[tokio::test]
 async fn first_refresh_inserts_new_nodes() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -155,8 +168,14 @@ async fn first_refresh_inserts_new_nodes() {
 #[tokio::test]
 async fn duplicate_node_does_not_create_pool_entry() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -186,8 +205,14 @@ async fn duplicate_node_does_not_create_pool_entry() {
 #[tokio::test]
 async fn missing_nodes_marked_on_subsequent_refresh() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -227,8 +252,14 @@ async fn missing_nodes_marked_on_subsequent_refresh() {
 #[tokio::test]
 async fn missing_node_reactivated_on_reappearance() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -284,8 +315,14 @@ async fn missing_node_reactivated_on_reappearance() {
 #[tokio::test]
 async fn new_snapshot_replaces_active() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -335,8 +372,14 @@ async fn new_snapshot_replaces_active() {
 #[tokio::test]
 async fn failed_reconcile_preserves_old_snapshot() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -384,8 +427,14 @@ async fn failed_reconcile_preserves_old_snapshot() {
 #[tokio::test]
 async fn node_bound_by_two_sources_not_missing_when_one_drops() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source_a = make_source("source-a");
     let source_b = make_source("source-b");

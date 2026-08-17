@@ -194,7 +194,11 @@ fn default_master_key_path() -> String {
 }
 
 fn default_allow_master_key_generation() -> bool {
-    true
+    // WHY default false: prevents silent key rotation on a lost key. If the
+    // key file is missing and generation is allowed, a new key is created
+    // and all existing encrypted columns become unreadable. Defaulting to
+    // fail-closed forces the operator to explicitly opt in (ADR-0007 §7).
+    false
 }
 
 fn default_session_ttl_secs() -> u64 {

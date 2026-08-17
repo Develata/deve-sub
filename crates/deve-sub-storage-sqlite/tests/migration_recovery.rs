@@ -395,10 +395,10 @@ async fn migration_0004_cascade_delete_removes_dependents() {
     let node_id = "01J0NOD0000000000000000001";
     let binding_id = "01J0BND0000000000000000001";
 
-    sqlx::query("INSERT INTO sources (id, name, url) VALUES (?, ?, ?)")
+    sqlx::query("INSERT INTO sources (id, name, url_encrypted) VALUES (?, ?, ?)")
         .bind(source_id)
         .bind("test-source")
-        .bind("https://example.com/sub")
+        .bind(None::<&str>)
         .execute(&pool)
         .await
         .expect("insert source");
@@ -428,10 +428,10 @@ async fn migration_0004_cascade_delete_removes_dependents() {
         "a second active snapshot should be rejected by idx_snapshots_single_active"
     );
 
-    sqlx::query("INSERT INTO source_items (id, snapshot_id, raw_uri) VALUES (?, ?, ?)")
+    sqlx::query("INSERT INTO source_items (id, snapshot_id, raw_uri_encrypted) VALUES (?, ?, ?)")
         .bind(item_id)
         .bind(snapshot_id)
-        .bind("vless://example.com:443")
+        .bind(None::<&str>)
         .execute(&pool)
         .await
         .expect("insert item");
@@ -586,14 +586,14 @@ async fn migration_0006_adds_filter_rules_json_column() {
     );
 
     sqlx::query(
-        "INSERT INTO sources (id, name, source_type, url, http_method, auto_update, \
+        "INSERT INTO sources (id, name, source_type, url_encrypted, http_method, auto_update, \
          update_interval_secs, enabled, keep_on_fail) \
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind("01J0SOURCE0000000000000006")
     .bind("test-source")
     .bind("uri_list")
-    .bind("https://example.com/sub")
+    .bind(None::<&str>)
     .bind("GET")
     .bind(0_i64)
     .bind(3600_i64)
@@ -1518,6 +1518,131 @@ async fn migration_0011_source_kind_check_and_cascade_delete() {
             .await
             .expect("count traffic");
     assert_eq!(tr_count, 0, "traffic records should be cascade-deleted");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+/// Recovery test for migration 0015 (constraint #13): single-step at-rest
+/// encryption. Adds `_encrypted` columns and drops plaintext columns.
+/// See ADR-0007 and `migrations/0015_secret_envelope.sql`.
+#[tokio::test]
+async fn migration_0015_applies_and_schema_is_correct() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    // sources: url_encrypted added, url dropped, headers_encrypted retained
+    let source_cols = get_columns(&pool, "sources").await;
+    assert!(
+        source_cols.contains(&"url_encrypted".to_string()),
+        "expected url_encrypted in sources, got {source_cols:?}"
+    );
+    assert!(
+        source_cols.contains(&"headers_encrypted".to_string()),
+        "expected headers_encrypted (renamed from _v2) in sources, got {source_cols:?}"
+    );
+    assert!(
+        !source_cols.contains(&"url".to_string()),
+        "plaintext url column must be dropped, got {source_cols:?}"
+    );
+    assert!(
+        !source_cols.contains(&"headers_encrypted_v2".to_string()),
+        "headers_encrypted_v2 must be renamed to headers_encrypted, got {source_cols:?}"
+    );
+
+    // source_items: raw_uri_encrypted added, raw_uri dropped
+    let item_cols = get_columns(&pool, "source_items").await;
+    assert!(
+        item_cols.contains(&"raw_uri_encrypted".to_string()),
+        "expected raw_uri_encrypted in source_items, got {item_cols:?}"
+    );
+    assert!(
+        !item_cols.contains(&"raw_uri".to_string()),
+        "plaintext raw_uri must be dropped from source_items, got {item_cols:?}"
+    );
+
+    // node_source_bindings: raw_uri_encrypted added, raw_uri dropped
+    let binding_cols = get_columns(&pool, "node_source_bindings").await;
+    assert!(
+        binding_cols.contains(&"raw_uri_encrypted".to_string()),
+        "expected raw_uri_encrypted in node_source_bindings, got {binding_cols:?}"
+    );
+    assert!(
+        !binding_cols.contains(&"raw_uri".to_string()),
+        "plaintext raw_uri must be dropped from node_source_bindings, got {binding_cols:?}"
+    );
+
+    // nodes: 6 _encrypted columns added, 6 plaintext JSON columns dropped
+    let node_cols = get_columns(&pool, "nodes").await;
+    for encrypted in [
+        "protocol_config_json_encrypted",
+        "authentication_json_encrypted",
+        "tls_json_encrypted",
+        "transport_json_encrypted",
+        "obfuscation_json_encrypted",
+        "extras_json_encrypted",
+    ] {
+        assert!(
+            node_cols.contains(&encrypted.to_string()),
+            "expected {encrypted} in nodes, got {node_cols:?}"
+        );
+    }
+    for plaintext in [
+        "protocol_config_json",
+        "authentication_json",
+        "tls_json",
+        "transport_json",
+        "obfuscation_json",
+        "extras_json",
+    ] {
+        assert!(
+            !node_cols.contains(&plaintext.to_string()),
+            "plaintext {plaintext} must be dropped from nodes, got {node_cols:?}"
+        );
+    }
+
+    // A fresh node can be inserted with only non-encrypted columns.
+    sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port) \
+         VALUES ('01KZNOD000000000000000015', 'shadowsocks', 'example.com', 8388)",
+    )
+    .execute(&pool)
+    .await
+    .expect("insert node with encrypted columns NULL");
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+#[tokio::test]
+async fn migration_0015_is_idempotent() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    // Re-running migrations should succeed (sqlx::migrate tracks applied
+    // migrations in _sqlx_migrations and skips them).
+    run_migrations(&pool).await;
+
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM _sqlx_migrations WHERE version = 15")
+            .fetch_one(&pool)
+            .await
+            .expect("count migration 15");
+    assert_eq!(count, 1, "migration 0015 should be recorded exactly once");
 
     pool.close().await;
     let _ = std::fs::remove_file(db_path.with_extension("db-wal"));

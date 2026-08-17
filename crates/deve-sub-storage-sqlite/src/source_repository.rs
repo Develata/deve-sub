@@ -4,11 +4,10 @@
 //! are stored as RFC 3339 strings, matching the `strftime` default in
 //! migration 0004. See ADR-0002 for the storage Port decision.
 //!
-//! Sensitive fields (URL, headers) are encrypted at rest with
-//! XChaCha20-Poly1305 when a [`MasterKey`] is provided. See ADR-0007.
-//! During the migration window, plaintext columns are retained for
-//! dual-write; reads prefer the encrypted column and fall back to
-//! plaintext when it is NULL.
+//! Sensitive fields (URL, headers) are encrypted at rest with XChaCha20-
+//! Poly1305 via the v2 secret envelope (HKDF subkey + column-bound AAD).
+//! See ADR-0007. The plaintext columns were dropped in migration 0015; a
+//! master key is required to read or write sensitive data.
 
 use std::sync::Arc;
 
@@ -21,6 +20,11 @@ use std::str::FromStr;
 
 use crate::timestamp::{format_ts, parse_ts};
 
+/// HKDF/AAD context label for the source URL column.
+const CTX_URL: &[u8] = b"sources.url";
+/// HKDF/AAD context label for the source headers column.
+const CTX_HEADERS: &[u8] = b"sources.headers";
+
 /// SQLite-backed source repository.
 pub struct SqliteSourceRepository {
     pool: SqlitePool,
@@ -30,8 +34,8 @@ pub struct SqliteSourceRepository {
 impl SqliteSourceRepository {
     /// Create a new repository without at-rest encryption.
     ///
-    /// URL and headers are stored as plaintext. Use this only for tests or
-    /// pre-migration databases where the master key is unavailable.
+    /// Sensitive columns will be stored as NULL and cannot be read back.
+    /// Use this only for tests that do not touch URL or headers data.
     #[must_use]
     pub fn new(pool: SqlitePool) -> Self {
         Self {
@@ -43,7 +47,8 @@ impl SqliteSourceRepository {
     /// Create a new repository with at-rest encryption.
     ///
     /// The URL and custom headers are encrypted with XChaCha20-Poly1305
-    /// before being written to the database. See ADR-0007.
+    /// (v2 envelope with HKDF subkey derivation and AAD) before being
+    /// written to the database. See ADR-0007.
     #[must_use]
     pub fn new_with_key(pool: SqlitePool, master_key: Arc<MasterKey>) -> Self {
         Self {
@@ -53,26 +58,56 @@ impl SqliteSourceRepository {
     }
 
     /// Encrypt a plaintext value into a secret envelope, if a key is set.
-    fn seal(&self, plaintext: &str) -> Result<Option<String>, SourceError> {
+    fn seal(&self, context: &[u8], plaintext: &str) -> Result<Option<String>, SourceError> {
         match &self.master_key {
-            Some(key) => envelope::seal(key.as_bytes(), plaintext.as_bytes())
+            Some(key) => envelope::seal(key.as_bytes(), context, plaintext.as_bytes())
                 .map(Some)
                 .map_err(|e| SourceError::Storage(format!("encryption failed: {e}"))),
             None => Ok(None),
         }
     }
 
-    /// Decrypt a secret envelope, falling back to plaintext if the
-    /// encrypted column is NULL or no key is set.
-    fn open(&self, encrypted: &Option<String>, plaintext: &str) -> Result<String, SourceError> {
+    /// Decrypt a secret envelope. Returns an error if no key is set or the
+    /// encrypted column is NULL.
+    fn open(&self, context: &[u8], encrypted: &Option<String>) -> Result<String, SourceError> {
         match (&self.master_key, encrypted) {
             (Some(key), Some(env)) => {
-                let bytes = envelope::open(key.as_bytes(), env)
+                let bytes = envelope::open(key.as_bytes(), context, env)
                     .map_err(|e| SourceError::Storage(format!("decryption failed: {e}")))?;
                 String::from_utf8(bytes)
                     .map_err(|e| SourceError::Storage(format!("decrypted value is not UTF-8: {e}")))
             }
-            _ => Ok(plaintext.to_owned()),
+            (Some(_), None) => Err(SourceError::Storage(
+                "encrypted column is NULL — data was written without a master key".to_owned(),
+            )),
+            (None, _) => Err(SourceError::Storage(
+                "no master key — cannot decrypt sensitive column".to_owned(),
+            )),
+        }
+    }
+
+    /// Decrypt an optional secret envelope. Returns `None` if the encrypted
+    /// column is NULL; errors if a key is set but decryption fails, or if no
+    /// key is set and the column is non-NULL.
+    fn open_opt(
+        &self,
+        context: &[u8],
+        encrypted: &Option<String>,
+    ) -> Result<Option<String>, SourceError> {
+        match (&self.master_key, encrypted) {
+            (Some(key), Some(env)) => {
+                let bytes = envelope::open(key.as_bytes(), context, env)
+                    .map_err(|e| SourceError::Storage(format!("decryption failed: {e}")))?;
+                let s = String::from_utf8(bytes).map_err(|e| {
+                    SourceError::Storage(format!("decrypted value is not UTF-8: {e}"))
+                })?;
+                Ok(Some(s))
+            }
+            (Some(_), None) => Ok(None),
+            (None, Some(_)) => Err(SourceError::Storage(
+                "no master key — cannot decrypt sensitive column".to_owned(),
+            )),
+            (None, None) => Ok(None),
         }
     }
 }
@@ -81,8 +116,8 @@ impl SqliteSourceRepository {
 ///
 /// WHY: keeping the column list in one place avoids drift between
 /// `find_by_id`, `find_by_name`, and `list` when columns are added.
-const SOURCE_COLUMNS: &str = "id, name, source_type, url, url_encrypted, http_method, headers_encrypted, \
-     headers_encrypted_v2, auto_update, update_interval_secs, enabled, keep_on_fail, \
+const SOURCE_COLUMNS: &str = "id, name, source_type, url_encrypted, http_method, headers_encrypted, \
+     auto_update, update_interval_secs, enabled, keep_on_fail, \
      filter_rules_json, created_at";
 
 /// Internal row representation for `sqlx::FromRow`.
@@ -91,11 +126,9 @@ struct SourceRow {
     id: String,
     name: String,
     source_type: String,
-    url: String,
     url_encrypted: Option<String>,
     http_method: String,
     headers_encrypted: Option<String>,
-    headers_encrypted_v2: Option<String>,
     auto_update: i64,
     update_interval_secs: i64,
     enabled: i64,
@@ -106,26 +139,15 @@ struct SourceRow {
 
 impl SourceRow {
     fn to_domain(&self, repo: &SqliteSourceRepository) -> Result<Source, SourceError> {
-        let url = repo.open(&self.url_encrypted, &self.url)?;
-        // WHY: prefer the v2 encrypted envelope over the legacy column when a
-        // key is set. The application layer does not yet populate
-        // headers_encrypted_v2, so this is a forward-compatible read path.
-        let headers = repo.open(
-            &self.headers_encrypted_v2,
-            self.headers_encrypted.as_deref().unwrap_or(""),
-        )?;
-        let headers_encrypted = if headers.is_empty() {
-            None
-        } else {
-            Some(headers)
-        };
+        let url = repo.open(CTX_URL, &self.url_encrypted)?;
+        let headers = repo.open_opt(CTX_HEADERS, &self.headers_encrypted)?;
         Ok(Source {
             id: SourceId::parse(&self.id).map_err(|e| SourceError::Storage(e.to_string()))?,
             name: self.name.clone(),
             source_type: SourceType::from_str(&self.source_type)?,
             url,
             http_method: self.http_method.clone(),
-            headers_encrypted,
+            headers_encrypted: headers,
             auto_update: self.auto_update != 0,
             update_interval_secs: u64::try_from(self.update_interval_secs)
                 .map_err(|_| SourceError::Storage("negative update_interval_secs".to_owned()))?,
@@ -147,20 +169,22 @@ impl SourceRow {
 impl SourceRepository for SqliteSourceRepository {
     async fn create(&self, source: &Source) -> Result<(), SourceError> {
         let created_at = format_ts(source.created_at).map_err(SourceError::Storage)?;
-        let url_encrypted = self.seal(&source.url)?;
+        let url_encrypted = self.seal(CTX_URL, &source.url)?;
+        let headers_encrypted = match &source.headers_encrypted {
+            Some(h) if !h.is_empty() => self.seal(CTX_HEADERS, h)?,
+            _ => None,
+        };
 
         sqlx::query(
-            "INSERT INTO sources (id, name, source_type, url, url_encrypted, http_method, headers_encrypted, headers_encrypted_v2, auto_update, update_interval_secs, enabled, keep_on_fail, filter_rules_json, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO sources (id, name, source_type, url_encrypted, http_method, headers_encrypted, auto_update, update_interval_secs, enabled, keep_on_fail, filter_rules_json, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(source.id.to_string())
         .bind(&source.name)
         .bind(source.source_type.to_string())
-        .bind(&source.url)
         .bind(&url_encrypted)
         .bind(&source.http_method)
-        .bind(&source.headers_encrypted)
-        .bind(&None::<String>)
+        .bind(&headers_encrypted)
         .bind(source.auto_update as i64)
         .bind(source.update_interval_secs as i64)
         .bind(source.enabled as i64)
@@ -229,16 +253,18 @@ impl SourceRepository for SqliteSourceRepository {
     }
 
     async fn update(&self, source: &Source) -> Result<(), SourceError> {
-        let url_encrypted = self.seal(&source.url)?;
+        let url_encrypted = self.seal(CTX_URL, &source.url)?;
+        let headers_encrypted = match &source.headers_encrypted {
+            Some(h) if !h.is_empty() => self.seal(CTX_HEADERS, h)?,
+            _ => None,
+        };
         let result = sqlx::query(
             "UPDATE sources SET \
                name = ?, \
                source_type = ?, \
-               url = ?, \
                url_encrypted = ?, \
                http_method = ?, \
                headers_encrypted = ?, \
-               headers_encrypted_v2 = ?, \
                auto_update = ?, \
                update_interval_secs = ?, \
                enabled = ?, \
@@ -248,11 +274,9 @@ impl SourceRepository for SqliteSourceRepository {
         )
         .bind(&source.name)
         .bind(source.source_type.to_string())
-        .bind(&source.url)
         .bind(&url_encrypted)
         .bind(&source.http_method)
-        .bind(&source.headers_encrypted)
-        .bind(&None::<String>)
+        .bind(&headers_encrypted)
         .bind(source.auto_update as i64)
         .bind(source.update_interval_secs as i64)
         .bind(source.enabled as i64)
@@ -335,23 +359,19 @@ mod tests {
         let source = sample_source();
         repo.create(&source).await.expect("create");
 
-        // Verify the encrypted column contains a v1 envelope.
-        let row: (Option<String>, String) =
-            sqlx::query_as("SELECT url_encrypted, url FROM sources WHERE id = ?")
+        let row: (Option<String>,) =
+            sqlx::query_as("SELECT url_encrypted FROM sources WHERE id = ?")
                 .bind(source.id.to_string())
                 .fetch_one(&pool)
                 .await
                 .expect("query");
 
-        let (url_encrypted, url_plain) = row;
-        let url_encrypted = url_encrypted.expect("url_encrypted should be non-NULL");
+        let url_encrypted = row.0.expect("url_encrypted should be non-NULL");
         assert!(envelope::is_envelope(&url_encrypted));
         assert!(
             !url_encrypted.contains("user:pass"),
             "encrypted column must not contain plaintext credentials"
         );
-        // Dual-write: plaintext column is still populated.
-        assert_eq!(url_plain, source.url);
     }
 
     #[tokio::test]
@@ -371,7 +391,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn no_key_stores_plaintext() {
+    async fn no_key_stores_null() {
         let pool = setup_pool().await;
         let repo = SqliteSourceRepository::new(pool.clone());
 
@@ -385,6 +405,22 @@ mod tests {
                 .await
                 .expect("query");
         assert!(row.0.is_none(), "url_encrypted should be NULL without key");
+    }
+
+    #[tokio::test]
+    async fn no_key_read_errors() {
+        let pool = setup_pool().await;
+        let repo = SqliteSourceRepository::new_with_key(pool.clone(), test_key());
+
+        let source = sample_source();
+        repo.create(&source).await.expect("create");
+
+        let no_key_repo = SqliteSourceRepository::new(pool);
+        let result = no_key_repo.find_by_id(source.id).await;
+        assert!(
+            result.is_err(),
+            "reading encrypted data without a key must error"
+        );
     }
 
     #[tokio::test]

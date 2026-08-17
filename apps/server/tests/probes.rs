@@ -90,12 +90,16 @@ impl TestApp {
                     as Arc<dyn TotpSecretRepository>,
                 recovery_code_repo: Arc::new(SqliteRecoveryCodeRepository::new(pool.clone()))
                     as Arc<dyn RecoveryCodeRepository>,
-                source_repo: Arc::new(SqliteSourceRepository::new(pool.clone()))
-                    as Arc<dyn SourceRepository>,
+                source_repo: Arc::new(SqliteSourceRepository::new_with_key(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn SourceRepository>,
                 snapshot_repo: Arc::new(SqliteSourceSnapshotRepository::new(pool.clone()))
                     as Arc<dyn SourceSnapshotRepository>,
-                pool_repo: Arc::new(SqliteNodePoolRepository::new(pool.clone()))
-                    as Arc<dyn NodePoolRepository>,
+                pool_repo: Arc::new(SqliteNodePoolRepository::new_with_key(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn NodePoolRepository>,
                 pool_meta_repo: Arc::new(SqlitePoolMetaRepository::new(pool.clone()))
                     as Arc<dyn PoolMetaRepository>,
                 override_repo: Arc::new(SqliteNodeOverrideRepository::new(pool.clone()))

@@ -78,6 +78,14 @@ impl MasterKey {
             options.mode(0o600);
         }
 
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                SecurityError::MasterKey(format!("failed to create key directory: {e}"))
+            })?;
+        }
+
         match options.open(path) {
             Ok(mut file) => {
                 tracing::warn!(
@@ -90,14 +98,6 @@ impl MasterKey {
                 OsRng.try_fill_bytes(&mut bytes).map_err(|e| {
                     SecurityError::MasterKey(format!("entropy source failure: {e}"))
                 })?;
-
-                if let Some(parent) = path.parent()
-                    && !parent.as_os_str().is_empty()
-                {
-                    std::fs::create_dir_all(parent).map_err(|e| {
-                        SecurityError::MasterKey(format!("failed to create key directory: {e}"))
-                    })?;
-                }
 
                 use std::io::Write;
                 file.write_all(&bytes).map_err(|e| {
@@ -130,19 +130,28 @@ impl MasterKey {
         Self { bytes: *bytes }
     }
 
-    /// Compute a non-reversible fingerprint of the key for identification.
+    /// Compute a domain-separated fingerprint of the key for identification.
     ///
-    /// Returns the hex-encoded SHA-256 digest of the key bytes. The digest
-    /// is one-way: the raw key cannot be recovered from the fingerprint
-    /// (SHA-256 preimage resistance). Its purpose is to let a restore
-    /// verify that the loaded master key matches the key used at backup
-    /// time, preventing silent decryption failures when encrypted columns
-    /// are restored with the wrong key (DS-AUD-034, ADR-0007).
-    #[must_use]
-    pub fn fingerprint(&self) -> String {
-        use sha2::{Digest, Sha256};
-        let hash = Sha256::digest(self.bytes);
-        hash.iter().map(|b| format!("{b:02x}")).collect()
+    /// Returns the hex-encoded HMAC-SHA256 digest of the fixed string
+    /// `"deve-sub-key-fingerprint-v1"` keyed by the master key. The digest
+    /// is one-way: the raw key cannot be recovered from the fingerprint.
+    /// Its purpose is to let a restore verify that the loaded master key
+    /// matches the key used at backup time, preventing silent decryption
+    /// failures when encrypted columns are restored with the wrong key
+    /// (DS-AUD-034, ADR-0007 §4).
+    ///
+    /// # Errors
+    /// Returns [`SecurityError::Crypto`] if HMAC initialization fails, which
+    /// is not expected for a valid 32-byte key.
+    pub fn fingerprint(&self) -> Result<String, SecurityError> {
+        use hmac::{Hmac, KeyInit, Mac};
+        use sha2::Sha256;
+        type HmacSha256 = Hmac<Sha256>;
+        let mut mac = HmacSha256::new_from_slice(&self.bytes)
+            .map_err(|e| SecurityError::Crypto(format!("HMAC init failed: {e}")))?;
+        mac.update(b"deve-sub-key-fingerprint-v1");
+        let result = mac.finalize().into_bytes();
+        Ok(result.iter().map(|b| format!("{b:02x}")).collect())
     }
 }
 
@@ -193,15 +202,15 @@ mod tests {
     fn fingerprint_is_stable_and_distinct() {
         let key_a = MasterKey::from_bytes(&[0x01; 32]);
         let key_b = MasterKey::from_bytes(&[0x02; 32]);
-        let fp_a = key_a.fingerprint();
-        let fp_a2 = key_a.fingerprint();
-        let fp_b = key_b.fingerprint();
+        let fp_a = key_a.fingerprint().expect("fingerprint");
+        let fp_a2 = key_a.fingerprint().expect("fingerprint");
+        let fp_b = key_b.fingerprint().expect("fingerprint");
         assert_eq!(fp_a, fp_a2, "fingerprint must be stable");
         assert_ne!(
             fp_a, fp_b,
             "different keys must have different fingerprints"
         );
-        assert_eq!(fp_a.len(), 64, "SHA-256 hex = 64 chars");
+        assert_eq!(fp_a.len(), 64, "HMAC-SHA256 hex = 64 chars");
         assert!(
             fp_a.chars().all(|c| c.is_ascii_hexdigit()),
             "fingerprint must be hex"

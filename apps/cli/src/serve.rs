@@ -26,6 +26,7 @@ use deve_sub_domain::{
 use deve_sub_server::{AppState, build_router};
 
 use crate::commands::{ServeArgs, ensure_db_dir, load_config, open_db};
+use crate::db_lock::DbLock;
 
 /// Start the HTTP server.
 pub async fn serve(args: ServeArgs) -> Result<()> {
@@ -43,6 +44,13 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
 
     ensure_db_dir(&config.database.path)?;
     ensure_db_dir(&config.security.master_key_path)?;
+
+    // WHY hold an exclusive flock for the entire process lifetime: SQLite's
+    // own locking detects concurrent write transactions but does not prevent
+    // two `serve` processes from opening pools on the same DB file. The
+    // flock is the authoritative process-level guard (ADR-0007 §7).
+    // `_db_lock` is dropped on function exit, releasing the lock.
+    let _db_lock = DbLock::acquire_exclusive(std::path::Path::new(&config.database.path))?;
 
     let db = open_db(&config.database.path, 8).await?;
     deve_sub_storage_sqlite::verify_schema(&db)

@@ -64,10 +64,15 @@ fn to_json_opt<T: serde::Serialize>(value: &Option<T>) -> Result<Option<String>,
     value.as_ref().map(to_json).transpose()
 }
 
-/// Encrypt a JSON string into a secret envelope, if a key is set.
-fn seal_json(key: Option<&MasterKey>, json: &str) -> Result<Option<String>, SourceError> {
+/// Encrypt a JSON string into a secret envelope, if a key is set. The
+/// `context` label drives HKDF subkey derivation and is bound as AAD.
+fn seal_json(
+    key: Option<&MasterKey>,
+    context: &[u8],
+    json: &str,
+) -> Result<Option<String>, SourceError> {
     match key {
-        Some(k) => envelope::seal(k.as_bytes(), json.as_bytes())
+        Some(k) => envelope::seal(k.as_bytes(), context, json.as_bytes())
             .map(Some)
             .map_err(|e| SourceError::Storage(format!("encryption failed: {e}"))),
         None => Ok(None),
@@ -77,13 +82,24 @@ fn seal_json(key: Option<&MasterKey>, json: &str) -> Result<Option<String>, Sour
 /// Encrypt an optional JSON string into a secret envelope.
 fn seal_json_opt(
     key: Option<&MasterKey>,
+    context: &[u8],
     json: &Option<String>,
 ) -> Result<Option<String>, SourceError> {
     match json {
-        Some(s) => seal_json(key, s),
+        Some(s) => seal_json(key, context, s),
         None => Ok(None),
     }
 }
+
+/// HKDF/AAD context labels for node columns.
+const CTX_PROTOCOL_CONFIG: &[u8] = b"nodes.protocol_config_json";
+const CTX_AUTHENTICATION: &[u8] = b"nodes.authentication_json";
+const CTX_TLS: &[u8] = b"nodes.tls_json";
+const CTX_TRANSPORT: &[u8] = b"nodes.transport_json";
+const CTX_OBFUSCATION: &[u8] = b"nodes.obfuscation_json";
+const CTX_EXTRAS: &[u8] = b"nodes.extras_json";
+const CTX_SOURCE_ITEM_URI: &[u8] = b"source_items.raw_uri";
+const CTX_BINDING_URI: &[u8] = b"node_source_bindings.raw_uri";
 
 #[async_trait]
 impl NodePoolRepository for SqliteNodePoolRepository {
@@ -228,15 +244,18 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             }
 
             // Insert the source_item with the final parse status.
-            let raw_uri_encrypted = seal_json(self.master_key.as_deref(), &entry.raw_uri)?;
+            let raw_uri_encrypted = seal_json(
+                self.master_key.as_deref(),
+                CTX_SOURCE_ITEM_URI,
+                &entry.raw_uri,
+            )?;
             sqlx::query(
                 "INSERT INTO source_items \
-                 (id, snapshot_id, raw_uri, raw_uri_encrypted, parse_status) \
-                 VALUES (?, ?, ?, ?, ?)",
+                 (id, snapshot_id, raw_uri_encrypted, parse_status) \
+                 VALUES (?, ?, ?, ?)",
             )
             .bind(SourceItemId::new().to_string())
             .bind(input.snapshot.id.to_string())
-            .bind(&entry.raw_uri)
             .bind(&raw_uri_encrypted)
             .bind(final_status.to_string())
             .execute(&mut *tx)
@@ -245,16 +264,17 @@ impl NodePoolRepository for SqliteNodePoolRepository {
 
             // Create a binding if this entry produced or matched a node.
             if let Some(node_id) = &node_id_opt {
+                let binding_uri_encrypted =
+                    seal_json(self.master_key.as_deref(), CTX_BINDING_URI, &entry.raw_uri)?;
                 sqlx::query(
                     "INSERT INTO node_source_bindings \
-                     (id, node_id, source_id, raw_uri, raw_uri_encrypted) \
-                     VALUES (?, ?, ?, ?, ?)",
+                     (id, node_id, source_id, raw_uri_encrypted) \
+                     VALUES (?, ?, ?, ?)",
                 )
                 .bind(NodeSourceBindingId::new().to_string())
                 .bind(node_id)
                 .bind(input.source_id.to_string())
-                .bind(&entry.raw_uri)
-                .bind(&raw_uri_encrypted)
+                .bind(&binding_uri_encrypted)
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| SourceError::Storage(e.to_string()))?;
@@ -562,43 +582,37 @@ async fn insert_node(
     let congestion_json = to_json_opt(&node.congestion)?;
     let extras_json = to_json(&node.extras)?;
 
-    let config_json_encrypted = seal_json(key, &config_json)?;
-    let auth_json_encrypted = seal_json(key, &auth_json)?;
-    let tls_json_encrypted = seal_json_opt(key, &tls_json)?;
-    let transport_json_encrypted = seal_json_opt(key, &transport_json)?;
-    let obfuscation_json_encrypted = seal_json_opt(key, &obfuscation_json)?;
-    let extras_json_encrypted = seal_json(key, &extras_json)?;
+    let config_json_encrypted = seal_json(key, CTX_PROTOCOL_CONFIG, &config_json)?;
+    let auth_json_encrypted = seal_json(key, CTX_AUTHENTICATION, &auth_json)?;
+    let tls_json_encrypted = seal_json_opt(key, CTX_TLS, &tls_json)?;
+    let transport_json_encrypted = seal_json_opt(key, CTX_TRANSPORT, &transport_json)?;
+    let obfuscation_json_encrypted = seal_json_opt(key, CTX_OBFUSCATION, &obfuscation_json)?;
+    let extras_json_encrypted = seal_json(key, CTX_EXTRAS, &extras_json)?;
 
     sqlx::query(
         "INSERT INTO nodes \
-         (id, display_name, protocol_kind, host, port, protocol_config_json, \
-         protocol_config_json_encrypted, authentication_json, authentication_json_encrypted, \
-         tls_json, tls_json_encrypted, transport_json, transport_json_encrypted, \
-         udp_capability, multiplex_json, obfuscation_json, obfuscation_json_encrypted, \
-         congestion_json, region, extras_json, extras_json_encrypted, \
+         (id, display_name, protocol_kind, host, port, \
+         protocol_config_json_encrypted, authentication_json_encrypted, \
+         tls_json_encrypted, transport_json_encrypted, \
+         udp_capability, multiplex_json, obfuscation_json_encrypted, \
+         congestion_json, region, extras_json_encrypted, \
          imported_at, revision, status, missing_from_source, source_label) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?)",
     )
     .bind(&node_id)
     .bind(&node.display_name)
     .bind(proto_str)
     .bind(host_str)
     .bind(i64::from(node.endpoint.port))
-    .bind(&config_json)
     .bind(&config_json_encrypted)
-    .bind(&auth_json)
     .bind(&auth_json_encrypted)
-    .bind(&tls_json)
     .bind(&tls_json_encrypted)
-    .bind(&transport_json)
     .bind(&transport_json_encrypted)
     .bind(&udp_json)
     .bind(&multiplex_json)
-    .bind(&obfuscation_json)
     .bind(&obfuscation_json_encrypted)
     .bind(&congestion_json)
     .bind(&node.region.value)
-    .bind(&extras_json)
     .bind(&extras_json_encrypted)
     .bind(&imported_at)
     .bind(&node.source.source_label)

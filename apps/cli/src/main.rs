@@ -12,6 +12,7 @@ use clap::{Parser, Subcommand};
 
 mod backup;
 mod commands;
+mod db_lock;
 mod health;
 mod node_cmds;
 mod serve;

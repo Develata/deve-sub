@@ -15,8 +15,18 @@ use deve_sub_storage_sqlite::{SqliteNodePoolRepository, SqliteSourceRepository};
 
 const TROJAN: &str = "trojan://TEST_PASSWORD@example.com:443?sni=example.com&type=tcp#NodeA";
 
+type EncryptedColumns = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
 struct TestDb {
     pool: sqlx::sqlite::SqlitePool,
+    master_key: Arc<MasterKey>,
     _dir: tempfile::TempDir,
 }
 
@@ -32,7 +42,11 @@ impl TestDb {
             .run(&pool)
             .await
             .expect("migrations");
-        Self { pool, _dir: dir }
+        Self {
+            pool,
+            master_key: Arc::new(MasterKey::from_bytes(&[0x42; 32])),
+            _dir: dir,
+        }
     }
 }
 
@@ -76,13 +90,14 @@ fn entry(node: deve_sub_domain::Node) -> ReconcileEntry {
 
 /// DS-AUD-027: When a master key is configured, sensitive JSON columns
 /// (authentication, protocol_config, tls, transport, obfuscation, extras)
-/// must be persisted as secret envelopes, not plaintext.
+/// must be persisted as v2 secret envelopes, not plaintext.
 #[tokio::test]
 async fn node_credentials_encrypted_at_rest() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let key = Arc::new(MasterKey::from_bytes(&[0x42; 32]));
-    let pool_repo = SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&key));
+    let source_repo =
+        SqliteSourceRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -100,27 +115,14 @@ async fn node_credentials_encrypted_at_rest() {
         .await
         .expect("reconcile");
 
-    let row: (
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    ) = sqlx::query_as(
+    let row: EncryptedColumns = sqlx::query_as(
         "SELECT authentication_json_encrypted, protocol_config_json_encrypted, \
-             tls_json_encrypted, transport_json_encrypted, obfuscation_json_encrypted, \
-             extras_json_encrypted FROM nodes LIMIT 1",
+              tls_json_encrypted, transport_json_encrypted, obfuscation_json_encrypted, \
+              extras_json_encrypted FROM nodes LIMIT 1",
     )
     .fetch_one(&db.pool)
     .await
     .expect("fetch encrypted columns");
-
-    let plaintext_row: (String, String) =
-        sqlx::query_as("SELECT authentication_json, extras_json FROM nodes LIMIT 1")
-            .fetch_one(&db.pool)
-            .await
-            .expect("fetch plaintext columns");
 
     let (auth_enc, cfg_enc, tls_enc, tp_enc, obf_enc, ext_enc) = row;
     assert!(
@@ -143,8 +145,8 @@ async fn node_credentials_encrypted_at_rest() {
     ] {
         if let Some(e) = enc {
             assert!(
-                e.starts_with("v1:"),
-                "{label} envelope must have v1: prefix"
+                e.starts_with("v2:"),
+                "{label} envelope must have v2: prefix"
             );
             assert!(
                 !e.contains("TEST_PASSWORD"),
@@ -152,16 +154,6 @@ async fn node_credentials_encrypted_at_rest() {
             );
         }
     }
-
-    let (auth_plain, ext_plain) = plaintext_row;
-    assert!(
-        auth_plain.contains("TEST_PASSWORD"),
-        "plaintext auth column retained for backward compat"
-    );
-    assert!(
-        ext_plain.contains("tcp") || !ext_plain.is_empty(),
-        "plaintext extras column retained for backward compat"
-    );
 }
 
 /// DS-AUD-027: Reading nodes back with the same key decrypts the sensitive
@@ -169,9 +161,10 @@ async fn node_credentials_encrypted_at_rest() {
 #[tokio::test]
 async fn read_decrypts_node_credentials() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let key = Arc::new(MasterKey::from_bytes(&[0x42; 32]));
-    let pool_repo = SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&key));
+    let source_repo =
+        SqliteSourceRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -202,13 +195,15 @@ async fn read_decrypts_node_credentials() {
     );
 }
 
-/// DS-AUD-027: Without a master key, the repository falls back to plaintext
-/// columns (legacy compatibility path).
+/// DS-AUD-027: Without a master key, reading encrypted nodes fails closed
+/// rather than silently returning empty or garbage credentials.
 #[tokio::test]
-async fn no_key_falls_back_to_plaintext() {
+async fn no_key_read_fails_closed() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo =
+        SqliteSourceRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -226,39 +221,25 @@ async fn no_key_falls_back_to_plaintext() {
         .await
         .expect("reconcile");
 
-    let (enc_count,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM nodes WHERE authentication_json_encrypted IS NULL")
-            .fetch_one(&db.pool)
-            .await
-            .expect("count");
-    assert_eq!(
-        enc_count, 1,
-        "no key → encrypted columns stay NULL, plaintext used"
-    );
-
-    let nodes = pool_repo
-        .list_nodes(&NodeFilter::all(), None, 100)
-        .await
-        .expect("list nodes");
-    assert_eq!(nodes.len(), 1);
-    let auth_json = serde_json::to_string(&nodes[0].node.authentication).expect("serialize auth");
+    let no_key_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let result = no_key_repo.list_nodes(&NodeFilter::all(), None, 100).await;
     assert!(
-        auth_json.contains("TEST_PASSWORD"),
-        "plaintext fallback must still expose original credentials"
+        result.is_err(),
+        "reading encrypted nodes without a key must error (fail-closed)"
     );
 }
 
 /// DS-AUD-027 (raw_uri surface): When a master key is configured, raw share
-/// URIs recorded in `source_items` and `node_source_bindings` are dual-written
-/// as secret envelopes alongside the plaintext column (transition window per
-/// ADR-0007 Phase 2). Envelopes must have the v1: prefix and must not leak
+/// URIs recorded in `source_items` and `node_source_bindings` are stored as
+/// v2 secret envelopes. Envelopes must have the v2: prefix and must not leak
 /// the original password.
 #[tokio::test]
 async fn raw_uri_encrypted_in_items_and_bindings() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let key = Arc::new(MasterKey::from_bytes(&[0x42; 32]));
-    let pool_repo = SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&key));
+    let source_repo =
+        SqliteSourceRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -284,7 +265,7 @@ async fn raw_uri_encrypted_in_items_and_bindings() {
     let item_enc = item_row
         .0
         .expect("source_items.raw_uri_encrypted populated");
-    assert!(item_enc.starts_with("v1:"));
+    assert!(item_enc.starts_with("v2:"));
     assert!(
         !item_enc.contains("TEST_PASSWORD"),
         "source_items envelope must not leak plaintext"
@@ -298,58 +279,9 @@ async fn raw_uri_encrypted_in_items_and_bindings() {
     let binding_enc = binding_row
         .0
         .expect("node_source_bindings.raw_uri_encrypted populated");
-    assert!(binding_enc.starts_with("v1:"));
+    assert!(binding_enc.starts_with("v2:"));
     assert!(
         !binding_enc.contains("TEST_PASSWORD"),
         "node_source_bindings envelope must not leak plaintext"
     );
-
-    let (plain_count,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM source_items WHERE raw_uri IS NOT NULL")
-            .fetch_one(&db.pool)
-            .await
-            .expect("count plaintext");
-    assert_eq!(
-        plain_count, 1,
-        "plaintext raw_uri retained for transition window"
-    );
-}
-
-/// DS-AUD-027 (raw_uri surface): Without a master key, raw_uri is written
-/// only to the plaintext column; the encrypted column stays NULL.
-#[tokio::test]
-async fn raw_uri_no_key_leaves_encrypted_null() {
-    let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
-
-    let source = make_source("test-source");
-    source_repo.create(&source).await.expect("create source");
-
-    let node = trojan_node(TROJAN);
-    let entries = [entry(node)];
-    let snapshot = make_snapshot(source.id, 1, 1);
-
-    pool_repo
-        .reconcile(ReconcileInput {
-            source_id: source.id,
-            snapshot: &snapshot,
-            entries: &entries,
-        })
-        .await
-        .expect("reconcile");
-
-    let (item_null,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM source_items WHERE raw_uri_encrypted IS NULL")
-            .fetch_one(&db.pool)
-            .await
-            .expect("count item null");
-    assert_eq!(item_null, 1);
-
-    let (binding_null,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM node_source_bindings WHERE raw_uri_encrypted IS NULL")
-            .fetch_one(&db.pool)
-            .await
-            .expect("count binding null");
-    assert_eq!(binding_null, 1);
 }

@@ -9,6 +9,7 @@
 //! - NODE-010: manual override survives upstream refresh
 
 use std::net::IpAddr;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use deve_sub_application::source::{
@@ -19,6 +20,7 @@ use deve_sub_domain::{
     ItemParseStatus, NodePoolRepository, ReconcileEntry, RegionMethod, SourceType,
 };
 use deve_sub_kernel::{NodeId, TagId};
+use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
     SqliteNodeOverrideRepository, SqliteNodePoolRepository, SqliteSourceRepository,
     SqliteSourceSnapshotRepository,
@@ -30,6 +32,7 @@ use deve_sub_storage_sqlite::{
 
 struct TestDb {
     pool: sqlx::sqlite::SqlitePool,
+    master_key: Arc<MasterKey>,
     _dir: tempfile::TempDir,
 }
 
@@ -45,7 +48,11 @@ impl TestDb {
             .run(&pool)
             .await
             .expect("migrations");
-        Self { pool, _dir: dir }
+        Self {
+            pool,
+            master_key: Arc::new(MasterKey::from_bytes(&[0x42u8; 32])),
+            _dir: dir,
+        }
     }
 }
 
@@ -190,9 +197,11 @@ async fn node_009_dual_stack_candidate_ips() {
 #[tokio::test]
 async fn node_006_manual_region_survives_auto_detection() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo =
+        SqliteSourceRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let override_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
     let fetcher = MockFetcher {
         body: TROJAN_URI.to_owned(),
@@ -261,9 +270,11 @@ async fn node_006_manual_region_survives_auto_detection() {
 #[tokio::test]
 async fn node_010_override_survives_refresh() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo =
+        SqliteSourceRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let override_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
     let fetcher = MockFetcher {
         body: TROJAN_URI.to_owned(),
@@ -362,9 +373,11 @@ const MULTI_NODE_URI: &str = "trojan://pass@host1.com:443#Node1\n\
 #[tokio::test]
 async fn node_004_batch_enable_disable() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo =
+        SqliteSourceRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let override_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
     let fetcher = MockFetcher {
         body: MULTI_NODE_URI.to_owned(),
@@ -427,9 +440,11 @@ async fn node_004_batch_enable_disable() {
 #[tokio::test]
 async fn node_005_batch_tags() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo =
+        SqliteSourceRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let override_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
     let fetcher = MockFetcher {
         body: MULTI_NODE_URI.to_owned(),

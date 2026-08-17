@@ -27,41 +27,60 @@ fn from_json_opt<T: serde::de::DeserializeOwned>(
     s.map(from_json).transpose()
 }
 
-/// Decrypt an encrypted column, falling back to the plaintext column when the
-/// encrypted column is NULL or no key is set. See ADR-0007.
+/// Decrypt a required encrypted column. Errors if no key is set or the
+/// encrypted column is NULL (data was written without a master key).
 fn open_field(
     key: Option<&MasterKey>,
+    context: &[u8],
     encrypted: &Option<String>,
-    plaintext: &str,
 ) -> Result<String, SourceError> {
     match (key, encrypted) {
         (Some(k), Some(env)) => {
-            let bytes = envelope::open(k.as_bytes(), env)
+            let bytes = envelope::open(k.as_bytes(), context, env)
                 .map_err(|e| SourceError::Storage(format!("decryption failed: {e}")))?;
             String::from_utf8(bytes)
                 .map_err(|e| SourceError::Storage(format!("decrypted value is not UTF-8: {e}")))
         }
-        _ => Ok(plaintext.to_owned()),
+        (Some(_), None) => Err(SourceError::Storage(
+            "encrypted column is NULL — data was written without a master key".to_owned(),
+        )),
+        (None, _) => Err(SourceError::Storage(
+            "no master key — cannot decrypt sensitive column".to_owned(),
+        )),
     }
 }
 
-/// Decrypt an optional encrypted column, falling back to the plaintext column.
+/// Decrypt an optional encrypted column. Returns `None` if the encrypted
+/// column is NULL; errors if a key is set but decryption fails, or if no
+/// key is set and the column is non-NULL.
 fn open_field_opt(
     key: Option<&MasterKey>,
+    context: &[u8],
     encrypted: &Option<String>,
-    plaintext: Option<&str>,
 ) -> Result<Option<String>, SourceError> {
     match (key, encrypted) {
         (Some(k), Some(env)) => {
-            let bytes = envelope::open(k.as_bytes(), env)
+            let bytes = envelope::open(k.as_bytes(), context, env)
                 .map_err(|e| SourceError::Storage(format!("decryption failed: {e}")))?;
             let s = String::from_utf8(bytes)
                 .map_err(|e| SourceError::Storage(format!("decrypted value is not UTF-8: {e}")))?;
             Ok(Some(s))
         }
-        _ => Ok(plaintext.map(str::to_owned)),
+        (Some(_), None) => Ok(None),
+        (None, Some(_)) => Err(SourceError::Storage(
+            "no master key — cannot decrypt sensitive column".to_owned(),
+        )),
+        (None, None) => Ok(None),
     }
 }
+
+/// HKDF/AAD context labels for node columns.
+const CTX_PROTOCOL_CONFIG: &[u8] = b"nodes.protocol_config_json";
+const CTX_AUTHENTICATION: &[u8] = b"nodes.authentication_json";
+const CTX_TLS: &[u8] = b"nodes.tls_json";
+const CTX_TRANSPORT: &[u8] = b"nodes.transport_json";
+const CTX_OBFUSCATION: &[u8] = b"nodes.obfuscation_json";
+const CTX_EXTRAS: &[u8] = b"nodes.extras_json";
 
 /// Raw row from the `nodes` table plus a COALESCE for the source label.
 #[derive(sqlx::FromRow)]
@@ -71,22 +90,16 @@ pub(crate) struct NodeRow {
     protocol_kind: String,
     host: String,
     port: i64,
-    protocol_config_json: String,
     protocol_config_json_encrypted: Option<String>,
-    authentication_json: String,
     authentication_json_encrypted: Option<String>,
-    tls_json: Option<String>,
     tls_json_encrypted: Option<String>,
-    transport_json: Option<String>,
     transport_json_encrypted: Option<String>,
     udp_capability: Option<String>,
     multiplex_json: Option<String>,
-    obfuscation_json: Option<String>,
     obfuscation_json_encrypted: Option<String>,
     congestion_json: Option<String>,
     region: Option<String>,
     chain_json: Option<String>,
-    extras_json: String,
     extras_json_encrypted: Option<String>,
     imported_at: String,
     revision: i64,
@@ -158,26 +171,15 @@ impl NodeRow {
 
         let config_json = open_field(
             key,
+            CTX_PROTOCOL_CONFIG,
             &self.protocol_config_json_encrypted,
-            &self.protocol_config_json,
         )?;
-        let auth_json = open_field(
-            key,
-            &self.authentication_json_encrypted,
-            &self.authentication_json,
-        )?;
-        let tls_json = open_field_opt(key, &self.tls_json_encrypted, self.tls_json.as_deref())?;
-        let transport_json = open_field_opt(
-            key,
-            &self.transport_json_encrypted,
-            self.transport_json.as_deref(),
-        )?;
-        let obfuscation_json = open_field_opt(
-            key,
-            &self.obfuscation_json_encrypted,
-            self.obfuscation_json.as_deref(),
-        )?;
-        let extras_json = open_field(key, &self.extras_json_encrypted, &self.extras_json)?;
+        let auth_json = open_field(key, CTX_AUTHENTICATION, &self.authentication_json_encrypted)?;
+        let tls_json = open_field_opt(key, CTX_TLS, &self.tls_json_encrypted)?;
+        let transport_json = open_field_opt(key, CTX_TRANSPORT, &self.transport_json_encrypted)?;
+        let obfuscation_json =
+            open_field_opt(key, CTX_OBFUSCATION, &self.obfuscation_json_encrypted)?;
+        let extras_json = open_field(key, CTX_EXTRAS, &self.extras_json_encrypted)?;
 
         let node = Node {
             id: node_id,
@@ -239,14 +241,14 @@ impl NodeRow {
 /// column is empty (e.g. pre-migration rows or nodes inserted via reconcile
 /// where the protocol parser leaves `source_label` empty).
 pub(crate) const NODE_COLUMNS: &str = "n.id, n.display_name, n.protocol_kind, n.host, n.port, \
-     n.protocol_config_json, n.protocol_config_json_encrypted, \
-     n.authentication_json, n.authentication_json_encrypted, \
-     n.tls_json, n.tls_json_encrypted, \
-     n.transport_json, n.transport_json_encrypted, \
+     n.protocol_config_json_encrypted, \
+     n.authentication_json_encrypted, \
+     n.tls_json_encrypted, \
+     n.transport_json_encrypted, \
      n.udp_capability, n.multiplex_json, \
-     n.obfuscation_json, n.obfuscation_json_encrypted, \
+     n.obfuscation_json_encrypted, \
      n.congestion_json, n.region, n.chain_json, \
-     n.extras_json, n.extras_json_encrypted, \
+     n.extras_json_encrypted, \
      n.imported_at, n.revision, n.status, \
      n.missing_from_source, n.created_at, \
      COALESCE(NULLIF(n.source_label, ''), \

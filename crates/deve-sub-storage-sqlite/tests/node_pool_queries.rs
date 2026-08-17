@@ -17,6 +17,7 @@ use deve_sub_storage_sqlite::{SqliteNodePoolRepository, SqliteSourceRepository};
 
 struct TestDb {
     pool: sqlx::sqlite::SqlitePool,
+    master_key: std::sync::Arc<deve_sub_security::MasterKey>,
     _dir: tempfile::TempDir,
 }
 
@@ -32,7 +33,13 @@ impl TestDb {
             .run(&pool)
             .await
             .expect("migrations");
-        Self { pool, _dir: dir }
+        Self {
+            pool,
+            master_key: std::sync::Arc::new(deve_sub_security::MasterKey::from_bytes(
+                &[0x42u8; 32],
+            )),
+            _dir: dir,
+        }
     }
 }
 
@@ -83,7 +90,10 @@ const TROJAN_A_DUP: &str =
 #[tokio::test]
 async fn import_inserts_new_nodes() {
     let db = TestDb::new().await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let nodes = vec![trojan_node(TROJAN_A), trojan_node(TROJAN_B)];
     let result = pool_repo.import_nodes(nodes).await.expect("import");
@@ -107,7 +117,10 @@ async fn import_inserts_new_nodes() {
 #[tokio::test]
 async fn import_duplicate_does_not_overwrite_credentials() {
     let db = TestDb::new().await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let node_a = trojan_node(TROJAN_A);
     let original_id = node_a.id;
@@ -140,8 +153,14 @@ async fn import_duplicate_does_not_overwrite_credentials() {
 #[tokio::test]
 async fn import_reactivates_missing_node() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -197,7 +216,10 @@ async fn import_reactivates_missing_node() {
 #[tokio::test]
 async fn get_node_returns_pool_metadata() {
     let db = TestDb::new().await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let node = trojan_node(TROJAN_A);
     let id = node.id;
@@ -221,7 +243,10 @@ async fn get_node_returns_pool_metadata() {
 #[tokio::test]
 async fn get_node_returns_none_for_unknown() {
     let db = TestDb::new().await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let entry = pool_repo.get_node(NodeId::new()).await.expect("get");
     assert!(entry.is_none());
@@ -231,7 +256,10 @@ async fn get_node_returns_none_for_unknown() {
 #[tokio::test]
 async fn list_nodes_filters_by_protocol() {
     let db = TestDb::new().await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     pool_repo
         .import_nodes(vec![trojan_node(TROJAN_A), trojan_node(TROJAN_B)])
@@ -267,8 +295,14 @@ async fn list_nodes_filters_by_protocol() {
 #[tokio::test]
 async fn list_nodes_active_only_excludes_missing() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
@@ -316,7 +350,10 @@ async fn list_nodes_active_only_excludes_missing() {
 #[tokio::test]
 async fn list_nodes_paginates_by_cursor() {
     let db = TestDb::new().await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     pool_repo
         .import_nodes(vec![trojan_node(TROJAN_A), trojan_node(TROJAN_B)])
@@ -343,7 +380,10 @@ async fn list_nodes_paginates_by_cursor() {
 #[tokio::test]
 async fn import_preserves_manual_source_label() {
     let db = TestDb::new().await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let mut node = trojan_node(TROJAN_A);
     node.source.source_label = "manual".to_owned();

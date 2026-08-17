@@ -18,6 +18,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use deve_sub_application::template::{CreateTemplateParams, create_template, generate};
 use deve_sub_domain::{
@@ -26,6 +27,7 @@ use deve_sub_domain::{
     TrojanConfig, UdpCapability,
 };
 use deve_sub_kernel::Timestamp;
+use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
     SqliteGenerationCacheRepository, SqliteNodePoolRepository, SqlitePoolMetaRepository,
     SqliteTemplateRepository, SqliteTemplateVersionRepository,
@@ -132,6 +134,7 @@ const SPEC_DESC_SORT: &str = concat!(
 
 struct TestDb {
     pool: sqlx::SqlitePool,
+    master_key: Arc<MasterKey>,
     template_id: deve_sub_kernel::TemplateId,
     _dir: tempfile::TempDir,
 }
@@ -148,7 +151,9 @@ impl TestDb {
             .await
             .expect("migrations");
 
-        let pool_repo = SqliteNodePoolRepository::new(pool.clone());
+        let master_key = Arc::new(MasterKey::from_bytes(&[0x42u8; 32]));
+        let pool_repo =
+            SqliteNodePoolRepository::new_with_key(pool.clone(), Arc::clone(&master_key));
         pool_repo
             .import_nodes(vec![
                 make_trojan(TROJAN_ID_A, "alpha-node", "alpha.example.com"),
@@ -174,6 +179,7 @@ impl TestDb {
 
         Self {
             pool,
+            master_key,
             template_id: result.template.id,
             _dir: dir,
         }
@@ -225,7 +231,8 @@ async fn generate_rejects_profile_not_in_target_profiles() {
     let db = TestDb::new(SPEC_MIHOMO_ONLY, "mihomo-only").await;
     let template_repo = SqliteTemplateRepository::new(db.pool.clone());
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
@@ -258,7 +265,8 @@ async fn generate_mihomo_emits_full_template_with_groups_rules_dns_tun() {
     let db = TestDb::new(SPEC_FULL_TEMPLATE, "full-mihomo").await;
     let template_repo = SqliteTemplateRepository::new(db.pool.clone());
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
@@ -303,7 +311,8 @@ async fn generate_applies_asc_sort_order_to_group_members() {
     let db = TestDb::new(SPEC_FULL_TEMPLATE, "asc-sort").await;
     let template_repo = SqliteTemplateRepository::new(db.pool.clone());
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
@@ -343,7 +352,8 @@ async fn generate_applies_desc_sort_order_to_group_members() {
     let db = TestDb::new(SPEC_DESC_SORT, "desc-sort").await;
     let template_repo = SqliteTemplateRepository::new(db.pool.clone());
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
@@ -410,7 +420,8 @@ async fn generate_strict_mode_rejects_incompatible_group_type() {
     let db = TestDb::new(SPEC_XRAY_URL_TEST_GROUP, "xray-url-test").await;
     let template_repo = SqliteTemplateRepository::new(db.pool.clone());
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
@@ -441,7 +452,8 @@ async fn generate_lenient_mode_warns_on_incompatible_group_type() {
     let db = TestDb::new(SPEC_XRAY_URL_TEST_GROUP, "xray-url-test-lenient").await;
     let template_repo = SqliteTemplateRepository::new(db.pool.clone());
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
@@ -473,7 +485,8 @@ async fn generate_cache_hit_returns_honest_cache_warnings() {
     let db = TestDb::new(SPEC_FULL_TEMPLATE, "cache-hit").await;
     let template_repo = SqliteTemplateRepository::new(db.pool.clone());
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 

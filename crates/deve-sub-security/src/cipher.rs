@@ -7,7 +7,7 @@
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chacha20poly1305::aead::Aead;
+use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use rand::RngCore;
 use rand::rngs::OsRng;
@@ -73,10 +73,88 @@ pub fn decrypt(key: &[u8], ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>, S
 /// Returns [`SecurityError::Crypto`] if encryption fails.
 pub fn encrypt_to_b64(key: &[u8], plaintext: &[u8]) -> Result<(String, String), SecurityError> {
     let (ciphertext, nonce) = encrypt(key, plaintext)?;
-    Ok((
-        URL_SAFE_NO_PAD.encode(ciphertext),
-        URL_SAFE_NO_PAD.encode(nonce),
-    ))
+    Ok((encode_b64(&ciphertext), encode_b64(&nonce)))
+}
+
+/// Encode bytes as base64url (no padding).
+#[must_use]
+pub fn encode_b64(bytes: &[u8]) -> String {
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+/// Decode a base64url (no padding) string.
+///
+/// # Errors
+/// Returns [`SecurityError::Crypto`] if the input is not valid base64url.
+pub fn decode_b64(s: &str) -> Result<Vec<u8>, SecurityError> {
+    URL_SAFE_NO_PAD
+        .decode(s)
+        .map_err(|e| SecurityError::Crypto(format!("base64 decode failed: {e}")))
+}
+
+/// Encrypt plaintext with additional authenticated data (AAD).
+///
+/// The AAD is authenticated but not encrypted — it binds the ciphertext to a
+/// specific context (e.g. a table+column identifier) so a ciphertext copied
+/// from one column cannot be decrypted in another. Returns the ciphertext
+/// (with Poly1305 tag) and the 24-byte nonce.
+///
+/// # Errors
+/// Returns [`SecurityError::Crypto`] if encryption fails.
+pub fn encrypt_aad(
+    key: &[u8],
+    plaintext: &[u8],
+    aad: &[u8],
+) -> Result<(Vec<u8>, [u8; NONCE_LEN]), SecurityError> {
+    let cipher = XChaCha20Poly1305::new_from_slice(key)
+        .map_err(|e| SecurityError::Crypto(format!("invalid key length: {e}")))?;
+    let nonce = generate_nonce()?;
+    let ciphertext = cipher
+        .encrypt(
+            (&nonce).into(),
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
+        .map_err(|e| SecurityError::Crypto(format!("encryption failed: {e}")))?;
+    Ok((ciphertext, nonce))
+}
+
+/// Decrypt ciphertext with additional authenticated data (AAD).
+///
+/// The AAD must match the value used during encryption; otherwise decryption
+/// fails (Poly1305 tag mismatch).
+///
+/// # Errors
+/// Returns [`SecurityError::Crypto`] if decryption fails (wrong key, corrupted
+/// ciphertext, tampered tag, or AAD mismatch).
+pub fn decrypt_aad(
+    key: &[u8],
+    ciphertext: &[u8],
+    nonce: &[u8],
+    aad: &[u8],
+) -> Result<Vec<u8>, SecurityError> {
+    if nonce.len() != NONCE_LEN {
+        return Err(SecurityError::Crypto(format!(
+            "invalid nonce length: expected {NONCE_LEN}, got {}",
+            nonce.len()
+        )));
+    }
+    let cipher = XChaCha20Poly1305::new_from_slice(key)
+        .map_err(|e| SecurityError::Crypto(format!("invalid key length: {e}")))?;
+    let nonce: &[u8; NONCE_LEN] = nonce
+        .try_into()
+        .map_err(|_| SecurityError::Crypto("nonce conversion failed".to_owned()))?;
+    cipher
+        .decrypt(
+            nonce.into(),
+            Payload {
+                msg: ciphertext,
+                aad,
+            },
+        )
+        .map_err(|e| SecurityError::Crypto(format!("decryption failed: {e}")))
 }
 
 /// Decrypt from base64url-encoded strings.
@@ -88,12 +166,8 @@ pub fn decrypt_from_b64(
     ciphertext_b64: &str,
     nonce_b64: &str,
 ) -> Result<Vec<u8>, SecurityError> {
-    let ciphertext = URL_SAFE_NO_PAD
-        .decode(ciphertext_b64)
-        .map_err(|e| SecurityError::Crypto(format!("ciphertext decode failed: {e}")))?;
-    let nonce = URL_SAFE_NO_PAD
-        .decode(nonce_b64)
-        .map_err(|e| SecurityError::Crypto(format!("nonce decode failed: {e}")))?;
+    let ciphertext = decode_b64(ciphertext_b64)?;
+    let nonce = decode_b64(nonce_b64)?;
     decrypt(key, &ciphertext, &nonce)
 }
 
@@ -133,5 +207,32 @@ mod tests {
         let (ct_b64, n_b64) = encrypt_to_b64(&key, plaintext).expect("encrypt");
         let decrypted = decrypt_from_b64(&key, &ct_b64, &n_b64).expect("decrypt");
         assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn aad_roundtrip() {
+        let key = [0x42u8; 32];
+        let aad = b"sources.url";
+        let (ct, nonce) = encrypt_aad(&key, b"secret", aad).expect("encrypt");
+        let pt = decrypt_aad(&key, &ct, &nonce, aad).expect("decrypt");
+        assert_eq!(pt, b"secret");
+    }
+
+    #[test]
+    fn aad_mismatch_fails() {
+        let key = [0x42u8; 32];
+        let (ct, nonce) = encrypt_aad(&key, b"secret", b"sources.url").expect("encrypt");
+        assert!(
+            decrypt_aad(&key, &ct, &nonce, b"sources.headers").is_err(),
+            "AAD mismatch must fail decryption"
+        );
+    }
+
+    #[test]
+    fn aad_wrong_key_fails() {
+        let key = [0x42u8; 32];
+        let wrong = [0x99u8; 32];
+        let (ct, nonce) = encrypt_aad(&key, b"secret", b"ctx").expect("encrypt");
+        assert!(decrypt_aad(&wrong, &ct, &nonce, b"ctx").is_err());
     }
 }

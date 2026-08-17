@@ -64,6 +64,7 @@ impl GeoIpPort for StubGeoIp {
 
 struct TestDb {
     pool: sqlx::sqlite::SqlitePool,
+    master_key: std::sync::Arc<deve_sub_security::MasterKey>,
     _dir: tempfile::TempDir,
 }
 
@@ -79,7 +80,13 @@ impl TestDb {
             .run(&pool)
             .await
             .expect("migrations");
-        Self { pool, _dir: dir }
+        Self {
+            pool,
+            master_key: std::sync::Arc::new(deve_sub_security::MasterKey::from_bytes(
+                &[0x42u8; 32],
+            )),
+            _dir: dir,
+        }
     }
 }
 
@@ -106,9 +113,15 @@ async fn create_auto_source(repo: &SqliteSourceRepository, name: &str, interval_
 #[tokio::test]
 async fn scheduler_refreshes_due_source_on_tick() {
     let db = TestDb::new().await;
-    let source_repo = Arc::new(SqliteSourceRepository::new(db.pool.clone()));
+    let source_repo = Arc::new(SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    ));
     let snapshot_repo = Arc::new(SqliteSourceSnapshotRepository::new(db.pool.clone()));
-    let pool_repo = Arc::new(SqliteNodePoolRepository::new(db.pool.clone()));
+    let pool_repo = Arc::new(SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    ));
     let (fetcher, calls) = CountingFetcher::new(TROJAN_URI.as_bytes().to_vec());
 
     create_auto_source(&source_repo, "auto-source", 3600).await;
@@ -150,9 +163,15 @@ async fn scheduler_refreshes_due_source_on_tick() {
 #[tokio::test]
 async fn scheduler_skips_not_due_source() {
     let db = TestDb::new().await;
-    let source_repo = Arc::new(SqliteSourceRepository::new(db.pool.clone()));
+    let source_repo = Arc::new(SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    ));
     let snapshot_repo = Arc::new(SqliteSourceSnapshotRepository::new(db.pool.clone()));
-    let pool_repo = Arc::new(SqliteNodePoolRepository::new(db.pool.clone()));
+    let pool_repo = Arc::new(SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    ));
     let (fetcher, calls) = CountingFetcher::new(TROJAN_URI.as_bytes().to_vec());
 
     // interval is 1 hour; the source was just created so it has no snapshot
@@ -202,9 +221,15 @@ async fn scheduler_skips_not_due_source() {
 #[tokio::test]
 async fn scheduler_skips_disabled_source() {
     let db = TestDb::new().await;
-    let source_repo = Arc::new(SqliteSourceRepository::new(db.pool.clone()));
+    let source_repo = Arc::new(SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    ));
     let snapshot_repo = Arc::new(SqliteSourceSnapshotRepository::new(db.pool.clone()));
-    let pool_repo = Arc::new(SqliteNodePoolRepository::new(db.pool.clone()));
+    let pool_repo = Arc::new(SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    ));
     let (fetcher, calls) = CountingFetcher::new(TROJAN_URI.as_bytes().to_vec());
 
     create_auto_source(&source_repo, "auto-source", 1).await;
@@ -243,9 +268,15 @@ async fn scheduler_skips_disabled_source() {
 #[tokio::test]
 async fn scheduler_stops_on_shutdown() {
     let db = TestDb::new().await;
-    let source_repo = Arc::new(SqliteSourceRepository::new(db.pool.clone()));
+    let source_repo = Arc::new(SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    ));
     let snapshot_repo = Arc::new(SqliteSourceSnapshotRepository::new(db.pool.clone()));
-    let pool_repo = Arc::new(SqliteNodePoolRepository::new(db.pool.clone()));
+    let pool_repo = Arc::new(SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    ));
     let (fetcher, _calls) = CountingFetcher::new(TROJAN_URI.as_bytes().to_vec());
 
     create_auto_source(&source_repo, "auto-source", 1).await;

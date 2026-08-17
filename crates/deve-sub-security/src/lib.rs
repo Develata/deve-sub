@@ -15,10 +15,11 @@ pub mod master_key;
 pub mod password;
 pub mod recovery;
 pub mod ssrf;
+pub mod subkey;
 pub mod token;
 pub mod totp;
 
-pub use cipher::{decrypt, decrypt_from_b64, encrypt, encrypt_to_b64};
+pub use cipher::{decrypt, decrypt_aad, decrypt_from_b64, encrypt, encrypt_aad, encrypt_to_b64};
 pub use envelope::{is_envelope, mask_url, open, seal};
 pub use hmac::{PURPOSE_CHALLENGE, PURPOSE_RECOVERY, PURPOSE_SESSION, hmac_digest};
 pub use master_key::MasterKey;
@@ -27,6 +28,7 @@ pub use recovery::{
     generate_codes as generate_recovery_codes, normalize_code as normalize_recovery_code,
 };
 pub use ssrf::{SsrfError, SsrfGuard};
+pub use subkey::derive_envelope_subkey;
 pub use token::{generate_session_token, generate_short_code};
 pub use totp::{
     DIGITS as TOTP_DIGITS, PERIOD as TOTP_PERIOD, base32_decode, base32_secret,

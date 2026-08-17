@@ -4,6 +4,8 @@
 //! fuse (AGENTS.md rule #9). See
 //! `docs/plan/milestones/M4-sources-and-node-pool.md` Slice 3.
 
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::Serialize;
@@ -42,6 +44,10 @@ pub struct NodeImportArgs {
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
     pub db_path: String,
+
+    /// Master key path for at-rest encryption of node credentials.
+    #[arg(long, env = "DEVE_SUB_KEY_PATH", default_value = "data/master.key")]
+    pub key_path: String,
 }
 
 /// Arguments for `node list`.
@@ -64,6 +70,10 @@ pub struct NodeListArgs {
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
     pub db_path: String,
+
+    /// Master key path for decrypting node credentials at rest.
+    #[arg(long, env = "DEVE_SUB_KEY_PATH", default_value = "data/master.key")]
+    pub key_path: String,
 }
 
 /// Output format for `node list`.
@@ -93,11 +103,19 @@ pub async fn node_import(args: NodeImportArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, "importing nodes");
 
     ensure_db_dir(&args.db_path)?;
+    ensure_db_dir(&args.key_path)?;
 
     let pool = open_db(&args.db_path, 1).await?;
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
-    let pool_repo = deve_sub_storage_sqlite::SqliteNodePoolRepository::new(pool);
+    let master_key = Arc::new(
+        deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(&args.key_path))
+            .context("failed to load master key")?,
+    );
+    let pool_repo = deve_sub_storage_sqlite::SqliteNodePoolRepository::new_with_key(
+        pool,
+        Arc::clone(&master_key),
+    );
 
     let content: Vec<u8> = match args.input.as_deref() {
         None | Some("-") => {
@@ -152,11 +170,19 @@ pub async fn node_list(args: NodeListArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, "listing nodes");
 
     ensure_db_dir(&args.db_path)?;
+    ensure_db_dir(&args.key_path)?;
 
     let pool = open_db(&args.db_path, 1).await?;
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
-    let pool_repo = deve_sub_storage_sqlite::SqliteNodePoolRepository::new(pool);
+    let master_key = Arc::new(
+        deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(&args.key_path))
+            .context("failed to load master key")?,
+    );
+    let pool_repo = deve_sub_storage_sqlite::SqliteNodePoolRepository::new_with_key(
+        pool,
+        Arc::clone(&master_key),
+    );
 
     let params = deve_sub_application::source::ListNodesParams {
         protocol: None,

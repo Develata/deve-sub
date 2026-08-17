@@ -8,6 +8,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use deve_sub_application::source::{ListNodesParams, list_nodes};
@@ -16,11 +17,13 @@ use deve_sub_domain::{
     ProtocolConfig, ProtocolKind, RegionAssignment, RegionMethod, TrojanConfig, UdpCapability,
 };
 use deve_sub_kernel::Timestamp;
+use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::SqliteNodePoolRepository;
 
 /// A temporary SQLite database populated with `count` Trojan nodes.
 struct BenchDb {
     pool: sqlx::SqlitePool,
+    master_key: Arc<MasterKey>,
     _dir: tempfile::TempDir,
 }
 
@@ -36,7 +39,8 @@ impl BenchDb {
             .await
             .expect("migrations");
 
-        let repo = SqliteNodePoolRepository::new(pool.clone());
+        let master_key = Arc::new(MasterKey::from_bytes(&[0x42u8; 32]));
+        let repo = SqliteNodePoolRepository::new_with_key(pool.clone(), Arc::clone(&master_key));
 
         // WHY batch size 500: SQLite has a default 999 host-parameter limit
         // per statement. `import_nodes` binds ~20 columns per node, so 500
@@ -56,7 +60,11 @@ impl BenchDb {
             made += take;
         }
 
-        Self { pool, _dir: dir }
+        Self {
+            pool,
+            master_key,
+            _dir: dir,
+        }
     }
 }
 
@@ -103,7 +111,7 @@ fn make_trojan_node(idx: usize) -> Node {
 fn bench_list_10k(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     let db = rt.block_on(BenchDb::new(10_000));
-    let repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let repo = SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
 
     let mut group = c.benchmark_group("list_10k");
     for limit in [100_u32, 1_000, 10_000] {

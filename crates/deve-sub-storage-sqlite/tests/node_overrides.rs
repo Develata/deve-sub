@@ -8,14 +8,18 @@
 //! across source refreshes — the read path reconstructs it). See
 //! `docs/plan/milestones/M4-sources-and-node-pool.md` Slice 4.
 
+use std::sync::Arc;
+
 use deve_sub_domain::{
     NodeFilter, NodeOverride, NodeOverrideRepository, NodePoolRepository, RegionMethod, SourceError,
 };
 use deve_sub_kernel::{NodeId, NodeOverrideId};
+use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{SqliteNodeOverrideRepository, SqliteNodePoolRepository};
 
 struct TestDb {
     pool: sqlx::sqlite::SqlitePool,
+    master_key: Arc<MasterKey>,
     _dir: tempfile::TempDir,
 }
 
@@ -31,7 +35,11 @@ impl TestDb {
             .run(&pool)
             .await
             .expect("migrations");
-        Self { pool, _dir: dir }
+        Self {
+            pool,
+            master_key: Arc::new(MasterKey::from_bytes(&[0x42u8; 32])),
+            _dir: dir,
+        }
     }
 }
 
@@ -46,7 +54,8 @@ fn trojan_node(uri: &str) -> deve_sub_domain::Node {
 }
 
 async fn import_node(db: &TestDb) -> NodeId {
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let node = trojan_node(TROJAN_A);
     let id = node.id;
     pool_repo.import_nodes(vec![node]).await.expect("import");
@@ -183,7 +192,8 @@ async fn batch_set_enabled_preserves_other_fields() {
 async fn set_node_tags_replaces_tags() {
     let db = TestDb::new().await;
     let node_id = import_node(&db).await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let ov_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
 
     let tag1 = ov_repo
@@ -219,7 +229,8 @@ async fn set_node_tags_replaces_tags() {
 #[tokio::test]
 async fn batch_set_tags_for_multiple_nodes() {
     let db = TestDb::new().await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let ov_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
 
     let node_a = trojan_node(TROJAN_A);
@@ -257,7 +268,8 @@ async fn batch_set_tags_for_multiple_nodes() {
 async fn tag_crud_and_cascade() {
     let db = TestDb::new().await;
     let node_id = import_node(&db).await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let ov_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
 
     let tag1 = ov_repo
@@ -321,7 +333,8 @@ async fn tag_crud_and_cascade() {
 async fn list_nodes_applies_override() {
     let db = TestDb::new().await;
     let node_id = import_node(&db).await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let ov_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
 
     let ov = NodeOverride {
@@ -368,7 +381,8 @@ async fn list_nodes_applies_override() {
 async fn list_nodes_returns_tags() {
     let db = TestDb::new().await;
     let node_id = import_node(&db).await;
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
     let ov_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
 
     let tag1 = ov_repo

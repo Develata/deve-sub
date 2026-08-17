@@ -85,6 +85,7 @@ impl GeoIpPort for StubGeoIp {
 
 struct TestDb {
     pool: sqlx::sqlite::SqlitePool,
+    master_key: std::sync::Arc<deve_sub_security::MasterKey>,
     _dir: tempfile::TempDir,
 }
 
@@ -100,7 +101,13 @@ impl TestDb {
             .run(&pool)
             .await
             .expect("migrations");
-        Self { pool, _dir: dir }
+        Self {
+            pool,
+            master_key: std::sync::Arc::new(deve_sub_security::MasterKey::from_bytes(
+                &[0x42u8; 32],
+            )),
+            _dir: dir,
+        }
     }
 }
 
@@ -149,9 +156,15 @@ const TROJAN_URI_LIST: &str = "trojan://TEST_PASSWORD@example.com:443?sni=exampl
 #[tokio::test]
 async fn refresh_inserts_nodes_and_creates_snapshot() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let fetcher = MockFetcher::new(vec![MockResponse::Ok {
         body: TROJAN_URI_LIST.as_bytes().to_vec(),
         etag: Some("\"v1\"".to_owned()),
@@ -189,9 +202,15 @@ async fn refresh_inserts_nodes_and_creates_snapshot() {
 #[tokio::test]
 async fn refresh_304_not_modified_preserves_old_snapshot() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = create_source(&source_repo, "test-source").await;
 
@@ -234,9 +253,15 @@ async fn refresh_304_not_modified_preserves_old_snapshot() {
 #[tokio::test]
 async fn fetch_failure_preserves_old_snapshot() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = create_source(&source_repo, "test-source").await;
 
@@ -290,9 +315,15 @@ async fn fetch_failure_preserves_old_snapshot() {
 #[tokio::test]
 async fn parse_failure_preserves_old_snapshot() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     use base64::Engine;
     let encoded = base64::engine::general_purpose::STANDARD.encode(TROJAN_URI_LIST);
@@ -349,9 +380,15 @@ async fn parse_failure_preserves_old_snapshot() {
 #[tokio::test]
 async fn refresh_nonexistent_source_returns_not_found() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let fetcher = MockFetcher::new(vec![]);
 
     let fake_id = deve_sub_kernel::SourceId::new();
@@ -375,9 +412,15 @@ async fn refresh_nonexistent_source_returns_not_found() {
 #[tokio::test]
 async fn fetch_failure_disables_source_when_keep_on_fail_false() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = source::create_source(
         &source_repo,
@@ -420,9 +463,15 @@ async fn fetch_failure_disables_source_when_keep_on_fail_false() {
 #[tokio::test]
 async fn fetch_failure_preserves_enabled_when_keep_on_fail_true() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = source::create_source(
         &source_repo,
@@ -469,9 +518,15 @@ async fn fetch_failure_preserves_enabled_when_keep_on_fail_true() {
 #[tokio::test]
 async fn cancelled_refresh_publishes_no_half_snapshot() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     use base64::Engine;
     let encoded = base64::engine::general_purpose::STANDARD.encode(TROJAN_URI_LIST);
@@ -541,9 +596,15 @@ async fn cancelled_refresh_publishes_no_half_snapshot() {
 #[tokio::test]
 async fn concurrent_refreshes_do_not_cross_pollute() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source_a = create_source(&source_repo, "source-a").await;
     let source_b = create_source(&source_repo, "source-b").await;
@@ -623,9 +684,15 @@ async fn concurrent_refreshes_do_not_cross_pollute() {
 #[tokio::test]
 async fn zero_node_refresh_preserves_old_snapshot() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = create_source(&source_repo, "test-source").await;
 
@@ -692,9 +759,15 @@ async fn zero_node_refresh_preserves_old_snapshot() {
 #[tokio::test]
 async fn oversized_response_rejected_preserves_old_snapshot() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = create_source(&source_repo, "test-source").await;
 
@@ -750,9 +823,15 @@ async fn oversized_response_rejected_preserves_old_snapshot() {
 #[tokio::test]
 async fn timeout_then_retry_succeeds() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
 
     let source = create_source(&source_repo, "test-source").await;
 
@@ -800,9 +879,15 @@ async fn timeout_then_retry_succeeds() {
 #[tokio::test]
 async fn src_014_diff_counts_correct() {
     let db = TestDb::new().await;
-    let source_repo = SqliteSourceRepository::new(db.pool.clone());
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
-    let pool_repo = SqliteNodePoolRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
     let source = create_source(&source_repo, "src-014-diff").await;
 
     // v1: 3 nodes (A, B, C)

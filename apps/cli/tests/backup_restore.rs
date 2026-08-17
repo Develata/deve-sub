@@ -40,10 +40,9 @@ async fn setup_db(db_path: &std::path::Path) {
     pool.close().await;
 }
 
-/// Create a database migrated only up to migration 13 (drops the
-/// `traffic_daily_snapshots` table from migration 14, reverts the
-/// `_encrypted` columns from migration 15, and removes their migration
-/// rows), simulating an older-schema backup source.
+/// Create a database migrated only up to migration 13 (reverses migrations
+/// 0014 and 0015, then removes their migration rows), simulating an
+/// older-schema backup source.
 async fn setup_db_schema_13(db_path: &std::path::Path) {
     let url = format!("sqlite://{}?mode=rwc", db_path.display());
     let pool = sqlx::sqlite::SqlitePool::connect(&url).await.expect("pool");
@@ -56,24 +55,41 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
         .await
         .expect("insert user");
 
+    // Reverse migration 0014: drop the traffic_daily_snapshots table.
     sqlx::query("DROP TABLE IF EXISTS traffic_daily_snapshots")
         .execute(&pool)
         .await
         .expect("drop table");
 
+    // Reverse migration 0015: drop the _encrypted columns and restore the
+    // plaintext columns that 0015 dropped, so the schema matches pre-0015
+    // state and forward-migrating through 0015 succeeds on restore.
     for stmt in [
         "ALTER TABLE sources DROP COLUMN url_encrypted",
-        "ALTER TABLE sources DROP COLUMN headers_encrypted_v2",
+        "ALTER TABLE sources DROP COLUMN headers_encrypted",
+        "ALTER TABLE sources ADD COLUMN url TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE sources ADD COLUMN headers_encrypted TEXT",
         "ALTER TABLE source_items DROP COLUMN raw_uri_encrypted",
+        "ALTER TABLE source_items ADD COLUMN raw_uri TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE node_source_bindings DROP COLUMN raw_uri_encrypted",
-        "ALTER TABLE nodes DROP COLUMN authentication_json_encrypted",
+        "ALTER TABLE node_source_bindings ADD COLUMN raw_uri TEXT",
         "ALTER TABLE nodes DROP COLUMN protocol_config_json_encrypted",
+        "ALTER TABLE nodes DROP COLUMN authentication_json_encrypted",
         "ALTER TABLE nodes DROP COLUMN tls_json_encrypted",
         "ALTER TABLE nodes DROP COLUMN transport_json_encrypted",
         "ALTER TABLE nodes DROP COLUMN obfuscation_json_encrypted",
         "ALTER TABLE nodes DROP COLUMN extras_json_encrypted",
+        "ALTER TABLE nodes ADD COLUMN protocol_config_json TEXT NOT NULL DEFAULT '{}'",
+        "ALTER TABLE nodes ADD COLUMN authentication_json TEXT NOT NULL DEFAULT '{}'",
+        "ALTER TABLE nodes ADD COLUMN tls_json TEXT",
+        "ALTER TABLE nodes ADD COLUMN transport_json TEXT",
+        "ALTER TABLE nodes ADD COLUMN obfuscation_json TEXT",
+        "ALTER TABLE nodes ADD COLUMN extras_json TEXT NOT NULL DEFAULT '{}'",
     ] {
-        sqlx::query(stmt).execute(&pool).await.expect("drop column");
+        sqlx::query(stmt)
+            .execute(&pool)
+            .await
+            .expect("reverse 0015");
     }
 
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
@@ -389,15 +405,16 @@ async fn backup006_manifest_records_key_fingerprint() {
         "fingerprint must be hex"
     );
 
-    // Verify the fingerprint matches a fresh computation.
-    let expected_fp = {
-        use sha2::Digest;
-        let hash = sha2::Sha256::digest(&key_bytes);
-        hash.iter().map(|b| format!("{b:02x}")).collect::<String>()
-    };
+    // WHY use `MasterKey::fingerprint` as the oracle rather than
+    // re-deriving the HMAC: this test confirms the manifest *records* the
+    // fingerprint, not that the HMAC construction is correct (that belongs
+    // in the security crate's own tests).
+    let expected_fp = deve_sub_security::MasterKey::from_bytes(&key_bytes)
+        .fingerprint()
+        .expect("fingerprint");
     assert_eq!(
         fp, expected_fp,
-        "fingerprint must match SHA-256 of key bytes"
+        "fingerprint must match MasterKey::fingerprint (HMAC-SHA256 keyed by master key)"
     );
 }
 

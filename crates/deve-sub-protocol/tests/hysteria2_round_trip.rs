@@ -191,3 +191,45 @@ fn hysteria2_obfuscation_type() {
     let obfs: &Obfuscation = node.obfuscation.as_ref().expect("obfs");
     assert_eq!(obfs.kind, "salamander");
 }
+
+/// W-U: congestion-controller query param must be parsed (previously
+/// hardcoded to Bbr, silently dropping non-Bbr controllers on round-trip).
+#[test]
+fn hysteria2_congestion_controller_round_trip() {
+    let uri = "hysteria2://TEST_PASSWORD@example.com:443\
+               ?up=50 Mbps&down=100 Mbps&congestion-controller=cubic#Cong";
+    let node = deve_sub_protocol::parse_uri(uri).expect("parse");
+    let cong = node.congestion.as_ref().expect("congestion");
+    assert!(matches!(cong.controller, CongestionController::Cubic));
+    assert_eq!(cong.up_bps, Some(50_000_000));
+    assert_eq!(cong.down_bps, Some(100_000_000));
+
+    let emitted = deve_sub_emitter::emit_uri(&node).expect("emit");
+    assert!(
+        emitted.contains("congestion-controller=cubic"),
+        "emitted URI must contain congestion-controller=cubic, got: {emitted}"
+    );
+    let reparsed = deve_sub_protocol::parse_uri(&emitted).expect("reparse");
+    assert_eq!(reparsed.congestion, node.congestion);
+}
+
+/// W-U: congestion-controller is preserved even without up/down bandwidth.
+#[test]
+fn hysteria2_congestion_controller_without_bandwidth() {
+    let uri = "hysteria2://TEST_PASSWORD@example.com:443?congestion-controller=new_reno#NoBW";
+    let node = deve_sub_protocol::parse_uri(uri).expect("parse");
+    let cong = node
+        .congestion
+        .as_ref()
+        .expect("congestion must be present");
+    assert!(
+        matches!(cong.controller, CongestionController::NewReno),
+        "controller must be NewReno"
+    );
+    assert_eq!(cong.up_bps, None);
+    assert_eq!(cong.down_bps, None);
+
+    let emitted = deve_sub_emitter::emit_uri(&node).expect("emit");
+    let reparsed = deve_sub_protocol::parse_uri(&emitted).expect("reparse");
+    assert_eq!(reparsed.congestion, node.congestion);
+}

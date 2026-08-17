@@ -21,8 +21,8 @@ use deve_sub_domain::{
 use crate::error::ParseError;
 
 use super::{
-    default_tls_enabled, get_bool, get_port, get_str, get_str_array, node_shell_container,
-    parse_host_str, unsupported_entry,
+    default_tls_enabled, get_bool, get_port, get_str, get_str_array, get_str_or_first,
+    node_shell_container, parse_host_str, unsupported_entry,
 };
 
 /// Parse a Mihomo YAML config into a list of [`Node`] values.
@@ -254,7 +254,7 @@ fn extract_transport(entry: &Value) -> Result<Option<Transport>, ParseError> {
         TransportKind::H2 => {
             let h2_opts = entry.get("h2-opts");
             let path = h2_opts.and_then(|h| get_str(h, "path"));
-            let host = h2_opts.and_then(|h| get_str(h, "host"));
+            let host = h2_opts.and_then(|h| get_str_or_first(h, "host"));
             (path, host, None)
         }
         TransportKind::Xhttp => {

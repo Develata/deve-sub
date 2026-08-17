@@ -70,7 +70,10 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
 fn push_tls_fields(fields: &mut Vec<(String, Value)>, node: &Node) {
     let Some(tls) = &node.tls else { return };
     let mut tls_obj = Map::new();
-    if tls.enabled {
+    // WHY: Reality requires tls.enabled=true even if the source did not set
+    // it explicitly. The sing-box parser mirrors this (extract_tls forces
+    // enabled=true whenever TLS fields are present).
+    if tls.enabled || tls.reality.is_some() {
         tls_obj.insert("enabled".to_owned(), Value::Bool(true));
     }
     if let Some(ref sni) = tls.server_name {
@@ -90,6 +93,23 @@ fn push_tls_fields(fields: &mut Vec<(String, Value)>, node: &Node) {
             "utls".to_owned(),
             json!({ "enabled": true, "fingerprint": fp }),
         );
+    }
+    if let Some(ref reality) = tls.reality {
+        let mut reality_obj = Map::new();
+        reality_obj.insert("enabled".to_owned(), Value::Bool(true));
+        if !reality.public_key.is_empty() {
+            reality_obj.insert(
+                "public_key".to_owned(),
+                Value::String(reality.public_key.clone()),
+            );
+        }
+        if !reality.short_id.is_empty() {
+            reality_obj.insert(
+                "short_id".to_owned(),
+                Value::String(reality.short_id.clone()),
+            );
+        }
+        tls_obj.insert("reality".to_owned(), Value::Object(reality_obj));
     }
     if !tls_obj.is_empty() {
         fields.push(("tls".to_owned(), Value::Object(tls_obj)));

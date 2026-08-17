@@ -96,6 +96,20 @@ pub(crate) fn default_tls_enabled() -> TlsConfig {
     }
 }
 
+/// Extract a string field that may appear as a single string or a
+/// single-element array. Mihomo's `h2-opts.host` is a list in the official
+/// format, but some configs use a bare string; this helper accepts both.
+pub(crate) fn get_str_or_first(v: &Value, key: &str) -> Option<String> {
+    let val = v.get(key)?;
+    if let Some(s) = val.as_str() {
+        return Some(s.to_owned());
+    }
+    val.as_array()
+        .and_then(|arr| arr.first())
+        .and_then(|e| e.as_str())
+        .map(String::from)
+}
+
 /// Extract a string array field from a JSON value.
 pub(crate) fn get_str_array(v: &Value, key: &str) -> Vec<String> {
     v.get(key)

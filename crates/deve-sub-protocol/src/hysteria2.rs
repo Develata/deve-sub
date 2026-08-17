@@ -64,9 +64,23 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
     let up_bps = query.get("up").map(|v| parse_bandwidth(v)).transpose()?;
     let down_bps = query.get("down").map(|v| parse_bandwidth(v)).transpose()?;
 
-    let congestion = if up_bps.is_some() || down_bps.is_some() {
+    // WHY: Parse congestion-controller from the query instead of hardcoding
+    // Bbr. The emitter writes congestion-controller for non-Bbr values, so
+    // without this the field is silently lost on round-trip (W-U fix).
+    // Also create CongestionConfig when only congestion-controller is
+    // present (no up/down), matching the TUIC parser pattern.
+    let controller = query
+        .get("congestion-controller")
+        .map(|v| match v.as_str() {
+            "bbr" => CongestionController::Bbr,
+            "cubic" => CongestionController::Cubic,
+            "new_reno" => CongestionController::NewReno,
+            other => CongestionController::Other(other.to_owned()),
+        });
+
+    let congestion = if up_bps.is_some() || down_bps.is_some() || controller.is_some() {
         Some(CongestionConfig {
-            controller: CongestionController::Bbr,
+            controller: controller.unwrap_or(CongestionController::Bbr),
             up_bps,
             down_bps,
         })

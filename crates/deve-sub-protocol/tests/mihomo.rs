@@ -304,3 +304,63 @@ proxies:
     assert_eq!(nodes[0].display_name, "Node1");
     assert_eq!(nodes[1].display_name, "Node2");
 }
+
+/// W-R: mihomo parser must accept H2 host in both string and array form.
+/// The emitter writes `host: [...]` (list) to match the official mihomo
+/// format; the parser must round-trip it back.
+#[test]
+fn mihomo_parses_h2_host_array() {
+    let yaml = format!(
+        r#"
+proxies:
+  - name: "H2-Array"
+    type: trojan
+    server: h2.example.com
+    port: 443
+    password: "{RESERVED_PASSWORD}"
+    network: h2
+    h2-opts:
+      path: /h2
+      host: [h2.example.com]
+"#
+    );
+
+    let nodes = deve_sub_protocol::container::parse_mihomo_yaml(&yaml).expect("parse");
+    assert_eq!(nodes.len(), 1);
+    let transport = nodes[0].transport.as_ref().expect("transport");
+    assert_eq!(transport.kind, TransportKind::H2);
+    assert_eq!(
+        transport.host.as_deref(),
+        Some("h2.example.com"),
+        "parser must read host from array form"
+    );
+}
+
+/// W-R: mihomo parser must still accept H2 host as a bare string.
+#[test]
+fn mihomo_parses_h2_host_string() {
+    let yaml = format!(
+        r#"
+proxies:
+  - name: "H2-String"
+    type: trojan
+    server: h2.example.com
+    port: 443
+    password: "{RESERVED_PASSWORD}"
+    network: h2
+    h2-opts:
+      path: /h2
+      host: h2.example.com
+"#
+    );
+
+    let nodes = deve_sub_protocol::container::parse_mihomo_yaml(&yaml).expect("parse");
+    assert_eq!(nodes.len(), 1);
+    let transport = nodes[0].transport.as_ref().expect("transport");
+    assert_eq!(transport.kind, TransportKind::H2);
+    assert_eq!(
+        transport.host.as_deref(),
+        Some("h2.example.com"),
+        "parser must read host from string form"
+    );
+}

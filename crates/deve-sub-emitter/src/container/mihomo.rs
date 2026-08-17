@@ -598,7 +598,10 @@ fn emit_shadowtls(
 
 fn push_tls(node: &Node, entry: &mut String) {
     if let Some(ref tls) = node.tls {
-        if tls.enabled {
+        // WHY: Reality requires tls: true even if the source did not set
+        // enabled explicitly. The mihomo parser mirrors this (extract_tls
+        // forces enabled=true when reality-opts is present).
+        if tls.enabled || tls.reality.is_some() {
             entry.push_str("\n    tls: true");
         }
         if let Some(ref sni) = tls.server_name {
@@ -610,6 +613,24 @@ fn push_tls(node: &Node, entry: &mut String) {
         if !tls.alpn.is_empty() {
             let alpn: Vec<String> = tls.alpn.iter().map(|a| yaml_dq(a)).collect();
             entry.push_str(&format!("\n    alpn: [{}]", alpn.join(", ")));
+        }
+        if let Some(ref fp) = tls.client_fingerprint {
+            entry.push_str(&format!("\n    client-fingerprint: {}", yaml_dq(fp)));
+        }
+        if let Some(ref reality) = tls.reality {
+            entry.push_str("\n    reality-opts:");
+            if !reality.public_key.is_empty() {
+                entry.push_str(&format!(
+                    "\n      public-key: {}",
+                    yaml_dq(&reality.public_key)
+                ));
+            }
+            // WHY: short-id must be quoted to prevent YAML from coercing
+            // pure-digit values (e.g. "01020304") to integers (ADR: domain
+            // tls.rs §RealityConfig).
+            if !reality.short_id.is_empty() {
+                entry.push_str(&format!("\n      short-id: {}", yaml_dq(&reality.short_id)));
+            }
         }
     }
 }
@@ -634,7 +655,23 @@ fn push_network(node: &Node, entry: &mut String) {
 
 fn push_transport_opts(transport: &Transport, entry: &mut String) {
     match transport.kind {
-        TransportKind::Ws | TransportKind::HttpUpgrade => {
+        TransportKind::Ws => {
+            let has_path = transport.path.is_some();
+            let has_host = transport.host.is_some();
+            if has_path || has_host {
+                entry.push_str("\n    ws-opts:");
+                if let Some(ref path) = transport.path {
+                    entry.push_str(&format!("\n      path: {}", yaml_dq(path)));
+                }
+                if let Some(ref host) = transport.host {
+                    entry.push_str(&format!(
+                        "\n      headers:\n        Host: {}",
+                        yaml_dq(host)
+                    ));
+                }
+            }
+        }
+        TransportKind::HttpUpgrade => {
             if let Some(ref path) = transport.path {
                 entry.push_str(&format!("\n    ws-opts:\n      path: {}", yaml_dq(path)));
             }
@@ -648,8 +685,19 @@ fn push_transport_opts(transport: &Transport, entry: &mut String) {
             }
         }
         TransportKind::H2 => {
-            if let Some(ref path) = transport.path {
-                entry.push_str(&format!("\n    h2-opts:\n      path: {}", yaml_dq(path)));
+            let has_path = transport.path.is_some();
+            let has_host = transport.host.is_some();
+            if has_path || has_host {
+                entry.push_str("\n    h2-opts:");
+                if let Some(ref path) = transport.path {
+                    entry.push_str(&format!("\n      path: {}", yaml_dq(path)));
+                }
+                // WHY: mihomo h2-opts.host is a list in the official format.
+                // Emit as inline YAML list; the parser accepts both string
+                // and list forms via get_str_or_first.
+                if let Some(ref host) = transport.host {
+                    entry.push_str(&format!("\n      host: [{}]", yaml_dq(host)));
+                }
             }
         }
         TransportKind::Xhttp => {

@@ -147,7 +147,7 @@ fn vless_reality_node() -> Node {
         client_fingerprint: Some("chrome".to_owned()),
         certificate_pins: vec![],
         reality: Some(RealityConfig {
-            public_key: "TEST_PUBLIC_KEY".to_owned(),
+            public_key: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8".to_owned(),
             short_id: "01020304".to_owned(),
             spider_x: None,
         }),

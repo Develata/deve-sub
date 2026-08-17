@@ -86,6 +86,20 @@ pub trait ProbeRunRepository: Send + Sync {
         completed_at: Option<Timestamp>,
     ) -> Result<(), ProbeError>;
 
+    /// Persist results and completion timestamp WITHOUT changing status.
+    ///
+    /// WHY: when a concurrent cancel wins the status race (W-F), the runner's
+    /// `update_status` hits the terminal guard and returns
+    /// `RunAlreadyTerminal`. The runner still has collected diagnostic
+    /// results that should be visible to the user, so it calls this method to
+    /// persist them on the already-terminal row.
+    async fn update_results(
+        &self,
+        id: ProbeRunId,
+        results: &[crate::probe::entity::ProbeRunResult],
+        completed_at: Option<Timestamp>,
+    ) -> Result<(), ProbeError>;
+
     /// Mark any runs in `Running` status as `Failed` (crash recovery on
     /// startup). Returns the count of recovered runs.
     async fn recover_crashed_runs(&self) -> Result<u64, ProbeError>;

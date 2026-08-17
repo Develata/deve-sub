@@ -85,9 +85,24 @@ pub async fn execute_probe_run(
         return Ok(());
     }
 
-    deps.run_repo
+    // WHY: a cancel can arrive between the `find_by_id` terminal check above
+    // and this `Running` write, flipping the row to `Cancelled`. If that
+    // happens our `Running` write hits the terminal guard (W-F) and returns
+    // `RunAlreadyTerminal`. We do NOT exit early here — the cancel flag is
+    // already set, so all probe tasks will skip immediately (checking the
+    // flag before acquiring a semaphore permit). We still collect the
+    // per-node skip results and persist them via `update_results` at the end
+    // so the user sees a complete result set, not an empty row.
+    if let Err(deve_sub_domain::ProbeError::RunAlreadyTerminal) = deps
+        .run_repo
         .update_status(run_id, ProbeRunStatus::Running, &[], None)
-        .await?;
+        .await
+    {
+        tracing::info!(
+            run_id = %run_id,
+            "probe run already terminal at Running transition; probes will skip"
+        );
+    }
 
     let semaphore = Arc::new(Semaphore::new(config.concurrency));
     let mut join_set: JoinSet<LatencyResult> = JoinSet::new();
@@ -209,9 +224,42 @@ pub async fn execute_probe_run(
         (ProbeRunStatus::Completed, Some(Timestamp::now()))
     };
 
-    deps.run_repo
+    // WHY: a cancel can fire the flag AND persist `Cancelled` between our
+    // `cancelled.load()` above and this write. If so, the terminal guard in
+    // `update_status` (W-F) returns `RunAlreadyTerminal`. That is the cancel
+    // winning the race — the user already received a 200 for `Cancelled`, so
+    // we must not overwrite it with `Completed`. Still persist the diagnostic
+    // results via `update_results` (status-less write) so the user sees the
+    // partial probe data that was collected before the cancel.
+    match deps
+        .run_repo
         .update_status(run_id, final_status, &results, completed_at)
-        .await?;
+        .await
+    {
+        Ok(()) => {}
+        Err(deve_sub_domain::ProbeError::RunAlreadyTerminal) => {
+            tracing::info!(
+                run_id = %run_id,
+                "probe run became terminal via concurrent cancel; status write skipped"
+            );
+            // Best-effort persist of diagnostic results onto the terminal
+            // row. A storage failure here is logged, not fatal — the run
+            // is already terminal and the user's cancel 200 is intact.
+            if let Err(e) = deps
+                .run_repo
+                .update_results(run_id, &results, completed_at)
+                .await
+            {
+                tracing::warn!(
+                    error = %e,
+                    run_id = %run_id,
+                    "failed to persist diagnostic results after concurrent cancel"
+                );
+            }
+            return Ok(());
+        }
+        Err(e) => return Err(e),
+    }
 
     Ok(())
 }

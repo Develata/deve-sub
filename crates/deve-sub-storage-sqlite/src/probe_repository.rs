@@ -557,16 +557,80 @@ impl ProbeRunRepository for SqliteProbeRunRepository {
             .map(format_ts)
             .transpose()
             .map_err(ProbeError::Storage)?;
+        // WHY: the guard blocks overwriting a terminal row with a DIFFERENT
+        // terminal status (e.g. cancel wrote `Cancelled`, runner tries
+        // `Completed`). But it ALLOWS idempotent same-status writes
+        // (`Cancelled` → `Cancelled`) so the runner can persist its collected
+        // results onto a row that cancel already flipped to `Cancelled` (W-F).
+        let status_char = status.as_db_char();
         let result = sqlx::query(
-            "UPDATE probe_runs SET status = ?, results = ?, completed_at = ? WHERE id = ?",
+            "UPDATE probe_runs SET status = ?, results = ?, completed_at = ? \
+             WHERE id = ? AND (status NOT IN ('C', 'X', 'F') OR status = ?)",
         )
-        .bind(status.as_db_char())
+        .bind(status_char)
         .bind(results_str)
         .bind(completed_str)
         .bind(id.to_string())
+        .bind(status_char)
         .execute(&self.pool)
         .await
         .map_err(|e| ProbeError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            // WHY: 0 rows can mean either (a) the run never existed, or (b)
+            // a concurrent cancel marked the row terminal between our last
+            // read and this UPDATE (W-F race). Distinguish via a follow-up
+            // SELECT so the runner can treat a cancel-win as Ok rather than
+            // a spurious RunNotFound.
+            let existing: Option<(String,)> =
+                sqlx::query_as("SELECT id FROM probe_runs WHERE id = ?")
+                    .bind(id.to_string())
+                    .fetch_optional(&self.pool)
+                    .await
+                    .map_err(|e| ProbeError::Storage(e.to_string()))?;
+            if existing.is_none() {
+                return Err(ProbeError::RunNotFound);
+            }
+            return Err(ProbeError::RunAlreadyTerminal);
+        }
+        Ok(())
+    }
+
+    async fn update_results(
+        &self,
+        id: ProbeRunId,
+        results: &[ProbeRunResult],
+        completed_at: Option<Timestamp>,
+    ) -> Result<(), ProbeError> {
+        let results_json: Vec<ResultJson> = results
+            .iter()
+            .map(|r| {
+                let error_class = if r.error_class == ErrorClass::Ok {
+                    None
+                } else {
+                    Some(r.error_class.as_db_char().to_owned())
+                };
+                ResultJson {
+                    node_id: r.node_id.to_string(),
+                    rtt_ms: r.rtt_ms,
+                    error_class,
+                    skipped: r.skipped,
+                }
+            })
+            .collect();
+        let results_str = serde_json::to_string(&results_json)
+            .map_err(|e| ProbeError::Storage(format!("results serialize: {e}")))?;
+        let completed_str = completed_at
+            .map(format_ts)
+            .transpose()
+            .map_err(ProbeError::Storage)?;
+        let result =
+            sqlx::query("UPDATE probe_runs SET results = ?, completed_at = ? WHERE id = ?")
+                .bind(results_str)
+                .bind(completed_str)
+                .bind(id.to_string())
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ProbeError::Storage(e.to_string()))?;
         if result.rows_affected() == 0 {
             return Err(ProbeError::RunNotFound);
         }

@@ -230,13 +230,19 @@ pub async fn cancel_probe_run(
         return Err(ProbeAppError::RunAlreadyTerminal);
     }
 
-    // If the runner has a cancellation flag for this run, fire it.
+    // If the runner has a cancellation flag for this run, fire it. The runner
+    // observes the flag, aborts pending probes, waits for in-flight probes to
+    // finish (bounded by timeout), then writes `Cancelled` with the collected
+    // results via `update_status`. The terminal guard on `update_status` (W-F)
+    // ensures a `Completed` write cannot overwrite a `Cancelled` row if the
+    // no-flag cancel branch already persisted it.
     if let Some(flag) = cancelled_flags.get(&id) {
         flag.store(true, Ordering::Relaxed);
     } else {
-        // The run hasn't been picked up by the runner yet, or the runner
-        // manages it differently. Mark it as cancelled directly so the
-        // runner sees the terminal status when it tries to update.
+        // The run hasn't been picked up by the runner yet. Mark it as
+        // cancelled directly so the runner sees the terminal status when it
+        // tries to update (the terminal guard blocks the runner's
+        // `Running`/`Completed` write).
         run_repo
             .update_status(
                 id,

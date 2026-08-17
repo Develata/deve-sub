@@ -13,41 +13,42 @@ use crate::container::ir::AssembledTemplate;
 use crate::error::EmitError;
 
 pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
-    let mut lines = Vec::new();
-    lines.push("proxies:".to_owned());
+    let mut out = String::with_capacity(nodes.len() * 256 + 16);
+    out.push_str("proxies:");
     for node in nodes {
-        emit_proxy(node, &mut lines)?;
+        emit_proxy(node, &mut out)?;
     }
-    Ok(lines.join("\n"))
+    Ok(out)
 }
 
 pub fn emit_full(template: &AssembledTemplate) -> Result<String, EmitError> {
-    let mut sections: Vec<String> = Vec::new();
-
-    let mut proxy_lines = Vec::new();
-    proxy_lines.push("proxies:".to_owned());
+    let mut out = String::with_capacity(template.nodes.len() * 256 + 1024);
+    out.push_str("proxies:");
     for node in &template.nodes {
-        emit_proxy(node, &mut proxy_lines)?;
+        emit_proxy(node, &mut out)?;
     }
-    sections.push(proxy_lines.join("\n"));
 
     if !template.groups.is_empty() {
-        sections.push(emit_groups(&template.groups)?);
+        out.push('\n');
+        emit_groups(&template.groups, &mut out)?;
     }
 
     if !template.rules.is_empty() {
-        sections.push(emit_rules(&template.rules)?);
+        out.push('\n');
+        emit_rules(&template.rules, &mut out)?;
     }
 
     if !template.dns.is_null() {
-        sections.push(emit_json_block("dns", &template.dns)?);
+        out.push('\n');
+        emit_json_block("dns", &template.dns, &mut out)?;
     }
 
     if !template.tun.is_null() {
-        sections.push(emit_json_block("tun", &template.tun)?);
+        out.push('\n');
+        emit_json_block("tun", &template.tun, &mut out)?;
     }
 
-    Ok(sections.join("\n"))
+    Ok(out)
 }
 
 /// Escape a string for a YAML double-quoted scalar.
@@ -77,9 +78,11 @@ fn yaml_dq(s: &str) -> String {
     out
 }
 
-fn emit_groups(groups: &[crate::container::ir::AssembledGroup]) -> Result<String, EmitError> {
-    let mut lines = Vec::new();
-    lines.push("proxy-groups:".to_owned());
+fn emit_groups(
+    groups: &[crate::container::ir::AssembledGroup],
+    out: &mut String,
+) -> Result<(), EmitError> {
+    out.push_str("proxy-groups:");
     for g in groups {
         let type_str = match g.group_type {
             GroupType::Select => "select",
@@ -90,41 +93,43 @@ fn emit_groups(groups: &[crate::container::ir::AssembledGroup]) -> Result<String
             GroupType::Direct => "direct",
             GroupType::Reject => "reject",
         };
-        lines.push(format!("  - name: {}", yaml_dq(&g.name)));
-        lines.push(format!("    type: {type_str}"));
+        out.push_str("\n  - name: ");
+        out.push_str(&yaml_dq(&g.name));
+        out.push_str("\n    type: ");
+        out.push_str(type_str);
         if !g.members.is_empty() {
-            lines.push("    proxies:".to_owned());
+            out.push_str("\n    proxies:");
             for m in &g.members {
-                lines.push(format!("      - {}", yaml_dq(m)));
+                out.push_str("\n      - ");
+                out.push_str(&yaml_dq(m));
             }
         }
     }
-    Ok(lines.join("\n"))
+    Ok(())
 }
 
-fn emit_rules(rules: &[serde_json::Value]) -> Result<String, EmitError> {
-    let mut lines = Vec::new();
-    lines.push("rules:".to_owned());
+fn emit_rules(rules: &[serde_json::Value], out: &mut String) -> Result<(), EmitError> {
+    out.push_str("rules:");
     for rule in rules {
         let yaml = json_to_yaml_line(rule)?;
-        let indented = yaml
-            .lines()
-            .enumerate()
-            .map(|(i, l)| {
-                if i == 0 {
-                    format!("  - {l}")
-                } else {
-                    format!("    {l}")
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        lines.push(indented);
+        for (i, l) in yaml.lines().enumerate() {
+            if i == 0 {
+                out.push_str("\n  - ");
+                out.push_str(l);
+            } else {
+                out.push_str("\n    ");
+                out.push_str(l);
+            }
+        }
     }
-    Ok(lines.join("\n"))
+    Ok(())
 }
 
-fn emit_json_block(key: &str, value: &serde_json::Value) -> Result<String, EmitError> {
+fn emit_json_block(
+    key: &str,
+    value: &serde_json::Value,
+    out: &mut String,
+) -> Result<(), EmitError> {
     let yaml =
         serde_yaml::to_string(value).map_err(|e| EmitError::Encode(format!("serde_yaml: {e}")))?;
     // WHY: serde_yaml emits a leading "---\n" document marker and column-0
@@ -133,12 +138,13 @@ fn emit_json_block(key: &str, value: &serde_json::Value) -> Result<String, EmitE
         .strip_prefix("---\n")
         .unwrap_or(&yaml)
         .trim_end_matches('\n');
-    let indented = body
-        .lines()
-        .map(|l| format!("  {l}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    Ok(format!("{key}:\n{indented}"))
+    out.push_str(key);
+    out.push(':');
+    for l in body.lines() {
+        out.push_str("\n  ");
+        out.push_str(l);
+    }
+    Ok(())
 }
 
 fn json_to_yaml_line(value: &serde_json::Value) -> Result<String, EmitError> {
@@ -151,22 +157,22 @@ fn json_to_yaml_line(value: &serde_json::Value) -> Result<String, EmitError> {
         .to_owned())
 }
 
-fn emit_proxy(node: &Node, lines: &mut Vec<String>) -> Result<(), EmitError> {
+fn emit_proxy(node: &Node, out: &mut String) -> Result<(), EmitError> {
     let server = node.endpoint.host.uri_host();
     let port = node.endpoint.port;
     let name = &node.display_name;
 
     match node.protocol {
-        ProtocolKind::Trojan => emit_trojan(node, &server, port, name, lines),
-        ProtocolKind::Shadowsocks => emit_ss(node, &server, port, name, lines),
-        ProtocolKind::VMess => emit_vmess(node, &server, port, name, lines),
-        ProtocolKind::Vless => emit_vless(node, &server, port, name, lines),
-        ProtocolKind::Hysteria2 => emit_hysteria2(node, &server, port, name, lines),
-        ProtocolKind::TuicV5 => emit_tuic_v5(node, &server, port, name, lines),
-        ProtocolKind::WireGuard => emit_wireguard(node, &server, port, name, lines),
-        ProtocolKind::AnyTls => emit_anytls(node, &server, port, name, lines),
-        ProtocolKind::Snell => emit_snell(node, &server, port, name, lines),
-        ProtocolKind::ShadowTls => emit_shadowtls(node, &server, port, name, lines),
+        ProtocolKind::Trojan => emit_trojan(node, &server, port, name, out),
+        ProtocolKind::Shadowsocks => emit_ss(node, &server, port, name, out),
+        ProtocolKind::VMess => emit_vmess(node, &server, port, name, out),
+        ProtocolKind::Vless => emit_vless(node, &server, port, name, out),
+        ProtocolKind::Hysteria2 => emit_hysteria2(node, &server, port, name, out),
+        ProtocolKind::TuicV5 => emit_tuic_v5(node, &server, port, name, out),
+        ProtocolKind::WireGuard => emit_wireguard(node, &server, port, name, out),
+        ProtocolKind::AnyTls => emit_anytls(node, &server, port, name, out),
+        ProtocolKind::Snell => emit_snell(node, &server, port, name, out),
+        ProtocolKind::ShadowTls => emit_shadowtls(node, &server, port, name, out),
         ref other => {
             return Err(EmitError::NoEmitter(format!(
                 "mihomo: unsupported protocol {other}"
@@ -189,7 +195,7 @@ fn emit_trojan(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let password = match &node.authentication {
         Authentication::Password { password } => password,
@@ -199,7 +205,8 @@ fn emit_trojan(
     entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
     push_tls(node, &mut entry);
     push_network(node, &mut entry);
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -208,7 +215,7 @@ fn emit_ss(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let password = match &node.authentication {
         Authentication::Password { password } => password,
@@ -223,7 +230,8 @@ fn emit_ss(
         yaml_entry(name, "ss", server, port),
         yaml_dq(password),
     );
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -232,7 +240,7 @@ fn emit_vmess(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let uuid = match &node.authentication {
         Authentication::Uuid { uuid } => uuid,
@@ -252,7 +260,8 @@ fn emit_vmess(
     }
     push_tls(node, &mut entry);
     push_network(node, &mut entry);
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -261,7 +270,7 @@ fn emit_vless(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let uuid = match &node.authentication {
         Authentication::Uuid { uuid } => uuid,
@@ -276,7 +285,8 @@ fn emit_vless(
     }
     push_tls(node, &mut entry);
     push_network(node, &mut entry);
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -285,7 +295,7 @@ fn emit_hysteria2(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let password = match &node.authentication {
         Authentication::Password { password } => password,
@@ -294,7 +304,8 @@ fn emit_hysteria2(
     let mut entry = yaml_entry(name, "hysteria2", server, port);
     entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
     push_tls(node, &mut entry);
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -303,7 +314,7 @@ fn emit_tuic_v5(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let (uuid, password) = match &node.authentication {
         Authentication::UuidPassword { uuid, password } => (uuid, password),
@@ -313,7 +324,8 @@ fn emit_tuic_v5(
     entry.push_str(&format!("\n    uuid: {}", yaml_dq(uuid)));
     entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
     push_tls(node, &mut entry);
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -322,7 +334,7 @@ fn emit_wireguard(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let cfg = match &node.config {
         ProtocolConfig::WireGuard(c) => c,
@@ -383,7 +395,8 @@ fn emit_wireguard(
         }
     }
 
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -392,7 +405,7 @@ fn emit_anytls(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let password = match &node.authentication {
         Authentication::Password { password } => password,
@@ -420,7 +433,8 @@ fn emit_anytls(
     if let Some(n) = cfg.min_idle_session {
         entry.push_str(&format!("\n    min-idle-session: {n}"));
     }
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -429,7 +443,7 @@ fn emit_snell(
     server: &str,
     port: u16,
     name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let psk = match &node.authentication {
         Authentication::Password { password } => password,
@@ -476,7 +490,8 @@ fn emit_snell(
     if matches!(cfg.obfs.as_ref().map(|o| o.mode), Some(SnellObfsMode::Tls)) {
         push_tls(node, &mut entry);
     }
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 
@@ -491,7 +506,7 @@ fn emit_shadowtls(
     _server: &str,
     _port: u16,
     _name: &str,
-    lines: &mut Vec<String>,
+    out: &mut String,
 ) -> Result<(), EmitError> {
     let cfg = match &node.config {
         ProtocolConfig::ShadowTls(c) => c,
@@ -509,14 +524,19 @@ fn emit_shadowtls(
     inner_node.tls = None;
 
     // Capture the inner emitter's output into a temp buffer, then append
-    // the ShadowTLS obfs fields before pushing to `lines`.
-    let mut inner_lines: Vec<String> = Vec::new();
-    emit_proxy(&inner_node, &mut inner_lines)?;
-    let inner_entry = inner_lines.into_iter().next().ok_or_else(|| {
-        EmitError::NoEmitter("shadowtls: inner emitter produced no output".to_owned())
-    })?;
+    // the ShadowTLS obfs fields before pushing to `out`.
+    let mut inner_buf = String::new();
+    emit_proxy(&inner_node, &mut inner_buf)?;
+    // WHY: emit_proxy pushes "\n<entry>"; strip the leading newline to get
+    // the raw entry, append shadowtls fields, then re-push with separator.
+    let inner_entry = inner_buf.strip_prefix('\n').unwrap_or(&inner_buf);
+    if inner_entry.is_empty() {
+        return Err(EmitError::NoEmitter(
+            "shadowtls: inner emitter produced no output".to_owned(),
+        ));
+    }
 
-    let mut entry = inner_entry;
+    let mut entry = inner_entry.to_owned();
 
     match cfg.inner_protocol {
         ProtocolKind::Shadowsocks => {
@@ -571,7 +591,8 @@ fn emit_shadowtls(
         }
     }
 
-    lines.push(entry);
+    out.push('\n');
+    out.push_str(&entry);
     Ok(())
 }
 

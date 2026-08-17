@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 
-use deve_sub_domain::{GroupType, Node, ProtocolKind, SnellVersion, TransportKind};
+use deve_sub_domain::{GroupType, Node, ProtocolKind, SnellObfsMode, SnellVersion, TransportKind};
 use thiserror::Error;
 
 /// Target output profile identifier.
@@ -87,6 +87,18 @@ pub enum CompatibilityReason {
     UnsupportedProtocolVersion {
         protocol: &'static str,
         version: u32,
+        supported: &'static str,
+    },
+    // WHY: sing-box snell V4 supports only http/tls obfs modes
+    // (option/snell.go); shadow-tls/restls/jls are mihomo-only projections.
+    // Without this check the node passes compatibility but kills the entire
+    // generation when the sing-box emitter returns `NoEmitter` (constraint #7:
+    // no silent dropping of incompatible nodes).
+    #[error("unsupported obfs mode '{mode}' for {protocol} on {profile}; supported: {supported}")]
+    UnsupportedObfsMode {
+        protocol: &'static str,
+        profile: &'static str,
+        mode: &'static str,
         supported: &'static str,
     },
 }
@@ -352,6 +364,28 @@ pub fn check_node(node: &Node, cap: &ProfileCapability) -> Result<(), Compatibil
                 });
             }
         }
+        // WHY: sing-box snell V4 supports only http/tls obfs modes
+        // (option/snell.go); shadow-tls/restls/jls are mihomo-only
+        // projections. Rejecting here reports the node as incompatible
+        // instead of letting the sing-box emitter return `NoEmitter` and
+        // kill the entire generation (constraint #7: no silent dropping).
+        if cfg.version == SnellVersion::V4
+            && let Some(ref obfs) = cfg.obfs
+            && !matches!(obfs.mode, SnellObfsMode::Http | SnellObfsMode::Tls)
+        {
+            let mode_str = match obfs.mode {
+                SnellObfsMode::ShadowTls => "shadow-tls",
+                SnellObfsMode::Restls => "restls",
+                SnellObfsMode::Jls => "jls",
+                SnellObfsMode::Http | SnellObfsMode::Tls => unreachable!(),
+            };
+            return Err(CompatibilityReason::UnsupportedObfsMode {
+                protocol: "snell",
+                profile: "sing-box",
+                mode: mode_str,
+                supported: "http, tls",
+            });
+        }
     }
 
     Ok(())
@@ -379,7 +413,8 @@ mod tests {
     use super::*;
     use deve_sub_domain::{
         Authentication, DomainName, Endpoint, Host, Node, NodeSource, ProtocolConfig, ProtocolKind,
-        RegionAssignment, RegionMethod, Transport, TransportKind, TrojanConfig, UdpCapability,
+        RegionAssignment, RegionMethod, SnellConfig, SnellObfs, SnellObfsMode, SnellVersion,
+        Transport, TransportKind, TrojanConfig, UdpCapability,
     };
     use deve_sub_kernel::{NodeId, Timestamp};
 
@@ -506,5 +541,92 @@ mod tests {
             assert_eq!(ProfileKind::from_kebab(p.as_kebab()), Some(p));
         }
         assert!(ProfileKind::from_kebab("unknown").is_none());
+    }
+
+    fn make_snell_node(version: SnellVersion, obfs: Option<SnellObfsMode>) -> Node {
+        let mut node = make_trojan_node(None);
+        node.protocol = ProtocolKind::Snell;
+        node.config = ProtocolConfig::Snell(SnellConfig {
+            version,
+            reuse: None,
+            obfs: obfs.map(|m| SnellObfs {
+                mode: m,
+                host: None,
+                password: None,
+                version: None,
+                alpn: vec![],
+            }),
+            v6_mode: None,
+        });
+        node
+    }
+
+    #[test]
+    fn singbox_accepts_snell_v4_http_obfs() {
+        let node = make_snell_node(SnellVersion::V4, Some(SnellObfsMode::Http));
+        let cap = capability_for(ProfileKind::SingBox);
+        check_node(&node, &cap).expect("sing-box should accept snell v4 http obfs");
+    }
+
+    #[test]
+    fn singbox_accepts_snell_v4_tls_obfs() {
+        let node = make_snell_node(SnellVersion::V4, Some(SnellObfsMode::Tls));
+        let cap = capability_for(ProfileKind::SingBox);
+        check_node(&node, &cap).expect("sing-box should accept snell v4 tls obfs");
+    }
+
+    #[test]
+    fn singbox_rejects_snell_v4_shadowtls_obfs() {
+        let node = make_snell_node(SnellVersion::V4, Some(SnellObfsMode::ShadowTls));
+        let cap = capability_for(ProfileKind::SingBox);
+        let err = check_node(&node, &cap).expect_err("sing-box should reject snell v4 shadow-tls");
+        assert!(matches!(
+            err,
+            CompatibilityReason::UnsupportedObfsMode {
+                protocol: "snell",
+                profile: "sing-box",
+                mode: "shadow-tls",
+                supported: "http, tls",
+            }
+        ));
+    }
+
+    #[test]
+    fn singbox_rejects_snell_v4_restls_obfs() {
+        let node = make_snell_node(SnellVersion::V4, Some(SnellObfsMode::Restls));
+        let cap = capability_for(ProfileKind::SingBox);
+        let err = check_node(&node, &cap).expect_err("sing-box should reject snell v4 restls");
+        assert!(matches!(
+            err,
+            CompatibilityReason::UnsupportedObfsMode {
+                protocol: "snell",
+                profile: "sing-box",
+                mode: "restls",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn singbox_rejects_snell_v4_jls_obfs() {
+        let node = make_snell_node(SnellVersion::V4, Some(SnellObfsMode::Jls));
+        let cap = capability_for(ProfileKind::SingBox);
+        let err = check_node(&node, &cap).expect_err("sing-box should reject snell v4 jls");
+        assert!(matches!(
+            err,
+            CompatibilityReason::UnsupportedObfsMode {
+                protocol: "snell",
+                profile: "sing-box",
+                mode: "jls",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn mihomo_accepts_snell_v4_shadowtls_obfs() {
+        let node = make_snell_node(SnellVersion::V4, Some(SnellObfsMode::ShadowTls));
+        let cap = capability_for(ProfileKind::Mihomo);
+        check_node(&node, &cap).expect("mihomo should accept snell v4 shadow-tls obfs");
     }
 }

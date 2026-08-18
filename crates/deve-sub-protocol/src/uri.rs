@@ -239,7 +239,7 @@ pub(crate) fn parse_bandwidth(value: &str) -> Result<u64, ParseError> {
         _ => return Err(ParseError::InvalidBandwidth(value.to_owned())),
     };
 
-    Ok((num * multiplier as f64) as u64)
+    Ok((num * multiplier as f64).round() as u64)
 }
 
 /// Parse an integer number of seconds into a [`time::Duration`].

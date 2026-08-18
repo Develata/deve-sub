@@ -248,3 +248,64 @@ fn singbox_invalid_json_errors() {
         deve_sub_protocol::container::parse_singbox_json("not json").expect_err("should fail");
     assert!(matches!(err, deve_sub_protocol::ParseError::InvalidJson(_)));
 }
+
+/// P3-3: sing-box parser must preserve plugin_opts for Shadowsocks.
+#[test]
+fn singbox_parses_shadowsocks_plugin_opts() {
+    let json = r#"{
+  "outbounds": [
+    {
+      "type": "shadowsocks",
+      "tag": "SS-Plugin",
+      "server": "ss.example.com",
+      "server_port": 8388,
+      "method": "aes-256-gcm",
+      "password": "TEST_PASSWORD",
+      "plugin": "obfs-local",
+      "plugin_opts": "obfs=tls;obfs-host=example.com"
+    }
+  ]
+}"#;
+
+    let nodes = deve_sub_protocol::container::parse_singbox_json(json).expect("parse");
+    assert_eq!(nodes.len(), 1);
+    let ProtocolConfig::Shadowsocks(cfg) = &nodes[0].config else {
+        panic!("expected Shadowsocks");
+    };
+    assert_eq!(cfg.plugin.as_deref(), Some("obfs-local"));
+    assert_eq!(
+        cfg.plugin_opts.as_deref(),
+        Some("obfs=tls;obfs-host=example.com"),
+        "plugin_opts must be preserved"
+    );
+}
+
+/// P3-1: sing-box parser must preserve packet_encoding for VMess.
+#[test]
+fn singbox_parses_vmess_packet_encoding() {
+    let json = format!(
+        r#"{{
+  "outbounds": [
+    {{
+      "type": "vmess",
+      "tag": "VMess-PE",
+      "server": "vmess.example.com",
+      "server_port": 443,
+      "uuid": "{RESERVED_UUID}",
+      "packet_encoding": "xudp"
+    }}
+  ]
+}}"#
+    );
+
+    let nodes = deve_sub_protocol::container::parse_singbox_json(&json).expect("parse");
+    assert_eq!(nodes.len(), 1);
+    let ProtocolConfig::VMess(cfg) = &nodes[0].config else {
+        panic!("expected VMess");
+    };
+    assert_eq!(
+        cfg.packet_encoding.as_deref(),
+        Some("xudp"),
+        "packet_encoding must be preserved"
+    );
+}

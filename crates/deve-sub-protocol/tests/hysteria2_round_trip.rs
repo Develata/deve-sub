@@ -233,3 +233,17 @@ fn hysteria2_congestion_controller_without_bandwidth() {
     let reparsed = deve_sub_protocol::parse_uri(&emitted).expect("reparse");
     assert_eq!(reparsed.congestion, node.congestion);
 }
+
+/// P3-2: parse_bandwidth rounds fractional values instead of truncating.
+#[test]
+fn hysteria2_bandwidth_rounds_fractional() {
+    // 0.5 bps rounds to 1 bps (previously truncated to 0).
+    let uri = "hysteria2://TEST_PASSWORD@example.com:443?up=0.5 bps#Frac";
+    let node = deve_sub_protocol::parse_uri(uri).expect("parse");
+    let cong = node.congestion.as_ref().expect("congestion");
+    assert_eq!(
+        cong.up_bps,
+        Some(1),
+        "0.5 bps must round to 1, not truncate to 0"
+    );
+}

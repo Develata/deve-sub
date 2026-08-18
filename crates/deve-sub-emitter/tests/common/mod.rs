@@ -163,7 +163,7 @@ fn vmess_node() -> Node {
         ProtocolConfig::VMess(deve_sub_domain::VMessConfig {
             alter_id: Some(0),
             security: None,
-            packet_encoding: None,
+            packet_encoding: Some("packet".to_owned()),
         }),
     );
     n.endpoint.host = Host::Domain(DomainName::new("vmess.example.com".to_owned()));

@@ -203,6 +203,11 @@ fn emit_trojan(
     };
     let mut entry = yaml_entry(name, "trojan", server, port);
     entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
+    if let ProtocolConfig::Trojan(cfg) = &node.config
+        && let Some(ref pe) = cfg.packet_encoding
+    {
+        entry.push_str(&format!("\n    packet-encoding: {}", yaml_dq(pe)));
+    }
     push_tls(node, &mut entry);
     push_network(node, &mut entry);
     out.push('\n');
@@ -257,6 +262,9 @@ fn emit_vmess(
         // default the xray emitter uses). Caught by OUT-001.
         let cipher = cfg.security.clone().unwrap_or_else(|| "auto".to_owned());
         entry.push_str(&format!("\n    cipher: {cipher}"));
+        if let Some(ref pe) = cfg.packet_encoding {
+            entry.push_str(&format!("\n    packet-encoding: {}", yaml_dq(pe)));
+        }
     }
     push_tls(node, &mut entry);
     push_network(node, &mut entry);
@@ -278,10 +286,13 @@ fn emit_vless(
     };
     let mut entry = yaml_entry(name, "vless", server, port);
     entry.push_str(&format!("\n    uuid: {}", yaml_dq(uuid)));
-    if let ProtocolConfig::VlessReality(cfg) = &node.config
-        && let Some(ref flow) = cfg.flow
-    {
-        entry.push_str(&format!("\n    flow: {flow}"));
+    if let ProtocolConfig::VlessReality(cfg) = &node.config {
+        if let Some(ref flow) = cfg.flow {
+            entry.push_str(&format!("\n    flow: {flow}"));
+        }
+        if let Some(ref pe) = cfg.packet_encoding {
+            entry.push_str(&format!("\n    packet-encoding: {}", yaml_dq(pe)));
+        }
     }
     push_tls(node, &mut entry);
     push_network(node, &mut entry);
@@ -672,9 +683,26 @@ fn push_transport_opts(transport: &Transport, entry: &mut String) {
             }
         }
         TransportKind::HttpUpgrade => {
-            if let Some(ref path) = transport.path {
-                entry.push_str(&format!("\n    ws-opts:\n      path: {}", yaml_dq(path)));
+            let has_path = transport.path.is_some();
+            let has_host = transport.host.is_some();
+            // WHY: mihomo has no dedicated httpupgrade-opts key. httpupgrade
+            // is a variant of the WebSocket transport, activated by
+            // `v2ray-http-upgrade: true` inside ws-opts (MetaCubeX/mihomo
+            // WSOptions struct). Without this flag, mihomo treats the entry
+            // as regular WebSocket.
+            if has_path || has_host {
+                entry.push_str("\n    ws-opts:");
+                if let Some(ref path) = transport.path {
+                    entry.push_str(&format!("\n      path: {}", yaml_dq(path)));
+                }
+                if let Some(ref host) = transport.host {
+                    entry.push_str(&format!(
+                        "\n      headers:\n        Host: {}",
+                        yaml_dq(host)
+                    ));
+                }
             }
+            entry.push_str("\n      v2ray-http-upgrade: true");
         }
         TransportKind::Grpc => {
             if let Some(ref path) = transport.path {

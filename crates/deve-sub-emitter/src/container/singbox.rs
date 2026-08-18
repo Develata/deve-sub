@@ -140,17 +140,25 @@ fn shadowsocks(node: &Node) -> EmitResult {
         Authentication::Password { password } => password.clone(),
         _ => return Err(EmitError::MissingField("ss password")),
     };
-    let method = match &node.config {
-        ProtocolConfig::Shadowsocks(cfg) => cfg.method.clone(),
+    let (method, plugin, plugin_opts) = match &node.config {
+        ProtocolConfig::Shadowsocks(cfg) => (
+            cfg.method.clone(),
+            cfg.plugin.clone(),
+            cfg.plugin_opts.clone(),
+        ),
         _ => return Err(EmitError::MissingField("ss method")),
     };
-    Ok((
-        "shadowsocks",
-        vec![
-            ("method".to_owned(), Value::String(method)),
-            ("password".to_owned(), Value::String(password)),
-        ],
-    ))
+    let mut fields = vec![
+        ("method".to_owned(), Value::String(method)),
+        ("password".to_owned(), Value::String(password)),
+    ];
+    if let Some(p) = plugin {
+        fields.push(("plugin".to_owned(), Value::String(p)));
+    }
+    if let Some(po) = plugin_opts {
+        fields.push(("plugin_opts".to_owned(), Value::String(po)));
+    }
+    Ok(("shadowsocks", fields))
 }
 
 fn vmess(node: &Node) -> EmitResult {
@@ -159,10 +167,23 @@ fn vmess(node: &Node) -> EmitResult {
         _ => return Err(EmitError::MissingField("vmess uuid")),
     };
     let mut fields = vec![("uuid".to_owned(), Value::String(uuid))];
-    if let ProtocolConfig::VMess(cfg) = &node.config
-        && let Some(aid) = cfg.alter_id
-    {
-        fields.push(("alter_id".to_owned(), json!(aid)));
+    if let ProtocolConfig::VMess(cfg) = &node.config {
+        if let Some(aid) = cfg.alter_id {
+            fields.push(("alter_id".to_owned(), json!(aid)));
+        }
+        if let Some(ref pe) = cfg.packet_encoding {
+            // WHY: sing-box rejects "packet" (a v2rayN/URI convention);
+            // it accepts only "xudp" and "none". Map "packet" → "xudp"
+            // (the sing-box-supported packet encoding equivalent).
+            let singbox_pe = match pe.as_str() {
+                "packet" => "xudp",
+                other => other,
+            };
+            fields.push((
+                "packet_encoding".to_owned(),
+                Value::String(singbox_pe.to_owned()),
+            ));
+        }
     }
     push_tls_fields(&mut fields, node);
     push_transport_fields(&mut fields, node);
@@ -175,10 +196,20 @@ fn vless(node: &Node) -> EmitResult {
         _ => return Err(EmitError::MissingField("vless uuid")),
     };
     let mut fields = vec![("uuid".to_owned(), Value::String(uuid))];
-    if let ProtocolConfig::VlessReality(cfg) = &node.config
-        && let Some(ref flow) = cfg.flow
-    {
-        fields.push(("flow".to_owned(), Value::String(flow.clone())));
+    if let ProtocolConfig::VlessReality(cfg) = &node.config {
+        if let Some(ref flow) = cfg.flow {
+            fields.push(("flow".to_owned(), Value::String(flow.clone())));
+        }
+        if let Some(ref pe) = cfg.packet_encoding {
+            let singbox_pe = match pe.as_str() {
+                "packet" => "xudp",
+                other => other,
+            };
+            fields.push((
+                "packet_encoding".to_owned(),
+                Value::String(singbox_pe.to_owned()),
+            ));
+        }
     }
     push_tls_fields(&mut fields, node);
     push_transport_fields(&mut fields, node);

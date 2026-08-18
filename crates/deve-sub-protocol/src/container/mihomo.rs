@@ -238,7 +238,7 @@ fn extract_transport(entry: &Value) -> Result<Option<Transport>, ParseError> {
     };
 
     let (path, host, xhttp_mode) = match kind {
-        TransportKind::Ws => {
+        TransportKind::Ws | TransportKind::HttpUpgrade => {
             let ws_opts = entry.get("ws-opts");
             let path = ws_opts.and_then(|w| get_str(w, "path"));
             let host = ws_opts
@@ -300,7 +300,7 @@ fn parse_vless(entry: &Value) -> Result<Node, ParseError> {
     let config = ProtocolConfig::VlessReality(VlessRealityConfig {
         encryption: get_str(entry, "encryption"),
         flow: get_str(entry, "flow"),
-        packet_encoding: None,
+        packet_encoding: get_str(entry, "packet-encoding"),
     });
 
     let mut node = node_shell_container();
@@ -323,7 +323,7 @@ fn parse_trojan(entry: &Value) -> Result<Node, ParseError> {
     let transport = extract_transport(entry)?;
 
     let config = ProtocolConfig::Trojan(TrojanConfig {
-        packet_encoding: None,
+        packet_encoding: get_str(entry, "packet-encoding"),
     });
 
     let mut node = node_shell_container();
@@ -382,7 +382,7 @@ fn parse_vmess(entry: &Value) -> Result<Node, ParseError> {
     let config = ProtocolConfig::VMess(VMessConfig {
         alter_id,
         security,
-        packet_encoding: None,
+        packet_encoding: get_str(entry, "packet-encoding"),
     });
 
     let mut node = node_shell_container();

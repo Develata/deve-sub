@@ -315,7 +315,7 @@ fn parse_vless(entry: &Value) -> Result<Node, ParseError> {
     let config = ProtocolConfig::VlessReality(VlessRealityConfig {
         encryption: get_str(entry, "encryption"),
         flow: get_str(entry, "flow"),
-        packet_encoding: None,
+        packet_encoding: get_str(entry, "packet_encoding"),
     });
 
     let mut node = node_shell_container();
@@ -356,7 +356,7 @@ fn parse_shadowsocks(entry: &Value) -> Result<Node, ParseError> {
     let config = ProtocolConfig::Shadowsocks(deve_sub_domain::ShadowsocksConfig {
         method,
         plugin: get_str(entry, "plugin"),
-        plugin_opts: None,
+        plugin_opts: get_str(entry, "plugin_opts"),
     });
 
     let mut node = node_shell_container();
@@ -378,7 +378,7 @@ fn parse_vmess(entry: &Value) -> Result<Node, ParseError> {
             .and_then(|v| v.as_u64())
             .map(|n| u32::try_from(n).unwrap_or(0)),
         security: get_str(entry, "security"),
-        packet_encoding: None,
+        packet_encoding: get_str(entry, "packet_encoding"),
     });
 
     let mut node = node_shell_container();

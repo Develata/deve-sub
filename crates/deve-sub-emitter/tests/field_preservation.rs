@@ -94,3 +94,42 @@ fn mihomo_emits_h2_host_list() {
         "must emit host as YAML list for H2 transport"
     );
 }
+
+/// P3-1: mihomo emitter must emit packet-encoding when set.
+#[test]
+fn mihomo_emits_packet_encoding() {
+    let node = find_node("vmess-test");
+    let output = emit_mihomo(&[node]).expect("emit");
+    assert!(
+        output.contains("packet-encoding:"),
+        "must emit packet-encoding for vmess with packet_encoding set"
+    );
+}
+
+/// P3-1: sing-box emitter must emit packet_encoding when set.
+#[test]
+fn singbox_emits_packet_encoding() {
+    let node = find_node("vmess-test");
+    let output = emit_singbox(&[node]).expect("emit");
+    assert!(
+        output.contains("\"packet_encoding\""),
+        "must emit packet_encoding for vmess with packet_encoding set"
+    );
+}
+
+/// P3-4: mihomo emitter must emit v2ray-http-upgrade: true for HttpUpgrade.
+#[test]
+fn mihomo_emits_httpupgrade_flag() {
+    let mut node = find_node("trojan-test");
+    node.transport = Some(Transport {
+        kind: TransportKind::HttpUpgrade,
+        path: Some("/hu".to_owned()),
+        host: None,
+        xhttp_mode: None,
+    });
+    let output = emit_mihomo(&[node]).expect("emit");
+    assert!(
+        output.contains("v2ray-http-upgrade: true"),
+        "must emit v2ray-http-upgrade: true for HttpUpgrade transport"
+    );
+}

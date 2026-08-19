@@ -307,13 +307,24 @@ async fn deliver_for_subscription(
 ///
 /// If `profile` is `Some`, validate it against the Subscription's profile
 /// (must match) and parse to `ProfileKind`. If `None`, auto-detect from the
-/// User-Agent header.
+/// User-Agent header and validate the detected profile against the
+/// Subscription's bound profile.
 ///
-/// WHY the explicit profile must match the Subscription's configured profile:
+/// WHY the resolved profile must match the Subscription's configured profile:
 /// a Subscription is bound to one profile at creation; serving a different
 /// profile for the same token would produce content the client did not
 /// subscribe to. The `/sub/{token}/{profile}` path segment is a convenience
 /// for clients that include it, not a profile-switching mechanism.
+///
+/// DS-AUD-B16: the auto-detect path previously returned the UA-detected
+/// profile without comparing it to `subscription.profile`, so a sing-box-
+/// bound subscription requested by a Mihomo client silently served Mihomo
+/// content. The explicit-path branch already enforced binding; the
+/// auto-detect branch now enforces it too, rejecting a mismatch with
+/// `UnknownProfile` naming both the detected and bound profiles. Erroring
+/// (not falling back to the bound profile) keeps the two paths consistent:
+/// the same subscription 404s whether the client names the wrong profile
+/// or omits it while sending a mismatched UA.
 fn resolve_profile(
     profile: Option<&str>,
     user_agent: Option<&str>,
@@ -328,12 +339,19 @@ fn resolve_profile(
                 .ok_or_else(|| SubscriptionAppError::UnknownProfile(p.to_owned()))
         }
         None => {
-            let detected = detect_profile_from_user_agent(user_agent);
-            detected.ok_or_else(|| {
+            let detected = detect_profile_from_user_agent(user_agent).ok_or_else(|| {
                 SubscriptionAppError::UnknownProfile(
                     "could not auto-detect profile from User-Agent".to_owned(),
                 )
-            })
+            })?;
+            if detected.as_kebab() != subscription.profile {
+                return Err(SubscriptionAppError::UnknownProfile(format!(
+                    "auto-detected profile '{}' does not match subscription's bound profile '{}'",
+                    detected.as_kebab(),
+                    subscription.profile
+                )));
+            }
+            Ok(detected)
         }
     }
 }
@@ -605,5 +623,68 @@ mod tests {
             info.contains("upload=1000") && info.contains("download=2000"),
             "userinfo should reflect consumed traffic: {info}"
         );
+    }
+
+    fn sub_bound_to(profile: &str) -> Subscription {
+        Subscription::new(
+            "n",
+            "s",
+            UserId::new(),
+            TemplateId::new(),
+            profile,
+            deve_sub_domain::NodeSelector::default(),
+            deve_sub_kernel::SubscriptionTokenId::new(),
+        )
+    }
+
+    #[test]
+    fn resolve_profile_explicit_match_returns_profile() {
+        let sub = sub_bound_to("mihomo");
+        let p = resolve_profile(Some("mihomo"), None, &sub).expect("explicit match");
+        assert_eq!(p, ProfileKind::Mihomo);
+    }
+
+    #[test]
+    fn resolve_profile_explicit_mismatch_rejects() {
+        let sub = sub_bound_to("sing-box");
+        let err = resolve_profile(Some("mihomo"), None, &sub).expect_err("explicit mismatch");
+        assert!(matches!(err, SubscriptionAppError::UnknownProfile(_)));
+        assert!(format!("{err}").contains("mihomo"));
+    }
+
+    #[test]
+    fn resolve_profile_auto_detect_match_returns_profile() {
+        let sub = sub_bound_to("mihomo");
+        let p = resolve_profile(None, Some("Clash/0.20"), &sub).expect("auto match");
+        assert_eq!(p, ProfileKind::Mihomo);
+    }
+
+    #[test]
+    fn resolve_profile_auto_detect_mismatch_rejects() {
+        // DS-AUD-B16 regression guard: a sing-box UA on a mihomo-bound
+        // subscription must NOT silently serve mihomo content.
+        let sub = sub_bound_to("mihomo");
+        let err = resolve_profile(None, Some("sing-box/1.8"), &sub).expect_err("auto mismatch");
+        match err {
+            SubscriptionAppError::UnknownProfile(msg) => {
+                assert!(msg.contains("sing-box"), "msg must name detected: {msg}");
+                assert!(msg.contains("mihomo"), "msg must name bound: {msg}");
+            }
+            other => panic!("expected UnknownProfile, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_profile_auto_detect_unknown_ua_rejects() {
+        let sub = sub_bound_to("mihomo");
+        let err = resolve_profile(None, Some("Mozilla/5.0"), &sub).expect_err("unknown UA");
+        assert!(matches!(err, SubscriptionAppError::UnknownProfile(_)));
+    }
+
+    #[test]
+    fn resolve_profile_auto_detect_none_ua_rejects() {
+        let sub = sub_bound_to("mihomo");
+        let err = resolve_profile(None, None, &sub).expect_err("no UA");
+        assert!(matches!(err, SubscriptionAppError::UnknownProfile(_)));
     }
 }

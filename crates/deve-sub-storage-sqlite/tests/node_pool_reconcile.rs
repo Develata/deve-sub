@@ -85,6 +85,8 @@ const TROJAN_A: &str = "trojan://TEST_PASSWORD@example.com:443?sni=example.com&t
 const TROJAN_B: &str = "trojan://TEST_PASSWORD@other.com:8443?sni=other.com&type=tcp#NodeB";
 const TROJAN_A_DUP: &str =
     "trojan://TEST_PASSWORD@example.com:443?sni=example.com&type=tcp#NodeADup";
+const TROJAN_A_ALT_PASS: &str =
+    "trojan://ALT_PASSWORD@example.com:443?sni=example.com&type=tcp#NodeAlt";
 
 async fn count_nodes(pool: &sqlx::sqlite::SqlitePool) -> (i64, i64) {
     let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM nodes")
@@ -163,8 +165,9 @@ async fn first_refresh_inserts_new_nodes() {
     assert_eq!(count_bindings(&db.pool, &source.id.to_string()).await, 2);
 }
 
-/// SRC-005: Duplicate nodes (same protocol+host+port) are recorded as
-/// duplicates and do not create new pool entries.
+/// SRC-005: Truly identical nodes (same credentials, endpoint, config —
+/// differing only in display name) are deduplicated by the identity
+/// fingerprint and do not create new pool entries (B-12).
 #[tokio::test]
 async fn duplicate_node_does_not_create_pool_entry() {
     let db = TestDb::new().await;
@@ -180,6 +183,9 @@ async fn duplicate_node_does_not_create_pool_entry() {
     let source = make_source("test-source");
     source_repo.create(&source).await.expect("create source");
 
+    // TROJAN_A and TROJAN_A_DUP have the SAME password and endpoint — only
+    // the display name (URI fragment) differs, which is not part of
+    // identity. They are truly identical and must dedup.
     let node_a = trojan_node(TROJAN_A);
     let node_dup = trojan_node(TROJAN_A_DUP);
     let entries = [entry(node_a), entry(node_dup)];
@@ -198,7 +204,49 @@ async fn duplicate_node_does_not_create_pool_entry() {
     assert_eq!(result.duplicate_nodes, 1);
 
     let (total, _) = count_nodes(&db.pool).await;
-    assert_eq!(total, 1, "duplicate should not create a second pool node");
+    assert_eq!(total, 1, "truly identical node deduped");
+}
+
+/// B-12: Reconcile preserves distinct-credential nodes at the same
+/// endpoint. Two trojan nodes at the same host:port but with DIFFERENT
+/// passwords have different identity fingerprints and must both be
+/// inserted as new nodes.
+#[tokio::test]
+async fn reconcile_preserves_distinct_credentials_at_same_endpoint() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+
+    let source = make_source("test-source");
+    source_repo.create(&source).await.expect("create source");
+
+    // Two trojan nodes at the SAME host:port but DIFFERENT passwords.
+    let entries = [
+        entry(trojan_node(TROJAN_A)),
+        entry(trojan_node(TROJAN_A_ALT_PASS)),
+    ];
+    let snapshot = make_snapshot(source.id, 1, 2);
+
+    let result = pool_repo
+        .reconcile(ReconcileInput {
+            source_id: source.id,
+            snapshot: &snapshot,
+            entries: &entries,
+        })
+        .await
+        .expect("reconcile");
+
+    assert_eq!(result.new_nodes, 2, "distinct credentials -> 2 new nodes");
+    assert_eq!(result.duplicate_nodes, 0);
+
+    let (total, _) = count_nodes(&db.pool).await;
+    assert_eq!(total, 2, "both distinct-credential nodes preserved");
 }
 
 /// SRC-006: Nodes absent from a refresh are marked missing.

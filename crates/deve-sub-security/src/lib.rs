@@ -21,7 +21,10 @@ pub mod totp;
 
 pub use cipher::{decrypt, decrypt_aad, decrypt_from_b64, encrypt, encrypt_aad, encrypt_to_b64};
 pub use envelope::{is_envelope, mask_url, open, seal};
-pub use hmac::{PURPOSE_CHALLENGE, PURPOSE_RECOVERY, PURPOSE_SESSION, hmac_digest};
+pub use hmac::{
+    PURPOSE_CHALLENGE, PURPOSE_NODE_IDENTITY, PURPOSE_RECOVERY, PURPOSE_SESSION, hmac_digest,
+    identity_fingerprint,
+};
 pub use master_key::MasterKey;
 pub use password::{hash_password, hash_password_async, verify_password, verify_password_async};
 pub use recovery::{

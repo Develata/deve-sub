@@ -98,6 +98,24 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
         .await
         .expect("reverse 0016");
 
+    // Reverse migration 0017: drop identity_fingerprint column and restore
+    // the old (protocol_kind, host, port) dedup unique index.
+    sqlx::query("DROP INDEX IF EXISTS idx_nodes_dedup")
+        .execute(&pool)
+        .await
+        .expect("drop idx_nodes_dedup for 0017 reversal");
+    sqlx::query("ALTER TABLE nodes DROP COLUMN identity_fingerprint")
+        .execute(&pool)
+        .await
+        .expect("reverse 0017");
+    sqlx::query(
+        "CREATE UNIQUE INDEX idx_nodes_dedup \
+         ON nodes(protocol_kind, host, port) WHERE missing_from_source = 0",
+    )
+    .execute(&pool)
+    .await
+    .expect("recreate old idx_nodes_dedup");
+
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
         .execute(&pool)
         .await

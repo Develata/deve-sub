@@ -310,41 +310,50 @@ async fn migration_0004_applies_and_schema_is_correct() {
         );
     }
 
-    // WHY: idx_nodes_dedup is a partial unique index (WHERE missing_from_source = 0).
-    // Verify it enforces dedup by inserting a duplicate (protocol, host, port)
-    // and asserting a constraint violation, then confirm a "missing" row does
-    // NOT collide (the partial predicate exempts it).
-    sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port) VALUES (?, ?, ?, ?)")
-        .bind("01J0NODE000000000000000001")
-        .bind("vless")
-        .bind("example.com")
-        .bind(443_i64)
-        .execute(&pool)
-        .await
-        .expect("first node insert");
+    // WHY: idx_nodes_dedup is a partial unique index on identity_fingerprint
+    // (WHERE missing_from_source = 0). Verify it enforces dedup by inserting
+    // a duplicate identity_fingerprint and asserting a constraint violation,
+    // then confirm a "missing" row does NOT collide (the partial predicate
+    // exempts it).
+    sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind("01J0NODE000000000000000001")
+    .bind("vless")
+    .bind("example.com")
+    .bind(443_i64)
+    .bind("fp-dedup-001")
+    .execute(&pool)
+    .await
+    .expect("first node insert");
 
-    let dup_result =
-        sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port) VALUES (?, ?, ?, ?)")
-            .bind("01J0NODE000000000000000002")
-            .bind("vless")
-            .bind("example.com")
-            .bind(443_i64)
-            .execute(&pool)
-            .await;
+    let dup_result = sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind("01J0NODE000000000000000002")
+    .bind("vless")
+    .bind("example.com")
+    .bind(443_i64)
+    .bind("fp-dedup-001")
+    .execute(&pool)
+    .await;
     assert!(
         dup_result.is_err(),
-        "duplicate (protocol, host, port) should be rejected by idx_nodes_dedup"
+        "duplicate identity_fingerprint should be rejected by idx_nodes_dedup"
     );
 
     // A node marked missing_from_source=1 must NOT collide with the active node.
     sqlx::query(
-        "INSERT INTO nodes (id, protocol_kind, host, port, missing_from_source) \
-         VALUES (?, ?, ?, ?, 1)",
+        "INSERT INTO nodes (id, protocol_kind, host, port, missing_from_source, \
+         identity_fingerprint) VALUES (?, ?, ?, ?, 1, ?)",
     )
     .bind("01J0NODE000000000000000003")
     .bind("vless")
     .bind("example.com")
     .bind(443_i64)
+    .bind("fp-dedup-001")
     .execute(&pool)
     .await
     .expect("missing node insert should not collide");
@@ -436,11 +445,12 @@ async fn migration_0004_cascade_delete_removes_dependents() {
         .await
         .expect("insert item");
 
-    sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port) VALUES (?, ?, ?, ?)")
+    sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) VALUES (?, ?, ?, ?, ?)")
         .bind(node_id)
         .bind("vless")
         .bind("example.com")
         .bind(443_i64)
+        .bind("fp-cascade")
         .execute(&pool)
         .await
         .expect("insert node");
@@ -523,11 +533,12 @@ async fn migration_0005_adds_source_label_column() {
     );
 
     // Insert a row without specifying source_label — should default to ''.
-    sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port) VALUES (?, ?, ?, ?)")
+    sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) VALUES (?, ?, ?, ?, ?)")
         .bind("01J0NODE000000000000000005")
         .bind("vless")
         .bind("example.com")
         .bind(443_i64)
+        .bind("fp-005")
         .execute(&pool)
         .await
         .expect("insert node with default source_label");
@@ -541,14 +552,15 @@ async fn migration_0005_adds_source_label_column() {
 
     // Insert a row with an explicit source_label — should persist.
     sqlx::query(
-        "INSERT INTO nodes (id, protocol_kind, host, port, source_label) \
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO nodes (id, protocol_kind, host, port, source_label, \
+         identity_fingerprint) VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind("01J0NODE000000000000000006")
     .bind("trojan")
     .bind("other.com")
     .bind(8443_i64)
     .bind("manual")
+    .bind("fp-006")
     .execute(&pool)
     .await
     .expect("insert node with manual source_label");
@@ -1235,8 +1247,8 @@ async fn migration_0013_backup_restore_preserves_chain() {
     run_migrations(&pool).await;
 
     sqlx::query(
-        "INSERT INTO nodes (id, protocol_kind, host, port) \
-         VALUES ('01KZNOD0000000000000000BR', 'shadowsocks', 'chain.example.com', 8388)",
+        "INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) \
+         VALUES ('01KZNOD0000000000000000BR', 'shadowsocks', 'chain.example.com', 8388, 'fp-chain-br')",
     )
     .execute(&pool)
     .await
@@ -1301,8 +1313,8 @@ async fn migration_0013_adds_chain_json_column() {
 
     // chain_json is nullable; a fresh node inserts with NULL.
     sqlx::query(
-        "INSERT INTO nodes (id, protocol_kind, host, port) \
-         VALUES ('01KZNOD000000000000000013', 'shadowsocks', 'example.com', 8388)",
+        "INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) \
+         VALUES ('01KZNOD000000000000000013', 'shadowsocks', 'example.com', 8388, 'fp-chain-013')",
     )
     .execute(&pool)
     .await
@@ -1610,8 +1622,8 @@ async fn migration_0015_applies_and_schema_is_correct() {
 
     // A fresh node can be inserted with only non-encrypted columns.
     sqlx::query(
-        "INSERT INTO nodes (id, protocol_kind, host, port) \
-         VALUES ('01KZNOD000000000000000015', 'shadowsocks', 'example.com', 8388)",
+        "INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) \
+         VALUES ('01KZNOD000000000000000015', 'shadowsocks', 'example.com', 8388, 'fp-enc-015')",
     )
     .execute(&pool)
     .await

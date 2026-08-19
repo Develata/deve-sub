@@ -21,7 +21,7 @@ use deve_sub_domain::{
     NodePoolEntry, NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
 };
 use deve_sub_kernel::{NodeId, NodeSourceBindingId, SourceItemId};
-use deve_sub_security::{MasterKey, envelope};
+use deve_sub_security::{MasterKey, PURPOSE_NODE_IDENTITY, envelope, identity_fingerprint};
 use sqlx::sqlite::SqlitePool;
 
 use crate::node_row::{NODE_COLUMNS, NodeRow};
@@ -98,6 +98,21 @@ const CTX_TLS: &[u8] = b"nodes.tls_json";
 const CTX_TRANSPORT: &[u8] = b"nodes.transport_json";
 const CTX_OBFUSCATION: &[u8] = b"nodes.obfuscation_json";
 const CTX_EXTRAS: &[u8] = b"nodes.extras_json";
+
+/// Compute the node identity fingerprint (B-12).
+///
+/// The fingerprint is a keyed HMAC-SHA256 of the canonical node identity
+/// JSON string (see [`Node::canonical_identity_str`]), using the master
+/// key. When no key is set (test mode), a plain SHA256 digest is used —
+/// the two forms are not interchangeable but are each internally
+/// consistent within a single database instance.
+fn node_fingerprint(node: &Node, key: Option<&MasterKey>) -> Result<String, SourceError> {
+    let canonical = node
+        .canonical_identity_str()
+        .map_err(|e| SourceError::Storage(format!("canonical identity: {e}")))?;
+    identity_fingerprint(PURPOSE_NODE_IDENTITY, &canonical, key.map(|k| k.as_bytes()))
+        .map_err(|e| SourceError::Storage(format!("identity fingerprint: {e}")))
+}
 const CTX_SOURCE_ITEM_URI: &[u8] = b"source_items.raw_uri";
 const CTX_BINDING_URI: &[u8] = b"node_source_bindings.raw_uri";
 
@@ -176,17 +191,15 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             if let Some(node) = &entry.node {
                 let proto_str = to_json(&node.protocol)?;
                 let host_str = node.endpoint.host.uri_host();
-                let port_i64 = i64::from(node.endpoint.port);
+                let fingerprint = node_fingerprint(node, self.master_key.as_deref())?;
 
                 let active: Option<(String,)> = sqlx::query_as(
                     "SELECT id FROM nodes \
-                     WHERE protocol_kind = ? AND host = ? AND port = ? \
+                     WHERE identity_fingerprint = ? \
                      AND missing_from_source = 0 \
                      LIMIT 1",
                 )
-                .bind(&proto_str)
-                .bind(&host_str)
-                .bind(port_i64)
+                .bind(&fingerprint)
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(|e| SourceError::Storage(e.to_string()))?;
@@ -199,20 +212,19 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                     result.duplicate_nodes += 1;
                 } else {
                     // WHY: query the nodes table directly for a missing node
-                    // with the same dedup key. A missing node has no binding
-                    // to this source (it was deleted in a prior refresh), so a
-                    // bindings JOIN would miss it. The dedup unique index
-                    // guarantees at most one active node per key but allows
-                    // multiple missing ones; we take the first.
+                    // with the same identity fingerprint. A missing node has
+                    // no binding to this source (it was deleted in a prior
+                    // refresh), so a bindings JOIN would miss it. The dedup
+                    // partial unique index guarantees at most one active node
+                    // per fingerprint but allows multiple missing ones; we
+                    // take the first.
                     let missing: Option<(String,)> = sqlx::query_as(
                         "SELECT id FROM nodes \
-                         WHERE protocol_kind = ? AND host = ? AND port = ? \
+                         WHERE identity_fingerprint = ? \
                          AND missing_from_source = 1 \
                          LIMIT 1",
                     )
-                    .bind(&proto_str)
-                    .bind(&host_str)
-                    .bind(port_i64)
+                    .bind(&fingerprint)
                     .fetch_optional(&mut *tx)
                     .await
                     .map_err(|e| SourceError::Storage(e.to_string()))?;
@@ -234,6 +246,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                             node,
                             &proto_str,
                             &host_str,
+                            &fingerprint,
                             self.master_key.as_deref(),
                         )
                         .await?;
@@ -424,21 +437,21 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         for node in nodes {
             let proto_str = to_json(&node.protocol)?;
             let host_str = node.endpoint.host.uri_host();
-            let port_i64 = i64::from(node.endpoint.port);
+            let fingerprint = node_fingerprint(&node, self.master_key.as_deref())?;
 
             // WHY: dedup matches reconcile — one active (non-missing) node per
-            // (protocol_kind, host, port). Duplicates are counted but NOT
+            // identity fingerprint (B-12). Duplicates are counted but NOT
             // overwritten; the existing node's credentials are preserved
-            // (NODE-003: do not drop nodes with different credentials).
+            // (NODE-003: do not drop nodes with different credentials — but
+            // now nodes with different credentials have different
+            // fingerprints and are distinct entries, not duplicates).
             let existing: Option<(String,)> = sqlx::query_as(
                 "SELECT id FROM nodes \
-                 WHERE protocol_kind = ? AND host = ? AND port = ? \
+                 WHERE identity_fingerprint = ? \
                  AND missing_from_source = 0 \
                  LIMIT 1",
             )
-            .bind(&proto_str)
-            .bind(&host_str)
-            .bind(port_i64)
+            .bind(&fingerprint)
             .fetch_optional(&mut *tx)
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
@@ -451,23 +464,22 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             } else {
                 let missing: Option<(String,)> = sqlx::query_as(
                     "SELECT id FROM nodes \
-                     WHERE protocol_kind = ? AND host = ? AND port = ? \
+                     WHERE identity_fingerprint = ? \
                      AND missing_from_source = 1 \
                      LIMIT 1",
                 )
-                .bind(&proto_str)
-                .bind(&host_str)
-                .bind(port_i64)
+                .bind(&fingerprint)
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(|e| SourceError::Storage(e.to_string()))?;
 
                 if let Some((missing_id,)) = missing {
                     // WHY: reactivate a previously-missing node with the same
-                    // dedup key rather than creating a duplicate row. The
-                    // dedup partial unique index would otherwise reject the
-                    // insert. We keep the existing node's credentials/config
-                    // (NODE-003) and only flip missing_from_source back to 0.
+                    // identity fingerprint rather than creating a duplicate
+                    // row. The dedup partial unique index would otherwise
+                    // reject the insert. We keep the existing node's
+                    // credentials/config (NODE-003) and only flip
+                    // missing_from_source back to 0.
                     sqlx::query(
                         "UPDATE nodes SET missing_from_source = 0, revision = revision + 1 \
                          WHERE id = ?",
@@ -486,6 +498,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                         &node,
                         &proto_str,
                         &host_str,
+                        &fingerprint,
                         self.master_key.as_deref(),
                     )
                     .await?;
@@ -594,6 +607,7 @@ async fn insert_node(
     node: &Node,
     proto_str: &str,
     host_str: &str,
+    fingerprint: &str,
     key: Option<&MasterKey>,
 ) -> Result<String, SourceError> {
     let node_id = node.id.to_string();
@@ -622,8 +636,9 @@ async fn insert_node(
          tls_json_encrypted, transport_json_encrypted, \
          udp_capability, multiplex_json, obfuscation_json_encrypted, \
          congestion_json, region, extras_json_encrypted, \
-         imported_at, revision, status, missing_from_source, source_label) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?)",
+         imported_at, revision, status, missing_from_source, source_label, \
+         identity_fingerprint) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?, ?)",
     )
     .bind(&node_id)
     .bind(&node.display_name)
@@ -640,8 +655,9 @@ async fn insert_node(
     .bind(&congestion_json)
     .bind(&node.region.value)
     .bind(&extras_json_encrypted)
-    .bind(&imported_at)
+    .bind(imported_at)
     .bind(&node.source.source_label)
+    .bind(fingerprint)
     .execute(&mut **tx)
     .await
     .map_err(|e| SourceError::Storage(e.to_string()))?;

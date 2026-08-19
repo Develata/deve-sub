@@ -140,6 +140,64 @@ impl NodeChain {
     }
 }
 
+/// Identity-relevant fields of a [`Node`], used for deduplication (B-12).
+///
+/// Serialized via `serde_json::Value` (BTreeMap-backed by default, since the
+/// workspace does not enable serde_json's `preserve_order` feature) to
+/// produce canonical JSON with alphabetically sorted keys, independent of
+/// struct field declaration order. The resulting string is the input to the
+/// keyed HMAC identity fingerprint.
+///
+/// WHY: `id`, `display_name`, `source`, `extras`, `region`, `tags`, `chain`,
+/// `udp`, `multiplex`, and `congestion` are excluded — they are either
+/// assigned by the pool, user-facing metadata, or negotiated at runtime, and
+/// do not distinguish otherwise-identical proxy endpoints. Two nodes that
+/// differ ONLY in these fields are the same endpoint and should dedup.
+#[derive(Debug, Clone, Serialize)]
+struct NodeIdentityRef<'a> {
+    protocol: &'a ProtocolKind,
+    endpoint: &'a Endpoint,
+    authentication: &'a Authentication,
+    config: &'a ProtocolConfig,
+    tls: &'a Option<TlsConfig>,
+    transport: &'a Option<Transport>,
+    obfuscation: &'a Option<Obfuscation>,
+}
+
+impl Node {
+    /// Return a canonical JSON string of all identity-relevant fields.
+    ///
+    /// Two nodes with the same canonical identity are considered the same
+    /// proxy endpoint and deduplicated in the pool. Fields that distinguish
+    /// endpoints — credentials, SNI, transport path, Reality keys, etc. —
+    /// are included; metadata fields (`id`, `display_name`, `source`,
+    /// `extras`, `region`, `tags`, `chain`, `udp`, `multiplex`,
+    /// `congestion`) are not.
+    ///
+    /// Keys are sorted alphabetically by going through `serde_json::Value`
+    /// (BTreeMap-backed by default), giving canonical JSON independent of
+    /// struct field declaration order. The resulting string is the input to
+    /// the keyed HMAC identity fingerprint (B-12).
+    ///
+    /// See B-12 in the v0.1.0 pre-release audit and NODE-003.
+    ///
+    /// # Errors
+    /// Returns `serde_json::Error` if serialization fails (should not happen
+    /// for in-memory `Node` values, but is propagated for correctness).
+    pub fn canonical_identity_str(&self) -> Result<String, serde_json::Error> {
+        let v = serde_json::to_value(NodeIdentityRef {
+            protocol: &self.protocol,
+            endpoint: &self.endpoint,
+            authentication: &self.authentication,
+            config: &self.config,
+            tls: &self.tls,
+            transport: &self.transport,
+            obfuscation: &self.obfuscation,
+        })?;
+        serde_json::to_string(&v)
+    }
+}
+
 /// Provenance of a node within the unified pool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeSource {

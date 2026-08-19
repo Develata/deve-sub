@@ -112,10 +112,59 @@ async fn import_inserts_new_nodes() {
     assert_eq!(entries.len(), 2);
 }
 
-/// NODE-003: A duplicate node (same protocol+host+port) does not overwrite
-/// the existing node's credentials.
+/// NODE-003 (B-12): Two nodes at the same (protocol, host, port) but with
+/// DIFFERENT credentials are distinct pool entries — the identity
+/// fingerprint includes credentials, so both are preserved. The old dedup
+/// key (protocol_kind, host, port) collapsed them, dropping a valid node.
 #[tokio::test]
-async fn import_duplicate_does_not_overwrite_credentials() {
+async fn import_distinct_credentials_creates_distinct_nodes() {
+    let db = TestDb::new().await;
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+
+    let node_a = trojan_node(TROJAN_A);
+    let id_a = node_a.id;
+    pool_repo
+        .import_nodes(vec![node_a])
+        .await
+        .expect("import first");
+
+    // Second import with a DIFFERENT password but same endpoint.
+    // B-12: this is a distinct node, not a duplicate.
+    let node_b = trojan_node(TROJAN_A_DUP);
+    let id_b = node_b.id;
+    let result = pool_repo
+        .import_nodes(vec![node_b])
+        .await
+        .expect("import distinct");
+
+    assert_eq!(result.new_nodes, 1, "different credentials -> new node");
+    assert_eq!(result.duplicate_nodes, 0);
+    assert!(matches!(result.outcomes[0], ImportOutcome::Inserted(id) if id == id_b));
+
+    let entries = pool_repo
+        .list_nodes(&NodeFilter::all(), None, 100)
+        .await
+        .expect("list");
+    assert_eq!(entries.len(), 2, "both distinct-credential nodes preserved");
+    assert!(
+        entries.iter().any(|e| e.node.id == id_a),
+        "original node A present"
+    );
+    assert!(
+        entries.iter().any(|e| e.node.id == id_b),
+        "new node B present"
+    );
+}
+
+/// NODE-003: A truly identical node (same credentials, endpoint, and
+/// config) is deduplicated — the existing entry is preserved, no new row
+/// is created. The display name (URI fragment) is not part of identity,
+/// so two URIs that differ only in `#name` dedup to the same pool entry.
+#[tokio::test]
+async fn import_truly_identical_node_dedups() {
     let db = TestDb::new().await;
     let pool_repo = SqliteNodePoolRepository::new_with_key(
         db.pool.clone(),
@@ -129,8 +178,8 @@ async fn import_duplicate_does_not_overwrite_credentials() {
         .await
         .expect("import first");
 
-    // Second import with a DIFFERENT password but same endpoint.
-    let node_dup = trojan_node(TROJAN_A_DUP);
+    // Second import with the SAME URI (different NodeId, same identity).
+    let node_dup = trojan_node(TROJAN_A);
     let result = pool_repo
         .import_nodes(vec![node_dup])
         .await
@@ -144,7 +193,7 @@ async fn import_duplicate_does_not_overwrite_credentials() {
         .list_nodes(&NodeFilter::all(), None, 100)
         .await
         .expect("list");
-    assert_eq!(entries.len(), 1, "duplicate should not create a second row");
+    assert_eq!(entries.len(), 1, "truly identical node deduped");
     assert_eq!(entries[0].node.id, original_id, "original node preserved");
 }
 

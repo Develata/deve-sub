@@ -12,7 +12,7 @@ use crate::pages::subscription_types::{
     ListSubscriptionsResponse, Modal, PROFILES, RotateTokenRequest, ShortCodeResponse, SubscriptionDto,
     SubscriptionResponse, TokenRotationResponse, UpdateSubscriptionRequest,
 };
-use crate::pages::templates::{ListTemplatesResponse, TemplateDto};
+use crate::pages::template_types::{ListTemplatesResponse, TemplateDto};
 use crate::pages::util::copy_to_clipboard;
 
 #[derive(Props, Clone, PartialEq)]

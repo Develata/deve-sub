@@ -363,3 +363,106 @@ async fn cli001_headless_startup() {
         }
     }
 }
+
+/// CLI-006: a second `serve` started against an already-locked database
+/// must fail fast (bounded timeout, not hang forever) with a clear error
+/// naming the lock and the holder. Regression guard for DS-AUD-B05.
+#[tokio::test(flavor = "multi_thread")]
+async fn cli006_second_serve_fails_fast_when_one_running() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("test.db");
+    let key_path = dir.path().join("master.key");
+    setup_db(&db_path, &key_path).await;
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port1 = listener.local_addr().expect("addr").port();
+    drop(listener);
+
+    let config = serde_json::json!({
+        "security": {
+            "master_key_path": key_path.to_str().unwrap(),
+            "allow_master_key_generation": true,
+            "cookie_secure": false
+        }
+    });
+    let config_path = dir.path().join("config.json");
+    std::fs::write(&config_path, config.to_string()).expect("write config");
+
+    let first = Command::new(BIN)
+        .args([
+            "serve",
+            "--config",
+            config_path.to_str().unwrap(),
+            "--bind",
+            &format!("127.0.0.1:{port1}"),
+            "--db-path",
+            db_path.to_str().unwrap(),
+            "--headless",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn first serve");
+    let _first_guard = ChildGuard(first);
+
+    let addr1: std::net::SocketAddr = format!("127.0.0.1:{port1}").parse().expect("addr");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut healthy = false;
+    while std::time::Instant::now() < deadline {
+        if let Ok(mut stream) =
+            std::net::TcpStream::connect_timeout(&addr1, std::time::Duration::from_millis(500))
+        {
+            let _ = stream.write_all(b"GET /health/live HTTP/1.1\r\nHost: localhost\r\n\r\n");
+            let mut buf = [0u8; 256];
+            if let Ok(n) = stream.read(&mut buf)
+                && String::from_utf8_lossy(&buf[..n]).starts_with("HTTP/1.1 200")
+            {
+                healthy = true;
+                break;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    assert!(healthy, "first serve did not become healthy within 10s");
+
+    // Second serve on a different port (so a bind failure cannot confound
+    // the test) but the SAME db_path — must fail on the lock, not hang.
+    let listener2 = std::net::TcpListener::bind("127.0.0.1:0").expect("bind2");
+    let port2 = listener2.local_addr().expect("addr").port();
+    drop(listener2);
+
+    let start = std::time::Instant::now();
+    let output = Command::new(BIN)
+        .args([
+            "serve",
+            "--config",
+            config_path.to_str().unwrap(),
+            "--bind",
+            &format!("127.0.0.1:{port2}"),
+            "--db-path",
+            db_path.to_str().unwrap(),
+            "--headless",
+        ])
+        // Bounded wait — the old blocking `lock_exclusive` would hang here
+        // until the test harness killed the process.
+        .output()
+        .expect("spawn second serve");
+    let elapsed = start.elapsed();
+
+    assert!(
+        !output.status.success(),
+        "second serve must fail, got status {:?}",
+        output.status
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("another deve-sub process holds the lock"),
+        "stderr must name the held lock, got: {stderr}"
+    );
+    // B-05 contract: must fail within 5s (the serve-side timeout).
+    // Generous upper bound to absorb scheduling jitter on CI.
+    assert!(
+        elapsed < std::time::Duration::from_secs(15),
+        "second serve took {elapsed:?} — lock acquisition is not bounded"
+    );
+}

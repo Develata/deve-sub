@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 
@@ -50,7 +51,14 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     // two `serve` processes from opening pools on the same DB file. The
     // flock is the authoritative process-level guard (ADR-0007 §7).
     // `_db_lock` is dropped on function exit, releasing the lock.
-    let _db_lock = DbLock::acquire_exclusive(std::path::Path::new(&config.database.path))?;
+    //
+    // DS-AUD-B05: bounded 5s timeout (not blocking-forever) and the lock
+    // is held on a sidecar file, so a `restore` rename of the DB inode
+    // cannot free the lock out from under a running `serve`.
+    let _db_lock = DbLock::acquire_with_timeout(
+        std::path::Path::new(&config.database.path),
+        Duration::from_secs(5),
+    )?;
 
     let db = open_db(&config.database.path, 8).await?;
     deve_sub_storage_sqlite::verify_schema(&db)

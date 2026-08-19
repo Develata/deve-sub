@@ -26,6 +26,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
@@ -359,7 +360,13 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
     // for its entire lifetime, so a successful acquire here proves no
     // `serve` is running. The lock is released when `_db_lock` drops at
     // function exit (ADR-0007 §7).
-    let _db_lock = crate::db_lock::DbLock::acquire_exclusive(Path::new(&db_path))?;
+    //
+    // DS-AUD-B05: bounded 1s timeout (fail-fast — restore is interactive;
+    // a hang here is unacceptable) and the lock is on the sidecar file,
+    // so the subsequent `fs::rename(staging, restore_target)` cannot free
+    // the lock from a lingering `serve` that still holds the old inode.
+    let _db_lock =
+        crate::db_lock::DbLock::acquire_with_timeout(Path::new(&db_path), Duration::from_secs(1))?;
 
     // DS-AUD-032: atomic restore — write to a temp path, verify, then rename.
     // A failed restore (corrupt snapshot, migration error, integrity failure)

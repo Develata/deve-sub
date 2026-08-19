@@ -1,37 +1,24 @@
-//! Nodes page — virtual scroll list, multi-select, filtering (UI-008).
-//!
-//! Supports 10,000+ nodes via manual virtual scrolling: only visible items
-//! (viewport / item_height + buffer) are rendered. Search by name, filter
-//! by protocol.
+//! Nodes page — virtual scroll list, multi-select, filtering, and
+//! management actions (import, batch enable/disable, batch tags, per-node
+//! override/region/tags/chain).
 
 #![cfg(target_family = "wasm")]
 
 use dioxus::prelude::*;
-use serde::{Deserialize, Serialize};
 
+use crate::api::{get, send};
 use crate::i18n::{Language, format_t, t};
+use crate::pages::node_chain_modal::ChainModal;
+use crate::pages::node_import_modal::ImportModal;
+use crate::pages::node_override_modal::{OverrideModal, RegionModal};
+use crate::pages::node_tag_modal::TagModal;
+use crate::pages::node_types::{
+    BatchEnabledRequest, BatchResultDto, ListNodesResponse, NodeDto, NodeModal,
+};
 
 const ITEM_HEIGHT: f64 = 48.0;
 const VIEWPORT_HEIGHT: f64 = 600.0;
 const BUFFER: usize = 5;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeDto {
-    pub id: String,
-    pub display_name: String,
-    pub protocol: String,
-    pub host: String,
-    pub port: u16,
-    pub region: Option<String>,
-    pub source_label: String,
-    pub is_active: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ListNodesResponse {
-    pub nodes: Vec<NodeDto>,
-    pub next_cursor: Option<String>,
-}
 
 #[derive(Props, Clone, PartialEq)]
 pub struct NodesProps {
@@ -42,19 +29,34 @@ pub fn NodesPage(props: NodesProps) -> Element {
     let l = *props.lang.read();
     let mut nodes = use_signal(Vec::<NodeDto>::new);
     let mut loading = use_signal(|| true);
-    let mut error = use_signal(|| String::new());
+    let mut error = use_signal(String::new);
     let mut search = use_signal(String::new);
     let mut protocol_filter = use_signal(String::new);
     let mut selected = use_signal(std::collections::HashSet::<String>::new);
     let mut scroll_top = use_signal(|| 0.0_f64);
     let mut cursor = use_signal(|| Option::<String>::None);
     let mut loading_more = use_signal(|| false);
+    let mut modal = use_signal(|| NodeModal::None);
+    let mut batch_msg = use_signal(String::new);
 
-    // Fetch all nodes. Virtual scroll ensures only visible rows are rendered,
-    // so holding 10k nodes in memory is cheap; client-side filter then searches
-    // the full set instead of just the first page.
+    let fetch_nodes = move || {
+        spawn(async move {
+            match get::<ListNodesResponse>("/nodes?limit=10000").await {
+                Ok(resp) => {
+                    nodes.set(resp.nodes);
+                    cursor.set(resp.next_cursor);
+                    loading.set(false);
+                }
+                Err(e) => {
+                    error.set(e.message);
+                    loading.set(false);
+                }
+            }
+        });
+    };
+
     use_future(move || async move {
-        match crate::api::get::<ListNodesResponse>("/nodes?limit=10000").await {
+        match get::<ListNodesResponse>("/nodes?limit=10000").await {
             Ok(resp) => {
                 nodes.set(resp.nodes);
                 cursor.set(resp.next_cursor);
@@ -76,7 +78,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
         loading_more.set(true);
         spawn(async move {
             let path = format!("/nodes?limit=100&cursor={c}");
-            match crate::api::get::<ListNodesResponse>(&path).await {
+            match get::<ListNodesResponse>(&path).await {
                 Ok(resp) => {
                     let mut current = nodes.read().clone();
                     current.extend(resp.nodes);
@@ -92,7 +94,34 @@ pub fn NodesPage(props: NodesProps) -> Element {
         });
     };
 
-    // Filter nodes by search and protocol.
+    let batch_set_enabled = move |enabled: bool| {
+        let ids: Vec<String> = selected.read().iter().cloned().collect();
+        if ids.is_empty() {
+            return;
+        }
+        batch_msg.set(String::new());
+        spawn(async move {
+            let req = BatchEnabledRequest {
+                node_ids: ids,
+                enabled,
+            };
+            match send::<BatchResultDto, _>("POST", "/nodes/batch-enabled", Some(&req)).await {
+                Ok(r) => {
+                    batch_msg.set(format_t(
+                        l,
+                        if enabled { "nodes.batch_enabled_ok" } else { "nodes.batch_disabled_ok" },
+                        r.updated as usize,
+                    ));
+                    fetch_nodes();
+                    selected.write().clear();
+                }
+                Err(e) => {
+                    batch_msg.set(e.message);
+                }
+            }
+        });
+    };
+
     let filtered: Vec<NodeDto> = {
         let all = nodes.read();
         let s = search.read().to_lowercase();
@@ -104,7 +133,6 @@ pub fn NodesPage(props: NodesProps) -> Element {
             .collect()
     };
 
-    // Collect unique protocols for filter dropdown.
     let protocols: Vec<String> = {
         let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for n in nodes.read().iter() {
@@ -113,7 +141,6 @@ pub fn NodesPage(props: NodesProps) -> Element {
         set.into_iter().collect()
     };
 
-    // Virtual scroll calculations.
     let total = filtered.len();
     let total_height = total as f64 * ITEM_HEIGHT;
     let current_scroll = *scroll_top.read();
@@ -128,15 +155,53 @@ pub fn NodesPage(props: NodesProps) -> Element {
     let offset_y = start_idx as f64 * ITEM_HEIGHT;
 
     let selected_count = selected.read().len();
+    let has_selection = selected_count > 0;
 
     rsx! {
         div { class: "space-y-4",
-            // Header.
             div { class: "flex items-center justify-between",
                 h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "nodes.title")} }
                 if selected_count > 0 {
                     span { class: "text-sm text-amber-600 dark:text-amber-500", {format_t(l, "nodes.selected", selected_count)} }
                 }
+            }
+
+            // Toolbar.
+            div { class: "flex flex-wrap items-center gap-2",
+                button {
+                    class: "rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700",
+                    onclick: move |_| modal.set(NodeModal::Import),
+                    {t(l, "nodes.import_btn")}
+                }
+                if has_selection {
+                    button {
+                        class: "rounded-md border border-green-300 px-3 py-2 text-sm text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-900/20",
+                        onclick: move |_| batch_set_enabled(true),
+                        {t(l, "nodes.batch_enable")}
+                    }
+                    button {
+                        class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                        onclick: move |_| batch_set_enabled(false),
+                        {t(l, "nodes.batch_disable")}
+                    }
+                    button {
+                        class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                        onclick: move |_| {
+                            let ids: Vec<String> = selected.read().iter().cloned().collect();
+                            modal.set(NodeModal::Tags(ids));
+                        },
+                        {t(l, "nodes.batch_tags")}
+                    }
+                    button {
+                        class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-500 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800",
+                        onclick: move |_| selected.write().clear(),
+                        {t(l, "nodes.clear_selection")}
+                    }
+                }
+            }
+
+            if !batch_msg.read().is_empty() {
+                div { class: "rounded-md bg-blue-50 p-3 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-400", "{batch_msg}" }
             }
 
             // Filters.
@@ -157,13 +222,6 @@ pub fn NodesPage(props: NodesProps) -> Element {
                         option { value: "{p}", "{p}" }
                     }
                 }
-                button {
-                    class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                    onclick: move |_| {
-                        selected.write().clear();
-                    },
-                    if selected_count > 0 { "清除选择" } else { "" }
-                }
             }
 
             if *loading.read() {
@@ -173,7 +231,6 @@ pub fn NodesPage(props: NodesProps) -> Element {
             } else if !error.read().is_empty() {
                 div { class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{error}" }
             } else {
-                // Virtual scroll container.
                 div {
                     class: "overflow-y-auto rounded-lg border border-stone-200 dark:border-stone-800",
                     id: "nodes-scroll",
@@ -188,12 +245,12 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     },
                     div { style: "height: {total_height}px; position: relative;",
                         div { style: "position: absolute; top: {offset_y}px; left: 0; right: 0;",
-                            // Column header.
                             div { class: "flex items-center border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
                                 div { class: "w-10 px-3 py-3" }
                                 div { class: "flex-1 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.protocol")} }
-                                div { class: "w-32 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.region")} }
-                                div { class: "w-24 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.status")} }
+                                div { class: "w-28 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.region")} }
+                                div { class: "w-20 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.status")} }
+                                div { class: "w-44 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.actions")} }
                             }
                             for (i, node) in visible_items.iter().enumerate() {
                                 {
@@ -214,6 +271,11 @@ pub fn NodesPage(props: NodesProps) -> Element {
                                         "Tuic" => "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300",
                                         _ => "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300",
                                     };
+                                    let ov_id = node_id.clone();
+                                    let reg_id = node_id.clone();
+                                    let tag_id = node_id.clone();
+                                    let chain_id = node_id.clone();
+                                    let chain_initial = node.chain.clone();
                                     rsx! {
                                         div {
                                             key: "{node_id}",
@@ -246,17 +308,55 @@ pub fn NodesPage(props: NodesProps) -> Element {
                                                 span { class: "font-medium", "{node.display_name}" }
                                                 span { class: "ml-2 text-xs text-stone-400 dark:text-stone-500", "{node.host}:{node.port}" }
                                             }
-                                            div { class: "w-32 px-3 py-2",
+                                            div { class: "w-28 px-3 py-2",
                                                 span { class: "inline-flex rounded-full px-2 py-0.5 text-xs font-medium {protocol_class}", "{node.protocol}" }
                                             }
-                                            div { class: "w-24 px-3 py-2 text-sm text-stone-600 dark:text-stone-400",
+                                            div { class: "w-20 px-3 py-2 text-sm text-stone-600 dark:text-stone-400",
                                                 {node.region.clone().unwrap_or_else(|| "—".to_string())}
                                             }
-                                            div { class: "w-24 px-3 py-2",
+                                            div { class: "w-20 px-3 py-2",
                                                 if node.is_active {
                                                     span { class: "inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300", {t(l, "nodes.enabled")} }
                                                 } else {
                                                     span { class: "inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-400", {t(l, "nodes.disabled")} }
+                                                }
+                                            }
+                                            div { class: "w-44 px-3 py-2 flex gap-1",
+                                                button {
+                                                    class: "text-xs text-amber-600 hover:text-amber-800 dark:text-amber-500",
+                                                    title: {t(l, "nodes.override_title")},
+                                                    onclick: move |e| {
+                                                        e.stop_propagation();
+                                                        modal.set(NodeModal::Override(ov_id.clone()));
+                                                    },
+                                                    {t(l, "nodes.row_override")}
+                                                }
+                                                button {
+                                                    class: "text-xs text-stone-500 hover:text-stone-700 dark:text-stone-400",
+                                                    title: {t(l, "nodes.region_title")},
+                                                    onclick: move |e| {
+                                                        e.stop_propagation();
+                                                        modal.set(NodeModal::SetRegion(reg_id.clone()));
+                                                    },
+                                                    {t(l, "nodes.row_region")}
+                                                }
+                                                button {
+                                                    class: "text-xs text-stone-500 hover:text-stone-700 dark:text-stone-400",
+                                                    title: {t(l, "nodes.tag_title")},
+                                                    onclick: move |e| {
+                                                        e.stop_propagation();
+                                                        modal.set(NodeModal::Tags(vec![tag_id.clone()]));
+                                                    },
+                                                    {t(l, "nodes.row_tags")}
+                                                }
+                                                button {
+                                                    class: "text-xs text-stone-500 hover:text-stone-700 dark:text-stone-400",
+                                                    title: {t(l, "nodes.chain_title")},
+                                                    onclick: move |e| {
+                                                        e.stop_propagation();
+                                                        modal.set(NodeModal::Chain(chain_id.clone(), chain_initial.clone()));
+                                                    },
+                                                    {t(l, "nodes.row_chain")}
                                                 }
                                             }
                                         }
@@ -267,16 +367,60 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     }
                 }
 
-                // Load more button.
                 if cursor.read().is_some() {
                     div { class: "flex justify-center pt-4",
                         button {
                             class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
                             disabled: *loading_more.read(),
                             onclick: load_more,
-                            if *loading_more.read() { {t(l, "common.loading")} } else { "加载更多" }
+                            if *loading_more.read() { {t(l, "common.loading")} } else { {t(l, "nodes.load_more")} }
                         }
                     }
+                }
+            }
+        }
+
+        // Modals.
+        match &*modal.read() {
+            NodeModal::None => {}
+            NodeModal::Import => {
+                ImportModal {
+                    lang: props.lang,
+                    on_close: move |_| modal.set(NodeModal::None),
+                    on_success: move |_| fetch_nodes(),
+                }
+            }
+            NodeModal::Tags(ids) => {
+                TagModal {
+                    lang: props.lang,
+                    node_ids: ids.clone(),
+                    on_close: move |_| modal.set(NodeModal::None),
+                    on_success: move |_| fetch_nodes(),
+                }
+            }
+            NodeModal::SetRegion(id) => {
+                RegionModal {
+                    lang: props.lang,
+                    node_id: id.clone(),
+                    on_close: move |_| modal.set(NodeModal::None),
+                    on_success: move |_| fetch_nodes(),
+                }
+            }
+            NodeModal::Override(id) => {
+                OverrideModal {
+                    lang: props.lang,
+                    node_id: id.clone(),
+                    on_close: move |_| modal.set(NodeModal::None),
+                    on_success: move |_| fetch_nodes(),
+                }
+            }
+            NodeModal::Chain(id, chain) => {
+                ChainModal {
+                    lang: props.lang,
+                    node_id: id.clone(),
+                    initial_chain: chain.clone(),
+                    on_close: move |_| modal.set(NodeModal::None),
+                    on_success: move |_| fetch_nodes(),
                 }
             }
         }

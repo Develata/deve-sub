@@ -417,9 +417,14 @@ fn parse_hysteria2(entry: &Value) -> Result<Node, ParseError> {
             }
         });
 
+    // WHY: mihomo stores `hop-interval` as a string of seconds (min 5,
+    // default 30 in mihomo). The canonical model stores a Duration. See P3.
+    let hop_interval =
+        get_str(entry, "hop-interval").and_then(|s| crate::uri::parse_duration_secs(&s).ok());
+
     let config = ProtocolConfig::Hysteria2(Hysteria2Config {
         ports: get_str(entry, "ports"),
-        hop_interval: None,
+        hop_interval,
         fast_open: get_bool(entry, "fast-open"),
         lazy: get_bool(entry, "lazy"),
     });

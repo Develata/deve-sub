@@ -155,8 +155,10 @@ fn singbox_parses_hysteria2() {
         "enabled": true,
         "server_name": "hy2.example.com"
       }},
-      "obfs": "salamander",
-      "obfs_password": "obfs-pwd"
+      "obfs": {{
+        "type": "salamander",
+        "password": "obfs-pwd"
+      }}
     }}
   ]
 }}"#

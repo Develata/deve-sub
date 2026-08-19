@@ -4,8 +4,8 @@
 //! document (route, DNS, inbounds) is assembled in Slice 5.
 
 use deve_sub_domain::{
-    Authentication, Node, ProtocolConfig, ProtocolKind, SnellObfsMode, SnellVersion, Transport,
-    TransportKind,
+    Authentication, CongestionController, Node, ProtocolConfig, ProtocolKind, SnellObfsMode,
+    SnellVersion, Transport, TransportKind, UdpRelayMode,
 };
 use serde_json::{Map, Value, json};
 
@@ -221,8 +221,41 @@ fn hysteria2(node: &Node) -> EmitResult {
         Authentication::Password { password } => password.clone(),
         _ => return Err(EmitError::MissingField("hysteria2 password")),
     };
+    let cfg = match &node.config {
+        ProtocolConfig::Hysteria2(c) => c,
+        _ => return Err(EmitError::MissingField("hysteria2 config")),
+    };
     let mut fields = vec![("password".to_owned(), Value::String(password))];
     push_tls_fields(&mut fields, node);
+    // WHY: sing-box uses `up_mbps`/`down_mbps` as int Mbps (not bps strings),
+    // `server_ports` as a listable string, `hop_interval` as a Go duration,
+    // and `obfs` as a nested object `{type, password}` — all distinct from
+    // the URI/mihomo field shapes. See E3a.
+    if let Some(ref cong) = node.congestion {
+        if let Some(up) = cong.up_bps {
+            fields.push(("up_mbps".to_owned(), json!(up / 1_000_000)));
+        }
+        if let Some(down) = cong.down_bps {
+            fields.push(("down_mbps".to_owned(), json!(down / 1_000_000)));
+        }
+    }
+    if let Some(ref p) = cfg.ports {
+        fields.push(("server_ports".to_owned(), Value::String(p.clone())));
+    }
+    if let Some(hop) = cfg.hop_interval {
+        fields.push((
+            "hop_interval".to_owned(),
+            Value::String(format_go_duration(hop)),
+        ));
+    }
+    if let Some(ref obfs) = node.obfuscation {
+        let mut obfs_obj = Map::new();
+        obfs_obj.insert("type".to_owned(), Value::String(obfs.kind.clone()));
+        if let Some(ref pw) = obfs.password {
+            obfs_obj.insert("password".to_owned(), Value::String(pw.clone()));
+        }
+        fields.push(("obfs".to_owned(), Value::Object(obfs_obj)));
+    }
     Ok(("hysteria2", fields))
 }
 
@@ -231,11 +264,46 @@ fn tuic_v5(node: &Node) -> EmitResult {
         Authentication::UuidPassword { uuid, password } => (uuid.clone(), password.clone()),
         _ => return Err(EmitError::MissingField("tuic v5 uuid+password")),
     };
+    let cfg = match &node.config {
+        ProtocolConfig::TuicV5(c) => c,
+        _ => return Err(EmitError::MissingField("tuic v5 config")),
+    };
     let mut fields = vec![
         ("uuid".to_owned(), Value::String(uuid)),
         ("password".to_owned(), Value::String(password)),
     ];
     push_tls_fields(&mut fields, node);
+    // WHY: sing-box TUIC has no `disable_sni` field — it is a TUIC URI/mihomo
+    // concept. `zero_rtt_handshake` and `heartbeat` use sing-box's native
+    // shapes (bool and Go duration). See E3b.
+    if let Some(ref cong) = node.congestion {
+        let name = match &cong.controller {
+            CongestionController::Bbr => "bbr",
+            CongestionController::Cubic => "cubic",
+            CongestionController::NewReno => "new_reno",
+            CongestionController::Other(n) => n.as_str(),
+        };
+        fields.push((
+            "congestion_control".to_owned(),
+            Value::String(name.to_owned()),
+        ));
+    }
+    if let Some(mode) = cfg.udp_relay_mode {
+        let s = match mode {
+            UdpRelayMode::Native => "native",
+            UdpRelayMode::Quic => "quic",
+        };
+        fields.push(("udp_relay_mode".to_owned(), Value::String(s.to_owned())));
+    }
+    if let Some(zrtt) = cfg.zero_rtt_handshake {
+        fields.push(("zero_rtt_handshake".to_owned(), Value::Bool(zrtt)));
+    }
+    if let Some(hb) = cfg.heartbeat {
+        fields.push((
+            "heartbeat".to_owned(),
+            Value::String(format_go_duration(hb)),
+        ));
+    }
     Ok(("tuic", fields))
 }
 

@@ -396,14 +396,40 @@ fn parse_hysteria2(entry: &Value) -> Result<Node, ParseError> {
     let (name, endpoint) = build_base(entry)?;
     let password = get_str(entry, "password").ok_or(ParseError::MissingField("password"))?;
 
-    let obfuscation = get_str(entry, "obfs").map(|kind| Obfuscation {
-        kind,
-        password: get_str(entry, "obfs_password"),
+    // WHY: sing-box stores `obfs` as a nested object `{type, password}`,
+    // not flat `obfs`/`obfs_password` strings. See P2.
+    let obfuscation = entry.get("obfs").and_then(|o| {
+        get_str(o, "type").map(|kind| Obfuscation {
+            kind,
+            password: get_str(o, "password"),
+        })
     });
 
+    // WHY: sing-box uses `up_mbps`/`down_mbps` as int Mbps. Convert to bps
+    // for the canonical CongestionConfig. BBR is sing-box's only congestion
+    // controller for Hysteria2 (no `congestion_control` field). See P2.
+    let up_bps = entry
+        .get("up_mbps")
+        .and_then(|v| v.as_u64())
+        .map(|mbps| mbps * 1_000_000);
+    let down_bps = entry
+        .get("down_mbps")
+        .and_then(|v| v.as_u64())
+        .map(|mbps| mbps * 1_000_000);
+    let congestion = (up_bps.is_some() || down_bps.is_some()).then_some(CongestionConfig {
+        controller: CongestionController::Bbr,
+        up_bps,
+        down_bps,
+    });
+
+    let hop_interval = entry
+        .get("hop_interval")
+        .and_then(|v| v.as_str())
+        .and_then(parse_go_duration);
+
     let config = ProtocolConfig::Hysteria2(Hysteria2Config {
-        ports: get_str(entry, "port_hopping"),
-        hop_interval: None,
+        ports: get_str(entry, "server_ports"),
+        hop_interval,
         fast_open: get_bool(entry, "fast_open"),
         lazy: get_bool(entry, "lazy"),
     });
@@ -416,6 +442,7 @@ fn parse_hysteria2(entry: &Value) -> Result<Node, ParseError> {
     node.authentication = Authentication::Password { password };
     node.tls = extract_tls(entry).or_else(|| Some(default_tls_enabled()));
     node.obfuscation = obfuscation;
+    node.congestion = congestion;
     Ok(node)
 }
 

@@ -5,10 +5,11 @@
 //! dns) is assembled in Slice 5.
 
 use deve_sub_domain::{
-    Authentication, GroupType, Node, ProtocolConfig, ProtocolKind, SnellObfsMode, Transport,
-    TransportKind, XhttpMode,
+    Authentication, CongestionController, GroupType, Node, ProtocolConfig, ProtocolKind,
+    SnellObfsMode, Transport, TransportKind, UdpRelayMode, XhttpMode,
 };
 
+use crate::common::format_bandwidth;
 use crate::container::ir::AssembledTemplate;
 use crate::error::EmitError;
 
@@ -226,15 +227,33 @@ fn emit_ss(
         Authentication::Password { password } => password,
         _ => return Err(EmitError::MissingField("ss password")),
     };
-    let method = match &node.config {
-        ProtocolConfig::Shadowsocks(cfg) => &cfg.method,
+    let cfg = match &node.config {
+        ProtocolConfig::Shadowsocks(c) => c,
         _ => return Err(EmitError::MissingField("ss method")),
     };
-    let entry = format!(
-        "{}\n    cipher: {method}\n    password: {}",
-        yaml_entry(name, "ss", server, port),
-        yaml_dq(password),
-    );
+    let mut entry = yaml_entry(name, "ss", server, port);
+    entry.push_str(&format!("\n    cipher: {}", cfg.method));
+    entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
+    // WHY: mihomo stores SIP003 plugin as `plugin: <name>` and
+    // `plugin-opts:` as a YAML map. The canonical model stores the SIP003
+    // options string (`k=v;k=v`); split it into individual map entries.
+    // Boolean values emit as bare YAML bools so mihomo's struct decoder
+    // parses them with the correct type. See E1.
+    if let Some(ref p) = cfg.plugin {
+        entry.push_str(&format!("\n    plugin: {p}"));
+        if let Some(ref opts) = cfg.plugin_opts {
+            entry.push_str("\n    plugin-opts:");
+            for pair in opts.split(';') {
+                if let Some((k, v)) = pair.split_once('=') {
+                    let yaml_val = match v {
+                        "true" | "false" => v.to_owned(),
+                        _ => yaml_dq(v),
+                    };
+                    entry.push_str(&format!("\n      {k}: {yaml_val}"));
+                }
+            }
+        }
+    }
     out.push('\n');
     out.push_str(&entry);
     Ok(())
@@ -312,8 +331,44 @@ fn emit_hysteria2(
         Authentication::Password { password } => password,
         _ => return Err(EmitError::MissingField("hysteria2 password")),
     };
+    let cfg = match &node.config {
+        ProtocolConfig::Hysteria2(c) => c,
+        _ => return Err(EmitError::MissingField("hysteria2 config")),
+    };
     let mut entry = yaml_entry(name, "hysteria2", server, port);
     entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
+
+    // WHY: mihomo stores bandwidth as strings (e.g. "100 Mbps"), matching
+    // the Hysteria2Option `up`/`down` string fields. format_bandwidth
+    // produces the canonical Mbps/Kbps/bps form. See E2.
+    if let Some(ref cong) = node.congestion {
+        if let Some(up) = cong.up_bps {
+            entry.push_str(&format!("\n    up: \"{}\"", format_bandwidth(up)));
+        }
+        if let Some(down) = cong.down_bps {
+            entry.push_str(&format!("\n    down: \"{}\"", format_bandwidth(down)));
+        }
+    }
+
+    if let Some(ref p) = cfg.ports {
+        entry.push_str(&format!("\n    ports: {}", yaml_dq(p)));
+    }
+    // WHY: mihomo HopInterval is a string of seconds (min 5, default 30).
+    // The canonical model stores a Duration; emit as seconds string. See E2.
+    if let Some(hop) = cfg.hop_interval {
+        let secs = hop.whole_seconds();
+        if secs >= 0 {
+            entry.push_str(&format!("\n    hop-interval: {secs}"));
+        }
+    }
+
+    if let Some(ref obfs) = node.obfuscation {
+        entry.push_str(&format!("\n    obfs: {}", obfs.kind));
+        if let Some(ref obfs_pass) = obfs.password {
+            entry.push_str(&format!("\n    obfs-password: {}", yaml_dq(obfs_pass)));
+        }
+    }
+
     push_tls(node, &mut entry);
     out.push('\n');
     out.push_str(&entry);
@@ -331,9 +386,51 @@ fn emit_tuic_v5(
         Authentication::UuidPassword { uuid, password } => (uuid, password),
         _ => return Err(EmitError::MissingField("tuic v5 uuid+password")),
     };
+    let cfg = match &node.config {
+        ProtocolConfig::TuicV5(c) => c,
+        _ => return Err(EmitError::MissingField("tuic v5 config")),
+    };
     let mut entry = yaml_entry(name, "tuic", server, port);
     entry.push_str(&format!("\n    uuid: {}", yaml_dq(uuid)));
     entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
+
+    // WHY: mihomo TUIC field names differ from URI/sing-box: `reduce-rtt`
+    // (not `zero-rtt-handshake`), `heartbeat-interval` as integer seconds
+    // (not `heartbeat` as duration string). Congestion controller name is
+    // always emitted when present. See E3b.
+    if let Some(ref cong) = node.congestion {
+        let name = match &cong.controller {
+            CongestionController::Bbr => "bbr",
+            CongestionController::Cubic => "cubic",
+            CongestionController::NewReno => "new_reno",
+            CongestionController::Other(n) => n.as_str(),
+        };
+        entry.push_str(&format!("\n    congestion-controller: {name}"));
+    }
+
+    if let Some(mode) = cfg.udp_relay_mode {
+        let s = match mode {
+            UdpRelayMode::Native => "native",
+            UdpRelayMode::Quic => "quic",
+        };
+        entry.push_str(&format!("\n    udp-relay-mode: {s}"));
+    }
+
+    if let Some(reduce) = cfg.zero_rtt_handshake {
+        entry.push_str(&format!("\n    reduce-rtt: {reduce}"));
+    }
+
+    if let Some(hb) = cfg.heartbeat {
+        let secs = hb.whole_seconds();
+        if secs >= 0 {
+            entry.push_str(&format!("\n    heartbeat-interval: {secs}"));
+        }
+    }
+
+    if let Some(ds) = cfg.disable_sni {
+        entry.push_str(&format!("\n    disable-sni: {ds}"));
+    }
+
     push_tls(node, &mut entry);
     out.push('\n');
     out.push_str(&entry);

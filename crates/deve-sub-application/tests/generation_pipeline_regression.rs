@@ -663,3 +663,281 @@ async fn generate_activates_inactive_cache_from_delivery() {
         "admin generate must activate the entry (B-11)"
     );
 }
+
+// WHY: sing-box supports GroupType::Select, so a `select` group passes the
+// group-type compatibility check and reaches the container-field check
+// (DS-AUD-B17). The template also has rules + dns + tun to exercise all
+// four container-field categories.
+const SPEC_SINGBOX_FULL_CONTAINER: &str = concat!(
+    "apiVersion: deve-sub.io/v1\n",
+    "kind: SubscriptionTemplate\n",
+    "\n",
+    "metadata:\n",
+    "  name: singbox-full-container\n",
+    "  description: sing-box template with select group + rules + dns + tun\n",
+    "  version: 1\n",
+    "\n",
+    "spec:\n",
+    "  targetProfiles:\n",
+    "    - sing-box\n",
+    "  variables: {}\n",
+    "  nodeSelector:\n",
+    "    mode: dynamic\n",
+    "  proxyGroups:\n",
+    "    - name: select-all\n",
+    "      type: select\n",
+    "      members:\n",
+    "        - kind: node\n",
+    "          id: \"01KZAAAAAAAAAAAAAAAAAAAA00\"\n",
+    "      sortOrder: asc\n",
+    "  rules:\n",
+    "    - value:\n",
+    "        type: DOMAIN\n",
+    "        domain: example.com\n",
+    "        proxy: select-all\n",
+    "  dns:\n",
+    "    enable: true\n",
+    "    nameserver:\n",
+    "      - 8.8.8.8\n",
+    "  tun:\n",
+    "    enable: true\n",
+    "    device: utun0\n",
+    "  output: {}",
+);
+
+// sing-box template with ONLY rules (no groups/dns/tun) — isolates the
+// `rules` field category in the ContainerFieldsUnsupported error.
+const SPEC_SINGBOX_RULES_ONLY: &str = concat!(
+    "apiVersion: deve-sub.io/v1\n",
+    "kind: SubscriptionTemplate\n",
+    "\n",
+    "metadata:\n",
+    "  name: singbox-rules-only\n",
+    "  description: sing-box template with rules only\n",
+    "  version: 1\n",
+    "\n",
+    "spec:\n",
+    "  targetProfiles:\n",
+    "    - sing-box\n",
+    "  variables: {}\n",
+    "  nodeSelector:\n",
+    "    mode: dynamic\n",
+    "  proxyGroups: []\n",
+    "  rules:\n",
+    "    - value:\n",
+    "        type: DOMAIN\n",
+    "        domain: example.com\n",
+    "        proxy: select-all\n",
+    "  dns: {}\n",
+    "  tun: {}\n",
+    "  output: {}",
+);
+
+// sing-box template with NO container fields — strict mode must succeed
+// (proxy-only output is fine when nothing to drop).
+const SPEC_SINGBOX_PROXY_ONLY: &str = concat!(
+    "apiVersion: deve-sub.io/v1\n",
+    "kind: SubscriptionTemplate\n",
+    "\n",
+    "metadata:\n",
+    "  name: singbox-proxy-only\n",
+    "  description: sing-box template with no container fields\n",
+    "  version: 1\n",
+    "\n",
+    "spec:\n",
+    "  targetProfiles:\n",
+    "    - sing-box\n",
+    "  variables: {}\n",
+    "  nodeSelector:\n",
+    "    mode: dynamic\n",
+    "  proxyGroups: []\n",
+    "  rules: []\n",
+    "  dns: {}\n",
+    "  tun: {}\n",
+    "  output: {}",
+);
+
+fn make_strict_request(
+    template_id: deve_sub_kernel::TemplateId,
+    profile: &str,
+) -> GenerationRequest {
+    GenerationRequest::new(template_id, profile.to_owned(), GenerationMode::Strict)
+}
+
+#[tokio::test]
+async fn strict_non_mihomo_with_container_fields_fails() {
+    // DS-AUD-B17 regression guard: strict mode must NOT silently drop
+    // groups/rules/dns/tun for a non-mihomo profile.
+    let db = TestDb::new(SPEC_SINGBOX_FULL_CONTAINER, "singbox-full-strict").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_strict_request(db.template_id, "sing-box");
+    let result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "strict mode must reject dropped container fields (DS-AUD-B17)"
+    );
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("sing-box"),
+        "error must name the profile, got: {msg}"
+    );
+    assert!(
+        msg.contains("groups")
+            && msg.contains("rules")
+            && msg.contains("dns")
+            && msg.contains("tun"),
+        "error must name all dropped field categories, got: {msg}"
+    );
+    assert!(
+        msg.contains("strict mode refuses to drop"),
+        "error must explain the strict refusal, got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn strict_non_mihomo_with_rules_only_fails() {
+    let db = TestDb::new(SPEC_SINGBOX_RULES_ONLY, "singbox-rules-strict").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_strict_request(db.template_id, "sing-box");
+    let result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await;
+
+    assert!(result.is_err(), "strict mode must reject dropped rules");
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("rules") && !msg.contains("groups"),
+        "error must name only the dropped field (rules), got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn strict_mihomo_with_container_fields_succeeds() {
+    // Mihomo supports the full template IR — strict mode must NOT reject
+    // container fields for mihomo. The check is gated on `profile != Mihomo`.
+    let db = TestDb::new(SPEC_FULL_TEMPLATE, "mihomo-full-strict").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_strict_request(db.template_id, "mihomo");
+    let result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await
+    .expect("strict mihomo with container fields must succeed");
+
+    assert!(
+        result.content.contains("proxy-groups:"),
+        "mihomo must emit proxy-groups"
+    );
+    assert!(result.content.contains("rules:"), "mihomo must emit rules");
+}
+
+#[tokio::test]
+async fn lenient_non_mihomo_with_container_fields_warns() {
+    // Lenient mode keeps the documented proxy-only behavior with a warning
+    // (M5 plan §188-189). This test pins that the B-17 fix did not change
+    // the lenient path.
+    let db = TestDb::new(SPEC_SINGBOX_FULL_CONTAINER, "singbox-full-lenient").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_request(db.template_id, "sing-box");
+    let result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await
+    .expect("lenient sing-box must succeed with warning");
+
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|w| w.contains("proxy-only") && w.contains("sing-box")),
+        "lenient must warn proxy-only for sing-box, got: {:?}",
+        result.warnings
+    );
+    assert!(
+        !result.content.contains("proxy-groups:"),
+        "lenient sing-box must NOT emit proxy-groups (proxy-only)"
+    );
+}
+
+#[tokio::test]
+async fn strict_non_mihomo_no_container_fields_succeeds() {
+    // Strict mode must succeed for a non-mihomo profile when the template
+    // has no container fields to drop — proxy-only output is correct.
+    let db = TestDb::new(SPEC_SINGBOX_PROXY_ONLY, "singbox-proxy-strict").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_strict_request(db.template_id, "sing-box");
+    let result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await
+    .expect("strict sing-box with no container fields must succeed");
+
+    assert!(
+        !result.content.is_empty(),
+        "must produce non-empty proxy-only output"
+    );
+    assert!(
+        !result.content.contains("proxy-groups:"),
+        "proxy-only output must not contain proxy-groups"
+    );
+}

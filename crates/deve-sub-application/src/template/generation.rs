@@ -434,18 +434,43 @@ async fn run_pipeline(
 
     let groups = assemble_groups(&doc.spec.proxy_groups, &resolution.groups, &name_by_id);
 
-    // WHY: profiles other than mihomo do not yet have full-template
+    // DS-AUD-B17: profiles other than mihomo do not yet have full-template
     // emitters. Emitting only nodes would silently drop the template's
-    // groups/rules/dns/tun (constraint #7). Warn so the user knows the
-    // output is proxy-only; mihomo gets the full document.
+    // groups/rules/dns/tun (constraint #7). In lenient mode, warn so the
+    // user knows the output is proxy-only; mihomo gets the full document.
+    // In strict mode, refuse to drop them — the operator chose strict to
+    // catch exactly this kind of loss. Mirrors the IncompatibleGroupTypes
+    // handling above (strict → error, lenient → warning).
     if profile != ProfileKind::Mihomo
         && (!groups.is_empty()
             || !doc.spec.rules.is_empty()
-            || !doc.spec.dns.is_null()
-            || !doc.spec.tun.is_null())
+            || has_json_content(&doc.spec.dns)
+            || has_json_content(&doc.spec.tun))
     {
+        let mut dropped: Vec<&str> = Vec::new();
+        if !groups.is_empty() {
+            dropped.push("groups");
+        }
+        if !doc.spec.rules.is_empty() {
+            dropped.push("rules");
+        }
+        if has_json_content(&doc.spec.dns) {
+            dropped.push("dns");
+        }
+        if has_json_content(&doc.spec.tun) {
+            dropped.push("tun");
+        }
+        let fields = dropped.join(", ");
+        if mode == GenerationMode::Strict {
+            return Err(TemplateAppError::Generation(
+                GenerationError::ContainerFieldsUnsupported {
+                    profile: profile.as_kebab().to_owned(),
+                    fields,
+                },
+            ));
+        }
         warnings.push(format!(
-            "profile '{}' does not yet emit groups/rules/dns/tun; output is proxy-only",
+            "profile '{}' does not yet emit {fields}; output is proxy-only",
             profile.as_kebab()
         ));
     }
@@ -470,6 +495,22 @@ async fn run_pipeline(
         excluded: report.excluded,
         warnings,
     })
+}
+
+/// Whether a `serde_json::Value` carries operator-authored content worth
+/// warning about when dropped. `Null` and an empty object `{}` carry no
+/// content; any other shape (non-empty object, array, scalar) does.
+///
+/// DS-AUD-B17: the container-field check must not fire on `dns: {}` /
+/// `tun: {}` — those are the template schema's empty defaults, not
+/// authored content. Firing on them would reject a proxy-only template
+/// in strict mode for no reason.
+fn has_json_content(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::Null => false,
+        serde_json::Value::Object(m) => !m.is_empty(),
+        _ => true,
+    }
 }
 
 fn cached_result(cached: &GenerationCacheEntry) -> GenerationResult {

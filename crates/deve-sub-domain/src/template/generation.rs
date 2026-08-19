@@ -167,6 +167,18 @@ pub enum GenerationError {
         names: String,
         groups: Vec<IncompatibleGroup>,
     },
+    /// DS-AUD-B17: strict mode was requested and the target profile's
+    /// emitter does not support template container fields (groups/rules/
+    /// dns/tun) that the template authored. Strict mode refuses to
+    /// silently drop them (constraint #7); the operator must either use
+    /// lenient mode (which warns and emits proxy-only) or remove the
+    /// unsupported fields from the template for this profile.
+    #[error(
+        "generation failed: profile '{profile}' emitter does not support container fields but \
+         the template authored {fields}; strict mode refuses to drop them \
+         (use lenient mode, or remove the fields from the template for this profile)"
+    )]
+    ContainerFieldsUnsupported { profile: String, fields: String },
 }
 
 #[cfg(test)]

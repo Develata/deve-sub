@@ -19,8 +19,8 @@ use i18n::{Language, t};
 use theme::Theme;
 
 use pages::{
-    dashboard::DashboardPage, login::LoginPage, nodes::NodesPage, settings::SettingsPage,
-    setup::SetupPage, sources::SourcesPage, subscriptions::SubscriptionsPage,
+    audit::AuditPage, dashboard::DashboardPage, login::LoginPage, nodes::NodesPage,
+    settings::SettingsPage, setup::SetupPage, sources::SourcesPage, subscriptions::SubscriptionsPage,
     templates::TemplatesPage, users::UsersPage,
 };
 
@@ -46,27 +46,30 @@ pub enum Page {
     Templates,
     Subscriptions,
     Users,
+    Audit,
     Settings,
 }
 
-const NAV_ITEMS: [(Page, &str, &str); 7] = [
+const NAV_ITEMS: [(Page, &str, &str); 8] = [
     (Page::Dashboard, "nav.dashboard", "M"),
     (Page::Nodes, "nav.nodes", "N"),
     (Page::Sources, "nav.sources", "S"),
     (Page::Templates, "nav.templates", "T"),
     (Page::Subscriptions, "nav.subscriptions", "U"),
     (Page::Users, "nav.users", "Y"),
+    (Page::Audit, "nav.audit", "A"),
     (Page::Settings, "nav.settings", ","),
 ];
 
 /// Keyboard shortcut: Alt+<key> switches pages (UI-010).
-const NAV_SHORTCUTS: [(Page, &str); 7] = [
+const NAV_SHORTCUTS: [(Page, &str); 8] = [
     (Page::Dashboard, "m"),
     (Page::Nodes, "n"),
     (Page::Sources, "s"),
     (Page::Templates, "t"),
     (Page::Subscriptions, "u"),
     (Page::Users, "y"),
+    (Page::Audit, "a"),
     (Page::Settings, ","),
 ];
 
@@ -235,6 +238,7 @@ fn app() -> Element {
                                 Page::Templates => rsx! { TemplatesPage { lang: lang } },
                                 Page::Subscriptions => rsx! { SubscriptionsPage { lang: lang } },
                                 Page::Users => rsx! { UsersPage { lang: lang } },
+                                Page::Audit => rsx! { AuditPage { lang: lang } },
                                 Page::Settings => rsx! {
                                     SettingsPage {
                                         theme: current_theme,

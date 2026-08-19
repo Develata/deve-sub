@@ -2,6 +2,8 @@
 
 #![cfg(target_family = "wasm")]
 
+pub mod audit;
+pub mod audit_types;
 pub mod dashboard;
 pub mod login;
 pub mod nodes;

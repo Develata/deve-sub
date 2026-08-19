@@ -21,7 +21,7 @@ use theme::Theme;
 use pages::{
     dashboard::DashboardPage, login::LoginPage, nodes::NodesPage, settings::SettingsPage,
     setup::SetupPage, sources::SourcesPage, subscriptions::SubscriptionsPage,
-    templates::TemplatesPage,
+    templates::TemplatesPage, users::UsersPage,
 };
 
 /// Top-level view state driven by auth status.
@@ -45,25 +45,28 @@ pub enum Page {
     Sources,
     Templates,
     Subscriptions,
+    Users,
     Settings,
 }
 
-const NAV_ITEMS: [(Page, &str, &str); 6] = [
+const NAV_ITEMS: [(Page, &str, &str); 7] = [
     (Page::Dashboard, "nav.dashboard", "M"),
     (Page::Nodes, "nav.nodes", "N"),
     (Page::Sources, "nav.sources", "S"),
     (Page::Templates, "nav.templates", "T"),
     (Page::Subscriptions, "nav.subscriptions", "U"),
+    (Page::Users, "nav.users", "Y"),
     (Page::Settings, "nav.settings", ","),
 ];
 
 /// Keyboard shortcut: Alt+<key> switches pages (UI-010).
-const NAV_SHORTCUTS: [(Page, &str); 6] = [
+const NAV_SHORTCUTS: [(Page, &str); 7] = [
     (Page::Dashboard, "m"),
     (Page::Nodes, "n"),
     (Page::Sources, "s"),
     (Page::Templates, "t"),
     (Page::Subscriptions, "u"),
+    (Page::Users, "y"),
     (Page::Settings, ","),
 ];
 
@@ -231,6 +234,7 @@ fn app() -> Element {
                                 Page::Sources => rsx! { SourcesPage { lang: lang } },
                                 Page::Templates => rsx! { TemplatesPage { lang: lang } },
                                 Page::Subscriptions => rsx! { SubscriptionsPage { lang: lang } },
+                                Page::Users => rsx! { UsersPage { lang: lang } },
                                 Page::Settings => rsx! {
                                     SettingsPage {
                                         theme: current_theme,

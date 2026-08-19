@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use deve_sub_kernel::{GenerationCacheId, Revision, TemplateId};
 
 use super::error::TemplateError;
+use super::generation::GenerationMode;
 
 /// A cached generation entry: the emitted content plus the parameters that
 /// produced it.
@@ -24,6 +25,7 @@ pub struct GenerationCacheEntry {
     pub template_id: TemplateId,
     pub template_version: u64,
     pub profile: String,
+    pub mode: String,
     pub selection_mode: String,
     pub selection_payload: String,
     pub pool_revision: u64,
@@ -38,6 +40,7 @@ pub struct CacheKeyParams<'a> {
     pub template_id: TemplateId,
     pub template_version: u64,
     pub profile: &'a str,
+    pub mode: GenerationMode,
     pub selection_mode: &'a str,
     pub selection_payload: &'a str,
     pub pool_revision: Revision,
@@ -46,7 +49,7 @@ pub struct CacheKeyParams<'a> {
 impl CacheKeyParams<'_> {
     /// Compute the deterministic cache key from the parameters. SHA-256 of
     /// the canonical pipe-delimited concatenation. WHY: the cache must
-    /// invalidate when any input changes (template version, profile,
+    /// invalidate when any input changes (template version, profile, mode,
     /// selection, or pool revision), and a hash gives a stable, collision-
     /// resistant key without leaking the full parameters into the index.
     #[must_use]
@@ -58,6 +61,8 @@ impl CacheKeyParams<'_> {
         hasher.update(self.template_version.to_string().as_bytes());
         hasher.update(b"|");
         hasher.update(self.profile.as_bytes());
+        hasher.update(b"|");
+        hasher.update(self.mode.as_str().as_bytes());
         hasher.update(b"|");
         hasher.update(self.selection_mode.as_bytes());
         hasher.update(b"|");
@@ -114,7 +119,7 @@ mod tests {
         template_id: &'a str,
         version: u64,
         profile: &'a str,
-        mode: &'a str,
+        mode: GenerationMode,
         payload: &'a str,
         revision: u64,
     ) -> CacheKeyParams<'a> {
@@ -122,7 +127,8 @@ mod tests {
             template_id: TemplateId::parse(template_id).expect("ulid"),
             template_version: version,
             profile,
-            selection_mode: mode,
+            mode,
+            selection_mode: "dynamic",
             selection_payload: payload,
             pool_revision: Revision::new(revision),
         }
@@ -134,7 +140,7 @@ mod tests {
             "01KZAAAAAAAAAAAAAAAAAAAAAA",
             1,
             "mihomo",
-            "dynamic",
+            GenerationMode::Lenient,
             "{}",
             0,
         );
@@ -150,7 +156,7 @@ mod tests {
             "01KZAAAAAAAAAAAAAAAAAAAAAA",
             1,
             "mihomo",
-            "dynamic",
+            GenerationMode::Lenient,
             "{}",
             0,
         );
@@ -158,7 +164,7 @@ mod tests {
             "01KZAAAAAAAAAAAAAAAAAAAAAA",
             2,
             "mihomo",
-            "dynamic",
+            GenerationMode::Lenient,
             "{}",
             0,
         );
@@ -171,11 +177,18 @@ mod tests {
             "01KZAAAAAAAAAAAAAAAAAAAAAA",
             1,
             "mihomo",
-            "dynamic",
+            GenerationMode::Lenient,
             "{}",
             0,
         );
-        let p2 = make_params("01KZAAAAAAAAAAAAAAAAAAAAAA", 1, "xray", "dynamic", "{}", 0);
+        let p2 = make_params(
+            "01KZAAAAAAAAAAAAAAAAAAAAAA",
+            1,
+            "xray",
+            GenerationMode::Lenient,
+            "{}",
+            0,
+        );
         assert_ne!(p1.compute_key(), p2.compute_key());
     }
 
@@ -185,7 +198,7 @@ mod tests {
             "01KZAAAAAAAAAAAAAAAAAAAAAA",
             1,
             "mihomo",
-            "dynamic",
+            GenerationMode::Lenient,
             "{}",
             0,
         );
@@ -193,7 +206,7 @@ mod tests {
             "01KZAAAAAAAAAAAAAAAAAAAAAA",
             1,
             "mihomo",
-            "dynamic",
+            GenerationMode::Lenient,
             "{}",
             5,
         );
@@ -206,11 +219,45 @@ mod tests {
             "01KZAAAAAAAAAAAAAAAAAAAAAA",
             1,
             "mihomo",
-            "dynamic",
+            GenerationMode::Lenient,
             "{}",
             0,
         );
-        let p2 = make_params("01KZAAAAAAAAAAAAAAAAAAAAAA", 1, "mihomo", "fixed", "{}", 0);
+        let p2 = make_params(
+            "01KZAAAAAAAAAAAAAAAAAAAAAA",
+            1,
+            "mihomo",
+            GenerationMode::Lenient,
+            "{}",
+            0,
+        );
+        let mut p2 = p2;
+        p2.selection_mode = "fixed";
         assert_ne!(p1.compute_key(), p2.compute_key());
+    }
+
+    #[test]
+    fn cache_key_differs_on_generation_mode() {
+        let p_lenient = make_params(
+            "01KZAAAAAAAAAAAAAAAAAAAAAA",
+            1,
+            "mihomo",
+            GenerationMode::Lenient,
+            "{}",
+            0,
+        );
+        let p_strict = make_params(
+            "01KZAAAAAAAAAAAAAAAAAAAAAA",
+            1,
+            "mihomo",
+            GenerationMode::Strict,
+            "{}",
+            0,
+        );
+        assert_ne!(
+            p_lenient.compute_key(),
+            p_strict.compute_key(),
+            "lenient and strict must produce different cache keys (B-10)"
+        );
     }
 }

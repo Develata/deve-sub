@@ -73,6 +73,15 @@ pub async fn generate(
     let ctx = resolve_context(template_repo, version_repo, pool_meta_repo, &request).await?;
 
     if let Some(cached) = cache_repo.find_by_key(&ctx.cache_key).await? {
+        // WHY: a delivery may have prewarmed this cache key as inactive, or
+        // a prior store succeeded but activate failed. Admin generate must
+        // publish the result, so activate the inactive entry before
+        // returning. If already active, this is a no-op (B-11).
+        if !cached.is_active {
+            cache_repo
+                .activate(cached.template_id, &cached.profile, cached.id)
+                .await?;
+        }
         return Ok(cached_result(&cached));
     }
 
@@ -90,6 +99,7 @@ pub async fn generate(
         template_id: request.template_id,
         template_version: ctx.version.version,
         profile: request.profile.clone(),
+        mode: request.mode.as_str().to_owned(),
         selection_mode: ctx.selection_mode.to_owned(),
         selection_payload: ctx.selection_payload,
         pool_revision: ctx.pool_revision.value(),
@@ -149,6 +159,7 @@ pub async fn generate_for_delivery(
         template_id: request.template_id,
         template_version: ctx.version.version,
         profile: request.profile.clone(),
+        mode: request.mode.as_str().to_owned(),
         selection_mode: ctx.selection_mode.to_owned(),
         selection_payload: ctx.selection_payload,
         pool_revision: ctx.pool_revision.value(),
@@ -278,6 +289,7 @@ async fn resolve_context(
         template_id: request.template_id,
         template_version: version.version,
         profile: &request.profile,
+        mode: request.mode,
         selection_mode,
         selection_payload: &selection_payload,
         pool_revision,

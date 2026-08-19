@@ -20,7 +20,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use deve_sub_application::template::{CreateTemplateParams, create_template, generate};
+use deve_sub_application::template::{
+    CreateTemplateParams, create_template, generate, generate_for_delivery, get_active_generation,
+};
 use deve_sub_domain::{
     Authentication, DomainName, Endpoint, GenerationMode, GenerationRequest, Host, Node,
     NodePoolRepository, NodeSource, ProtocolConfig, ProtocolKind, RegionAssignment, RegionMethod,
@@ -537,5 +539,127 @@ async fn generate_cache_hit_returns_honest_cache_warnings() {
     assert_eq!(
         first.content, second.content,
         "cache hit must return identical content"
+    );
+}
+
+#[tokio::test]
+async fn generate_strict_mode_does_not_hit_lenient_cache() {
+    // B-10: strict and lenient must produce different cache keys so that a
+    // lenient generation cannot be served to a strict request (which would
+    // bypass the strict exclusion check).
+    let db = TestDb::new(SPEC_FULL_TEMPLATE, "strict-vs-lenient").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let lenient_request =
+        GenerationRequest::new(db.template_id, "mihomo".to_owned(), GenerationMode::Lenient);
+    let lenient_result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        lenient_request,
+    )
+    .await
+    .expect("lenient generate");
+    assert!(
+        !lenient_result
+            .warnings
+            .iter()
+            .any(|w| w == "served from cache"),
+        "first lenient call must not be a cache hit"
+    );
+
+    let strict_request =
+        GenerationRequest::new(db.template_id, "mihomo".to_owned(), GenerationMode::Strict);
+    let strict_result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        strict_request,
+    )
+    .await
+    .expect("strict generate");
+    assert!(
+        !strict_result
+            .warnings
+            .iter()
+            .any(|w| w == "served from cache"),
+        "strict must not hit lenient cache (B-10)"
+    );
+}
+
+#[tokio::test]
+async fn generate_activates_inactive_cache_from_delivery() {
+    // B-11: delivery prewarms the cache as inactive; admin generate must
+    // find the inactive hit and activate it so it becomes the served
+    // generation.
+    let db = TestDb::new(SPEC_FULL_TEMPLATE, "delivery-prewarm").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_request(db.template_id, "mihomo");
+
+    let delivery_result = generate_for_delivery(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request.clone(),
+    )
+    .await
+    .expect("delivery generate");
+    assert!(
+        !delivery_result
+            .warnings
+            .iter()
+            .any(|w| w == "served from cache"),
+        "first delivery must not be a cache hit"
+    );
+
+    let active_before = get_active_generation(&cache_repo, db.template_id, "mihomo")
+        .await
+        .expect("find_active before");
+    assert!(
+        active_before.is_none(),
+        "delivery must not activate the entry"
+    );
+
+    let admin_result = generate(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await
+    .expect("admin generate");
+    assert!(
+        admin_result
+            .warnings
+            .iter()
+            .any(|w| w == "served from cache"),
+        "admin generate must hit the prewarmed inactive cache (B-11)"
+    );
+
+    let active_after = get_active_generation(&cache_repo, db.template_id, "mihomo")
+        .await
+        .expect("find_active after");
+    assert!(
+        active_after.is_some(),
+        "admin generate must activate the entry (B-11)"
     );
 }

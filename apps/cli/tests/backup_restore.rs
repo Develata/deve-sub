@@ -92,6 +92,12 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
             .expect("reverse 0015");
     }
 
+    // Reverse migration 0016: drop the `mode` column from generation_cache.
+    sqlx::query("ALTER TABLE generation_cache DROP COLUMN mode")
+        .execute(&pool)
+        .await
+        .expect("reverse 0016");
+
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
         .execute(&pool)
         .await

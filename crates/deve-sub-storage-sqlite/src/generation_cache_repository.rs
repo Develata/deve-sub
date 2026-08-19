@@ -28,6 +28,7 @@ struct CacheRow {
     template_id: String,
     template_version: i64,
     profile: String,
+    mode: String,
     selection_mode: String,
     selection_payload: String,
     pool_revision: i64,
@@ -46,6 +47,7 @@ impl CacheRow {
             template_version: u64::try_from(self.template_version)
                 .map_err(|_| TemplateError::Storage("negative template_version".to_owned()))?,
             profile: self.profile.clone(),
+            mode: self.mode.clone(),
             selection_mode: self.selection_mode.clone(),
             selection_payload: self.selection_payload.clone(),
             pool_revision: u64::try_from(self.pool_revision)
@@ -64,7 +66,7 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         cache_key: &str,
     ) -> Result<Option<GenerationCacheEntry>, TemplateError> {
         let row: Option<CacheRow> = sqlx::query_as(
-            "SELECT id, template_id, template_version, profile, selection_mode, \
+            "SELECT id, template_id, template_version, profile, mode, selection_mode, \
              selection_payload, pool_revision, cache_key, content, is_active \
              FROM generation_cache WHERE cache_key = ?",
         )
@@ -81,7 +83,7 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         profile: &str,
     ) -> Result<Option<GenerationCacheEntry>, TemplateError> {
         let row: Option<CacheRow> = sqlx::query_as(
-            "SELECT id, template_id, template_version, profile, selection_mode, \
+            "SELECT id, template_id, template_version, profile, mode, selection_mode, \
              selection_payload, pool_revision, cache_key, content, is_active \
              FROM generation_cache WHERE template_id = ? AND profile = ? AND is_active = 1",
         )
@@ -96,14 +98,15 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
     async fn store(&self, entry: &GenerationCacheEntry) -> Result<(), TemplateError> {
         sqlx::query(
             "INSERT INTO generation_cache \
-             (id, template_id, template_version, profile, selection_mode, \
+             (id, template_id, template_version, profile, mode, selection_mode, \
               selection_payload, pool_revision, cache_key, content, is_active) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(entry.id.to_string())
         .bind(entry.template_id.to_string())
         .bind(entry.template_version as i64)
         .bind(&entry.profile)
+        .bind(&entry.mode)
         .bind(&entry.selection_mode)
         .bind(&entry.selection_payload)
         .bind(entry.pool_revision as i64)

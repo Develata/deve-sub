@@ -110,6 +110,23 @@ mkdir -p "$DATA_DIR"
 chmod 0700 "$DATA_DIR"
 chown -R "$DEVE_USER:$DEVE_GROUP" "$DATA_DIR"
 
+info "initializing master key..."
+# WHY (DS-AUD-B01): serve uses MasterKey::load (strict, fail-closed) per
+# ADR-0007 §7 — allow_master_key_generation defaults to false to prevent
+# silent key rotation when a production mount is lost. The key must exist
+# before serve starts. `key init` is the explicit bootstrap:
+# - refuses if the key already exists (no accidental rotation);
+# - refuses if the DB exists without a key (no silent invalidation of
+#   encrypted columns);
+# - creates 32 bytes from OsRng, mode 0600, fsync'd for crash durability.
+# The key path is $DATA_DIR/master.key (not the config default
+# data/master.key — systemd WorkingDirectory=$DATA_DIR would resolve
+# that relative default to $DATA_DIR/data/master.key, an extra segment
+# the operator cannot guess).
+sudo -u "$DEVE_USER" "$BIN_PATH" key init \
+    --key-path "$DATA_DIR/master.key" \
+    --db-path "$DATA_DIR/deve-sub.db"
+
 info "running database migrations..."
 # WHY: migrate before writing the service unit and starting, so a migration
 # failure aborts the install without leaving a broken service (DS-AUD-006).
@@ -126,7 +143,7 @@ After=network.target
 Type=simple
 User=$DEVE_USER
 Group=$DEVE_GROUP
-ExecStart=$BIN_PATH serve --db-path $DATA_DIR/deve-sub.db --bind $BIND_ADDR
+ExecStart=$BIN_PATH serve --db-path $DATA_DIR/deve-sub.db --key-path $DATA_DIR/master.key --bind $BIND_ADDR
 WorkingDirectory=$DATA_DIR
 Restart=on-failure
 RestartSec=5

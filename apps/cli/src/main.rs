@@ -38,6 +38,8 @@ enum Commands {
     Migrate(commands::MigrateArgs),
     /// Configuration commands.
     Config(commands::ConfigArgs),
+    /// Master key management commands.
+    Key(commands::KeyArgs),
     /// Export OpenAPI specification to stdout.
     Openapi(commands::OpenapiArgs),
     /// User management commands.
@@ -79,6 +81,9 @@ fn main() -> ExitCode {
             Commands::Migrate(args) => commands::migrate(args).await,
             Commands::Config(args) => match args.command {
                 commands::ConfigSubCommand::Validate(sub) => commands::config_validate(sub).await,
+            },
+            Commands::Key(args) => match args.command {
+                commands::KeySubCommand::Init(sub) => commands::key_init(sub).await,
             },
             Commands::Openapi(args) => commands::openapi(args).await,
             Commands::User(args) => match args.command {

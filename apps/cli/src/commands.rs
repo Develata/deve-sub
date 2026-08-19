@@ -28,6 +28,14 @@ pub struct ServeArgs {
     #[arg(long, env = "DEVE_SUB_DB_PATH")]
     pub(crate) db_path: Option<String>,
 
+    /// Path to the master key file (overrides `security.master_key_path`).
+    ///
+    /// DS-AUD-B01: explicit key path removes the relative-path resolution
+    /// footgun where systemd `WorkingDirectory=$DATA_DIR` made the default
+    /// `data/master.key` resolve to `$DATA_DIR/data/master.key`.
+    #[arg(long, env = "DEVE_SUB_KEY_PATH")]
+    pub(crate) key_path: Option<String>,
+
     /// Path to the compiled web frontend dist directory.
     #[arg(long, env = "DEVE_SUB_WEB_DIST_DIR")]
     pub(crate) web_dist_dir: Option<String>,
@@ -44,6 +52,9 @@ impl ServeArgs {
         }
         if let Some(db_path) = &self.db_path {
             config.database.path = db_path.clone();
+        }
+        if let Some(key_path) = &self.key_path {
+            config.security.master_key_path = key_path.clone();
         }
         if let Some(web_dist_dir) = &self.web_dist_dir {
             config.server.web_dist_dir = web_dist_dir.clone();
@@ -146,6 +157,47 @@ pub struct ConfigArgs {
 pub enum ConfigSubCommand {
     /// Validate configuration file.
     Validate(ConfigValidateArgs),
+}
+
+/// Master key management command container.
+#[derive(Args)]
+pub struct KeyArgs {
+    #[command(subcommand)]
+    pub command: KeySubCommand,
+}
+
+/// Master key subcommands.
+#[derive(Subcommand)]
+pub enum KeySubCommand {
+    /// Initialize a new master key file (refuses to overwrite an existing one).
+    Init(KeyInitArgs),
+}
+
+/// Arguments for `key init`.
+///
+/// DS-AUD-B01: `serve` calls `MasterKey::load` (strict, fail-closed) when
+/// `allow_master_key_generation=false` (the default). A fresh install with
+/// no key file therefore cannot start. `key init` is the explicit bootstrap
+/// step that creates the key before `serve` runs.
+#[derive(Args)]
+pub struct KeyInitArgs {
+    /// Path to write the master key file (32 bytes, mode 0600).
+    ///
+    /// Required: an explicit path is the point of B-01. The install script
+    /// passes `--key-path $DATA_DIR/master.key` so the relative-default
+    /// resolution footgun (systemd `WorkingDirectory` + `data/master.key`
+    /// resolving to `$DATA_DIR/data/master.key`) cannot recur.
+    #[arg(long, env = "DEVE_SUB_KEY_PATH")]
+    pub key_path: String,
+
+    /// Database path, used only for the fail-closed check (not opened).
+    ///
+    /// If the DB exists but the key is missing, `key init` refuses: a new
+    /// key would silently invalidate every encrypted column (TOTP secrets,
+    /// source credentials, node credentials). The operator must restore the
+    /// key from backup or remove the DB to start fresh.
+    #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
+    pub db_path: String,
 }
 
 /// Source management command container.
@@ -295,6 +347,68 @@ pub async fn config_validate(args: ConfigValidateArgs) -> Result<()> {
     println!("  server.bind:   {}", config.server.bind);
     println!("  server.serve_web: {}", config.server.serve_web);
     println!("  database.path: {}", config.database.path);
+    Ok(())
+}
+
+/// `deve-sub key init` — atomically create a new master key file.
+///
+/// DS-AUD-B01: `serve` uses `MasterKey::load` (strict, fail-closed) when
+/// `allow_master_key_generation=false` (the default). A fresh install with
+/// no key file cannot start. This command is the explicit bootstrap step
+/// that creates the key before `serve` runs, replacing the ad-hoc
+/// `head -c 32 /dev/urandom` shell pattern in the Docker entrypoint.
+///
+/// Fail-closed guards (in order):
+/// 1. If the key file already exists → refuse. The operator should use the
+///    existing key; re-initializing would silently rotate it and invalidate
+///    every HMAC-derived and encrypted value in the DB.
+/// 2. If the DB file exists but the key is missing → refuse. A new key
+///    cannot decrypt the existing encrypted columns; the operator must
+///    restore the key from backup or remove the DB to start fresh.
+///
+/// On success, the key file is 32 random bytes from `OsRng`, mode `0600`
+/// (Unix), `fsync`'d for crash durability. No DB is opened.
+pub async fn key_init(args: KeyInitArgs) -> Result<()> {
+    let key_path = Path::new(&args.key_path);
+    let db_path = Path::new(&args.db_path);
+
+    if key_path.exists() {
+        bail!(
+            "key file already exists at {}; refusing to overwrite. \
+             Use the existing key, or remove the file first (WARNING: \
+             removing it invalidates all encrypted columns — restore from \
+             backup if you lost it)",
+            key_path.display()
+        );
+    }
+
+    // WHY: a DB-without-key state means the key was lost (deleted, mount
+    // lost, wrong host). Generating a fresh key would let `serve` start,
+    // but every encrypted column (TOTP secrets, source/node credentials)
+    // would fail to decrypt — silent data loss. Force the operator to
+    // explicitly restore the key or explicitly remove the DB.
+    if db_path.exists() {
+        bail!(
+            "database already exists at {} but key file is missing at {}. \
+             Generating a new key would silently invalidate all encrypted \
+             columns (TOTP secrets, source credentials, node credentials). \
+             Restore the key from backup, or remove the database to start fresh",
+            db_path.display(),
+            key_path.display()
+        );
+    }
+
+    let _key = deve_sub_security::MasterKey::init_new(key_path)
+        .context("failed to initialize master key")?;
+
+    println!(
+        "master key initialized at {} (32 bytes, mode 0600)",
+        key_path.display()
+    );
+    println!(
+        "next: run `deve-sub migrate --db-path {}` then `deve-sub serve`",
+        args.db_path
+    );
     Ok(())
 }
 

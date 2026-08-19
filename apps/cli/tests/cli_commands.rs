@@ -466,3 +466,137 @@ async fn cli006_second_serve_fails_fast_when_one_running() {
         "second serve took {elapsed:?} — lock acquisition is not bounded"
     );
 }
+
+/// DS-AUD-B01: `key init` creates a fresh key when neither key nor DB exists.
+#[test]
+fn key_init_creates_key_file() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let key_path = dir.path().join("master.key");
+    let db_path = dir.path().join("deve-sub.db");
+
+    let output = Command::new(BIN)
+        .args([
+            "key",
+            "init",
+            "--key-path",
+            key_path.to_str().unwrap(),
+            "--db-path",
+            db_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn key init");
+
+    assert!(
+        output.status.success(),
+        "key init failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(key_path.exists(), "key file must be created");
+    let bytes = std::fs::read(&key_path).expect("read key");
+    assert_eq!(bytes.len(), 32, "key must be exactly 32 bytes");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("master key initialized"),
+        "stdout must confirm init, got: {stdout}"
+    );
+}
+
+/// DS-AUD-B01: `key init` refuses to overwrite an existing key file.
+#[test]
+fn key_init_refuses_when_key_exists() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let key_path = dir.path().join("master.key");
+    let db_path = dir.path().join("deve-sub.db");
+    std::fs::write(&key_path, [0xAAu8; 32]).expect("pre-create key");
+
+    let output = Command::new(BIN)
+        .args([
+            "key",
+            "init",
+            "--key-path",
+            key_path.to_str().unwrap(),
+            "--db-path",
+            db_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn key init");
+
+    assert!(
+        !output.status.success(),
+        "key init must fail when key exists, got status {:?}",
+        output.status
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("already exists") && stderr.contains("refusing to overwrite"),
+        "stderr must refuse overwrite, got: {stderr}"
+    );
+    // Original key must be untouched.
+    let bytes = std::fs::read(&key_path).expect("read key");
+    assert_eq!(bytes, [0xAAu8; 32], "existing key must not be modified");
+}
+
+/// DS-AUD-B01: `key init` refuses when DB exists but key is missing —
+/// generating a new key would silently invalidate all encrypted columns.
+#[test]
+fn key_init_refuses_when_db_exists_without_key() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let key_path = dir.path().join("master.key");
+    let db_path = dir.path().join("deve-sub.db");
+    // Create a non-empty "DB" file — the check is Path::exists(), not
+    // schema validation, so any file triggers the guard.
+    std::fs::write(&db_path, b"sqlite3 fake db content").expect("pre-create db");
+
+    let output = Command::new(BIN)
+        .args([
+            "key",
+            "init",
+            "--key-path",
+            key_path.to_str().unwrap(),
+            "--db-path",
+            db_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn key init");
+
+    assert!(
+        !output.status.success(),
+        "key init must fail when DB exists without key"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("database already exists") && stderr.contains("silently invalidate"),
+        "stderr must explain the fail-closed reason, got: {stderr}"
+    );
+    // Key file must NOT be created.
+    assert!(!key_path.exists(), "key must not be created when DB exists");
+}
+
+/// DS-AUD-B01: `key init` uses the default `data/deve-sub.db` for the
+/// existence check when `--db-path` is omitted.
+#[test]
+fn key_init_default_db_path_when_omitted() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let key_path = dir.path().join("master.key");
+    // Create the default-relative DB at the cwd so the guard fires.
+    let default_db_dir = dir.path().join("data");
+    std::fs::create_dir_all(&default_db_dir).expect("mkdir");
+    std::fs::write(default_db_dir.join("deve-sub.db"), b"fake").expect("db");
+
+    let output = Command::new(BIN)
+        .args(["key", "init", "--key-path", key_path.to_str().unwrap()])
+        .current_dir(dir.path())
+        .output()
+        .expect("spawn key init");
+
+    assert!(
+        !output.status.success(),
+        "key init must detect the default-path DB and refuse"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("database already exists"),
+        "stderr must report the DB-without-key guard, got: {stderr}"
+    );
+}

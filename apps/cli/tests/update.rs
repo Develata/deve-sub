@@ -15,7 +15,7 @@ const BIN: &str = env!("CARGO_BIN_EXE_deve-sub");
 
 /// Start a mock HTTP server that serves a manifest, binary, checksums, and
 /// a health endpoint. Returns (base_url, health_status).
-async fn start_mock_server(new_binary: Vec<u8>, health_ok: bool) -> String {
+async fn start_mock_server(new_binary: Vec<u8>, health_ok: bool, version: &str) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = listener.local_addr().expect("addr");
 
@@ -37,7 +37,7 @@ async fn start_mock_server(new_binary: Vec<u8>, health_ok: bool) -> String {
     };
 
     let manifest = serde_json::json!({
-        "tag_name": "v999.0.0",
+        "tag_name": format!("v{version}"),
         "assets": [
             {
                 "name": asset_name,
@@ -113,15 +113,15 @@ fn read_file(path: &std::path::Path) -> Vec<u8> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn update001_successful_update() {
+async fn update001_successful_update_no_restart() {
     let dir = tempfile::tempdir().expect("tempdir");
     let binary_path = copy_current_binary(dir.path());
-    let original_bytes = read_file(&binary_path);
 
-    let new_binary = b"#!/bin/sh\necho fake-new-binary\n".to_vec();
-    let base_url = start_mock_server(new_binary.clone(), true).await;
+    let current_version = env!("CARGO_PKG_VERSION");
+    let new_binary = format!("#!/bin/sh\necho deve-sub {current_version}\n").into_bytes();
+    let base_url = start_mock_server(new_binary.clone(), true, current_version).await;
 
-    let status = Command::new(BIN)
+    let output = Command::new(BIN)
         .args([
             "update",
             "--manifest-url",
@@ -137,10 +137,16 @@ async fn update001_successful_update() {
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .status()
+        .output()
         .expect("spawn");
 
-    assert!(status.success(), "update should succeed: {status:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "update should succeed: {:?}\nstdout: {stdout}\nstderr: {stderr}",
+        output.status
+    );
 
     let updated_bytes = read_file(&binary_path);
     assert_eq!(
@@ -148,21 +154,20 @@ async fn update001_successful_update() {
         "binary should be replaced with the new version"
     );
     assert!(
-        !dir.path().join("deve-sub.bak").exists(),
-        "backup should be removed after successful update"
+        dir.path().join("deve-sub.bak").exists(),
+        "backup must be KEPT under --no-restart (liveness not confirmed)"
     );
-
-    let _ = original_bytes;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn update002_failed_update_rolls_back() {
+async fn update002_bad_binary_rejected_before_swap() {
     let dir = tempfile::tempdir().expect("tempdir");
     let binary_path = copy_current_binary(dir.path());
     let original_bytes = read_file(&binary_path);
 
-    let new_binary = b"#!/bin/sh\nexit 1\n".to_vec();
-    let base_url = start_mock_server(new_binary.clone(), false).await;
+    let new_binary = b"#!/bin/sh\necho fake-new-binary\n".to_vec();
+    let current_version = env!("CARGO_PKG_VERSION");
+    let base_url = start_mock_server(new_binary.clone(), false, current_version).await;
 
     let status = Command::new(BIN)
         .args([
@@ -185,20 +190,16 @@ async fn update002_failed_update_rolls_back() {
 
     assert!(
         !status.success(),
-        "update should fail when health check fails: {status:?}"
+        "update must fail when the binary reports the wrong version: {status:?}"
     );
 
     let restored_bytes = read_file(&binary_path);
     assert_eq!(
         restored_bytes, original_bytes,
-        "binary should be rolled back to the original"
+        "live binary must be untouched — bad binary rejected before swap"
     );
     assert!(
         !dir.path().join("deve-sub.bak").exists(),
-        "backup should be consumed by rollback"
-    );
-    assert!(
-        dir.path().join("deve-sub.failed").exists(),
-        "failed binary should be preserved as .failed for diagnostics"
+        "no backup should exist — swap never happened"
     );
 }

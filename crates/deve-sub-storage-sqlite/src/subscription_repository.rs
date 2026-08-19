@@ -8,7 +8,9 @@
 //! blueprint.
 
 use async_trait::async_trait;
-use deve_sub_domain::{NodeSelector, Subscription, SubscriptionError, SubscriptionRepository};
+use deve_sub_domain::{
+    NodeSelector, Subscription, SubscriptionError, SubscriptionRepository, SubscriptionToken,
+};
 use deve_sub_kernel::{ShortCodeId, SubscriptionId, TemplateId, UserId};
 use sqlx::sqlite::SqlitePool;
 
@@ -146,6 +148,92 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
                 SubscriptionError::Storage(msg)
             }
         })?;
+        Ok(())
+    }
+
+    async fn create_with_token(
+        &self,
+        subscription: &Subscription,
+        token: &SubscriptionToken,
+    ) -> Result<(), SubscriptionError> {
+        // WHY: atomic subscription+token insert in one transaction so a
+        // failure between the two inserts cannot leave an orphaned
+        // subscription with no delivery token (P1-2 A1).
+        let node_selection = serde_json::to_string(&subscription.node_selection)
+            .map_err(|e| SubscriptionError::Storage(format!("node_selection serialize: {e}")))?;
+        let sub_created_at =
+            format_ts(subscription.created_at).map_err(SubscriptionError::Storage)?;
+        let sub_updated_at =
+            format_ts(subscription.updated_at).map_err(SubscriptionError::Storage)?;
+        let sub_expires_at = subscription
+            .expires_at
+            .map(format_ts)
+            .transpose()
+            .map_err(SubscriptionError::Storage)?;
+        let token_issued_at = format_ts(token.issued_at).map_err(SubscriptionError::Storage)?;
+        let token_grace = token
+            .rotation_grace_until
+            .map(format_ts)
+            .transpose()
+            .map_err(SubscriptionError::Storage)?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+
+        sqlx::query(
+            "INSERT INTO subscriptions \
+             (id, name, slug, owner_id, template_id, template_version_pin, profile, \
+              node_selection, traffic_limit, expires_at, token_id, enabled, \
+              created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(subscription.id.to_string())
+        .bind(&subscription.name)
+        .bind(&subscription.slug)
+        .bind(subscription.owner_id.to_string())
+        .bind(subscription.template_id.to_string())
+        .bind(subscription.template_version_pin.map(|v| v as i64))
+        .bind(&subscription.profile)
+        .bind(&node_selection)
+        .bind(subscription.traffic_limit.map(|v| v as i64))
+        .bind(sub_expires_at)
+        .bind(subscription.token_id.to_string())
+        .bind(subscription.enabled as i64)
+        .bind(sub_created_at)
+        .bind(sub_updated_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("UNIQUE") {
+                SubscriptionError::SlugExists
+            } else {
+                SubscriptionError::Storage(msg)
+            }
+        })?;
+
+        sqlx::query(
+            "INSERT INTO subscription_tokens \
+             (id, subscription_id, token_digest, previous_token_digest, \
+              rotation_grace_until, issued_at) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(token.id.to_string())
+        .bind(token.subscription_id.to_string())
+        .bind(&token.token_digest)
+        .bind(&token.previous_token_digest)
+        .bind(token_grace)
+        .bind(token_issued_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
         Ok(())
     }
 

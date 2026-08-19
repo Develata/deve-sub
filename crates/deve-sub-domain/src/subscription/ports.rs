@@ -19,6 +19,17 @@ pub trait SubscriptionRepository: Send + Sync {
     /// owner.
     async fn create(&self, subscription: &Subscription) -> Result<(), SubscriptionError>;
 
+    /// Atomically create a subscription and its delivery token in a single
+    /// transaction. Either both rows are committed or neither is.
+    /// WHY: the subscription→token insert is a cross-table operation that
+    /// was previously two separate repo calls; a failure between them left
+    /// an orphaned subscription with no token (P1-2 A1).
+    async fn create_with_token(
+        &self,
+        subscription: &Subscription,
+        token: &SubscriptionToken,
+    ) -> Result<(), SubscriptionError>;
+
     /// Find a subscription by ID.
     async fn find_by_id(
         &self,
@@ -138,6 +149,19 @@ pub trait ShortCodeRepository: Send + Sync {
     /// [`SubscriptionError::ShortCodeExists`] on UNIQUE constraint violation
     /// (OUT-013); the application layer retries with a fresh CSPRNG code.
     async fn create(&self, short_code: &ShortCode) -> Result<(), SubscriptionError>;
+
+    /// Atomically replace the short code for a subscription: delete the old
+    /// short code (if any), insert the new one, and update the subscription's
+    /// `short_code_id` reference — all in one transaction.
+    /// WHY: `regenerate_short_code` was previously three separate repo calls
+    /// across two traits; a failure between them left the subscription
+    /// pointing to a deleted short code (P1-2 A2).
+    async fn replace(
+        &self,
+        subscription_id: SubscriptionId,
+        old_short_code_id: Option<ShortCodeId>,
+        new_short_code: &ShortCode,
+    ) -> Result<(), SubscriptionError>;
 
     /// Find a short code by its code string. Used by the `GET /s/{code}`
     /// delivery handler.

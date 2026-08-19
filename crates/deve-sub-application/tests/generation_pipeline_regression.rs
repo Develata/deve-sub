@@ -164,10 +164,8 @@ impl TestDb {
             .expect("import nodes");
 
         let template_repo = SqliteTemplateRepository::new(pool.clone());
-        let version_repo = SqliteTemplateVersionRepository::new(pool.clone());
         let result = create_template(
             &template_repo,
-            &version_repo,
             CreateTemplateParams {
                 name: name.to_owned(),
                 description: "test".to_owned(),

@@ -81,7 +81,6 @@ pub struct CreateTemplateResult {
 /// - [`TemplateAppError::Template`] — storage error.
 pub async fn create_template(
     template_repo: &dyn TemplateRepository,
-    version_repo: &dyn TemplateVersionRepository,
     params: CreateTemplateParams,
 ) -> Result<CreateTemplateResult, TemplateAppError> {
     validate_name(&params.name)?;
@@ -107,11 +106,7 @@ pub async fn create_template(
     template.active_version = 1;
 
     template_repo
-        .create(&template)
-        .await
-        .map_err(map_template_error)?;
-    version_repo
-        .create(&version)
+        .create_with_version(&template, &version)
         .await
         .map_err(map_template_error)?;
 
@@ -153,7 +148,6 @@ pub struct UpdateTemplateResult {
 /// - [`TemplateAppError::Template`] — storage error.
 pub async fn update_template(
     template_repo: &dyn TemplateRepository,
-    version_repo: &dyn TemplateVersionRepository,
     params: UpdateTemplateParams,
 ) -> Result<UpdateTemplateResult, TemplateAppError> {
     validate_name(&params.name)?;
@@ -187,12 +181,8 @@ pub async fn update_template(
     template.active_version_id = Some(version.id);
     template.active_version = next_version;
 
-    version_repo
-        .create(&version)
-        .await
-        .map_err(map_template_error)?;
     template_repo
-        .update(&template)
+        .update_with_version(&template, &version)
         .await
         .map_err(map_template_error)?;
 

@@ -87,10 +87,8 @@ impl BenchDb {
 
         // Create the template.
         let template_repo = SqliteTemplateRepository::new(pool.clone());
-        let version_repo = SqliteTemplateVersionRepository::new(pool.clone());
         let result = create_template(
             &template_repo,
-            &version_repo,
             CreateTemplateParams {
                 name: "bench-mihomo".to_owned(),
                 description: "Benchmark template".to_owned(),

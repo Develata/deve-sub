@@ -42,7 +42,6 @@ pub(super) async fn create_template(
 ) -> Result<(StatusCode, Json<TemplateResponse>), (StatusCode, Json<ErrorResponse>)> {
     let result = template::create_template(
         state.template_repo.as_ref(),
-        state.version_repo.as_ref(),
         CreateTemplateParams {
             name: req.name,
             description: req.description,
@@ -215,7 +214,6 @@ pub(super) async fn update_template(
 
     let result = template::update_template(
         state.template_repo.as_ref(),
-        state.version_repo.as_ref(),
         UpdateTemplateParams {
             id: template_id,
             name: req.name,

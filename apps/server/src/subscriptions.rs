@@ -89,7 +89,6 @@ async fn create_subscription(
 
     let result = subscription::create_subscription(
         state.subscription_repo.as_ref(),
-        state.subscription_token_repo.as_ref(),
         &state.master_key,
         CreateSubscriptionParams {
             name: req.name,

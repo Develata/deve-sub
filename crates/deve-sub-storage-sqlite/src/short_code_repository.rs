@@ -77,6 +77,71 @@ impl ShortCodeRepository for SqliteShortCodeRepository {
         Ok(())
     }
 
+    async fn replace(
+        &self,
+        subscription_id: SubscriptionId,
+        old_short_code_id: Option<ShortCodeId>,
+        new_short_code: &ShortCode,
+    ) -> Result<(), SubscriptionError> {
+        // WHY: delete-old + insert-new + update-subscription-ref must be one
+        // transaction so a failure between any two steps cannot leave the
+        // subscription pointing to a deleted short code, or a new short code
+        // with no subscription referencing it (P1-2 A2).
+        let created_at =
+            format_ts(new_short_code.created_at).map_err(SubscriptionError::Storage)?;
+        let new_id = new_short_code.id.to_string();
+        let new_sub_id = new_short_code.subscription_id.to_string();
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+
+        if let Some(old_id) = old_short_code_id {
+            sqlx::query("DELETE FROM subscription_short_codes WHERE id = ?")
+                .bind(old_id.to_string())
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        }
+
+        sqlx::query(
+            "INSERT INTO subscription_short_codes \
+             (id, subscription_id, code, created_at) \
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(&new_id)
+        .bind(&new_sub_id)
+        .bind(&new_short_code.code)
+        .bind(created_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("UNIQUE") {
+                SubscriptionError::ShortCodeExists
+            } else {
+                SubscriptionError::Storage(msg)
+            }
+        })?;
+
+        let result = sqlx::query("UPDATE subscriptions SET short_code_id = ? WHERE id = ?")
+            .bind(&new_id)
+            .bind(subscription_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(SubscriptionError::SubscriptionNotFound);
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        Ok(())
+    }
+
     async fn find_by_code(&self, code: &str) -> Result<Option<ShortCode>, SubscriptionError> {
         let row: Option<ShortCodeRow> = sqlx::query_as(
             "SELECT id, subscription_id, code, created_at \

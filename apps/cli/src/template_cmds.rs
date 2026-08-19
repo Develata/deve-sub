@@ -193,8 +193,7 @@ pub async fn template_add(args: TemplateAddArgs) -> Result<()> {
     let pool = open_db(&args.db_path, 1).await?;
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
-    let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool.clone());
-    let version_repo = deve_sub_storage_sqlite::SqliteTemplateVersionRepository::new(pool);
+    let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool);
 
     let spec_yaml = read_spec(&args.spec_file)?;
     if spec_yaml.is_empty() {
@@ -207,10 +206,9 @@ pub async fn template_add(args: TemplateAddArgs) -> Result<()> {
         spec_yaml,
     };
 
-    let result =
-        deve_sub_application::template::create_template(&template_repo, &version_repo, params)
-            .await
-            .map_err(|e| anyhow::anyhow!("create failed: {e}"))?;
+    let result = deve_sub_application::template::create_template(&template_repo, params)
+        .await
+        .map_err(|e| anyhow::anyhow!("create failed: {e}"))?;
 
     println!("Template created successfully:");
     println!("  id:             {}", result.template.id);
@@ -296,8 +294,7 @@ pub async fn template_update(args: TemplateUpdateArgs) -> Result<()> {
     let pool = open_db(&args.db_path, 1).await?;
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
-    let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool.clone());
-    let version_repo = deve_sub_storage_sqlite::SqliteTemplateVersionRepository::new(pool);
+    let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool);
 
     let id = deve_sub_kernel::TemplateId::parse(&args.id)
         .context("invalid template id (expected ULID)")?;
@@ -314,10 +311,9 @@ pub async fn template_update(args: TemplateUpdateArgs) -> Result<()> {
         spec_yaml,
     };
 
-    let result =
-        deve_sub_application::template::update_template(&template_repo, &version_repo, params)
-            .await
-            .map_err(|e| anyhow::anyhow!("update failed: {e}"))?;
+    let result = deve_sub_application::template::update_template(&template_repo, params)
+        .await
+        .map_err(|e| anyhow::anyhow!("update failed: {e}"))?;
 
     println!("Template updated successfully:");
     println!("  id:             {}", result.template.id);

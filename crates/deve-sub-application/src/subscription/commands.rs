@@ -132,7 +132,6 @@ pub struct CreateSubscriptionResult {
 /// - [`SubscriptionAppError::Subscription`] — storage error.
 pub async fn create_subscription(
     sub_repo: &dyn SubscriptionRepository,
-    token_repo: &dyn SubscriptionTokenRepository,
     master_key: &MasterKey,
     params: CreateSubscriptionParams,
 ) -> Result<CreateSubscriptionResult, SubscriptionAppError> {
@@ -169,11 +168,6 @@ pub async fn create_subscription(
     subscription.traffic_limit = params.traffic_limit;
     subscription.expires_at = expires_at;
 
-    sub_repo
-        .create(&subscription)
-        .await
-        .map_err(map_subscription_error)?;
-
     let token = SubscriptionToken {
         id: token_id,
         subscription_id: subscription.id,
@@ -182,8 +176,9 @@ pub async fn create_subscription(
         rotation_grace_until: None,
         issued_at: Timestamp::now(),
     };
-    token_repo
-        .create(&token)
+
+    sub_repo
+        .create_with_token(&subscription, &token)
         .await
         .map_err(map_subscription_error)?;
 
@@ -412,19 +407,14 @@ pub async fn regenerate_short_code(
         .map_err(map_subscription_error)?
         .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
 
-    if let Some(old_id) = subscription.short_code_id {
-        let _ = short_code_repo.delete(old_id).await;
-    }
-
     for _ in 0..SHORT_CODE_MAX_RETRIES {
         let code = generate_short_code()?;
         let short_code = ShortCode::new(subscription_id, code.clone());
-        match short_code_repo.create(&short_code).await {
+        match short_code_repo
+            .replace(subscription_id, subscription.short_code_id, &short_code)
+            .await
+        {
             Ok(()) => {
-                sub_repo
-                    .set_short_code_id(subscription_id, Some(short_code.id))
-                    .await
-                    .map_err(map_subscription_error)?;
                 return Ok(ShortCodeResult {
                     short_code_id: short_code.id,
                     code,

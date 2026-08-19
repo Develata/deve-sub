@@ -207,7 +207,6 @@ pub async fn subscription_add(args: SubscriptionAddArgs) -> Result<()> {
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
     let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool.clone());
-    let token_repo = deve_sub_storage_sqlite::SqliteSubscriptionTokenRepository::new(pool);
     let master_key = load_master_key(&args.key_path)?;
 
     let owner_id = deve_sub_kernel::UserId::parse(&args.owner_id)
@@ -228,14 +227,10 @@ pub async fn subscription_add(args: SubscriptionAddArgs) -> Result<()> {
         expires_at: args.expires_at.clone(),
     };
 
-    let result = deve_sub_application::subscription::create_subscription(
-        &sub_repo,
-        &token_repo,
-        &master_key,
-        params,
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("create failed: {e}"))?;
+    let result =
+        deve_sub_application::subscription::create_subscription(&sub_repo, &master_key, params)
+            .await
+            .map_err(|e| anyhow::anyhow!("create failed: {e}"))?;
 
     println!("Subscription created successfully:");
     println!("  id:      {}", result.subscription.id);

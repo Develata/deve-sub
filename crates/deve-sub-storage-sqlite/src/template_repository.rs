@@ -5,7 +5,7 @@
 //! in migration 0007. See ADR-0002 for the storage Port decision.
 
 use async_trait::async_trait;
-use deve_sub_domain::{SubscriptionTemplate, TemplateError, TemplateRepository};
+use deve_sub_domain::{SubscriptionTemplate, TemplateError, TemplateRepository, TemplateVersion};
 use deve_sub_kernel::TemplateId;
 use sqlx::sqlite::SqlitePool;
 
@@ -89,6 +89,155 @@ impl TemplateRepository for SqliteTemplateRepository {
                 TemplateError::Storage(msg)
             }
         })?;
+        Ok(())
+    }
+
+    async fn create_with_version(
+        &self,
+        template: &SubscriptionTemplate,
+        version: &TemplateVersion,
+    ) -> Result<(), TemplateError> {
+        // WHY: insert-template + insert-version-1 must be one transaction so a
+        // failure between them cannot leave an orphaned template with no
+        // version (P1-2 A3).
+        let template_created_at = format_ts(template.created_at).map_err(TemplateError::Storage)?;
+        let template_updated_at = format_ts(template.updated_at).map_err(TemplateError::Storage)?;
+        let active_version_id = template
+            .active_version_id
+            .map(|id| id.to_string())
+            .unwrap_or_default();
+        let version_created_at = format_ts(version.created_at).map_err(TemplateError::Storage)?;
+        let spec_json = serde_json::to_string(&version.spec)
+            .map_err(|e| TemplateError::Storage(format!("spec serialize: {e}")))?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
+        sqlx::query(
+            "INSERT INTO templates (id, name, description, active_version_id, active_version, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(template.id.to_string())
+        .bind(&template.name)
+        .bind(&template.description)
+        .bind(&active_version_id)
+        .bind(template.active_version as i64)
+        .bind(&template_created_at)
+        .bind(&template_updated_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("UNIQUE") {
+                TemplateError::NameExists
+            } else {
+                TemplateError::Storage(msg)
+            }
+        })?;
+
+        sqlx::query(
+            "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(version.id.to_string())
+        .bind(version.template_id.to_string())
+        .bind(version.version as i64)
+        .bind(&spec_json)
+        .bind(&version.spec_yaml)
+        .bind(version.is_active as i64)
+        .bind(&version_created_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| TemplateError::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn update_with_version(
+        &self,
+        template: &SubscriptionTemplate,
+        version: &TemplateVersion,
+    ) -> Result<(), TemplateError> {
+        // WHY: deactivate-old-version + insert-new-version + update-template
+        // must be one transaction so a failure between any two steps cannot
+        // leave the template pointing to a non-existent active version, or a
+        // new version that the template aggregate does not reference (P1-2 A3).
+        let template_updated_at = format_ts(template.updated_at).map_err(TemplateError::Storage)?;
+        let active_version_id = template
+            .active_version_id
+            .map(|id| id.to_string())
+            .unwrap_or_default();
+        let version_created_at = format_ts(version.created_at).map_err(TemplateError::Storage)?;
+        let spec_json = serde_json::to_string(&version.spec)
+            .map_err(|e| TemplateError::Storage(format!("spec serialize: {e}")))?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
+        sqlx::query(
+            "UPDATE template_versions SET is_active = 0 WHERE template_id = ? AND is_active = 1",
+        )
+        .bind(version.template_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
+        sqlx::query(
+            "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(version.id.to_string())
+        .bind(version.template_id.to_string())
+        .bind(version.version as i64)
+        .bind(&spec_json)
+        .bind(&version.spec_yaml)
+        .bind(version.is_active as i64)
+        .bind(&version_created_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
+        let result = sqlx::query(
+            "UPDATE templates SET \
+                name = ?, \
+                description = ?, \
+                active_version_id = ?, \
+                active_version = ?, \
+                updated_at = ? \
+              WHERE id = ?",
+        )
+        .bind(&template.name)
+        .bind(&template.description)
+        .bind(&active_version_id)
+        .bind(template.active_version as i64)
+        .bind(&template_updated_at)
+        .bind(template.id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("UNIQUE") {
+                TemplateError::NameExists
+            } else {
+                TemplateError::Storage(msg)
+            }
+        })?;
+        if result.rows_affected() == 0 {
+            return Err(TemplateError::TemplateNotFound);
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| TemplateError::Storage(e.to_string()))?;
         Ok(())
     }
 

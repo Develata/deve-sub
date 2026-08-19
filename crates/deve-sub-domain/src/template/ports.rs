@@ -14,6 +14,29 @@ pub trait TemplateRepository: Send + Sync {
     /// name is already taken.
     async fn create(&self, template: &SubscriptionTemplate) -> Result<(), TemplateError>;
 
+    /// Atomically create a template and its first version (version 1) in a
+    /// single transaction. Either both rows are committed or neither is.
+    /// WHY: `create_template` was previously two separate repo calls; a
+    /// failure between them left an orphaned template with no version
+    /// (P1-2 A3).
+    async fn create_with_version(
+        &self,
+        template: &SubscriptionTemplate,
+        version: &TemplateVersion,
+    ) -> Result<(), TemplateError>;
+
+    /// Atomically update a template's metadata and create a new active
+    /// version in a single transaction. Deactivates the previous active
+    /// version, inserts the new one, and updates the template aggregate.
+    /// WHY: `update_template` was previously two separate repo calls; a
+    /// failure between them left the template pointing to a non-existent
+    /// active version (P1-2 A3).
+    async fn update_with_version(
+        &self,
+        template: &SubscriptionTemplate,
+        version: &TemplateVersion,
+    ) -> Result<(), TemplateError>;
+
     /// Find a template by ID.
     async fn find_by_id(
         &self,

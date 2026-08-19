@@ -33,6 +33,14 @@ pub struct AppConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     /// Bind address.
+    ///
+    /// DS-AUD-B02: default is `127.0.0.1:8080` (loopback) so the
+    /// "one-command" path (`deve-sub serve` with no config) is safe and
+    /// usable: a browser on `http://localhost:8080` can init, login,
+    /// refresh, and logout. To expose the server to the network, set
+    /// `bind: "0.0.0.0:8080"` in the config file or pass `--bind` — and
+    /// put it behind a reverse proxy with TLS for production (see the
+    /// `cookie_secure` field for the matching cookie contract).
     #[serde(default = "default_bind_addr")]
     pub bind: String,
 
@@ -88,16 +96,23 @@ pub struct SecurityConfig {
 
     /// Whether to set the `Secure` flag on session cookies.
     ///
-    /// When `true` (the default), cookies are only sent over HTTPS. Disable
-    /// only for local development over plain HTTP by setting
-    /// `cookie_secure: false` in the config file or `DEVE_SUB_COOKIE_SECURE=0`.
-    /// Production deployments must keep this enabled.
+    /// DS-AUD-B02: default is `false` so the "one-command" path
+    /// (`deve-sub serve` with no config, defaulting to loopback HTTP) works:
+    /// browsers will send the cookie back over plain HTTP. With `true` and a
+    /// plain-HTTP bind, the browser never sends the session cookie, so
+    /// `/api/v1/auth/me` returns 401 after a successful login — the
+    /// "login is broken" trap.
     ///
-    /// WHY: with `cookie_secure: true` and a plain-HTTP bind (the default
-    /// `0.0.0.0:8080`), browsers and cookie-aware HTTP clients (e.g. curl
-    /// with a cookie jar) will not send the `Secure` cookie back, causing
-    /// `/api/v1/auth/me` to return 401. For local dev without TLS, set
-    /// `cookie_secure: false`.
+    /// For production behind a reverse proxy (Caddy/nginx terminating TLS),
+    /// set `cookie_secure: true` in the config file. The reverse proxy
+    /// provides the HTTPS hop the browser needs to send the cookie back.
+    /// See `trust_proxy_headers` for the matching IP-extraction setting.
+    ///
+    /// WHY: the previous default (`true`) made the default deployment
+    /// (HTTP) unusable for browser login. Operators had to read a code
+    /// comment to discover the mismatch. The new default pairs the cookie
+    /// flag with the bind default so the "one-command" path is correct by
+    /// construction; production opts into `Secure` via the config file.
     #[serde(default = "default_cookie_secure")]
     pub cookie_secure: bool,
 
@@ -174,7 +189,10 @@ fn default_product_name() -> String {
 }
 
 fn default_bind_addr() -> String {
-    "0.0.0.0:8080".to_owned()
+    // WHY (DS-AUD-B02): loopback default so `deve-sub serve` with no config
+    // is safe and usable for browser login over plain HTTP. Network exposure
+    // requires an explicit `--bind 0.0.0.0:...` or config-file opt-in.
+    "127.0.0.1:8080".to_owned()
 }
 
 fn default_serve_web() -> bool {
@@ -206,7 +224,12 @@ fn default_session_ttl_secs() -> u64 {
 }
 
 fn default_cookie_secure() -> bool {
-    true
+    // WHY (DS-AUD-B02): false pairs with the loopback-HTTP default bind so
+    // the "one-command" path works for browser login. A Secure cookie over
+    // plain HTTP is never sent back by the browser, so /api/v1/auth/me
+    // returns 401 after a successful login — the "login is broken" trap.
+    // Production behind a reverse proxy opts into true via the config file.
+    false
 }
 
 fn default_max_login_attempts() -> u32 {
@@ -227,4 +250,45 @@ pub struct GeoIpConfig {
     /// Path to the MaxMind `.mmdb` database file. `None` or missing file
     /// disables auto-region (graceful degradation).
     pub mmdb_path: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// DS-AUD-B02: the "one-command" path (`deve-sub serve` with no config)
+    /// must be safe and usable for browser login over plain HTTP. The
+    /// defaults pair: loopback bind + non-Secure cookie. A browser on
+    /// `http://localhost:8080` can init, login, refresh, and logout.
+    #[test]
+    fn default_config_is_loopback_http_with_insecure_cookie() {
+        let config = AppConfig::default();
+        assert_eq!(
+            config.server.bind, "127.0.0.1:8080",
+            "default bind must be loopback so the one-command HTTP path is safe"
+        );
+        assert!(
+            !config.security.cookie_secure,
+            "default cookie_secure must be false so the browser sends the cookie over HTTP"
+        );
+    }
+
+    /// DS-AUD-B02: round-trip through serde preserves the defaults (no
+    /// regression if the deserializer defaults drift from `Default::default()`).
+    #[test]
+    fn default_config_round_trips_through_serde() {
+        let json = serde_json::to_string(&AppConfig::default()).expect("serialize");
+        let back: AppConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.server.bind, "127.0.0.1:8080");
+        assert!(!back.security.cookie_secure);
+    }
+
+    /// DS-AUD-B02: an empty JSON object deserializes to the loopback-HTTP
+    /// profile (the serde defaults must match the `Default` impl).
+    #[test]
+    fn empty_json_uses_loopback_http_defaults() {
+        let config: AppConfig = serde_json::from_str("{}").expect("empty json");
+        assert_eq!(config.server.bind, "127.0.0.1:8080");
+        assert!(!config.security.cookie_secure);
+    }
 }

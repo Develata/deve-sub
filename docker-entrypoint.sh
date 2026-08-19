@@ -32,4 +32,5 @@ fi
 exec /app/deve-sub serve \
     --db-path /app/data/deve-sub.db \
     --key-path /app/data/master.key \
+    --bind 0.0.0.0:8080 \
     --web-dist-dir /app/web/dist

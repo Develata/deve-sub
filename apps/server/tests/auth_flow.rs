@@ -54,7 +54,11 @@ impl TestApp {
 
         let master_key = Arc::new(MasterKey::load_or_generate(&key_path).expect("master key"));
 
-        let config = deve_sub_application::AppConfig::default();
+        let mut config = deve_sub_application::AppConfig::default();
+        // DS-AUD-B02: the new default is `cookie_secure=false` (loopback HTTP
+        // profile). This test asserts the `Secure` cookie attribute, so opt
+        // into the production reverse-proxy profile explicitly.
+        config.security.cookie_secure = true;
 
         let rate_limiter: Arc<dyn LoginRateLimiter> =
             Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(

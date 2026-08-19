@@ -59,6 +59,18 @@ info "  version:      $VERSION"
 info "  bind:         $BIND_ADDR"
 info "  data dir:     $DATA_DIR"
 
+# WHY (DS-AUD-B02): the default install exposes plain HTTP on 0.0.0.0:8080.
+# The config default cookie_secure=false pairs with this so browser login
+# works, but the traffic is unencrypted and the session cookie is sent in
+# the clear. For production, put deve-sub behind a reverse proxy (Caddy,
+# nginx) terminating TLS and set cookie_secure=true + trust_proxy_headers=true
+# in the config file. Print this warning so the operator is not surprised.
+if [ "${BIND_ADDR%%:*}" != "127.0.0.1" ] && [ "${BIND_ADDR%%:*}" != "localhost" ]; then
+    info "WARNING: serving plain HTTP on $BIND_ADDR (cookie_secure=false)."
+    info "  For production, use a reverse proxy with TLS and set"
+    info "  cookie_secure=true + trust_proxy_headers=true in the config file."
+fi
+
 if [ "$VERSION" = "latest" ]; then
     info "WARNING: installing 'latest' — pin DEVE_SUB_VERSION for reproducible installs"
     DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/$ASSET"

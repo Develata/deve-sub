@@ -9,9 +9,40 @@ permissions:
   contents: read
 
 jobs:
+  # WHY (DS-AUD-B04): a tag push must pass the full verification suite
+  # before any binary is built. Reuses ci.yml (fmt/clippy/test/docs/wasm/
+  # e2e/docker) via workflow_call. If any ci job fails, the build job is
+  # skipped — no release is published (fail-closed).
+  verify:
+    name: Verify (ci suite)
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  # WHY (DS-AUD-B04): the tag name (minus leading `v`) must equal the
+  # Cargo version. Prevents tagging v0.2.0 against a worktree that still
+  # says 0.1.0, which would publish a binary reporting the wrong version.
+  version-check:
+    name: Tag == Cargo version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check tag matches Cargo version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          echo "tag (stripped): $TAG"
+          echo "Cargo version:  $CARGO_VERSION"
+          if [ "$TAG" != "$CARGO_VERSION" ]; then
+            echo "FAIL: tag v$TAG does not match Cargo version $CARGO_VERSION"
+            exit 1
+          fi
+          echo "OK: tag matches Cargo version"
+
   build:
     name: Build ${{ matrix.asset }}
     runs-on: ubuntu-latest
+    needs: [verify, version-check]
     strategy:
       fail-fast: true
       matrix:

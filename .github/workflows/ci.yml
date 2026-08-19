@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # WHY (DS-AUD-B04): callable by release.yml so a tag push must pass the
+  # full verification suite (fmt/clippy/test/docs/wasm/e2e/docker) before
+  # any binary is built or released.
+  workflow_call:
 
 permissions:
   contents: read

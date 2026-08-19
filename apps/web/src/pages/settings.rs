@@ -9,6 +9,7 @@
 use dioxus::prelude::*;
 
 use crate::i18n::{Language, t};
+use crate::pages::twofa_settings::TwoFactorSettings;
 use crate::theme::Theme;
 
 #[derive(Props, Clone, PartialEq)]
@@ -177,6 +178,9 @@ pub fn SettingsPage(props: SettingsProps) -> Element {
                     }
                 }
             }
+
+            // Two-factor authentication (AUTH-005, AUTH-006).
+            TwoFactorSettings { lang: props.lang }
         }
     }
 }

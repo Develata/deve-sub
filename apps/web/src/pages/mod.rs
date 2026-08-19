@@ -17,6 +17,7 @@ pub mod template_modals;
 pub mod template_types;
 pub mod template_versions;
 pub mod templates;
+pub mod twofa_settings;
 pub mod user_modals;
 pub mod user_types;
 pub mod users;

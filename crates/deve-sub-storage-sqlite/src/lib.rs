@@ -29,6 +29,7 @@ pub mod traffic_daily_snapshot_repository;
 pub mod traffic_repository;
 pub mod user_repository;
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -104,6 +105,37 @@ pub enum StorageError {
     /// The database path was invalid.
     #[error("invalid database path: {0}")]
     InvalidPath(String),
+
+    /// DS-AUD-B06: structured schema-verification errors. The previous
+    /// `verify_schema` only checked that `_sqlx_migrations` had a row; it
+    /// passed when the DB was behind, ahead, dirty, or had a checksum
+    /// mismatch. These variants make each failure mode actionable.
+    #[error("database schema is not initialized — run `deve-sub migrate` first")]
+    NotInitialized,
+
+    #[error(
+        "database schema is behind the binary: migration(s) {missing:?} not applied — \
+         run `deve-sub migrate`"
+    )]
+    SchemaBehind { missing: Vec<i64> },
+
+    #[error(
+        "database schema is ahead of the binary: applied migration {version} is not known to \
+         this binary — upgrade deve-sub (constraint #13: forward-only)"
+    )]
+    SchemaAhead { version: i64 },
+
+    #[error(
+        "database migration {version} is marked as not successfully applied (dirty) — \
+         run `deve-sub migrate` to retry, or restore from backup"
+    )]
+    SchemaDirty { version: i64 },
+
+    #[error(
+        "checksum mismatch on migration {version}: the applied migration's SQL was edited after \
+         it was applied — restore from backup or reconcile the migration file"
+    )]
+    SchemaChecksumMismatch { version: i64 },
 }
 
 /// SQLite PRAGMA configuration applied on every new connection.
@@ -215,22 +247,68 @@ pub fn embedded_schema_version() -> i64 {
         .unwrap_or(0)
 }
 
-/// Verify that the database schema is up-to-date by checking the
-/// `_sqlx_migrations` table exists and has at least one applied migration.
+/// Verify the database schema matches the migrations embedded in this
+/// binary, refusing to serve on a stale, ahead, dirty, or tampered
+/// schema (DS-AUD-B06).
 ///
-/// Call this at startup before serving to give a helpful error if the user
-/// forgot to run `deve-sub migrate`.
+/// Checks, in order:
+/// 1. `_sqlx_migrations` exists and is non-empty → else `NotInitialized`.
+/// 2. Every applied row has `success=1` → else `SchemaDirty`.
+/// 3. Every applied `version` is known to the embedded `Migrator` → else
+///    `SchemaAhead` (binary is older than DB; constraint #13).
+/// 4. Every applied `checksum` matches the embedded checksum → else
+///    `SchemaChecksumMismatch`.
+/// 5. Every embedded migration is applied → else `SchemaBehind`.
+///
+/// This is validate-only: it never applies pending migrations. The
+/// explicit `deve-sub migrate` subcommand owns migration; `serve` must
+/// refuse a stale schema so the operator notices, rather than silently
+/// running on a schema it does not understand.
 ///
 /// # Errors
-/// Returns [`StorageError`] if the database is not migrated or unreachable.
+/// Returns [`StorageError`] with the specific failure mode.
 pub async fn verify_schema(pool: &SqlitePool) -> Result<(), StorageError> {
-    sqlx::query("SELECT 1 FROM _sqlx_migrations LIMIT 1")
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|e| {
-            StorageError::InvalidPath(format!(
-                "database schema is not initialized — run `deve-sub migrate` first ({e})"
-            ))
-        })
+    let migrator = sqlx::migrate!("../../migrations");
+
+    let applied: Vec<(i64, bool, Vec<u8>)> =
+        sqlx::query_as("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(pool)
+            .await
+            .map_err(|_| StorageError::NotInitialized)?;
+
+    if applied.is_empty() {
+        return Err(StorageError::NotInitialized);
+    }
+
+    let embedded: HashMap<i64, &[u8]> = migrator
+        .migrations
+        .iter()
+        .map(|m| (m.version, m.checksum.as_ref()))
+        .collect();
+
+    for (version, success, checksum) in &applied {
+        if !success {
+            return Err(StorageError::SchemaDirty { version: *version });
+        }
+        match embedded.get(version) {
+            None => return Err(StorageError::SchemaAhead { version: *version }),
+            Some(expected) if *expected != checksum.as_slice() => {
+                return Err(StorageError::SchemaChecksumMismatch { version: *version });
+            }
+            _ => {}
+        }
+    }
+
+    let applied_versions: HashSet<i64> = applied.iter().map(|(v, _, _)| *v).collect();
+    let missing: Vec<i64> = migrator
+        .migrations
+        .iter()
+        .filter(|m| !applied_versions.contains(&m.version))
+        .map(|m| m.version)
+        .collect();
+    if !missing.is_empty() {
+        return Err(StorageError::SchemaBehind { missing });
+    }
+
+    Ok(())
 }

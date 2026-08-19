@@ -162,6 +162,18 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::En, "sources.last_refresh") => "Last Refresh",
         (Language::Zh, "sources.node_count") => "节点数",
         (Language::En, "sources.node_count") => "Nodes",
+        (Language::Zh, "sources.source_type") => "格式",
+        (Language::En, "sources.source_type") => "Format",
+        (Language::Zh, "sources.auto_update") => "自动更新",
+        (Language::En, "sources.auto_update") => "Auto Update",
+        (Language::Zh, "sources.update_interval") => "更新间隔（秒）",
+        (Language::En, "sources.update_interval") => "Interval (s)",
+        (Language::Zh, "sources.keep_on_fail") => "失败时保留",
+        (Language::En, "sources.keep_on_fail") => "Keep on Fail",
+        (Language::Zh, "sources.edit_title") => "编辑订阅源",
+        (Language::En, "sources.edit_title") => "Edit Source",
+        (Language::Zh, "sources.delete_confirm") => "确定删除此订阅源？关联节点将被移除。",
+        (Language::En, "sources.delete_confirm") => "Delete this source? Associated nodes will be removed.",
         (_, _) => "",
     }
 }

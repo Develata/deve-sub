@@ -17,7 +17,7 @@ pub mod subscription;
 pub mod template;
 
 pub use auth::{AuthError, LoginRateLimiter};
-pub use config::AppConfig;
+pub use config::{AppConfig, IssueSeverity, ValidationIssue};
 pub use health::{DbHealthPort, HealthError, HealthStatus, HealthView};
 pub use probe::{
     CreateProbeSourceParams, ProbeAppError, RunnerConfig, StartProbeRunParams,

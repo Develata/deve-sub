@@ -252,6 +252,141 @@ pub struct GeoIpConfig {
     pub mmdb_path: Option<String>,
 }
 
+/// Severity of a [`ValidationIssue`] discovered by [`AppConfig::validate`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IssueSeverity {
+    /// The config is unusable; the command must refuse to proceed.
+    Error,
+    /// The config is likely misconfigured but not fatal; the operator should
+    /// review before relying on it.
+    Warning,
+}
+
+/// A single semantic problem found by [`AppConfig::validate`] (DS-AUD-B08).
+#[derive(Debug, Clone)]
+pub struct ValidationIssue {
+    pub severity: IssueSeverity,
+    pub message: String,
+}
+
+impl AppConfig {
+    /// Run semantic checks on the resolved config (DS-AUD-B08).
+    ///
+    /// `config validate` deserializes JSON and prints fields but checks
+    /// nothing: bind format, port range, zero TTL/rate-limit, HTTP+Secure
+    /// cookie conflict, proxy-header/cookie-secure pairing, and web dist
+    /// presence were all silently accepted. This method returns a list of
+    /// issues; the caller decides whether Errors are fatal (CLI exit 1) and
+    /// whether Warnings are surfaced (log on `serve`).
+    ///
+    /// This is validate-only and side-effect-free: it does not open the DB,
+    /// write files, or bind ports.
+    #[must_use]
+    pub fn validate(&self) -> Vec<ValidationIssue> {
+        let mut issues = Vec::new();
+
+        match parse_bind_port(&self.server.bind) {
+            Ok(port) => {
+                if port == 0 {
+                    issues.push(ValidationIssue {
+                        severity: IssueSeverity::Error,
+                        message: format!(
+                            "server.bind port 0 is invalid; use 1..=65535 (bind={})",
+                            self.server.bind
+                        ),
+                    });
+                }
+            }
+            Err(e) => issues.push(ValidationIssue {
+                severity: IssueSeverity::Error,
+                message: format!("server.bind is invalid: {e} (bind={})", self.server.bind),
+            }),
+        }
+
+        if self.security.session_ttl_secs == 0 {
+            issues.push(ValidationIssue {
+                severity: IssueSeverity::Error,
+                message: "security.session_ttl_secs is 0; sessions would expire instantly"
+                    .to_owned(),
+            });
+        }
+        if self.security.max_login_attempts == 0 {
+            issues.push(ValidationIssue {
+                severity: IssueSeverity::Error,
+                message: "security.max_login_attempts is 0; lockout can never trigger".to_owned(),
+            });
+        }
+        if self.security.lockout_duration_secs == 0 {
+            issues.push(ValidationIssue {
+                severity: IssueSeverity::Error,
+                message: "security.lockout_duration_secs is 0; lockout is ineffective".to_owned(),
+            });
+        }
+
+        let is_loopback = matches!(
+            parse_bind_host(&self.server.bind).as_deref(),
+            Some("127.0.0.1") | Some("localhost") | Some("::1")
+        );
+        if self.security.cookie_secure && is_loopback {
+            // WHY: a Secure cookie over plain loopback HTTP is never sent
+            // back by the browser → /api/v1/auth/me returns 401 after login.
+            issues.push(ValidationIssue {
+                severity: IssueSeverity::Warning,
+                message: "cookie_secure=true with a loopback bind: the browser will not send \
+                          the Secure cookie over plain HTTP. Set cookie_secure=false for the \
+                          loopback profile, or use a reverse proxy with TLS."
+                    .to_owned(),
+            });
+        }
+        if !self.security.cookie_secure && !is_loopback {
+            issues.push(ValidationIssue {
+                severity: IssueSeverity::Warning,
+                message: "cookie_secure=false with a network bind: the session cookie is sent \
+                          in the clear over unencrypted HTTP. Use a reverse proxy with TLS and \
+                          set cookie_secure=true."
+                    .to_owned(),
+            });
+        }
+
+        if self.security.trust_proxy_headers && !self.security.cookie_secure {
+            issues.push(ValidationIssue {
+                severity: IssueSeverity::Warning,
+                message: "trust_proxy_headers=true but cookie_secure=false: a reverse proxy is \
+                          implied (headers trusted) but the cookie is not secured. Likely a \
+                          misconfigured reverse-proxy profile."
+                    .to_owned(),
+            });
+        }
+
+        if self.server.serve_web {
+            let dist = std::path::Path::new(&self.server.web_dist_dir);
+            if !dist.exists() {
+                issues.push(ValidationIssue {
+                    severity: IssueSeverity::Warning,
+                    message: format!(
+                        "server.serve_web=true but web_dist_dir does not exist: {}. \
+                         The placeholder page will be served.",
+                        self.server.web_dist_dir
+                    ),
+                });
+            }
+        }
+
+        issues
+    }
+}
+
+fn parse_bind_port(bind: &str) -> Result<u16, String> {
+    let port_str = bind.rsplit_once(':').ok_or("expected host:port")?.1;
+    port_str
+        .parse::<u16>()
+        .map_err(|e| format!("port is not a valid u16: {e}"))
+}
+
+fn parse_bind_host(bind: &str) -> Option<String> {
+    bind.rsplit_once(':').map(|(host, _)| host.to_lowercase())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,5 +425,90 @@ mod tests {
         let config: AppConfig = serde_json::from_str("{}").expect("empty json");
         assert_eq!(config.server.bind, "127.0.0.1:8080");
         assert!(!config.security.cookie_secure);
+    }
+
+    /// DS-AUD-B08: the default config (loopback HTTP profile) has no
+    /// validation Errors. It may have a Warning if web_dist_dir is missing
+    /// (common in fresh checkouts), but never an Error.
+    #[test]
+    fn validate_default_has_no_errors() {
+        let config = AppConfig::default();
+        let issues = config.validate();
+        assert!(
+            issues.iter().all(|i| i.severity != IssueSeverity::Error),
+            "default config must have no Errors, got: {issues:?}"
+        );
+    }
+
+    /// DS-AUD-B08: a zero session TTL is an Error (sessions expire instantly).
+    #[test]
+    fn validate_rejects_zero_session_ttl() {
+        let mut config = AppConfig::default();
+        config.security.session_ttl_secs = 0;
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| {
+            i.severity == IssueSeverity::Error && i.message.contains("session_ttl_secs")
+        }));
+    }
+
+    /// DS-AUD-B08: an unparseable bind is an Error.
+    #[test]
+    fn validate_rejects_invalid_bind() {
+        let mut config = AppConfig::default();
+        config.server.bind = "not-a-valid-address".to_owned();
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| {
+            i.severity == IssueSeverity::Error && i.message.contains("server.bind is invalid")
+        }));
+    }
+
+    /// DS-AUD-B08: port 0 is an Error (valid u16 but not a usable port).
+    #[test]
+    fn validate_rejects_port_zero() {
+        let mut config = AppConfig::default();
+        config.server.bind = "127.0.0.1:0".to_owned();
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| {
+            i.severity == IssueSeverity::Error && i.message.contains("port 0 is invalid")
+        }));
+    }
+
+    /// DS-AUD-B08: cookie_secure=true with a loopback bind warns (the
+    /// browser won't send the Secure cookie over plain HTTP → login broken).
+    #[test]
+    fn validate_warns_secure_cookie_on_loopback() {
+        let mut config = AppConfig::default();
+        config.security.cookie_secure = true;
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| {
+            i.severity == IssueSeverity::Warning && i.message.contains("loopback bind")
+        }));
+    }
+
+    /// DS-AUD-B08: cookie_secure=false with a network bind warns (cookie
+    /// sent in the clear over unencrypted HTTP).
+    #[test]
+    fn validate_warns_insecure_cookie_on_network() {
+        let mut config = AppConfig::default();
+        config.server.bind = "0.0.0.0:8080".to_owned();
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| {
+            i.severity == IssueSeverity::Warning && i.message.contains("in the clear")
+        }));
+    }
+
+    /// DS-AUD-B08: trust_proxy_headers=true without cookie_secure warns
+    /// (reverse-proxy profile is half-configured).
+    #[test]
+    fn validate_warns_proxy_headers_without_secure_cookie() {
+        let mut config = AppConfig::default();
+        config.server.bind = "0.0.0.0:8080".to_owned();
+        config.security.trust_proxy_headers = true;
+        let issues = config.validate();
+        // WHY: the proxy-headers warning fires alongside the network-insecure
+        // warning; assert at least the proxy-headers one is present.
+        assert!(issues.iter().any(|i| {
+            i.severity == IssueSeverity::Warning && i.message.contains("trust_proxy_headers")
+        }));
     }
 }

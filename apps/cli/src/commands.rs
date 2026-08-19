@@ -342,11 +342,48 @@ pub async fn migrate(args: MigrateArgs) -> Result<()> {
 
 pub async fn config_validate(args: ConfigValidateArgs) -> Result<()> {
     let config = load_config(&args.config)?;
-    println!("Configuration valid:");
-    println!("  product_name: {}", config.product_name);
-    println!("  server.bind:   {}", config.server.bind);
-    println!("  server.serve_web: {}", config.server.serve_web);
-    println!("  database.path: {}", config.database.path);
+
+    println!("Resolved configuration:");
+    println!("  product_name:          {}", config.product_name);
+    println!("  server.bind:           {}", config.server.bind);
+    println!("  server.serve_web:      {}", config.server.serve_web);
+    println!("  server.web_dist_dir:   {}", config.server.web_dist_dir);
+    println!("  database.path:         {}", config.database.path);
+    println!(
+        "  security.cookie_secure: {}",
+        config.security.cookie_secure
+    );
+    println!(
+        "  security.trust_proxy_headers: {}",
+        config.security.trust_proxy_headers
+    );
+
+    // DS-AUD-B08: the old `config validate` only deserialized + printed.
+    // Run the semantic validator so misconfigurations are surfaced.
+    let issues = config.validate();
+    let errors = issues
+        .iter()
+        .filter(|i| i.severity == deve_sub_application::IssueSeverity::Error)
+        .count();
+    let warnings = issues.len() - errors;
+
+    if issues.is_empty() {
+        println!("\nValidation: OK (no issues)");
+        return Ok(());
+    }
+
+    println!("\nValidation: {} error(s), {} warning(s)", errors, warnings);
+    for issue in &issues {
+        let label = match issue.severity {
+            deve_sub_application::IssueSeverity::Error => "ERROR",
+            deve_sub_application::IssueSeverity::Warning => "WARN ",
+        };
+        println!("  [{label}] {}", issue.message);
+    }
+
+    if errors > 0 {
+        anyhow::bail!("configuration has {errors} validation error(s)");
+    }
     Ok(())
 }
 

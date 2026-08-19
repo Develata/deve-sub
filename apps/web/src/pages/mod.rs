@@ -9,5 +9,8 @@ pub mod settings;
 pub mod setup;
 pub mod source_types;
 pub mod sources;
+pub mod subscription_modals;
+pub mod subscription_types;
 pub mod subscriptions;
 pub mod templates;
+pub mod util;

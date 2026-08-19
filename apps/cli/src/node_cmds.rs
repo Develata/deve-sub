@@ -109,9 +109,15 @@ pub async fn node_import(args: NodeImportArgs) -> Result<()> {
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
     let master_key = Arc::new(
-        deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(&args.key_path))
+        deve_sub_security::MasterKey::load(std::path::Path::new(&args.key_path))
             .context("failed to load master key")?,
     );
+    // WHY (DS-AUD-B07): bind/verify the key against the DB before any keyed
+    // operation. Fail-closed on mismatch prevents silent key rotation.
+    let fp = master_key
+        .fingerprint()
+        .context("failed to compute master key fingerprint")?;
+    deve_sub_storage_sqlite::ensure_key_binding(&pool, &fp).await?;
     let pool_repo = deve_sub_storage_sqlite::SqliteNodePoolRepository::new_with_key(
         pool,
         Arc::clone(&master_key),
@@ -176,9 +182,15 @@ pub async fn node_list(args: NodeListArgs) -> Result<()> {
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
     let master_key = Arc::new(
-        deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(&args.key_path))
+        deve_sub_security::MasterKey::load(std::path::Path::new(&args.key_path))
             .context("failed to load master key")?,
     );
+    // WHY (DS-AUD-B07): bind/verify the key against the DB before any keyed
+    // operation. Fail-closed on mismatch prevents silent key rotation.
+    let fp = master_key
+        .fingerprint()
+        .context("failed to compute master key fingerprint")?;
+    deve_sub_storage_sqlite::ensure_key_binding(&pool, &fp).await?;
     let pool_repo = deve_sub_storage_sqlite::SqliteNodePoolRepository::new_with_key(
         pool,
         Arc::clone(&master_key),

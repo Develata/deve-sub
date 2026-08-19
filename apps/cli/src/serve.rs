@@ -77,6 +77,17 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         }
         .context("failed to load master key")?,
     );
+    // WHY (DS-AUD-B07): bind the DB to the loaded key, or verify the key
+    // matches the one already bound. Fail-closed on mismatch prevents serve
+    // from starting with the wrong key (which would make old ciphertext
+    // unreadable). When `allow_master_key_generation=true`, a fresh key may
+    // be generated for an empty DB — the binding records it as the owner.
+    {
+        let fp = master_key
+            .fingerprint()
+            .context("failed to compute master key fingerprint")?;
+        deve_sub_storage_sqlite::ensure_key_binding(&db, &fp).await?;
+    }
 
     let user_repo: Arc<dyn UserRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteUserRepository::new(db.clone()),

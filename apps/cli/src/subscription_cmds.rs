@@ -193,10 +193,21 @@ pub struct SubscriptionRotateArgs {
     pub key_path: String,
 }
 
-/// Load the master key, generating it if missing.
-fn load_master_key(path: &str) -> Result<deve_sub_security::MasterKey> {
-    deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(path))
-        .context("failed to load master key")
+/// DS-AUD-B07: strictly load the master key (never generate) and bind/verify
+/// it against the database. Fail-closed on mismatch prevents a management
+/// command from silently generating a new key on a host with an existing DB
+/// whose key file was lost/misconfigured.
+async fn load_master_key(
+    pool: &sqlx::sqlite::SqlitePool,
+    path: &str,
+) -> Result<deve_sub_security::MasterKey> {
+    let key = deve_sub_security::MasterKey::load(std::path::Path::new(path))
+        .context("failed to load master key")?;
+    let fp = key
+        .fingerprint()
+        .context("failed to compute master key fingerprint")?;
+    deve_sub_storage_sqlite::ensure_key_binding(pool, &fp).await?;
+    Ok(key)
 }
 
 pub async fn subscription_add(args: SubscriptionAddArgs) -> Result<()> {
@@ -207,7 +218,7 @@ pub async fn subscription_add(args: SubscriptionAddArgs) -> Result<()> {
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
     let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool.clone());
-    let master_key = load_master_key(&args.key_path)?;
+    let master_key = load_master_key(&pool, &args.key_path).await?;
 
     let owner_id = deve_sub_kernel::UserId::parse(&args.owner_id)
         .context("invalid owner_id (expected ULID)")?;
@@ -391,8 +402,8 @@ pub async fn subscription_rotate(args: SubscriptionRotateArgs) -> Result<()> {
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
     let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool.clone());
+    let master_key = load_master_key(&pool, &args.key_path).await?;
     let token_repo = deve_sub_storage_sqlite::SqliteSubscriptionTokenRepository::new(pool);
-    let master_key = load_master_key(&args.key_path)?;
 
     let id = deve_sub_kernel::SubscriptionId::parse(&args.id)
         .context("invalid subscription id (expected ULID)")?;

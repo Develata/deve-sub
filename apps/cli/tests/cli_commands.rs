@@ -600,3 +600,76 @@ fn key_init_default_db_path_when_omitted() {
         "stderr must report the DB-without-key guard, got: {stderr}"
     );
 }
+
+/// DS-AUD-B07: a CLI command must NOT silently generate a new key on a host
+/// with an existing DB. The DB is bound to the first key that opens it; a
+/// subsequent command with a different key must fail closed with a
+/// fingerprint mismatch, not generate a fresh key (which would split the key
+/// epoch and make old ciphertext unreadable).
+#[tokio::test(flavor = "multi_thread")]
+async fn b07_wrong_key_fails_closed_not_silently_generated() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("test.db");
+    let key_a = dir.path().join("master.key");
+    let key_b = dir.path().join("other.key");
+    setup_db(&db_path, &key_a).await;
+
+    // Bind key A to the DB via the first keyed command (node import).
+    let mut child = Command::new(BIN)
+        .args([
+            "node",
+            "import",
+            "--db-path",
+            db_path.to_str().unwrap(),
+            "--key-path",
+            key_a.to_str().unwrap(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn first import");
+    {
+        let mut stdin = child.stdin.take().expect("stdin");
+        stdin.write_all(TROJAN_URI.as_bytes()).expect("write");
+    }
+    let output = child.wait_with_output().expect("wait");
+    assert!(
+        output.status.success(),
+        "first import must succeed and bind key A, got {:?}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Write a different key B and retry the same command. Must fail closed.
+    std::fs::write(&key_b, [0x99u8; 32]).expect("write key B");
+    let mut child = Command::new(BIN)
+        .args([
+            "node",
+            "import",
+            "--db-path",
+            db_path.to_str().unwrap(),
+            "--key-path",
+            key_b.to_str().unwrap(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn second import");
+    {
+        let mut stdin = child.stdin.take().expect("stdin");
+        stdin.write_all(TROJAN_URI.as_bytes()).expect("write");
+    }
+    let output = child.wait_with_output().expect("wait");
+    assert!(
+        !output.status.success(),
+        "second import with a different key must fail, got {:?}",
+        output.status
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("fingerprint mismatch"),
+        "stderr must report the fingerprint mismatch, got: {stderr}"
+    );
+}

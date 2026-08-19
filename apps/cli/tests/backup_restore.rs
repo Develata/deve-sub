@@ -116,6 +116,13 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
     .await
     .expect("recreate old idx_nodes_dedup");
 
+    // Reverse migration 0018: drop the key_metadata table so forward-
+    // migrating through 0018 succeeds on restore.
+    sqlx::query("DROP TABLE IF EXISTS key_metadata")
+        .execute(&pool)
+        .await
+        .expect("reverse 0018");
+
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
         .execute(&pool)
         .await

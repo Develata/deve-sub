@@ -526,9 +526,17 @@ pub async fn source_add(args: SourceAddArgs) -> Result<()> {
     deve_sub_storage_sqlite::run_migrations(&pool).await?;
 
     let master_key = Arc::new(
-        deve_sub_security::MasterKey::load_or_generate(std::path::Path::new(&args.key_path))
+        deve_sub_security::MasterKey::load(std::path::Path::new(&args.key_path))
             .context("failed to load master key")?,
     );
+    // WHY (DS-AUD-B07): bind the DB to the loaded key, or verify the key
+    // matches the one already bound. Fail-closed on mismatch prevents a
+    // management command from silently generating a new key (which would
+    // split the key epoch and make old ciphertext unreadable).
+    let fp = master_key
+        .fingerprint()
+        .context("failed to compute master key fingerprint")?;
+    deve_sub_storage_sqlite::ensure_key_binding(&pool, &fp).await?;
     let source_repo = deve_sub_storage_sqlite::SqliteSourceRepository::new_with_key(
         pool,
         Arc::clone(&master_key),

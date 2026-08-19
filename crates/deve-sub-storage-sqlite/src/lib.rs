@@ -136,6 +136,19 @@ pub enum StorageError {
          it was applied — restore from backup or reconcile the migration file"
     )]
     SchemaChecksumMismatch { version: i64 },
+
+    /// DS-AUD-B07: the loaded master key does not match the key bound to the
+    /// database. The fingerprint is a one-way HMAC-SHA256 digest (the raw
+    /// key cannot be recovered from it), so including both fingerprints in
+    /// the message is safe and aids operator diagnosis. Fail-closed: the
+    /// command must refuse to proceed to prevent a new key epoch on an
+    /// existing DB whose key was lost/misconfigured.
+    #[error(
+        "master key fingerprint mismatch: the loaded key does not match the key bound to this \
+         database.\n  expected (bound to DB): {expected}\n  actual (loaded key):   {actual}\n  \
+         Restore the correct key from backup, or remove the database to start fresh"
+    )]
+    KeyFingerprintMismatch { expected: String, actual: String },
 }
 
 /// SQLite PRAGMA configuration applied on every new connection.
@@ -232,6 +245,52 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), StorageError> {
         .run(pool)
         .await
         .map_err(StorageError::from)
+}
+
+/// Bind the database to the loaded master key, or verify the loaded key
+/// matches the key already bound (DS-AUD-B07).
+///
+/// Call this after [`run_migrations`] and `MasterKey::load` on every keyed
+/// entry point (CLI management commands, `serve`). The behavior is:
+/// - If `key_metadata` is empty (fresh DB) → INSERT a singleton row (id=1)
+///   recording `fingerprint`. This is the "new empty DB init transaction"
+///   the audit permits: the first key to open a fresh DB binds to it.
+/// - If a row exists → compare `current_key_fingerprint` against
+///   `fingerprint`. Mismatch → [`StorageError::KeyFingerprintMismatch`]
+///   (fail-closed). This prevents a management command from silently
+///   generating a NEW key on a host with an existing DB whose key file was
+///   lost/misconfigured, which would split the key epoch and make old
+///   ciphertext unreadable.
+///
+/// `migrate` (which runs before any key is loaded) must NOT call this; the
+/// binding happens on the first keyed command after migrate.
+///
+/// # Errors
+/// Returns [`StorageError::Database`] if the query fails, or
+/// [`StorageError::KeyFingerprintMismatch`] if the loaded key does not match
+/// the bound key.
+pub async fn ensure_key_binding(pool: &SqlitePool, fingerprint: &str) -> Result<(), StorageError> {
+    let bound: Option<(String,)> =
+        sqlx::query_as("SELECT current_key_fingerprint FROM key_metadata WHERE id = 1")
+            .fetch_optional(pool)
+            .await?;
+    match bound {
+        None => {
+            sqlx::query("INSERT INTO key_metadata (id, current_key_fingerprint) VALUES (1, ?)")
+                .bind(fingerprint)
+                .execute(pool)
+                .await?;
+            tracing::info!(fingerprint, "master key bound to database");
+        }
+        Some((expected,)) if expected == fingerprint => {}
+        Some((expected,)) => {
+            return Err(StorageError::KeyFingerprintMismatch {
+                expected,
+                actual: fingerprint.to_owned(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Return the highest migration version embedded in this binary (compile-time

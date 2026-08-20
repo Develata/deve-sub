@@ -1,10 +1,25 @@
 # syntax=docker/dockerfile:1
 
 # ── Stage 1: Rust + WASM builder ─────────────────────────────────────
-# WHY: Pinned Rust version matches CI (dtolnay/rust-toolchain@1.97.1). Trixie
-# builder per ADR-0006.
+# WHY: Builder always runs on $BUILDPLATFORM (amd64 in CI) for fast native
+# compilation. Arm64 binaries are produced via cross-compilation with
+# aarch64-unknown-linux-gnu, avoiding QEMU emulation which is 10-50x slower
+# for Rust + C deps (ring, libsqlite3-sys). See ADR-0006.
 # Constraint #11: no "latest" tag as a production release dependency.
-FROM rust:1.97.1-trixie AS builder
+FROM --platform=$BUILDPLATFORM rust:1.97.1-trixie AS builder
+
+ARG TARGETARCH
+
+# Install cross-compilation toolchain for arm64 targets.
+# WHY: ring (crypto) and libsqlite3-sys (SQLite) compile C/assembly code via
+# the cc crate, which needs a native C cross-compiler for the target arch.
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      apt-get update && \
+      apt-get install -y --no-install-recommends \
+        gcc-aarch64-linux-gnu g++-aarch64-linux-gnu && \
+      rm -rf /var/lib/apt/lists/* && \
+      rustup target add aarch64-unknown-linux-gnu; \
+    fi
 
 WORKDIR /build
 
@@ -19,9 +34,23 @@ COPY migrations/ migrations/
 COPY scripts/ scripts/
 
 # Build the host release binary.
-RUN cargo build --locked --release --bin deve-sub
+# For arm64 targets, cross-compile with aarch64-unknown-linux-gnu to avoid
+# QEMU emulation. The binary is copied to target/release/deve-sub in both
+# cases so the runtime stage COPY path is stable.
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc; \
+      export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++; \
+      export AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar; \
+      export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc; \
+      cargo build --locked --release --bin deve-sub --target aarch64-unknown-linux-gnu && \
+      mkdir -p target/release && \
+      cp target/aarch64-unknown-linux-gnu/release/deve-sub target/release/deve-sub; \
+    else \
+      cargo build --locked --release --bin deve-sub; \
+    fi
 
-# Build the WASM frontend (DS-AUD-004): the build script normalizes Dioxus
+# Build the WASM frontend (DS-AUD-004): architecture-independent, always
+# built natively on $BUILDPLATFORM. The build script normalizes Dioxus
 # output to apps/web/dist/ and verifies the index.html + WASM + JS contract
 # so the runtime image always has the real admin UI, not the placeholder
 # (DS-AUD-007/053).

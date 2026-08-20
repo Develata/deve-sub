@@ -45,4 +45,13 @@ pub enum SourceAppError {
     /// (SRC-006).
     #[error("refresh yielded zero nodes; old snapshot preserved")]
     ZeroNodes,
+
+    /// The refresh was cancelled by the user or a shutdown signal (B-15).
+    /// No snapshot was published.
+    #[error("refresh cancelled")]
+    Cancelled,
+
+    /// A refresh is already in progress for this source (B-15 lease).
+    #[error("refresh already in progress for source {0}")]
+    RefreshInProgress(String),
 }

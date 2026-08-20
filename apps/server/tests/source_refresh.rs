@@ -20,7 +20,7 @@ use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
     NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
     ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
-    SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
+    SourceRefreshJobRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
     TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRepository, UserRepository,
 };
@@ -30,14 +30,15 @@ use deve_sub_storage_sqlite::{
     SqliteLatencyRecordRepository, SqliteNodeOverrideRepository, SqliteNodePoolRepository,
     SqlitePoolMetaRepository, SqliteProbeRunRepository, SqliteProbeSourceRepository,
     SqliteRecoveryCodeRepository, SqliteSessionRepository, SqliteShortCodeRepository,
-    SqliteSourceRepository, SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
-    SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
-    SqliteTemplateVersionRepository, SqliteTotpSecretRepository,
+    SqliteSourceRefreshJobRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
+    SqliteSubscriptionRepository, SqliteSubscriptionTokenRepository, SqliteTempLinkRepository,
+    SqliteTemplateRepository, SqliteTemplateVersionRepository, SqliteTotpSecretRepository,
     SqliteTrafficDailySnapshotRepository, SqliteTrafficRepository, SqliteUserRepository,
 };
 
 struct MockFetcher {
     response: Mutex<Option<MockResp>>,
+    delay_ms: u64,
 }
 
 enum MockResp {
@@ -57,11 +58,23 @@ impl MockFetcher {
                 etag: None,
                 content_type: Some("text/plain".to_owned()),
             })),
+            delay_ms: 0,
         }
     }
     fn error() -> Self {
         Self {
             response: Mutex::new(Some(MockResp::Error(FetchError::Timeout(30)))),
+            delay_ms: 0,
+        }
+    }
+    fn slow(body: &str, delay_ms: u64) -> Self {
+        Self {
+            response: Mutex::new(Some(MockResp::Ok {
+                body: body.as_bytes().to_vec(),
+                etag: None,
+                content_type: Some("text/plain".to_owned()),
+            })),
+            delay_ms,
         }
     }
 }
@@ -69,6 +82,9 @@ impl MockFetcher {
 #[async_trait]
 impl SubscriptionFetcher for MockFetcher {
     async fn fetch(&self, _url: &str, _etag: Option<&str>) -> Result<FetchResult, FetchError> {
+        if self.delay_ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(self.delay_ms)).await;
+        }
         let resp = self.response.lock().expect("mutex").take();
         match resp {
             Some(MockResp::Ok {
@@ -136,6 +152,8 @@ impl TestApp {
                 )) as Arc<dyn SourceRepository>,
                 snapshot_repo: Arc::new(SqliteSourceSnapshotRepository::new(pool.clone()))
                     as Arc<dyn SourceSnapshotRepository>,
+                refresh_job_repo: Arc::new(SqliteSourceRefreshJobRepository::new(pool.clone()))
+                    as Arc<dyn SourceRefreshJobRepository>,
                 pool_repo: Arc::new(SqliteNodePoolRepository::new_with_key(
                     pool.clone(),
                     Arc::clone(&master_key),
@@ -193,6 +211,9 @@ impl TestApp {
                 real_proxy_probe: Arc::new(deve_sub_adapters::RealProxyProbe::new())
                     as Arc<dyn LatencyProbe>,
                 cancelled_flags: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+                refresh_cancel_flags: Arc::new(std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                )),
                 job_supervisor: Arc::new(deve_sub_application::JobSupervisor::new()),
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(fetcher) as Arc<dyn SubscriptionFetcher>,
@@ -293,7 +314,34 @@ async fn body_to_json(response: axum::response::Response) -> serde_json::Value {
 
 const TROJAN_LIST: &str = "trojan://TEST_PASSWORD@example.com:443?sni=example.com&type=tcp#NodeA";
 
-/// SRC-002: Admin can refresh a source and get reconcile counts.
+/// Poll `GET /api/v1/sources/refresh-jobs/{job_id}` until the job reaches a
+/// terminal status or the iteration budget is exhausted.
+async fn poll_job(router: &axum::Router, cookie: &str, job_id: &str) -> serde_json::Value {
+    for _ in 0..50 {
+        let response = router
+            .clone()
+            .oneshot(with_cookie(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/sources/refresh-jobs/{job_id}"))
+                    .body(Body::empty())
+                    .expect("request"),
+                cookie,
+            ))
+            .await
+            .expect("poll");
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = body_to_json(response).await;
+        let status = json["status"].as_str().expect("status");
+        if status == "completed" || status == "failed" || status == "cancelled" {
+            return json;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("refresh job did not reach terminal status within 5s");
+}
+
+/// SRC-002: Admin can refresh a source; the job completes with reconcile counts.
 #[tokio::test]
 async fn admin_can_refresh_source() {
     let app = TestApp::new_with_fetcher(MockFetcher::ok(TROJAN_LIST)).await;
@@ -310,14 +358,16 @@ async fn admin_can_refresh_source() {
         .await
         .expect("refresh");
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
     let json = body_to_json(response).await;
-    assert_eq!(json["not_modified"], false);
-    assert_eq!(json["version"], 1);
-    assert_eq!(json["node_count"], 1);
-    assert_eq!(json["reconcile"]["new_nodes"], 1);
-    assert_eq!(json["reconcile"]["duplicate_nodes"], 0);
-    assert!(json["snapshot_id"].as_str().is_some_and(|s| !s.is_empty()));
+    assert_eq!(json["status"], "running");
+    let job_id = json["job_id"].as_str().expect("job_id").to_owned();
+
+    let job = poll_job(&router, &cookie, &job_id).await;
+    assert_eq!(job["status"], "completed");
+    assert_eq!(job["new_nodes"], 1);
+    assert_eq!(job["duplicate_nodes"], 0);
+    assert_eq!(job["not_modified"], false);
 }
 
 /// SRC-002: Unauthenticated refresh returns 401.
@@ -370,7 +420,7 @@ async fn non_admin_forbidden() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-/// SRC-002: Refreshing a non-existent source returns 404.
+/// SRC-002: Refreshing a non-existent source returns 404 immediately.
 #[tokio::test]
 async fn refresh_nonexistent_returns_404() {
     let app = TestApp::new_with_fetcher(MockFetcher::ok(TROJAN_LIST)).await;
@@ -406,9 +456,9 @@ async fn refresh_invalid_id_returns_400() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-/// SRC-002: Fetch failure returns 502.
+/// SRC-002: Fetch failure produces a `failed` job (not 502 synchronously).
 #[tokio::test]
-async fn refresh_fetch_failure_returns_502() {
+async fn refresh_fetch_failure_marks_job_failed() {
     let app = TestApp::new_with_fetcher(MockFetcher::error()).await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
@@ -422,5 +472,40 @@ async fn refresh_fetch_failure_returns_502() {
         ))
         .await
         .expect("refresh");
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let json = body_to_json(response).await;
+    let job_id = json["job_id"].as_str().expect("job_id").to_owned();
+
+    let job = poll_job(&router, &cookie, &job_id).await;
+    assert_eq!(job["status"], "failed");
+    assert!(job["error_message"].as_str().is_some_and(|s| !s.is_empty()));
+}
+
+/// SRC-009: A second refresh while one is running returns 409.
+#[tokio::test]
+async fn concurrent_refresh_returns_409() {
+    let app = TestApp::new_with_fetcher(MockFetcher::slow(TROJAN_LIST, 500)).await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let source_id = create_source(&router, &cookie).await;
+
+    let first = router
+        .clone()
+        .oneshot(with_cookie(
+            post(&format!("/api/v1/sources/{source_id}/refresh")),
+            &cookie,
+        ))
+        .await
+        .expect("first refresh");
+    assert_eq!(first.status(), StatusCode::ACCEPTED);
+
+    let second = router
+        .clone()
+        .oneshot(with_cookie(
+            post(&format!("/api/v1/sources/{source_id}/refresh")),
+            &cookie,
+        ))
+        .await
+        .expect("second refresh");
+    assert_eq!(second.status(), StatusCode::CONFLICT);
 }

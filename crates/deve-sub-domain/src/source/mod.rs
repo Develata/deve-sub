@@ -8,6 +8,7 @@
 pub mod entity;
 pub mod error;
 pub mod ports;
+pub mod refresh_job;
 pub mod snapshot;
 pub mod source_item;
 
@@ -15,7 +16,9 @@ pub use entity::{Source, SourceFilterRules, SourceType};
 pub use error::SourceError;
 pub use ports::{
     ImportOutcome, ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, PoolMetaRepository,
-    ReconcileEntry, ReconcileInput, ReconcileResult, SourceRepository, SourceSnapshotRepository,
+    ReconcileEntry, ReconcileInput, ReconcileResult, SourceRefreshJobRepository, SourceRepository,
+    SourceSnapshotRepository,
 };
+pub use refresh_job::{RefreshPhase, SourceRefreshJob, SourceRefreshJobStatus};
 pub use snapshot::SourceSnapshot;
 pub use source_item::{ItemParseStatus, SourceItem};

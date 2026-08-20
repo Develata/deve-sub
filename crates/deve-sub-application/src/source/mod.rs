@@ -12,12 +12,12 @@ pub mod filter;
 pub mod geoip;
 pub mod node_commands;
 pub mod parse;
+pub mod refresh;
 pub mod scheduler;
 
 pub use commands::{
-    CreateSourceParams, ListNodesParams, RefreshResult, UpdateSourceParams, create_source,
-    delete_source, get_node, get_source, import_nodes, list_nodes, list_sources, refresh_source,
-    update_source,
+    CreateSourceParams, ListNodesParams, UpdateSourceParams, create_source, delete_source,
+    get_node, get_source, import_nodes, list_nodes, list_sources, update_source,
 };
 pub use error::SourceAppError;
 pub use fetcher::{FetchError, FetchResult, SubscriptionFetcher};
@@ -28,4 +28,7 @@ pub use node_commands::{
     delete_tag, list_tags, set_manual_region, set_node_chain, set_node_tags, update_override,
 };
 pub use parse::{ImportParseResult, ParseContentError, parse_content, parse_for_import};
+pub use refresh::{
+    RefreshDeps, RefreshResult, execute_refresh_job, signal_cancel, start_refresh_job,
+};
 pub use scheduler::RefreshScheduler;

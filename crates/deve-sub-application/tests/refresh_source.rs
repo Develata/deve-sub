@@ -17,12 +17,13 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use deve_sub_application::source::{
-    self, CreateSourceParams, FetchError, FetchResult, GeoIpPort, RegionDetection,
-    SubscriptionFetcher,
+    self, CreateSourceParams, FetchError, FetchResult, GeoIpPort, RefreshDeps, RefreshResult,
+    RegionDetection, SubscriptionFetcher, execute_refresh_job, start_refresh_job,
 };
 use deve_sub_domain::{SourceSnapshotRepository, SourceType};
 use deve_sub_storage_sqlite::{
-    SqliteNodePoolRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
+    SqliteNodePoolRepository, SqliteSourceRefreshJobRepository, SqliteSourceRepository,
+    SqliteSourceSnapshotRepository,
 };
 
 /// Mock fetcher that returns a pre-programmed response.
@@ -152,6 +153,31 @@ async fn create_source_typed(
 const TROJAN_URI_LIST: &str = "trojan://TEST_PASSWORD@example.com:443?sni=example.com&type=tcp#NodeA\n\
      trojan://TEST_PASSWORD@other.com:8443?sni=other.com&type=tcp#NodeB";
 
+/// Run a full refresh via the B-15 job flow, returning the result (or error)
+/// so tests can assert on both success and failure cases.
+async fn run_refresh(
+    source_repo: &SqliteSourceRepository,
+    snapshot_repo: &SqliteSourceSnapshotRepository,
+    pool_repo: &SqliteNodePoolRepository,
+    pool: &sqlx::sqlite::SqlitePool,
+    fetcher: &dyn SubscriptionFetcher,
+    geoip: &dyn GeoIpPort,
+    source_id: deve_sub_kernel::SourceId,
+) -> Result<RefreshResult, source::SourceAppError> {
+    let job_repo = SqliteSourceRefreshJobRepository::new(pool.clone());
+    let deps = RefreshDeps {
+        source_repo,
+        snapshot_repo,
+        pool_repo,
+        job_repo: &job_repo,
+        fetcher,
+        geoip,
+    };
+    let job_id = start_refresh_job(&deps, source_id).await?;
+    let cancelled = std::sync::atomic::AtomicBool::new(false);
+    execute_refresh_job(&deps, job_id, source_id, &cancelled).await
+}
+
 /// SRC-002/005: Successful refresh creates snapshot, inserts nodes.
 #[tokio::test]
 async fn refresh_inserts_nodes_and_creates_snapshot() {
@@ -173,10 +199,11 @@ async fn refresh_inserts_nodes_and_creates_snapshot() {
 
     let source = create_source(&source_repo, "test-source").await;
 
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &StubGeoIp,
         source.id,
@@ -219,10 +246,11 @@ async fn refresh_304_not_modified_preserves_old_snapshot() {
         etag: Some("\"v1\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    let r1 = source::refresh_source(
+    let r1 = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v1,
         &StubGeoIp,
         source.id,
@@ -233,10 +261,11 @@ async fn refresh_304_not_modified_preserves_old_snapshot() {
     assert_eq!(r1.snapshot.version, 1);
 
     let fetcher_304 = MockFetcher::new(vec![MockResponse::NotModified]);
-    let r2 = source::refresh_source(
+    let r2 = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_304,
         &StubGeoIp,
         source.id,
@@ -270,10 +299,11 @@ async fn fetch_failure_preserves_old_snapshot() {
         etag: Some("\"v1\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v1,
         &StubGeoIp,
         source.id,
@@ -282,10 +312,11 @@ async fn fetch_failure_preserves_old_snapshot() {
     .expect("refresh v1");
 
     let fetcher_fail = MockFetcher::new(vec![MockResponse::Error(FetchError::Timeout(30))]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_fail,
         &StubGeoIp,
         source.id,
@@ -334,10 +365,11 @@ async fn parse_failure_preserves_old_snapshot() {
         etag: Some("\"v1\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v1,
         &StubGeoIp,
         source.id,
@@ -350,10 +382,11 @@ async fn parse_failure_preserves_old_snapshot() {
         etag: None,
         content_type: None,
     }]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_bad,
         &StubGeoIp,
         source.id,
@@ -392,10 +425,11 @@ async fn refresh_nonexistent_source_returns_not_found() {
     let fetcher = MockFetcher::new(vec![]);
 
     let fake_id = deve_sub_kernel::SourceId::new();
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &StubGeoIp,
         fake_id,
@@ -438,10 +472,11 @@ async fn fetch_failure_disables_source_when_keep_on_fail_false() {
     .expect("create source");
 
     let fetcher = MockFetcher::new(vec![MockResponse::Error(FetchError::Timeout(30))]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &StubGeoIp,
         source.id,
@@ -489,10 +524,11 @@ async fn fetch_failure_preserves_enabled_when_keep_on_fail_true() {
     .expect("create source");
 
     let fetcher = MockFetcher::new(vec![MockResponse::Error(FetchError::Timeout(30))]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &StubGeoIp,
         source.id,
@@ -537,10 +573,11 @@ async fn cancelled_refresh_publishes_no_half_snapshot() {
         etag: Some("\"v1\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v1,
         &StubGeoIp,
         source.id,
@@ -563,10 +600,11 @@ async fn cancelled_refresh_publishes_no_half_snapshot() {
         etag: None,
         content_type: None,
     }]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_bad,
         &StubGeoIp,
         source.id,
@@ -624,18 +662,20 @@ async fn concurrent_refreshes_do_not_cross_pollute() {
     }]);
 
     let (r_a, r_b) = tokio::join!(
-        source::refresh_source(
+        run_refresh(
             &source_repo,
             &snapshot_repo,
             &pool_repo,
+            &db.pool,
             &fetcher_a,
             &StubGeoIp,
             source_a.id,
         ),
-        source::refresh_source(
+        run_refresh(
             &source_repo,
             &snapshot_repo,
             &pool_repo,
+            &db.pool,
             &fetcher_b,
             &StubGeoIp,
             source_b.id,
@@ -701,10 +741,11 @@ async fn zero_node_refresh_preserves_old_snapshot() {
         etag: Some("\"v1\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v1,
         &StubGeoIp,
         source.id,
@@ -717,10 +758,11 @@ async fn zero_node_refresh_preserves_old_snapshot() {
         etag: None,
         content_type: Some("text/plain".to_owned()),
     }]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_empty,
         &StubGeoIp,
         source.id,
@@ -776,10 +818,11 @@ async fn oversized_response_rejected_preserves_old_snapshot() {
         etag: Some("\"v1\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v1,
         &StubGeoIp,
         source.id,
@@ -789,10 +832,11 @@ async fn oversized_response_rejected_preserves_old_snapshot() {
 
     let fetcher_oversized =
         MockFetcher::new(vec![MockResponse::Error(FetchError::TooLarge(11_000_000))]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_oversized,
         &StubGeoIp,
         source.id,
@@ -836,10 +880,11 @@ async fn timeout_then_retry_succeeds() {
     let source = create_source(&source_repo, "test-source").await;
 
     let fetcher_timeout = MockFetcher::new(vec![MockResponse::Error(FetchError::Timeout(30))]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_timeout,
         &StubGeoIp,
         source.id,
@@ -858,10 +903,11 @@ async fn timeout_then_retry_succeeds() {
         etag: None,
         content_type: Some("text/plain".to_owned()),
     }]);
-    let result = source::refresh_source(
+    let result = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_retry,
         &StubGeoIp,
         source.id,
@@ -899,10 +945,11 @@ async fn src_014_diff_counts_correct() {
         etag: Some("\"v1\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    let r1 = source::refresh_source(
+    let r1 = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v1,
         &StubGeoIp,
         source.id,
@@ -925,10 +972,11 @@ async fn src_014_diff_counts_correct() {
         etag: Some("\"v2\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    let r2 = source::refresh_source(
+    let r2 = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v2,
         &StubGeoIp,
         source.id,
@@ -952,10 +1000,11 @@ async fn src_014_diff_counts_correct() {
         etag: Some("\"v3\"".to_owned()),
         content_type: Some("text/plain".to_owned()),
     }]);
-    let r3 = source::refresh_source(
+    let r3 = run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher_v3,
         &StubGeoIp,
         source.id,

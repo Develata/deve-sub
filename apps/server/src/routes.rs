@@ -63,6 +63,7 @@ fn register_api_routes(router: OpenApiRouter<AppState>) -> OpenApiRouter<AppStat
     let router = crate::users::register(router);
     let router = crate::audit::register(router);
     let router = crate::sources::register(router);
+    let router = crate::source_refresh::register(router);
     let router = crate::node_overrides::register(router);
     let router = crate::templates::register(router);
     let router = crate::template_generation::register(router);

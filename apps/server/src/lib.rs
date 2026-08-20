@@ -24,9 +24,10 @@ use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
     NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
     ProbeSourceAdapter, ProbeSourceRepository, RecoveryCodeRepository, SessionRepository,
-    ShortCodeRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
-    SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRepository, UserRepository,
+    ShortCodeRepository, SourceRefreshJobRepository, SourceRepository, SourceSnapshotRepository,
+    SubscriptionRepository, SubscriptionTokenRepository, TempLinkRepository, TemplateRepository,
+    TemplateVersionRepository, TotpSecretRepository, TrafficDailySnapshotRepository,
+    TrafficRepository, UserRepository,
 };
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
@@ -47,6 +48,7 @@ pub mod node_overrides;
 pub mod nodes;
 pub mod probes;
 pub mod routes;
+pub mod source_refresh;
 pub mod sources;
 pub mod subscriptions;
 pub mod template_generation;
@@ -75,6 +77,7 @@ pub struct AppState {
     pub recovery_code_repo: Arc<dyn RecoveryCodeRepository>,
     pub source_repo: Arc<dyn SourceRepository>,
     pub snapshot_repo: Arc<dyn SourceSnapshotRepository>,
+    pub refresh_job_repo: Arc<dyn SourceRefreshJobRepository>,
     pub pool_repo: Arc<dyn NodePoolRepository>,
     pub pool_meta_repo: Arc<dyn PoolMetaRepository>,
     pub override_repo: Arc<dyn NodeOverrideRepository>,
@@ -95,6 +98,8 @@ pub struct AppState {
     pub quic_probe: Arc<dyn LatencyProbe>,
     pub real_proxy_probe: Arc<dyn LatencyProbe>,
     pub cancelled_flags: Arc<Mutex<HashMap<deve_sub_kernel::ProbeRunId, Arc<AtomicBool>>>>,
+    pub refresh_cancel_flags:
+        Arc<Mutex<HashMap<deve_sub_kernel::SourceRefreshJobId, Arc<AtomicBool>>>>,
     pub job_supervisor: Arc<JobSupervisor>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,

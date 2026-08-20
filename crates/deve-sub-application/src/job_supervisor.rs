@@ -89,10 +89,7 @@ impl JobSupervisor {
     /// Returns the number of currently tracked tasks.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.tasks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .len()
+        self.tasks.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Returns `true` if no tasks are tracked.

@@ -13,8 +13,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use deve_sub_application::source::{
-    self, CreateSourceParams, FetchError, FetchResult, GeoIpPort, RegionDetection,
-    SubscriptionFetcher, UpdateOverrideParams, enrich_regions,
+    self, CreateSourceParams, FetchError, FetchResult, GeoIpPort, RefreshDeps, RegionDetection,
+    SubscriptionFetcher, UpdateOverrideParams, enrich_regions, execute_refresh_job,
+    start_refresh_job,
 };
 use deve_sub_domain::{
     ItemParseStatus, NodePoolRepository, ReconcileEntry, RegionMethod, SourceType,
@@ -22,8 +23,8 @@ use deve_sub_domain::{
 use deve_sub_kernel::{NodeId, TagId};
 use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::{
-    SqliteNodeOverrideRepository, SqliteNodePoolRepository, SqliteSourceRepository,
-    SqliteSourceSnapshotRepository,
+    SqliteNodeOverrideRepository, SqliteNodePoolRepository, SqliteSourceRefreshJobRepository,
+    SqliteSourceRepository, SqliteSourceSnapshotRepository,
 };
 
 // ---------------------------------------------------------------------------
@@ -123,6 +124,33 @@ async fn create_source(repo: &SqliteSourceRepository, name: &str) -> deve_sub_do
     .expect("create source")
 }
 
+async fn run_refresh(
+    source_repo: &SqliteSourceRepository,
+    snapshot_repo: &SqliteSourceSnapshotRepository,
+    pool_repo: &SqliteNodePoolRepository,
+    pool: &sqlx::sqlite::SqlitePool,
+    fetcher: &dyn SubscriptionFetcher,
+    geoip: &dyn GeoIpPort,
+    source_id: deve_sub_kernel::SourceId,
+) {
+    let job_repo = SqliteSourceRefreshJobRepository::new(pool.clone());
+    let deps = RefreshDeps {
+        source_repo,
+        snapshot_repo,
+        pool_repo,
+        job_repo: &job_repo,
+        fetcher,
+        geoip,
+    };
+    let job_id = start_refresh_job(&deps, source_id)
+        .await
+        .expect("start job");
+    let cancelled = std::sync::atomic::AtomicBool::new(false);
+    execute_refresh_job(&deps, job_id, source_id, &cancelled)
+        .await
+        .expect("execute job");
+}
+
 // ---------------------------------------------------------------------------
 // NODE-007: Auto region detection for IPv4
 // ---------------------------------------------------------------------------
@@ -215,16 +243,16 @@ async fn node_006_manual_region_survives_auto_detection() {
     let src = create_source(&source_repo, "node-006-source").await;
 
     // First refresh: inserts node with auto-detected region "US"
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &geoip,
         src.id,
     )
-    .await
-    .expect("first refresh");
+    .await;
 
     let nodes = pool_repo
         .list_nodes(&Default::default(), None, 100)
@@ -242,16 +270,16 @@ async fn node_006_manual_region_survives_auto_detection() {
     assert_eq!(region.value.as_deref(), Some("JP"));
 
     // Second refresh: auto-detects "US" again, but manual override must persist
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &geoip,
         src.id,
     )
-    .await
-    .expect("second refresh");
+    .await;
 
     // Verify effective region is still "JP" (manual), not "US" (auto)
     let entry = pool_repo
@@ -287,16 +315,16 @@ async fn node_010_override_survives_refresh() {
     let src = create_source(&source_repo, "node-010-source").await;
 
     // First refresh: inserts node
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &geoip,
         src.id,
     )
-    .await
-    .expect("first refresh");
+    .await;
 
     let nodes = pool_repo
         .list_nodes(&Default::default(), None, 100)
@@ -334,16 +362,16 @@ async fn node_010_override_survives_refresh() {
     assert!(entry.override_info.is_some());
 
     // Second refresh: upstream sends the same node
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &geoip,
         src.id,
     )
-    .await
-    .expect("second refresh");
+    .await;
 
     // Verify override still effective after refresh
     let entry = pool_repo
@@ -388,16 +416,16 @@ async fn node_004_batch_enable_disable() {
     };
 
     let src = create_source(&source_repo, "node-004-source").await;
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &geoip,
         src.id,
     )
-    .await
-    .expect("refresh");
+    .await;
 
     let nodes = pool_repo
         .list_nodes(&Default::default(), None, 100)
@@ -455,16 +483,16 @@ async fn node_005_batch_tags() {
     };
 
     let src = create_source(&source_repo, "node-005-source").await;
-    source::refresh_source(
+    run_refresh(
         &source_repo,
         &snapshot_repo,
         &pool_repo,
+        &db.pool,
         &fetcher,
         &geoip,
         src.id,
     )
-    .await
-    .expect("refresh");
+    .await;
 
     let nodes = pool_repo
         .list_nodes(&Default::default(), None, 100)

@@ -20,9 +20,10 @@ use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
     NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
     ProbeSourceAdapter, ProbeSourceRepository, RecoveryCodeRepository, SessionRepository,
-    ShortCodeRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
-    SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
-    TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRepository, UserRepository,
+    ShortCodeRepository, SourceRefreshJobRepository, SourceRepository, SourceSnapshotRepository,
+    SubscriptionRepository, SubscriptionTokenRepository, TempLinkRepository, TemplateRepository,
+    TemplateVersionRepository, TotpSecretRepository, TrafficDailySnapshotRepository,
+    TrafficRepository, UserRepository,
 };
 use deve_sub_server::{AppState, build_router};
 
@@ -112,6 +113,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     );
     let snapshot_repo: Arc<dyn SourceSnapshotRepository> =
         Arc::new(deve_sub_storage_sqlite::SqliteSourceSnapshotRepository::new(db.clone()));
+    let refresh_job_repo: Arc<dyn SourceRefreshJobRepository> =
+        Arc::new(deve_sub_storage_sqlite::SqliteSourceRefreshJobRepository::new(db.clone()));
     let pool_repo: Arc<dyn NodePoolRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteNodePoolRepository::new_with_key(
             db.clone(),
@@ -194,6 +197,9 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let cancelled_flags: Arc<
         Mutex<HashMap<deve_sub_kernel::ProbeRunId, Arc<std::sync::atomic::AtomicBool>>>,
     > = Arc::new(Mutex::new(HashMap::new()));
+    let refresh_cancel_flags: Arc<
+        Mutex<HashMap<deve_sub_kernel::SourceRefreshJobId, Arc<std::sync::atomic::AtomicBool>>>,
+    > = Arc::new(Mutex::new(HashMap::new()));
     let job_supervisor = Arc::new(JobSupervisor::new());
 
     let state = AppState {
@@ -206,6 +212,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         recovery_code_repo,
         source_repo: source_repo.clone(),
         snapshot_repo: snapshot_repo.clone(),
+        refresh_job_repo: refresh_job_repo.clone(),
         pool_repo: pool_repo.clone(),
         pool_meta_repo,
         override_repo,
@@ -226,6 +233,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         quic_probe,
         real_proxy_probe,
         cancelled_flags: Arc::clone(&cancelled_flags),
+        refresh_cancel_flags: Arc::clone(&refresh_cancel_flags),
         job_supervisor: Arc::clone(&job_supervisor),
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
@@ -233,7 +241,14 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         db_health,
     };
 
-    let scheduler = RefreshScheduler::new(source_repo, snapshot_repo, pool_repo, fetcher, geoip);
+    let scheduler = RefreshScheduler::new(
+        source_repo,
+        snapshot_repo,
+        pool_repo,
+        refresh_job_repo,
+        fetcher,
+        geoip,
+    );
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
 
     // Crash recovery (constraint #20): mark any probe runs left in Running or

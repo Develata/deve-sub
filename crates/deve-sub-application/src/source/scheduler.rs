@@ -5,26 +5,31 @@
 //! is observable (traced per refresh), cancellable (shutdown future breaks
 //! the loop), and safely shuts down (in-progress refreshes complete before
 //! exit; no new refreshes start after shutdown — constraint #20).
+//!
+//! B-15: each refresh now goes through the job lifecycle
+//! (`start_refresh_job` → `execute_refresh_job`) so progress is tracked in
+//! the `source_refresh_jobs` table and the per-source lease prevents
+//! concurrent refreshes.
 
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use deve_sub_domain::{NodePoolRepository, SourceRepository, SourceSnapshotRepository};
+use deve_sub_domain::{
+    NodePoolRepository, SourceRefreshJobRepository, SourceRepository, SourceSnapshotRepository,
+};
 
-use super::commands::refresh_source;
 use super::fetcher::SubscriptionFetcher;
 use super::geoip::GeoIpPort;
+use super::refresh::{RefreshDeps, execute_refresh_job, start_refresh_job};
 
-/// Default tick interval: check for due sources every 60 seconds.
 const DEFAULT_TICK_SECS: u64 = 60;
-
-/// Default max concurrent refreshes per tick (SRC-013: "并发受控").
 const DEFAULT_MAX_CONCURRENCY: usize = 4;
 
-/// Background scheduler that auto-refreshes eligible sources.
 pub struct RefreshScheduler {
     source_repo: std::sync::Arc<dyn SourceRepository>,
     snapshot_repo: std::sync::Arc<dyn SourceSnapshotRepository>,
     pool_repo: std::sync::Arc<dyn NodePoolRepository>,
+    job_repo: std::sync::Arc<dyn SourceRefreshJobRepository>,
     fetcher: std::sync::Arc<dyn SubscriptionFetcher>,
     geoip: std::sync::Arc<dyn GeoIpPort>,
     tick_interval: Duration,
@@ -32,12 +37,12 @@ pub struct RefreshScheduler {
 }
 
 impl RefreshScheduler {
-    /// Create a new scheduler with the given dependencies and default tick.
     #[must_use]
     pub fn new(
         source_repo: std::sync::Arc<dyn SourceRepository>,
         snapshot_repo: std::sync::Arc<dyn SourceSnapshotRepository>,
         pool_repo: std::sync::Arc<dyn NodePoolRepository>,
+        job_repo: std::sync::Arc<dyn SourceRefreshJobRepository>,
         fetcher: std::sync::Arc<dyn SubscriptionFetcher>,
         geoip: std::sync::Arc<dyn GeoIpPort>,
     ) -> Self {
@@ -45,6 +50,7 @@ impl RefreshScheduler {
             source_repo,
             snapshot_repo,
             pool_repo,
+            job_repo,
             fetcher,
             geoip,
             tick_interval: Duration::from_secs(DEFAULT_TICK_SECS),
@@ -52,29 +58,18 @@ impl RefreshScheduler {
         }
     }
 
-    /// Set the tick interval.
     #[must_use]
     pub fn tick_interval(mut self, interval: Duration) -> Self {
         self.tick_interval = interval;
         self
     }
 
-    /// Set the max concurrent refreshes per tick (SRC-013: "并发受控").
     #[must_use]
     pub fn max_concurrency(mut self, max: usize) -> Self {
         self.max_concurrency = max.max(1);
         self
     }
 
-    /// Run the scheduler loop until `shutdown` completes.
-    ///
-    /// Between ticks, the scheduler sleeps for `tick_interval`. On each tick,
-    /// it pages through all sources, filters for `auto_update && enabled`,
-    /// checks whether the last snapshot is due, and refreshes if so.
-    ///
-    /// The shutdown signal is checked between ticks only — an in-progress
-    /// refresh is allowed to complete before the scheduler exits (safe
-    /// shutdown per constraint #20).
     pub async fn run(self, shutdown: impl std::future::Future<Output = ()> + Send) {
         tokio::pin!(shutdown);
         tracing::info!(
@@ -99,6 +94,11 @@ impl RefreshScheduler {
     /// source_id, separate snapshot, separate reconcile transaction — so
     /// concurrent execution cannot cross-pollute. Concurrency is capped by
     /// `max_concurrency` via a semaphore to bound resource usage.
+    ///
+    /// B-15: each refresh goes through the job lifecycle. The per-source
+    /// lease (DB partial unique index on `source_refresh_jobs`) prevents
+    /// concurrent refreshes even if the scheduler and a manual API call
+    /// race.
     async fn tick(&self) {
         let due = self.collect_due_sources().await;
         if due.is_empty() {
@@ -116,28 +116,33 @@ impl RefreshScheduler {
             let source_repo = self.source_repo.clone();
             let snapshot_repo = self.snapshot_repo.clone();
             let pool_repo = self.pool_repo.clone();
+            let job_repo = self.job_repo.clone();
             let fetcher = self.fetcher.clone();
             let geoip = self.geoip.clone();
             let permit = semaphore.clone();
             set.spawn(async move {
-                // WHY: Semaphore::acquire_owned errors only if the semaphore
-                // is closed, which never happens here (we own it). This is
-                // infallible in this context.
                 #[allow(clippy::expect_used, reason = "semaphore is never closed by us")]
                 let _permit = permit
                     .acquire_owned()
                     .await
                     .expect("scheduler semaphore is never closed");
-                let result = refresh_source(
-                    source_repo.as_ref(),
-                    snapshot_repo.as_ref(),
-                    pool_repo.as_ref(),
-                    fetcher.as_ref(),
-                    geoip.as_ref(),
-                    source_id,
-                )
-                .await;
-                (source_id, result)
+                let deps = RefreshDeps {
+                    source_repo: source_repo.as_ref(),
+                    snapshot_repo: snapshot_repo.as_ref(),
+                    pool_repo: pool_repo.as_ref(),
+                    job_repo: job_repo.as_ref(),
+                    fetcher: fetcher.as_ref(),
+                    geoip: geoip.as_ref(),
+                };
+                let cancelled = AtomicBool::new(false);
+                match start_refresh_job(&deps, source_id).await {
+                    Ok(job_id) => {
+                        let result =
+                            execute_refresh_job(&deps, job_id, source_id, &cancelled).await;
+                        (source_id, result)
+                    }
+                    Err(e) => (source_id, Err(e)),
+                }
             });
         }
 
@@ -170,9 +175,6 @@ impl RefreshScheduler {
         }
     }
 
-    /// Page through all sources and return IDs of those that are due for
-    /// refresh (auto_update && enabled && interval elapsed since last
-    /// snapshot, or no snapshot yet).
     async fn collect_due_sources(&self) -> Vec<deve_sub_kernel::SourceId> {
         let now = deve_sub_kernel::Timestamp::now();
         let page_size: u32 = 100;

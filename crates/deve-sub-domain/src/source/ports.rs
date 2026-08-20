@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use deve_sub_kernel::{NodeId, Revision, SourceId, SourceSnapshotId, Timestamp};
 
 use super::error::SourceError;
+use super::refresh_job::{RefreshPhase, SourceRefreshJob};
 use super::source_item::ItemParseStatus;
 use super::{Source, SourceSnapshot};
 use crate::node_override::{NodeOverride, Tag};
@@ -309,4 +310,84 @@ pub trait PoolMetaRepository: Send + Sync {
 
     /// Atomically bump the pool revision by one and return the new value.
     async fn bump_revision(&self) -> Result<Revision, SourceError>;
+}
+
+/// Storage boundary for source refresh jobs (B-15).
+///
+/// Each refresh attempt creates one job row. The per-source lease is
+/// enforced by a partial UNIQUE index at the DB level: at most one
+/// `Running` job per source. The runner creates a job (Pending → Running),
+/// updates the phase as it progresses, and writes a terminal status
+/// (Completed / Failed / Cancelled) when done.
+#[async_trait]
+pub trait SourceRefreshJobRepository: Send + Sync {
+    /// Create a new refresh job row in `Pending` status.
+    ///
+    /// Returns [`SourceError::RefreshInProgress`] if a `Running` job already
+    /// exists for this source (the lease is held). This is the application-
+    /// level lease check; the DB-level partial unique index is the final
+    /// defense-in-depth guarantee.
+    async fn create(&self, job: &SourceRefreshJob) -> Result<(), SourceError>;
+
+    /// Find a refresh job by ID.
+    async fn find_by_id(
+        &self,
+        id: deve_sub_kernel::SourceRefreshJobId,
+    ) -> Result<Option<SourceRefreshJob>, SourceError>;
+
+    /// Find the Running job for a source, if any. Used by the scheduler to
+    /// check whether a source is already being refreshed before starting a
+    /// new refresh (the lease check).
+    async fn find_running_for_source(
+        &self,
+        source_id: SourceId,
+    ) -> Result<Option<SourceRefreshJob>, SourceError>;
+
+    /// Transition a job to `Running` status. Called by the runner when it
+    /// picks up the job. Returns [`SourceError::RefreshInProgress`] if
+    /// another job is already Running for this source (lease contention).
+    async fn mark_running(
+        &self,
+        id: deve_sub_kernel::SourceRefreshJobId,
+    ) -> Result<(), SourceError>;
+
+    /// Update the job's current phase (progress indicator). Called before
+    /// each phase: fetching, parsing, enriching, reconciling, publishing.
+    async fn update_phase(
+        &self,
+        id: deve_sub_kernel::SourceRefreshJobId,
+        phase: RefreshPhase,
+    ) -> Result<(), SourceError>;
+
+    /// Mark a job as completed with reconcile counts and not_modified flag.
+    async fn mark_completed(
+        &self,
+        id: deve_sub_kernel::SourceRefreshJobId,
+        new_nodes: u64,
+        duplicate_nodes: u64,
+        reactivated_nodes: u64,
+        missing_nodes: u64,
+        not_modified: bool,
+    ) -> Result<(), SourceError>;
+
+    /// Mark a job as failed with an error message.
+    async fn mark_failed(
+        &self,
+        id: deve_sub_kernel::SourceRefreshJobId,
+        error_message: &str,
+    ) -> Result<(), SourceError>;
+
+    /// Mark a job as cancelled. Called when a cancel signal is received or
+    /// on shutdown. Best-effort — the job may have already completed.
+    async fn mark_cancelled(
+        &self,
+        id: deve_sub_kernel::SourceRefreshJobId,
+    ) -> Result<(), SourceError>;
+
+    /// List recent refresh jobs for a source, newest first.
+    async fn list_for_source(
+        &self,
+        source_id: SourceId,
+        limit: u32,
+    ) -> Result<Vec<SourceRefreshJob>, SourceError>;
 }

@@ -5,17 +5,12 @@
 //! `docs/plan/03-architecture.md` §"Lightweight CQRS".
 
 use deve_sub_domain::{
-    ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, ProtocolKind, ReconcileInput,
-    ReconcileResult, Source, SourceError, SourceFilterRules, SourceRepository, SourceSnapshot,
-    SourceSnapshotRepository, SourceType,
+    ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, ProtocolKind, Source, SourceError,
+    SourceFilterRules, SourceRepository, SourceType,
 };
-use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
+use deve_sub_kernel::{NodeId, SourceId};
 
 use super::error::SourceAppError;
-use super::fetcher::{FetchResult, SubscriptionFetcher};
-use super::filter::{apply_protocol_filter, apply_region_filter};
-use super::geoip::{GeoIpPort, enrich_regions};
-use super::parse::parse_content;
 
 /// Maximum source name length.
 const MAX_NAME_LEN: usize = 128;
@@ -226,172 +221,7 @@ pub async fn list_sources(
     repo.list(cursor, limit).await.map_err(map_source_error)
 }
 
-/// Result of a successful source refresh.
-#[derive(Debug, Clone)]
-pub struct RefreshResult {
-    /// The snapshot created by this refresh.
-    pub snapshot: SourceSnapshot,
-    /// Reconciliation counts from the node pool update.
-    pub reconcile: ReconcileResult,
-    /// Whether the fetch returned 304 Not Modified. When `true`, no new
-    /// snapshot was created and `snapshot` refers to the previously active
-    /// one.
-    pub not_modified: bool,
-}
-
-/// Refresh a source: fetch → parse → reconcile.
-///
-/// Fetches the subscription URL (SSRF-checked by the fetcher), parses the
-/// content, and reconciles the parsed nodes into the pool in a single
-/// transaction. On fetch or parse failure, the last successful snapshot
-/// remains active (constraint #19). When `source.keep_on_fail` is `false`,
-/// a fetch or parse failure also disables the source (sets `enabled = false`)
-/// per plan M4 §"Failure/recovery"; the admin can re-enable it after fixing
-/// the URL.
-///
-/// # Errors
-/// - [`SourceAppError::SourceNotFound`] — source does not exist.
-/// - [`SourceAppError::Fetch`] — the fetch failed (SSRF, timeout, HTTP error).
-/// - [`SourceAppError::Parse`] — the content could not be parsed.
-/// - [`SourceAppError::Source`] — storage or reconciliation error.
-pub async fn refresh_source(
-    source_repo: &dyn SourceRepository,
-    snapshot_repo: &dyn SourceSnapshotRepository,
-    pool_repo: &dyn NodePoolRepository,
-    fetcher: &dyn SubscriptionFetcher,
-    geoip: &dyn GeoIpPort,
-    source_id: SourceId,
-) -> Result<RefreshResult, SourceAppError> {
-    let source = source_repo
-        .find_by_id(source_id)
-        .await
-        .map_err(map_source_error)?
-        .ok_or(SourceAppError::SourceNotFound)?;
-
-    let active = snapshot_repo
-        .find_active(source_id)
-        .await
-        .map_err(map_source_error)?;
-    let etag = active.as_ref().and_then(|s| s.etag.clone());
-
-    let fetch = match fetcher.fetch(&source.url, etag.as_deref()).await {
-        Ok(f) => f,
-        Err(e) => {
-            disable_on_failure(source_repo, &source).await;
-            return Err(e.into());
-        }
-    };
-
-    if let FetchResult::NotModified = fetch {
-        let snapshot = active.ok_or(SourceAppError::Source(SourceError::Storage(
-            "server returned 304 but no active snapshot exists".to_owned(),
-        )))?;
-        return Ok(RefreshResult {
-            snapshot,
-            reconcile: ReconcileResult::default(),
-            not_modified: true,
-        });
-    }
-
-    let (body, resp_etag, content_type) = match fetch {
-        FetchResult::Ok {
-            body,
-            etag,
-            content_type,
-        } => (body, etag, content_type),
-        FetchResult::NotModified => {
-            // WHY: the NotModified arm above returns early; this arm exists
-            // only to satisfy the exhaustive match and can never execute.
-            return Err(SourceAppError::Source(SourceError::Storage(
-                "unreachable: NotModified after 304 check".to_owned(),
-            )));
-        }
-    };
-
-    let mut entries = match parse_content(source.source_type, content_type.as_deref(), &body) {
-        Ok(e) => e,
-        Err(e) => {
-            disable_on_failure(source_repo, &source).await;
-            return Err(e.into());
-        }
-    };
-
-    // WHY: SRC-006 — if parse yielded zero valid nodes and an active snapshot
-    // already exists, preserve it rather than creating a new zero-node snapshot
-    // that would mark all existing nodes as missing. A transient empty response
-    // (server error page, format change) must not wipe the node pool.
-    let valid_after_parse = entries.iter().filter(|e| e.node.is_some()).count();
-    if valid_after_parse == 0 && active.is_some() {
-        return Err(SourceAppError::ZeroNodes);
-    }
-
-    // WHY: apply protocol filter (SRC-010 phase 1) before region enrichment
-    // so filtered nodes do not consume GeoIP lookups. Protocol is known at
-    // parse time, so this phase is safe to run before enrich_regions.
-    if let Some(ref rules) = source.filter_rules {
-        apply_protocol_filter(&mut entries, rules);
-    }
-
-    // WHY: auto-detect regions via GeoIP before reconcile. Manual overrides
-    // in `node_overrides` take precedence at read time (NODE-006/010), so
-    // this only sets the parsed node's stored region, not the effective one.
-    enrich_regions(&mut entries, geoip).await;
-
-    // WHY: apply region filter (SRC-010 phase 2) after region enrichment so
-    // region rules match against the GeoIP-detected region. Running before
-    // enrichment would see region=None for all nodes, making region rules
-    // non-functional.
-    if let Some(ref rules) = source.filter_rules {
-        apply_region_filter(&mut entries, rules);
-    }
-
-    let new_version = active.as_ref().map(|s| s.version + 1).unwrap_or(1);
-    let node_count =
-        u64::try_from(entries.iter().filter(|e| e.node.is_some()).count()).map_err(|_| {
-            SourceAppError::Source(SourceError::Storage("node count overflow".to_owned()))
-        })?;
-
-    let snapshot = SourceSnapshot {
-        id: SourceSnapshotId::new(),
-        source_id,
-        version: new_version,
-        fetched_at: Timestamp::now(),
-        etag: resp_etag,
-        node_count,
-        is_active: true,
-    };
-
-    let input = ReconcileInput {
-        source_id,
-        snapshot: &snapshot,
-        entries: &entries,
-    };
-    let reconcile = pool_repo.reconcile(input).await.map_err(map_source_error)?;
-
-    Ok(RefreshResult {
-        snapshot,
-        reconcile,
-        not_modified: false,
-    })
-}
-
-/// Best-effort disable a source after a refresh failure when `keep_on_fail`
-/// is false.
-///
-/// WHY: plan M4 §"Failure/recovery" requires that when `keep_on_fail` is
-/// false, a failed refresh marks the source as errored. We map "errored" to
-/// `enabled = false` because the `jobs` table (for detailed error recording)
-/// is not yet built; a proper `errored` status is deferred to the
-/// jobs-table milestone.
-async fn disable_on_failure(repo: &dyn SourceRepository, source: &Source) {
-    if !source.keep_on_fail && source.enabled {
-        let mut disabled = source.clone();
-        disabled.enabled = false;
-        if let Err(e) = repo.update(&disabled).await {
-            tracing::warn!(error = %e, "failed to disable source after refresh failure");
-        }
-    }
-}
+pub use super::refresh::RefreshResult;
 
 /// Map storage errors to application errors for non-delete operations.
 fn map_source_error(e: SourceError) -> SourceAppError {

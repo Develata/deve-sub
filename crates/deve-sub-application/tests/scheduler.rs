@@ -12,12 +12,13 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use deve_sub_application::source::{
-    self, CreateSourceParams, FetchError, FetchResult, GeoIpPort, RefreshScheduler,
-    RegionDetection, SubscriptionFetcher,
+    self, CreateSourceParams, FetchError, FetchResult, GeoIpPort, RefreshDeps, RefreshScheduler,
+    RegionDetection, SubscriptionFetcher, execute_refresh_job, start_refresh_job,
 };
 use deve_sub_domain::{SourceRepository, SourceSnapshotRepository, SourceType};
 use deve_sub_storage_sqlite::{
-    SqliteNodePoolRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
+    SqliteNodePoolRepository, SqliteSourceRefreshJobRepository, SqliteSourceRepository,
+    SqliteSourceSnapshotRepository,
 };
 
 struct CountingFetcher {
@@ -130,6 +131,7 @@ async fn scheduler_refreshes_due_source_on_tick() {
         source_repo.clone(),
         snapshot_repo.clone(),
         pool_repo.clone(),
+        Arc::new(SqliteSourceRefreshJobRepository::new(db.pool.clone())),
         Arc::new(fetcher),
         Arc::new(StubGeoIp),
     )
@@ -180,21 +182,29 @@ async fn scheduler_skips_not_due_source() {
     // again immediately.
     create_auto_source(&source_repo, "auto-source", 3600).await;
     let sid = source_repo.list(None, 1).await.expect("list")[0].id;
-    source::refresh_source(
-        source_repo.as_ref(),
-        snapshot_repo.as_ref(),
-        pool_repo.as_ref(),
-        &*Arc::new(CountingFetcher::new(TROJAN_URI.as_bytes().to_vec()).0),
-        &StubGeoIp,
-        sid,
-    )
-    .await
-    .expect("manual refresh");
+    {
+        let job_repo = SqliteSourceRefreshJobRepository::new(db.pool.clone());
+        let manual_fetcher = CountingFetcher::new(TROJAN_URI.as_bytes().to_vec()).0;
+        let deps = RefreshDeps {
+            source_repo: source_repo.as_ref(),
+            snapshot_repo: snapshot_repo.as_ref(),
+            pool_repo: pool_repo.as_ref(),
+            job_repo: &job_repo,
+            fetcher: &manual_fetcher,
+            geoip: &StubGeoIp,
+        };
+        let job_id = start_refresh_job(&deps, sid).await.expect("start job");
+        let cancelled = std::sync::atomic::AtomicBool::new(false);
+        execute_refresh_job(&deps, job_id, sid, &cancelled)
+            .await
+            .expect("manual refresh");
+    }
 
     let scheduler = RefreshScheduler::new(
         source_repo.clone(),
         snapshot_repo.clone(),
         pool_repo.clone(),
+        Arc::new(SqliteSourceRefreshJobRepository::new(db.pool.clone())),
         Arc::new(fetcher),
         Arc::new(StubGeoIp),
     )
@@ -242,6 +252,7 @@ async fn scheduler_skips_disabled_source() {
         source_repo.clone(),
         snapshot_repo.clone(),
         pool_repo.clone(),
+        Arc::new(SqliteSourceRefreshJobRepository::new(db.pool.clone())),
         Arc::new(fetcher),
         Arc::new(StubGeoIp),
     )
@@ -285,6 +296,7 @@ async fn scheduler_stops_on_shutdown() {
         source_repo,
         snapshot_repo,
         pool_repo,
+        Arc::new(SqliteSourceRefreshJobRepository::new(db.pool.clone())),
         Arc::new(fetcher),
         Arc::new(StubGeoIp),
     )

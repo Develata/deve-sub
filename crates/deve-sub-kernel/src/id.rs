@@ -228,6 +228,12 @@ entity_id!(
     "Strong-typed identifier for a single node latency measurement."
 );
 
+entity_id!(
+    SourceRefreshJobId,
+    "source refresh job",
+    "Strong-typed identifier for a source refresh job (B-15)."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

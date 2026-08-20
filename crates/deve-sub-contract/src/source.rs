@@ -171,3 +171,60 @@ fn default_update_interval() -> u64 {
 fn default_keep_on_fail() -> bool {
     true
 }
+
+/// Response body for `POST /api/v1/sources/{id}/refresh` (B-15 async job).
+///
+/// The refresh is now asynchronous: the API returns 202 with a job ID.
+/// The client polls `GET /api/v1/sources/refresh-jobs/{job_id}` for status.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RefreshJobAcceptedResponse {
+    /// ULID of the created refresh job.
+    pub job_id: String,
+    /// ULID of the source being refreshed.
+    pub source_id: String,
+    /// Current job status (always "running" or "pending" at this point).
+    pub status: String,
+}
+
+/// Response body for `GET /api/v1/sources/refresh-jobs/{job_id}` and
+/// `GET /api/v1/sources/{id}/refresh-jobs/latest`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SourceRefreshJobDto {
+    /// ULID of the refresh job.
+    pub id: String,
+    /// ULID of the source.
+    pub source_id: String,
+    /// Job status: "pending", "running", "completed", "failed", "cancelled".
+    pub status: String,
+    /// Current phase: "idle", "fetching", "parsing", "enriching",
+    /// "reconciling", "publishing".
+    pub phase: String,
+    /// When the job started (ISO 8601 UTC).
+    pub started_at: String,
+    /// When the job finished (ISO 8601 UTC). `None` if still running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    /// Error message if status is "failed". `None` otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    /// Reconcile counts, populated on success.
+    pub new_nodes: u64,
+    /// Reconcile counts: duplicate nodes.
+    pub duplicate_nodes: u64,
+    /// Reconcile counts: reactivated nodes.
+    pub reactivated_nodes: u64,
+    /// Reconcile counts: missing nodes.
+    pub missing_nodes: u64,
+    /// Whether the refresh resulted in a 304 Not Modified.
+    pub not_modified: bool,
+}
+
+/// Response body for `POST /api/v1/sources/refresh-jobs/{job_id}/cancel`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CancelRefreshJobResponse {
+    /// ULID of the refresh job.
+    pub job_id: String,
+    /// Whether the cancel signal was sent. `false` if the job was already
+    /// terminal (completed/failed/cancelled).
+    pub cancelled: bool,
+}

@@ -17,15 +17,17 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use deve_sub_domain::source::{NodeFilter, NodePoolEntry, NodePoolRepository, ReconcileInput, ReconcileResult, ImportResult};
+use deve_sub_domain::NodeChainEntry;
 use deve_sub_domain::source::SourceError;
+use deve_sub_domain::source::{
+    ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, ReconcileInput, ReconcileResult,
+};
 use deve_sub_domain::{
     Authentication, DomainName, Endpoint, ErrorClass, Host, LatencyProbe, LatencyRecord,
-    LatencyRecordRepository, LatencyResult, Node, NodeSource, ProtocolConfig, ProtocolKind,
-    ProbeError, ProbeRun, ProbeRunRepository, ProbeRunResult, ProbeRunStatus, ProbeType,
+    LatencyRecordRepository, LatencyResult, Node, NodeSource, ProbeError, ProbeRun,
+    ProbeRunRepository, ProbeRunResult, ProbeRunStatus, ProbeType, ProtocolConfig, ProtocolKind,
     RegionAssignment, RegionMethod, TrojanConfig, UdpCapability,
 };
-use deve_sub_domain::NodeChainEntry;
 use deve_sub_kernel::{NodeId, ProbeRunId, Timestamp};
 
 use super::{RunnerConfig, RunnerDeps, execute_probe_run};
@@ -41,7 +43,10 @@ struct CountingProbe {
 
 impl CountingProbe {
     fn new(max_concurrent: Arc<AtomicUsize>, current_concurrent: Arc<AtomicUsize>) -> Self {
-        Self { max_concurrent, current_concurrent }
+        Self {
+            max_concurrent,
+            current_concurrent,
+        }
     }
 }
 
@@ -74,15 +79,22 @@ fn make_test_node(id: NodeId) -> Node {
         id,
         display_name: "test".to_owned(),
         protocol: ProtocolKind::Trojan,
-        config: ProtocolConfig::Trojan(TrojanConfig { packet_encoding: None }),
+        config: ProtocolConfig::Trojan(TrojanConfig {
+            packet_encoding: None,
+        }),
         endpoint: Endpoint {
             host: Host::Domain(DomainName::new("example.com".to_owned())),
             port: 443,
         },
-        authentication: Authentication::Password { password: "TEST".to_owned() },
+        authentication: Authentication::Password {
+            password: "TEST".to_owned(),
+        },
         transport: None,
         tls: None,
-        udp: UdpCapability { supported: None, xudp: None },
+        udp: UdpCapability {
+            supported: None,
+            xudp: None,
+        },
         multiplex: None,
         obfuscation: None,
         congestion: None,
@@ -93,7 +105,10 @@ fn make_test_node(id: NodeId) -> Node {
             imported_at: Timestamp::now(),
         },
         tags: vec![],
-        region: RegionAssignment { method: RegionMethod::Auto, value: None },
+        region: RegionAssignment {
+            method: RegionMethod::Auto,
+            value: None,
+        },
         extras: BTreeMap::new(),
     }
 }
@@ -105,7 +120,12 @@ impl NodePoolRepository for StubPool {
     async fn reconcile(&self, _input: ReconcileInput<'_>) -> Result<ReconcileResult, SourceError> {
         unimplemented!()
     }
-    async fn list_nodes(&self, _filter: &NodeFilter, _cursor: Option<NodeId>, _limit: u32) -> Result<Vec<NodePoolEntry>, SourceError> {
+    async fn list_nodes(
+        &self,
+        _filter: &NodeFilter,
+        _cursor: Option<NodeId>,
+        _limit: u32,
+    ) -> Result<Vec<NodePoolEntry>, SourceError> {
         unimplemented!()
     }
     async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError> {
@@ -120,15 +140,18 @@ impl NodePoolRepository for StubPool {
         }))
     }
     async fn get_nodes(&self, ids: &[NodeId]) -> Result<Vec<NodePoolEntry>, SourceError> {
-        Ok(ids.iter().map(|&id| NodePoolEntry {
-            node: make_test_node(id),
-            missing_from_source: false,
-            is_active: true,
-            revision: 1,
-            created_at: Timestamp::now(),
-            override_info: None,
-            tags: vec![],
-        }).collect())
+        Ok(ids
+            .iter()
+            .map(|&id| NodePoolEntry {
+                node: make_test_node(id),
+                missing_from_source: false,
+                is_active: true,
+                revision: 1,
+                created_at: Timestamp::now(),
+                override_info: None,
+                tags: vec![],
+            })
+            .collect())
     }
     async fn import_nodes(&self, _nodes: Vec<Node>) -> Result<ImportResult, SourceError> {
         unimplemented!()
@@ -139,7 +162,11 @@ impl NodePoolRepository for StubPool {
     async fn existing_node_ids(&self, ids: &[NodeId]) -> Result<Vec<NodeId>, SourceError> {
         Ok(ids.to_vec())
     }
-    async fn set_node_chain(&self, _node_id: NodeId, _chain: Option<&[NodeId]>) -> Result<(), SourceError> {
+    async fn set_node_chain(
+        &self,
+        _node_id: NodeId,
+        _chain: Option<&[NodeId]>,
+    ) -> Result<(), SourceError> {
         unimplemented!()
     }
 }
@@ -164,7 +191,10 @@ impl StubRunRepo {
     }
 
     fn transitions(&self) -> Vec<ProbeRunStatus> {
-        self.transitions.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.transitions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 
@@ -176,15 +206,32 @@ impl ProbeRunRepository for StubRunRepo {
     async fn find_by_id(&self, _id: ProbeRunId) -> Result<Option<ProbeRun>, ProbeError> {
         Ok(None)
     }
-    async fn update_status(&self, _id: ProbeRunId, status: ProbeRunStatus, _results: &[ProbeRunResult], _completed_at: Option<Timestamp>) -> Result<(), ProbeError> {
-        self.transitions.lock().unwrap_or_else(|e| e.into_inner()).push(status);
-        let fail = *self.fail_on_running.lock().unwrap_or_else(|e| e.into_inner());
+    async fn update_status(
+        &self,
+        _id: ProbeRunId,
+        status: ProbeRunStatus,
+        _results: &[ProbeRunResult],
+        _completed_at: Option<Timestamp>,
+    ) -> Result<(), ProbeError> {
+        self.transitions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(status);
+        let fail = *self
+            .fail_on_running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if fail && status == ProbeRunStatus::Running {
             return Err(ProbeError::Storage("injected failure".to_owned()));
         }
         Ok(())
     }
-    async fn update_results(&self, _id: ProbeRunId, _results: &[ProbeRunResult], _completed_at: Option<Timestamp>) -> Result<(), ProbeError> {
+    async fn update_results(
+        &self,
+        _id: ProbeRunId,
+        _results: &[ProbeRunResult],
+        _completed_at: Option<Timestamp>,
+    ) -> Result<(), ProbeError> {
         Ok(())
     }
     async fn recover_crashed_runs(&self) -> Result<u64, ProbeError> {
@@ -211,10 +258,15 @@ impl LatencyRecordRepository for StubLatencyRepo {
     }
     async fn batch_create(&self, records: &[LatencyRecord]) -> Result<(), ProbeError> {
         self.batch_create_calls.fetch_add(1, Ordering::SeqCst);
-        self.records_inserted.fetch_add(records.len(), Ordering::SeqCst);
+        self.records_inserted
+            .fetch_add(records.len(), Ordering::SeqCst);
         Ok(())
     }
-    async fn list_for_node(&self, _node_id: NodeId, _limit: u32) -> Result<Vec<LatencyRecord>, ProbeError> {
+    async fn list_for_node(
+        &self,
+        _node_id: NodeId,
+        _limit: u32,
+    ) -> Result<Vec<LatencyRecord>, ProbeError> {
         unimplemented!()
     }
     async fn list_recent(&self, _limit: u32) -> Result<Vec<LatencyRecord>, ProbeError> {
@@ -233,7 +285,10 @@ impl LatencyRecordRepository for StubLatencyRepo {
 async fn failure_injection_writes_failed_status() {
     let run_repo = Arc::new(StubRunRepo::new());
     // Inject a storage failure when the runner tries to write `Running`.
-    *run_repo.fail_on_running.lock().unwrap_or_else(|e| e.into_inner()) = true;
+    *run_repo
+        .fail_on_running
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = true;
 
     let batch_calls = Arc::new(AtomicUsize::new(0));
     let records_inserted = Arc::new(AtomicUsize::new(0));
@@ -331,13 +386,14 @@ async fn ten_thousand_nodes_bounded_concurrency() {
         observed_max <= concurrency,
         "concurrency must be bounded by {concurrency}, observed max {observed_max}"
     );
-    assert!(
-        observed_max > 0,
-        "at least one probe must have run"
-    );
+    assert!(observed_max > 0, "at least one probe must have run");
 
     // Batch insert happened exactly once with all 10k records.
-    assert_eq!(batch_calls.load(Ordering::SeqCst), 1, "batch_create called once");
+    assert_eq!(
+        batch_calls.load(Ordering::SeqCst),
+        1,
+        "batch_create called once"
+    );
     assert_eq!(
         records_inserted.load(Ordering::SeqCst),
         10_000,

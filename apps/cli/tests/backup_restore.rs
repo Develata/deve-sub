@@ -123,6 +123,18 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
         .await
         .expect("reverse 0018");
 
+    // Reverse migration 0019: drop source_refresh_jobs table and the
+    // snapshots (source_id, version) unique index so forward-migrating
+    // through 0019 succeeds on restore.
+    sqlx::query("DROP INDEX IF EXISTS idx_snapshots_source_version_unique")
+        .execute(&pool)
+        .await
+        .expect("reverse 0019 index");
+    sqlx::query("DROP TABLE IF EXISTS source_refresh_jobs")
+        .execute(&pool)
+        .await
+        .expect("reverse 0019 table");
+
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
         .execute(&pool)
         .await

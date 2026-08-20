@@ -14,7 +14,7 @@ use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
     NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
     ProbeSourceRepository, RecoveryCodeRepository, SessionRepository, ShortCodeRepository,
-    SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
+    SourceRefreshJobRepository, SourceRepository, SourceSnapshotRepository, SubscriptionRepository,
     SubscriptionTokenRepository, TempLinkRepository, TemplateRepository, TemplateVersionRepository,
     TotpSecretRepository, TrafficDailySnapshotRepository, TrafficRepository, UserRepository,
 };
@@ -24,9 +24,9 @@ use deve_sub_storage_sqlite::{
     SqliteLatencyRecordRepository, SqliteNodeOverrideRepository, SqliteNodePoolRepository,
     SqlitePoolMetaRepository, SqliteProbeRunRepository, SqliteProbeSourceRepository,
     SqliteRecoveryCodeRepository, SqliteSessionRepository, SqliteShortCodeRepository,
-    SqliteSourceRepository, SqliteSourceSnapshotRepository, SqliteSubscriptionRepository,
-    SqliteSubscriptionTokenRepository, SqliteTempLinkRepository, SqliteTemplateRepository,
-    SqliteTemplateVersionRepository, SqliteTotpSecretRepository,
+    SqliteSourceRefreshJobRepository, SqliteSourceRepository, SqliteSourceSnapshotRepository,
+    SqliteSubscriptionRepository, SqliteSubscriptionTokenRepository, SqliteTempLinkRepository,
+    SqliteTemplateRepository, SqliteTemplateVersionRepository, SqliteTotpSecretRepository,
     SqliteTrafficDailySnapshotRepository, SqliteTrafficRepository, SqliteUserRepository,
 };
 
@@ -100,6 +100,8 @@ impl TestApp {
                 )) as Arc<dyn SourceRepository>,
                 snapshot_repo: Arc::new(SqliteSourceSnapshotRepository::new(pool.clone()))
                     as Arc<dyn SourceSnapshotRepository>,
+                refresh_job_repo: Arc::new(SqliteSourceRefreshJobRepository::new(pool.clone()))
+                    as Arc<dyn SourceRefreshJobRepository>,
                 pool_repo: Arc::new(SqliteNodePoolRepository::new_with_key(
                     pool.clone(),
                     Arc::clone(&master_key),
@@ -157,6 +159,9 @@ impl TestApp {
                 real_proxy_probe: Arc::new(deve_sub_adapters::RealProxyProbe::new())
                     as Arc<dyn LatencyProbe>,
                 cancelled_flags: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+                refresh_cancel_flags: Arc::new(std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                )),
                 job_supervisor: Arc::new(deve_sub_application::JobSupervisor::new()),
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())

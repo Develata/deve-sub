@@ -16,6 +16,7 @@ pub mod probe_repository;
 pub mod recovery_code_repository;
 pub mod session_repository;
 pub mod short_code_repository;
+pub mod source_refresh_job_repository;
 pub mod source_repository;
 pub mod source_snapshot_repository;
 pub mod subscription_repository;
@@ -49,6 +50,7 @@ pub use probe_repository::{
 pub use recovery_code_repository::SqliteRecoveryCodeRepository;
 pub use session_repository::SqliteSessionRepository;
 pub use short_code_repository::SqliteShortCodeRepository;
+pub use source_refresh_job_repository::SqliteSourceRefreshJobRepository;
 pub use source_repository::SqliteSourceRepository;
 pub use source_snapshot_repository::SqliteSourceSnapshotRepository;
 pub use subscription_repository::SqliteSubscriptionRepository;

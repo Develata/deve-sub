@@ -12,9 +12,8 @@ use deve_sub_application::{
     source::{self, CreateSourceParams, UpdateSourceParams},
 };
 use deve_sub_contract::{
-    CreateSourceRequest, ErrorResponse, ListSourcesResponse, ReconcileCountsDto,
-    RefreshSourceResponse, SourceDto, SourceFilterRulesDto, SourceResponse, SourceTypeDto,
-    UpdateSourceRequest,
+    CreateSourceRequest, ErrorResponse, ListSourcesResponse, SourceDto, SourceFilterRulesDto,
+    SourceResponse, SourceTypeDto, UpdateSourceRequest,
 };
 use deve_sub_domain::{Source, SourceFilterRules, SourceType};
 use deve_sub_kernel::SourceId;
@@ -412,99 +411,6 @@ async fn delete_source(
     Ok(StatusCode::OK)
 }
 
-/// `POST /api/v1/sources/{id}/refresh` — refresh a source (admin only).
-///
-/// Fetches the subscription URL, parses the content, and reconciles the
-/// parsed nodes into the pool. On fetch or parse failure, the last
-/// successful snapshot remains active (constraint #19).
-#[utoipa::path(
-    post,
-    path = "/api/v1/sources/{id}/refresh",
-    security(("cookie_auth" = [])),
-    params(("id" = String, Path, description = "Source ULID")),
-    responses(
-        (status = 200, description = "Source refreshed", body = RefreshSourceResponse),
-        (status = 400, description = "Invalid source id", body = ErrorResponse),
-        (status = 401, description = "Not authenticated", body = ErrorResponse),
-        (status = 403, description = "Not an admin", body = ErrorResponse),
-        (status = 404, description = "Source not found", body = ErrorResponse),
-        (status = 502, description = "Fetch or parse failed", body = ErrorResponse),
-        (status = 500, description = "Internal error", body = ErrorResponse),
-    )
-)]
-async fn refresh_source(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    Path(id): Path<String>,
-) -> Result<Json<RefreshSourceResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let source_id = SourceId::parse(&id).map_err(|_| {
-        err(
-            StatusCode::BAD_REQUEST,
-            "invalid_id",
-            "source id is not a valid ULID",
-        )
-    })?;
-
-    let result = source::refresh_source(
-        state.source_repo.as_ref(),
-        state.snapshot_repo.as_ref(),
-        state.pool_repo.as_ref(),
-        state.fetcher.as_ref(),
-        state.geoip.as_ref(),
-        source_id,
-    )
-    .await
-    .map_err(|e| match e {
-        source::SourceAppError::SourceNotFound => err(
-            StatusCode::NOT_FOUND,
-            "source_not_found",
-            "source does not exist",
-        ),
-        source::SourceAppError::Fetch(fe) => {
-            tracing::warn!(error = %fe.redacted(), "source fetch failed");
-            err(
-                StatusCode::BAD_GATEWAY,
-                "fetch_failed",
-                "failed to fetch subscription content",
-            )
-        }
-        source::SourceAppError::Parse(pe) => {
-            tracing::warn!(error = %pe, "source parse failed");
-            err(
-                StatusCode::BAD_GATEWAY,
-                "parse_failed",
-                "failed to parse subscription content",
-            )
-        }
-        other => {
-            tracing::warn!(error = %other, "refresh_source failed");
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                "failed to refresh source",
-            )
-        }
-    })?;
-
-    let entry = audit::audit_source_refresh(admin.user.id, &source_id.to_string());
-    if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
-        tracing::warn!(error = %e, "audit log write failed for source.refresh");
-    }
-
-    Ok(Json(RefreshSourceResponse {
-        snapshot_id: result.snapshot.id.to_string(),
-        version: result.snapshot.version,
-        not_modified: result.not_modified,
-        node_count: result.snapshot.node_count,
-        reconcile: ReconcileCountsDto {
-            new_nodes: result.reconcile.new_nodes,
-            duplicate_nodes: result.reconcile.duplicate_nodes,
-            reactivated_nodes: result.reconcile.reactivated_nodes,
-            missing_nodes: result.reconcile.missing_nodes,
-        },
-    }))
-}
-
 /// Register all source management routes on the given `OpenApiRouter`.
 pub fn register(
     router: utoipa_axum::router::OpenApiRouter<AppState>,
@@ -516,5 +422,4 @@ pub fn register(
         .routes(routes!(get_source))
         .routes(routes!(update_source))
         .routes(routes!(delete_source))
-        .routes(routes!(refresh_source))
 }

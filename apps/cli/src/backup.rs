@@ -417,6 +417,17 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
         bail!("database integrity check failed: {integrity}");
     }
 
+    // WHY: force a WAL checkpoint before closing so the forward-migration
+    // writes are flushed into the main DB file. Without this, the migration
+    // rows live in the WAL; deleting the WAL sidecars below would silently
+    // lose them, and the restored DB would report the pre-migration schema
+    // version. This is observable when running under `--test-threads=1`
+    // across the full workspace.
+    let _: (i64,) = sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
+        .fetch_one(&pool)
+        .await
+        .context("failed to checkpoint WAL before closing staging DB")?;
+
     pool.close().await;
 
     // DS-AUD-032: crash-durability and rollback safety for the atomic swap.

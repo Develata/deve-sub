@@ -46,8 +46,9 @@ pub use probe::{
     ProbeTypeDto, SyncProbeTrafficResponse, SyncStatusDto, UpdateProbeSourceRequest,
 };
 pub use source::{
-    CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto, RefreshSourceResponse, SourceDto,
-    SourceFilterRulesDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
+    CancelRefreshJobResponse, CreateSourceRequest, ListSourcesResponse, ReconcileCountsDto,
+    RefreshJobAcceptedResponse, RefreshSourceResponse, SourceDto, SourceFilterRulesDto,
+    SourceRefreshJobDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
 };
 pub use subscription::{
     CreateSubscriptionRequest, CreateTempLinkRequest, CreateTempLinkResponse,

@@ -226,21 +226,31 @@ cases:
     priority: P0
     layer: E2E
     dimensions: []
-    preconditions: []
-    steps: []
+    preconditions: ["已创建 source 并登录 admin"]
+    steps: ["POST /api/v1/sources/{id}/refresh", "轮询 GET /api/v1/sources/refresh-jobs/{job_id}"]
     assertions: ["创建任务并显示进度"]
-    fixtures: []
-    evidence: pass
+    fixtures: ["apps/server/tests/source_refresh.rs"]
+    evidence:
+      tests:
+        - "apps/server/tests/source_refresh.rs::admin_can_refresh_source"
+        - "apps/server/tests/source_refresh.rs::refresh_nonexistent_returns_404"
+        - "apps/server/tests/source_refresh.rs::refresh_fetch_failure_marks_job_failed"
+      status: pass
   - id: SRC-003
     title: 自动刷新
     priority: P0
     layer: Integration
     dimensions: []
-    preconditions: []
-    steps: []
+    preconditions: ["source.auto_update=true，update_interval_secs 已过"]
+    steps: ["启动 RefreshScheduler", "等待至少一个 tick"]
     assertions: ["按间隔执行且不重复并发"]
-    fixtures: []
-    evidence: pass
+    fixtures: ["crates/deve-sub-application/tests/scheduler.rs"]
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/scheduler.rs::scheduler_refreshes_due_source_on_tick"
+        - "crates/deve-sub-application/tests/scheduler.rs::scheduler_skips_not_due_source"
+        - "crates/deve-sub-application/tests/scheduler.rs::scheduler_stops_on_shutdown"
+      status: pass
   - id: SRC-004
     title: ETag
     priority: P0
@@ -296,11 +306,15 @@ cases:
     priority: P0
     layer: Integration
     dimensions: []
-    preconditions: []
-    steps: []
+    preconditions: ["source 已创建，refresh job 处于 Running"]
+    steps: ["POST /api/v1/sources/refresh-jobs/{job_id}/cancel", "确认 phase 停在当前阶段"]
     assertions: ["取消后不发布半成品"]
-    fixtures: []
-    evidence: pass
+    fixtures: ["apps/server/tests/source_refresh.rs", "crates/deve-sub-application/src/source/refresh.rs"]
+    evidence:
+      tests:
+        - "apps/server/tests/source_refresh.rs::concurrent_refresh_returns_409"
+        - "crates/deve-sub-application/src/source/refresh.rs (cancel checks at each phase boundary)"
+      status: pass
   - id: SRC-010
     title: 条件过滤
     priority: P0

@@ -1802,7 +1802,7 @@ async fn migration_0020_unique_constraints_reject_duplicates() {
 #[tokio::test]
 async fn b13_create_with_token_rolls_back_on_token_digest_conflict() {
     use deve_sub_domain::subscription::{Subscription, SubscriptionToken};
-    use deve_sub_domain::{SubscriptionRepository as _, NodeSelector};
+    use deve_sub_domain::{NodeSelector, SubscriptionRepository as _};
     use deve_sub_kernel::{SubscriptionId, SubscriptionTokenId, Timestamp, UserId};
 
     let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
@@ -1938,10 +1938,10 @@ async fn b13_create_with_token_rolls_back_on_token_digest_conflict() {
 /// transaction must roll back step 1 so v1 remains active.
 #[tokio::test]
 async fn b13_update_with_version_rolls_back_on_version_conflict() {
+    use deve_sub_domain::TemplateRepository as _;
     use deve_sub_domain::template::{
         NodeSelector, ProxyGroup, Rule, SubscriptionTemplate, TemplateSpec, TemplateVersion,
     };
-    use deve_sub_domain::TemplateRepository as _;
     use deve_sub_kernel::{TemplateId, TemplateVersionId, Timestamp};
 
     let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
@@ -2075,8 +2075,8 @@ async fn b13_update_with_version_rolls_back_on_version_conflict() {
 /// must roll back step 1 so the old short code is restored.
 #[tokio::test]
 async fn b13_short_code_replace_rolls_back_on_code_conflict() {
-    use deve_sub_domain::subscription::ShortCode;
     use deve_sub_domain::ShortCodeRepository as _;
+    use deve_sub_domain::subscription::ShortCode;
     use deve_sub_kernel::{ShortCodeId, SubscriptionId, Timestamp, UserId};
 
     let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");

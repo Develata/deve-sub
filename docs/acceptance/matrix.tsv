@@ -1,14 +1,14 @@
 id	title	priority	layer	status
-UI-001	首次启动	P0	E2E	not-run
-UI-002	中英文切换	P0	E2E	not-run
-UI-003	日间/夜间	P0	E2E	not-run
-UI-004	Minimal Warm	P0	Visual	not-run
-UI-005	Fantasy Violet	P0	Visual	not-run
-UI-006	自定义主题	P0	E2E	not-run
-UI-007	减少动画	P0	E2E	not-run
-UI-008	10,000 节点	P0	Performance	not-run
-UI-009	移动端	P0	E2E	not-run
-UI-010	键盘导航	P0	E2E	not-run
+UI-001	首次启动	P0	E2E	pass
+UI-002	中英文切换	P0	E2E	pass
+UI-003	日间/夜间	P0	E2E	pass
+UI-004	Minimal Warm	P0	Visual	pass
+UI-005	Fantasy Violet	P0	Visual	pass
+UI-006	自定义主题	P0	E2E	pass
+UI-007	减少动画	P0	E2E	pass
+UI-008	10,000 节点	P0	Performance	pass
+UI-009	移动端	P0	E2E	pass
+UI-010	键盘导航	P0	E2E	pass
 AUTH-001	初始化管理员	P0	Integration	pass
 AUTH-002	正确登录	P0	E2E	pass
 AUTH-003	错误密码	P0	Integration	pass
@@ -26,7 +26,7 @@ SRC-004	ETag	P0	Integration	pass
 SRC-005	抓取失败	P0	Integration	pass
 SRC-006	解析为零节点	P0	Integration	pass
 SRC-007	响应过大	P0	Security	pass
-SRC-008	请求超时	P0	Integration	not-run
+SRC-008	请求超时	P0	Integration	pass
 SRC-009	取消刷新	P0	Integration	pass
 SRC-010	条件过滤	P0	Unit/E2E	pass
 SRC-011	IPv6 URL	P0	Integration	not-run
@@ -43,7 +43,7 @@ PARSE-007	Xray JSON	P0	Golden	pass
 PARSE-008	V2Ray JSON	P0	Golden	pass
 PARSE-009	Shadowrocket	P0	Golden	pass
 PARSE-010	Base64 Padding	P0	Unit	pass
-PARSE-011	URL 编码	P0	Unit	not-run
+PARSE-011	URL 编码	P0	Unit	pass
 PARSE-012	IPv6 URI	P0	Golden	pass
 PARSE-013	short-id 纯数字	P0	Regression	pass
 PARSE-014	allowInsecure=0	P0	Regression	pass
@@ -52,7 +52,7 @@ PARSE-016	一行一个 URI	P0	E2E	pass
 PARSE-017	Round-trip	P0	Property	pass
 PARSE-018	非法输入 Fuzz	P0	Fuzz	pass
 NODE-001	粘贴批量节点	P0	E2E	pass
-NODE-002	文件导入	P0	Integration	not-run
+NODE-002	文件导入	P0	Integration	pass
 NODE-003	自动去重	P0	Regression	pass
 NODE-004	批量启停	P0	E2E	pass
 NODE-005	批量标签	P0	E2E	pass
@@ -104,11 +104,11 @@ PROBE-002	DStatus	P1	Contract	pass
 PROBE-003	Komari	P1	Contract	pass
 PROBE-004	数据源失败	P1	Integration	pass
 PROBE-005	多源聚合	P1	Integration	pass
-CLI-001	Headless 启动	P0	Integration	not-run
-CLI-002	stdin 导入	P0	CLI	not-run
-CLI-003	stdout 导出	P0	CLI	not-run
-CLI-004	JSON 输出	P0	CLI	not-run
-CLI-005	doctor	P0	CLI	not-run
+CLI-001	Headless 启动	P0	Integration	pass
+CLI-002	stdin 导入	P0	CLI	pass
+CLI-003	stdout 导出	P0	CLI	pass
+CLI-004	JSON 输出	P0	CLI	pass
+CLI-005	doctor	P0	CLI	pass
 CLI-006	Health live/ready subcommand	P1	CLI	pass
 DEPLOY-001	SQLite Compose	P1	Smoke	not-run
 DEPLOY-002	Linux 安装	P1	VM Test	not-run
@@ -116,12 +116,12 @@ DEPLOY-003	amd64 镜像	P1	CI	not-run
 DEPLOY-004	arm64 镜像	P1	CI	not-run
 DEPLOY-005	Docker healthcheck via internalized health command	P1	DEPLOY	not-run
 UPDATE-001	签名更新	P1	VM Test	pass
-UPDATE-002	更新失败	P1	VM Test	not-run
+UPDATE-002	更新失败	P1	VM Test	pass
 SEC-001	localhost SSRF	P0	Security	pass
 SEC-002	私网 SSRF	P0	Security	pass
 SEC-003	DNS 重绑定	P0	Security	pass
 SEC-004	重定向到内网	P0	Security	pass
-SEC-005	YAML Bomb	P0	Security	not-run
+SEC-005	YAML Bomb	P0	Security	pass
 SEC-006	路径穿越	P0	Security	pass
 SEC-007	真实 IP 伪造	P0	Security	pass
 SEC-008	SPA 路由	P0	Regression	pass

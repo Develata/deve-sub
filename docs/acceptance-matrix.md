@@ -17,8 +17,8 @@ items). `planned` is not `pass`.
 | Total cases | 153 |
 | P0 (core) | 115 |
 | P1 (infrastructure/performance) | 34 |
-| Evidence: pass | 124 |
-| Evidence: not-run | 29 |
+| Evidence: pass | 144 |
+| Evidence: not-run | 9 |
 
 The `pass` / `not-run` counts are derived from `matrix.yaml` `evidence.status`
 fields. A case is `pass` only when backed by at least one executable test

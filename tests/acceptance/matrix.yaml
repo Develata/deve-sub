@@ -21,8 +21,9 @@ cases:
     assertions: ["进入管理员初始化", "不出现默认弱密码"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-001-setup.spec.ts::UI-001"
+      status: pass
   - id: UI-002
     title: 中英文切换
     priority: P0
@@ -33,8 +34,9 @@ cases:
     assertions: ["当前页面和导航即时切换", "刷新后保留"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-002-i18n.spec.ts::UI-002"
+      status: pass
   - id: UI-003
     title: 日间/夜间
     priority: P0
@@ -45,8 +47,9 @@ cases:
     assertions: ["所有页面无不可读文字"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-003-dark-mode.spec.ts::UI-003"
+      status: pass
   - id: UI-004
     title: Minimal Warm
     priority: P0
@@ -57,8 +60,9 @@ cases:
     assertions: ["布局和设计 Token 正确"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-004-warm-theme.spec.ts::UI-004"
+      status: pass
   - id: UI-005
     title: Fantasy Violet
     priority: P0
@@ -69,8 +73,9 @@ cases:
     assertions: ["棋盘背景、装饰和卡片仍保持可读"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-005-violet-theme.spec.ts::UI-005"
+      status: pass
   - id: UI-006
     title: 自定义主题
     priority: P0
@@ -81,8 +86,9 @@ cases:
     assertions: ["修改颜色、Logo 后持久化"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-006-custom-theme.spec.ts::UI-006"
+      status: pass
   - id: UI-007
     title: 减少动画
     priority: P0
@@ -93,8 +99,9 @@ cases:
     assertions: ["系统设置后关闭非必要动画"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-007-reduce-motion.spec.ts::UI-007"
+      status: pass
   - id: UI-008
     title: 10,000 节点
     priority: P0
@@ -105,8 +112,9 @@ cases:
     assertions: ["滚动、筛选和选择不明显卡顿"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-008-10k-nodes.spec.ts::UI-008"
+      status: pass
   - id: UI-009
     title: 移动端
     priority: P0
@@ -117,8 +125,9 @@ cases:
     assertions: ["能查看订阅、刷新源和复制链接"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-009-mobile.spec.ts::UI-009"
+      status: pass
   - id: UI-010
     title: 键盘导航
     priority: P0
@@ -129,8 +138,9 @@ cases:
     assertions: ["导航、表格和对话框可使用键盘"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "tests/e2e/specs/ui-010-keyboard-nav.spec.ts::UI-010"
+      status: pass
   - id: AUTH-001
     title: 初始化管理员
     priority: P0
@@ -396,8 +406,9 @@ cases:
     assertions: ["任务超时且可重试"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "crates/deve-sub-application/tests/refresh_source.rs::timeout_then_retry_succeeds"
+      status: pass
   - id: SRC-009
     title: 取消刷新
     priority: P0
@@ -658,8 +669,15 @@ cases:
     assertions: ["中文名称和特殊符号无损"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::vless_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::hysteria2_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::tuic_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::naive_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::shadowsocks_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::trojan_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::vmess_round_trip_idempotent"
+      status: pass
   - id: PARSE-012
     title: IPv6 URI
     priority: P0
@@ -801,8 +819,9 @@ cases:
     assertions: ["大文件流式处理"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "apps/cli/tests/cli_commands.rs::node002_file_import"
+      status: pass
   - id: NODE-003
     title: 自动去重
     priority: P0
@@ -1506,8 +1525,9 @@ cases:
     assertions: ["无 Web UI，API 与订阅正常"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "apps/cli/tests/cli_commands.rs::cli001_headless_startup"
+      status: pass
   - id: CLI-002
     title: stdin 导入
     priority: P0
@@ -1518,8 +1538,9 @@ cases:
     assertions: ["节点正确导入"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "apps/cli/tests/cli_commands.rs::cli002_stdin_import"
+      status: pass
   - id: CLI-003
     title: stdout 导出
     priority: P0
@@ -1530,8 +1551,9 @@ cases:
     assertions: ["一行一个 URI"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "apps/cli/tests/cli_commands.rs::cli003_stdout_uri_export"
+      status: pass
   - id: CLI-004
     title: JSON 输出
     priority: P0
@@ -1542,8 +1564,9 @@ cases:
     assertions: ["可用于自动化脚本"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "apps/cli/tests/cli_commands.rs::cli004_json_output"
+      status: pass
   - id: CLI-005
     title: doctor
     priority: P0
@@ -1554,8 +1577,9 @@ cases:
     assertions: ["检测数据库、目录、网络和版本"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "apps/cli/tests/cli_commands.rs::cli005_doctor_checks_all_sections"
+      status: pass
   - id: CLI-006
     title: Health live/ready subcommand
     priority: P1
@@ -1657,8 +1681,9 @@ cases:
     assertions: ["自动回滚"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "apps/cli/tests/update.rs::update002_bad_binary_rejected_before_swap"
+      status: pass
   - id: SEC-001
     title: localhost SSRF
     priority: P0
@@ -1723,8 +1748,10 @@ cases:
     assertions: ["限制资源并拒绝"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "crates/deve-sub-application/src/source/parse.rs::too_many_nodes_rejected"
+        - "crates/deve-sub-application/src/source/parse.rs::max_nodes_accepted"
+      status: pass
   - id: SEC-006
     title: 路径穿越
     priority: P0

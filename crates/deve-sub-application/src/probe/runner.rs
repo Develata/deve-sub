@@ -243,3 +243,7 @@ async fn execute_probe_run_inner(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "runner_tests.rs"]
+mod tests;

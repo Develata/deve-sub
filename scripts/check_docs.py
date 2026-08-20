@@ -33,7 +33,8 @@ OPENAPI = ROOT / "docs" / "openapi" / "openapi.json"
 DOCS_DIR = ROOT / "docs"
 
 REQUIRED_CASE_FIELDS = {"id", "title", "priority", "layer", "evidence"}
-VALID_EVIDENCE = {"pass", "fail", "planned", "not-run", "blocked"}
+VALID_EVIDENCE_STATUS = {"pass", "fail", "planned", "not-run", "blocked"}
+VALID_EVIDENCE = VALID_EVIDENCE_STATUS  # legacy scalar form
 VALID_PRIORITY_RE = re.compile(r"^P\d+$")
 TOKEN_RE = re.compile(r"(?<![A-Z])([A-Z]+-(?:\*|\d+))")
 
@@ -94,9 +95,31 @@ def check_matrix_yaml() -> tuple[int, set[str]]:
             print(f"FAIL: duplicate case id: {cid}", file=sys.stderr)
             return 1, ids
         evidence = case["evidence"]
-        if evidence not in VALID_EVIDENCE:
+        if isinstance(evidence, dict):
+            status = evidence.get("status")
+            if status not in VALID_EVIDENCE_STATUS:
+                print(
+                    f"FAIL: case {cid} has invalid evidence.status {status!r}; expected one of {sorted(VALID_EVIDENCE_STATUS)}",
+                    file=sys.stderr,
+                )
+                return 1, ids
+            tests = evidence.get("tests")
+            if not isinstance(tests, list):
+                print(
+                    f"FAIL: case {cid} evidence.tests is not a list",
+                    file=sys.stderr,
+                )
+                return 1, ids
+        elif isinstance(evidence, str):
+            if evidence not in VALID_EVIDENCE:
+                print(
+                    f"FAIL: case {cid} has invalid evidence {evidence!r}; expected one of {sorted(VALID_EVIDENCE)}",
+                    file=sys.stderr,
+                )
+                return 1, ids
+        else:
             print(
-                f"FAIL: case {cid} has invalid evidence {evidence!r}; expected one of {sorted(VALID_EVIDENCE)}",
+                f"FAIL: case {cid} evidence must be a string or a mapping, got {type(evidence).__name__}",
                 file=sys.stderr,
             )
             return 1, ids

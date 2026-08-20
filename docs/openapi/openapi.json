@@ -2757,6 +2757,154 @@
         ]
       }
     },
+    "/api/v1/sources/refresh-jobs/{job_id}": {
+      "get": {
+        "summary": "`GET /api/v1/sources/refresh-jobs/{job_id}` — get refresh job status.",
+        "operationId": "get_refresh_job",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "description": "Refresh job ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRefreshJobDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sources/refresh-jobs/{job_id}/cancel": {
+      "post": {
+        "summary": "`POST /api/v1/sources/refresh-jobs/{job_id}/cancel` — cancel a refresh\njob. Sets the cancel flag so the runner aborts at the next phase boundary.",
+        "operationId": "cancel_refresh_job",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "description": "Refresh job ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancel signal sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelRefreshJobResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid job id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/sources/{id}": {
       "get": {
         "summary": "`GET /api/v1/sources/{id}` — get a source by ID (admin only).",
@@ -3020,8 +3168,8 @@
     },
     "/api/v1/sources/{id}/refresh": {
       "post": {
-        "summary": "`POST /api/v1/sources/{id}/refresh` — refresh a source (admin only).",
-        "description": "Fetches the subscription URL, parses the content, and reconciles the\nparsed nodes into the pool. On fetch or parse failure, the last\nsuccessful snapshot remains active (constraint #19).",
+        "summary": "`POST /api/v1/sources/{id}/refresh` — start an async refresh job (B-15).",
+        "description": "Returns 202 Accepted with the job ID. The refresh runs in a background\ntask via `JobSupervisor`. The client polls the job status endpoint.",
         "operationId": "refresh_source",
         "parameters": [
           {
@@ -3035,12 +3183,96 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Source refreshed",
+          "202": {
+            "description": "Refresh job accepted",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RefreshSourceResponse"
+                  "$ref": "#/components/schemas/RefreshJobAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid source id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Refresh already in progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sources/{id}/refresh-jobs/latest": {
+      "get": {
+        "summary": "`GET /api/v1/sources/{id}/refresh-jobs/latest` — get the latest refresh\njob for a source.",
+        "operationId": "get_latest_refresh_job",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Source ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRefreshJobDto"
                 }
               }
             }
@@ -3076,27 +3308,7 @@
             }
           },
           "404": {
-            "description": "Source not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Fetch or parse failed",
+            "description": "No jobs found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5900,6 +6112,24 @@
           }
         }
       },
+      "CancelRefreshJobResponse": {
+        "type": "object",
+        "description": "Response body for `POST /api/v1/sources/refresh-jobs/{job_id}/cancel`.",
+        "required": [
+          "job_id",
+          "cancelled"
+        ],
+        "properties": {
+          "cancelled": {
+            "type": "boolean",
+            "description": "Whether the cancel signal was sent. `false` if the job was already\nterminal (completed/failed/cancelled)."
+          },
+          "job_id": {
+            "type": "string",
+            "description": "ULID of the refresh job."
+          }
+        }
+      },
       "ChainEdgeDto": {
         "type": "object",
         "description": "A directed edge in the chain proxy dependency graph.",
@@ -7562,76 +7792,26 @@
           "real_proxy"
         ]
       },
-      "ReconcileCountsDto": {
+      "RefreshJobAcceptedResponse": {
         "type": "object",
-        "description": "Reconciliation counts returned by a source refresh.",
+        "description": "Response body for `POST /api/v1/sources/{id}/refresh` (B-15 async job).\n\nThe refresh is now asynchronous: the API returns 202 with a job ID.\nThe client polls `GET /api/v1/sources/refresh-jobs/{job_id}` for status.",
         "required": [
-          "new_nodes",
-          "duplicate_nodes",
-          "reactivated_nodes",
-          "missing_nodes"
+          "job_id",
+          "source_id",
+          "status"
         ],
         "properties": {
-          "duplicate_nodes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Nodes already in the pool (duplicate of an existing active node).",
-            "minimum": 0
-          },
-          "missing_nodes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Nodes previously bound to this source that are no longer present.",
-            "minimum": 0
-          },
-          "new_nodes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Nodes newly inserted into the pool.",
-            "minimum": 0
-          },
-          "reactivated_nodes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Nodes that were missing and have been reactivated.",
-            "minimum": 0
-          }
-        }
-      },
-      "RefreshSourceResponse": {
-        "type": "object",
-        "description": "Response body for `POST /api/v1/sources/{id}/refresh`.",
-        "required": [
-          "snapshot_id",
-          "version",
-          "not_modified",
-          "node_count",
-          "reconcile"
-        ],
-        "properties": {
-          "node_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Number of nodes in the snapshot.",
-            "minimum": 0
-          },
-          "not_modified": {
-            "type": "boolean",
-            "description": "Whether the server returned 304 Not Modified."
-          },
-          "reconcile": {
-            "$ref": "#/components/schemas/ReconcileCountsDto",
-            "description": "Reconciliation counts."
-          },
-          "snapshot_id": {
+          "job_id": {
             "type": "string",
-            "description": "ULID of the snapshot created (or the previously active one on 304)."
+            "description": "ULID of the created refresh job."
           },
-          "version": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Snapshot version number.",
-            "minimum": 0
+          "source_id": {
+            "type": "string",
+            "description": "ULID of the source being refreshed."
+          },
+          "status": {
+            "type": "string",
+            "description": "Current job status (always \"running\" or \"pending\" at this point)."
           }
         }
       },
@@ -7969,6 +8149,86 @@
               "type": "string"
             },
             "description": "Regions to keep; empty means keep all."
+          }
+        }
+      },
+      "SourceRefreshJobDto": {
+        "type": "object",
+        "description": "Response body for `GET /api/v1/sources/refresh-jobs/{job_id}` and\n`GET /api/v1/sources/{id}/refresh-jobs/latest`.",
+        "required": [
+          "id",
+          "source_id",
+          "status",
+          "phase",
+          "started_at",
+          "new_nodes",
+          "duplicate_nodes",
+          "reactivated_nodes",
+          "missing_nodes",
+          "not_modified"
+        ],
+        "properties": {
+          "duplicate_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Reconcile counts: duplicate nodes.",
+            "minimum": 0
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error message if status is \"failed\". `None` otherwise."
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the job finished (ISO 8601 UTC). `None` if still running."
+          },
+          "id": {
+            "type": "string",
+            "description": "ULID of the refresh job."
+          },
+          "missing_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Reconcile counts: missing nodes.",
+            "minimum": 0
+          },
+          "new_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Reconcile counts, populated on success.",
+            "minimum": 0
+          },
+          "not_modified": {
+            "type": "boolean",
+            "description": "Whether the refresh resulted in a 304 Not Modified."
+          },
+          "phase": {
+            "type": "string",
+            "description": "Current phase: \"idle\", \"fetching\", \"parsing\", \"enriching\",\n\"reconciling\", \"publishing\"."
+          },
+          "reactivated_nodes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Reconcile counts: reactivated nodes.",
+            "minimum": 0
+          },
+          "source_id": {
+            "type": "string",
+            "description": "ULID of the source."
+          },
+          "started_at": {
+            "type": "string",
+            "description": "When the job started (ISO 8601 UTC)."
+          },
+          "status": {
+            "type": "string",
+            "description": "Job status: \"pending\", \"running\", \"completed\", \"failed\", \"cancelled\"."
           }
         }
       },

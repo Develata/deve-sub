@@ -135,6 +135,22 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
         .await
         .expect("reverse 0019 table");
 
+    // Reverse migration 0020: drop the UNIQUE indexes so forward-migrating
+    // through 0020 (which does DROP INDEX IF EXISTS then CREATE UNIQUE INDEX)
+    // succeeds on restore.
+    sqlx::query("DROP INDEX IF EXISTS idx_template_versions_template")
+        .execute(&pool)
+        .await
+        .expect("drop 0020 template_versions unique");
+    sqlx::query("DROP INDEX IF EXISTS idx_subscription_tokens_subscription")
+        .execute(&pool)
+        .await
+        .expect("drop 0020 subscription_tokens unique");
+    sqlx::query("DROP INDEX IF EXISTS idx_subscription_short_codes_subscription")
+        .execute(&pool)
+        .await
+        .expect("drop 0020 subscription_short_codes unique");
+
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
         .execute(&pool)
         .await

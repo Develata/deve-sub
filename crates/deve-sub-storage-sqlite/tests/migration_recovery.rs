@@ -1660,3 +1660,569 @@ async fn migration_0015_is_idempotent() {
     let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
+
+/// Recovery test for migration 0020 (B-13): UNIQUE constraints on
+/// template_versions(template_id, version), subscription_tokens(subscription_id),
+/// and subscription_short_codes(subscription_id).
+///
+/// Verifies that the migration replaces the non-unique indexes from 0007/0009/
+/// 0010 with UNIQUE indexes, and that each constraint rejects duplicates while
+/// preserving legitimate inserts.
+#[tokio::test]
+async fn migration_0020_unique_constraints_reject_duplicates() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let indexes = get_index_names(&pool).await;
+    assert!(
+        indexes.contains(&"idx_template_versions_template".to_string()),
+        "idx_template_versions_template should exist (now UNIQUE), got {indexes:?}"
+    );
+    assert!(
+        indexes.contains(&"idx_subscription_tokens_subscription".to_string()),
+        "idx_subscription_tokens_subscription should exist (now UNIQUE), got {indexes:?}"
+    );
+    assert!(
+        indexes.contains(&"idx_subscription_short_codes_subscription".to_string()),
+        "idx_subscription_short_codes_subscription should exist (now UNIQUE), got {indexes:?}"
+    );
+
+    // Seed dependencies for the constraint tests.
+    sqlx::query("INSERT INTO users (id, username, password_hash) VALUES ('01J0USR00000000000000000B', 'owner_b', 'hash')")
+        .execute(&pool)
+        .await
+        .expect("insert user");
+    sqlx::query("INSERT INTO templates (id, name, description) VALUES ('01J0TMPL00000000000000000B', 'tmpl-b', '')")
+        .execute(&pool)
+        .await
+        .expect("insert template");
+    sqlx::query(
+        "INSERT INTO subscriptions \
+         (id, name, slug, owner_id, template_id, profile, node_selection, token_id, enabled) \
+         VALUES ('01J0SUB00000000000000000B', 'sub-b', 'slug-b', \
+                 '01J0USR00000000000000000B', '01J0TMPL00000000000000000B', \
+                 'mihomo', '{}', '01J0TOKN00000000000000000B', 1)",
+    )
+    .execute(&pool)
+    .await
+    .expect("insert subscription");
+
+    // --- template_versions(template_id, version) UNIQUE ---
+    sqlx::query(
+        "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active) \
+         VALUES ('01J0VER00000000000000000B', '01J0TMPL00000000000000000B', 1, '{}', '', 1)",
+    )
+    .execute(&pool)
+    .await
+    .expect("insert first template version");
+
+    let dup_version = sqlx::query(
+        "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active) \
+         VALUES ('01J0VER00000000000000000C', '01J0TMPL00000000000000000B', 1, '{}', '', 0)",
+    )
+    .execute(&pool)
+    .await;
+    assert!(
+        dup_version.is_err(),
+        "duplicate (template_id, version) must be rejected by UNIQUE constraint"
+    );
+
+    // A different version number for the same template is allowed.
+    sqlx::query(
+        "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active) \
+         VALUES ('01J0VER00000000000000000C', '01J0TMPL00000000000000000B', 2, '{}', '', 0)",
+    )
+    .execute(&pool)
+    .await
+    .expect("insert second template version with different version number");
+
+    // --- subscription_tokens(subscription_id) UNIQUE ---
+    sqlx::query(
+        "INSERT INTO subscription_tokens (id, subscription_id, token_digest) \
+         VALUES ('01J0TOKN00000000000000000B', '01J0SUB00000000000000000B', 'digest_b1')",
+    )
+    .execute(&pool)
+    .await
+    .expect("insert first token");
+
+    let dup_token = sqlx::query(
+        "INSERT INTO subscription_tokens (id, subscription_id, token_digest) \
+         VALUES ('01J0TOKN00000000000000000C', '01J0SUB00000000000000000B', 'digest_b2')",
+    )
+    .execute(&pool)
+    .await;
+    assert!(
+        dup_token.is_err(),
+        "a second token row for the same subscription must be rejected by UNIQUE constraint"
+    );
+
+    // --- subscription_short_codes(subscription_id) UNIQUE ---
+    sqlx::query(
+        "INSERT INTO subscription_short_codes (id, subscription_id, code) \
+         VALUES ('01J0SHC00000000000000000B', '01J0SUB00000000000000000B', 'code_b1')",
+    )
+    .execute(&pool)
+    .await
+    .expect("insert first short code");
+
+    let dup_short_code = sqlx::query(
+        "INSERT INTO subscription_short_codes (id, subscription_id, code) \
+         VALUES ('01J0SHC00000000000000000C', '01J0SUB00000000000000000B', 'code_b2')",
+    )
+    .execute(&pool)
+    .await;
+    assert!(
+        dup_short_code.is_err(),
+        "a second short code row for the same subscription must be rejected by UNIQUE constraint"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+/// Fault-injection test for B-13: if the token INSERT inside
+/// `create_with_token` fails (UNIQUE(token_digest) conflict with a different
+/// subscription's token), the subscription INSERT must be rolled back so no
+/// orphaned subscription remains.
+///
+/// A pre-existing token row for the *target* subscription_id is impossible
+/// because `subscription_tokens.subscription_id` has a FK to `subscriptions`
+/// and the subscription does not exist yet. Instead we trigger step-2 failure
+/// via `UNIQUE(token_digest)`: a different subscription already owns a token
+/// with the same digest. Step 1 (subscription INSERT) succeeds, step 2 (token
+/// INSERT) fails on UNIQUE(token_digest), and the transaction must roll back
+/// step 1.
+#[tokio::test]
+async fn b13_create_with_token_rolls_back_on_token_digest_conflict() {
+    use deve_sub_domain::subscription::{Subscription, SubscriptionToken};
+    use deve_sub_domain::{SubscriptionRepository as _, NodeSelector};
+    use deve_sub_kernel::{SubscriptionId, SubscriptionTokenId, Timestamp, UserId};
+
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let owner_id = UserId::new();
+    let template_id = deve_sub_kernel::TemplateId::new();
+
+    sqlx::query("INSERT INTO users (id, username, password_hash) VALUES (?, 'owner_c', 'hash')")
+        .bind(owner_id.to_string())
+        .execute(&pool)
+        .await
+        .expect("insert user");
+    sqlx::query("INSERT INTO templates (id, name, description) VALUES (?, 'tmpl-c', '')")
+        .bind(template_id.to_string())
+        .execute(&pool)
+        .await
+        .expect("insert template");
+
+    let blocking_sub_id = SubscriptionId::new();
+    let blocking_token_id = SubscriptionTokenId::new();
+    sqlx::query(
+        "INSERT INTO subscriptions \
+         (id, name, slug, owner_id, template_id, profile, node_selection, token_id, enabled) \
+         VALUES (?, 'blocking-sub', 'blocking-slug', ?, ?, 'mihomo', '{}', ?, 1)",
+    )
+    .bind(blocking_sub_id.to_string())
+    .bind(owner_id.to_string())
+    .bind(template_id.to_string())
+    .bind(blocking_token_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert blocking subscription");
+    sqlx::query(
+        "INSERT INTO subscription_tokens (id, subscription_id, token_digest) \
+         VALUES (?, ?, 'contested_digest')",
+    )
+    .bind(blocking_token_id.to_string())
+    .bind(blocking_sub_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert blocking token with contested digest");
+
+    let repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool.clone());
+
+    let new_sub_id = SubscriptionId::new();
+    let new_token_id = SubscriptionTokenId::new();
+    let subscription = Subscription {
+        id: new_sub_id,
+        name: "fault-sub".to_string(),
+        slug: "fault-slug".to_string(),
+        owner_id,
+        template_id,
+        template_version_pin: None,
+        profile: "mihomo".to_string(),
+        node_selection: NodeSelector::default(),
+        traffic_limit: None,
+        expires_at: None,
+        token_id: new_token_id,
+        enabled: true,
+        created_at: Timestamp::now(),
+        updated_at: Timestamp::now(),
+        short_code_id: None,
+    };
+    let token = SubscriptionToken {
+        id: new_token_id,
+        subscription_id: new_sub_id,
+        token_digest: "contested_digest".to_string(),
+        previous_token_digest: None,
+        rotation_grace_until: None,
+        issued_at: Timestamp::now(),
+    };
+
+    let result = repo.create_with_token(&subscription, &token).await;
+    assert!(
+        result.is_err(),
+        "create_with_token must fail when token_digest is already taken"
+    );
+
+    let (sub_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM subscriptions WHERE id = ?")
+        .bind(new_sub_id.to_string())
+        .fetch_one(&pool)
+        .await
+        .expect("count new subscriptions");
+    assert_eq!(
+        sub_count, 0,
+        "new subscription must be rolled back when token insert fails (B-13 atomicity)"
+    );
+
+    let (new_token_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_tokens WHERE id = ?")
+            .bind(new_token_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("count new tokens");
+    assert_eq!(
+        new_token_count, 0,
+        "new token must not exist (step 2 failed)"
+    );
+
+    let (blocking_token_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_tokens WHERE id = ?")
+            .bind(blocking_token_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("count blocking tokens");
+    assert_eq!(
+        blocking_token_count, 1,
+        "blocking token must remain untouched"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+/// Fault-injection test for B-13: if the version INSERT inside
+/// `update_with_version` fails (UNIQUE(template_id, version) conflict with a
+/// pre-existing inactive version), the deactivation of the old active version
+/// must be rolled back so the template keeps its active version.
+///
+/// `update_with_version` runs three steps in one transaction: (1) deactivate
+/// all active versions, (2) INSERT the new version, (3) UPDATE the template
+/// metadata. We pre-insert an inactive version with version=2, then call
+/// `update_with_version` with version=2. Step 1 succeeds (deactivates the
+/// active v1), step 2 fails on UNIQUE(template_id, version=2), and the
+/// transaction must roll back step 1 so v1 remains active.
+#[tokio::test]
+async fn b13_update_with_version_rolls_back_on_version_conflict() {
+    use deve_sub_domain::template::{
+        NodeSelector, ProxyGroup, Rule, SubscriptionTemplate, TemplateSpec, TemplateVersion,
+    };
+    use deve_sub_domain::TemplateRepository as _;
+    use deve_sub_kernel::{TemplateId, TemplateVersionId, Timestamp};
+
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let template_id = TemplateId::new();
+    let active_v1_id = TemplateVersionId::new();
+    let inactive_v2_id = TemplateVersionId::new();
+
+    sqlx::query(
+        "INSERT INTO templates (id, name, description, active_version_id, active_version) \
+         VALUES (?, 'fault-tmpl', '', ?, 1)",
+    )
+    .bind(template_id.to_string())
+    .bind(active_v1_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert template");
+
+    sqlx::query(
+        "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active) \
+         VALUES (?, ?, 1, '{}', '', 1)",
+    )
+    .bind(active_v1_id.to_string())
+    .bind(template_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert active v1");
+
+    sqlx::query(
+        "INSERT INTO template_versions (id, template_id, version, spec_json, spec_yaml, is_active) \
+         VALUES (?, ?, 2, '{}', '', 0)",
+    )
+    .bind(inactive_v2_id.to_string())
+    .bind(template_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert inactive v2 (blocks the new version insert)");
+
+    let repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool.clone());
+
+    let template = SubscriptionTemplate {
+        id: template_id,
+        name: "fault-tmpl".to_string(),
+        description: "updated".to_string(),
+        active_version_id: Some(TemplateVersionId::new()),
+        active_version: 2,
+        created_at: Timestamp::now(),
+        updated_at: Timestamp::now(),
+    };
+    let version = TemplateVersion {
+        id: TemplateVersionId::new(),
+        template_id,
+        version: 2,
+        spec: TemplateSpec {
+            target_profiles: Vec::new(),
+            variables: serde_json::Value::Object(serde_json::Map::new()),
+            node_selector: NodeSelector::default(),
+            proxy_groups: Vec::<ProxyGroup>::new(),
+            rules: Vec::<Rule>::new(),
+            dns: serde_json::Value::Object(serde_json::Map::new()),
+            tun: serde_json::Value::Object(serde_json::Map::new()),
+            output: serde_json::Value::Object(serde_json::Map::new()),
+        },
+        spec_yaml: String::new(),
+        is_active: true,
+        created_at: Timestamp::now(),
+    };
+
+    let result = repo.update_with_version(&template, &version).await;
+    assert!(
+        result.is_err(),
+        "update_with_version must fail when (template_id, version) already exists"
+    );
+
+    // WHY: step 1 (deactivate v1) must roll back, so v1 is active again.
+    let (active_v1_active,): (i64,) =
+        sqlx::query_as("SELECT is_active FROM template_versions WHERE id = ?")
+            .bind(active_v1_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("get v1 is_active");
+    assert_eq!(
+        active_v1_active, 1,
+        "v1 must remain active after rollback (step 1 deactivation rolled back)"
+    );
+
+    let (ver_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM template_versions WHERE template_id = ?")
+            .bind(template_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("count versions");
+    assert_eq!(
+        ver_count, 2,
+        "only the two pre-inserted versions should remain; the failed insert must not add a row"
+    );
+
+    let (tmpl_desc,): (String,) = sqlx::query_as("SELECT description FROM templates WHERE id = ?")
+        .bind(template_id.to_string())
+        .fetch_one(&pool)
+        .await
+        .expect("get template description");
+    assert_eq!(
+        tmpl_desc, "",
+        "template description must remain unchanged (step 3 UPDATE rolled back)"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
+/// Fault-injection test for B-13: if the short-code INSERT inside `replace`
+/// fails (UNIQUE(code) conflict with a different subscription's short code),
+/// the DELETE of the old short code and the UPDATE of the subscription must
+/// be rolled back.
+///
+/// With the new UNIQUE(subscription_id) constraint (migration 0020), two
+/// short-code rows for the *same* subscription cannot coexist, so we cannot
+/// inject a step-2 failure via subscription_id collision. Instead we trigger
+/// it via UNIQUE(code): a different subscription already owns a short code
+/// with the same code value. `replace` deletes the old short code (step 1),
+/// inserts the new one (step 2, fails on UNIQUE(code)), and the transaction
+/// must roll back step 1 so the old short code is restored.
+#[tokio::test]
+async fn b13_short_code_replace_rolls_back_on_code_conflict() {
+    use deve_sub_domain::subscription::ShortCode;
+    use deve_sub_domain::ShortCodeRepository as _;
+    use deve_sub_kernel::{ShortCodeId, SubscriptionId, Timestamp, UserId};
+
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    let owner_id = UserId::new();
+    let template_id = deve_sub_kernel::TemplateId::new();
+
+    sqlx::query("INSERT INTO users (id, username, password_hash) VALUES (?, 'owner_d', 'hash')")
+        .bind(owner_id.to_string())
+        .execute(&pool)
+        .await
+        .expect("insert user");
+    sqlx::query("INSERT INTO templates (id, name, description) VALUES (?, 'tmpl-d', '')")
+        .bind(template_id.to_string())
+        .execute(&pool)
+        .await
+        .expect("insert template");
+
+    let sub_a_id = SubscriptionId::new();
+    let old_sc_id = ShortCodeId::new();
+    let sub_a_token_id = deve_sub_kernel::SubscriptionTokenId::new();
+
+    sqlx::query(
+        "INSERT INTO subscriptions \
+         (id, name, slug, owner_id, template_id, profile, node_selection, token_id, \
+          enabled, short_code_id) \
+         VALUES (?, 'sub-a', 'slug-a', ?, ?, 'mihomo', '{}', ?, 1, ?)",
+    )
+    .bind(sub_a_id.to_string())
+    .bind(owner_id.to_string())
+    .bind(template_id.to_string())
+    .bind(sub_a_token_id.to_string())
+    .bind(old_sc_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert subscription A with short_code_id");
+
+    sqlx::query(
+        "INSERT INTO subscription_short_codes (id, subscription_id, code) \
+         VALUES (?, ?, 'old_code')",
+    )
+    .bind(old_sc_id.to_string())
+    .bind(sub_a_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert old short code for subscription A");
+
+    let sub_b_id = SubscriptionId::new();
+    let sub_b_sc_id = ShortCodeId::new();
+    let sub_b_token_id = deve_sub_kernel::SubscriptionTokenId::new();
+
+    sqlx::query(
+        "INSERT INTO subscriptions \
+         (id, name, slug, owner_id, template_id, profile, node_selection, token_id, enabled) \
+         VALUES (?, 'sub-b', 'slug-b', ?, ?, 'mihomo', '{}', ?, 1)",
+    )
+    .bind(sub_b_id.to_string())
+    .bind(owner_id.to_string())
+    .bind(template_id.to_string())
+    .bind(sub_b_token_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert subscription B");
+
+    sqlx::query(
+        "INSERT INTO subscription_short_codes (id, subscription_id, code) \
+         VALUES (?, ?, 'taken_code')",
+    )
+    .bind(sub_b_sc_id.to_string())
+    .bind(sub_b_id.to_string())
+    .execute(&pool)
+    .await
+    .expect("insert short code for subscription B with 'taken_code'");
+
+    let repo = deve_sub_storage_sqlite::SqliteShortCodeRepository::new(pool.clone());
+
+    let new_short_code = ShortCode {
+        id: ShortCodeId::new(),
+        subscription_id: sub_a_id,
+        code: "taken_code".to_string(),
+        created_at: Timestamp::now(),
+    };
+
+    let result = repo
+        .replace(sub_a_id, Some(old_sc_id), &new_short_code)
+        .await;
+    assert!(
+        result.is_err(),
+        "replace must fail when the new code is already taken by another subscription"
+    );
+
+    // WHY: the DELETE of the old short code (step 1) must roll back, so the
+    // old short code is restored and the subscription still references it.
+    let (old_sc_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_short_codes WHERE id = ?")
+            .bind(old_sc_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("count old short codes");
+    assert_eq!(
+        old_sc_count, 1,
+        "old short code must be restored (DELETE rolled back)"
+    );
+
+    let (new_sc_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_short_codes WHERE id = ?")
+            .bind(new_short_code.id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("count new short codes");
+    assert_eq!(
+        new_sc_count, 0,
+        "new short code must not exist (INSERT rolled back)"
+    );
+
+    let (sub_a_short_code_id,): (Option<String>,) =
+        sqlx::query_as("SELECT short_code_id FROM subscriptions WHERE id = ?")
+            .bind(sub_a_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("get subscription A short_code_id");
+    assert_eq!(
+        sub_a_short_code_id.as_deref(),
+        Some(old_sc_id.to_string()).as_deref(),
+        "subscription A must still point to the old short code (UPDATE rolled back)"
+    );
+
+    let (sub_b_sc_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscription_short_codes WHERE id = ?")
+            .bind(sub_b_sc_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("count subscription B short codes");
+    assert_eq!(
+        sub_b_sc_count, 1,
+        "subscription B's short code must remain untouched"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}

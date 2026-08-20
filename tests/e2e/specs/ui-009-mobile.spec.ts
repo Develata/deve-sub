@@ -12,7 +12,7 @@ test('UI-009 (mobile): can view subscriptions, refresh sources, and copy links',
 
   const subTable = page.locator('table');
   await expect(subTable).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('text=test-sub')).toBeVisible();
+  await expect(page.locator('tr').filter({ hasText: 'test-sub' })).toBeVisible();
 
   const copyBtn = page.locator('button').filter({ hasText: /复制|Copy/ }).first();
   await expect(copyBtn).toBeVisible();
@@ -25,7 +25,7 @@ test('UI-009 (mobile): can view subscriptions, refresh sources, and copy links',
 
   const sourceTable = page.locator('table');
   await expect(sourceTable).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('text=test-source')).toBeVisible();
+  await expect(page.locator('tr').filter({ hasText: 'test-source' })).toBeVisible();
 
   const refreshBtn = page.locator('button').filter({ hasText: /刷新|Refresh/ }).first();
   await expect(refreshBtn).toBeVisible();

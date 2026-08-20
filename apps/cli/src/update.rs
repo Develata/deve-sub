@@ -7,11 +7,10 @@
 //!
 //! DS-AUD-B09: the previous implementation had nine defects:
 //! 1. Binary + checksum from the same unsigned release — transport integrity
-//!    only, no publisher authentication. SIGNING IS DEFERRED (requires
-//!    `ed25519-dalek`, blocked on a crates.io network outage in this
-//!    session). The checksum still guards against transport corruption.
-//!    TODO(B-09-signing): add Ed25519 manifest signature verification once
-//!    the dependency can be fetched.
+//!    only, no publisher authentication. FIXED: releases now include a signed
+//!    manifest (`deve-sub-manifest.json` + `.sig`) verified via Ed25519
+//!    against an embedded public key (see `update_manifest.rs`). Unsigned
+//!    releases fall back to `checksums.txt` with a warning.
 //! 2. `--config` flag existed but `load_bind_from_config` was never called.
 //! 3. systemd restart failure still proceeded to the health URL.
 //! 4. Old process on the port could return 200 → false positive → backup
@@ -31,6 +30,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use crate::commands::load_config;
+use crate::update_manifest;
 
 /// GitHub Releases API response (subset).
 #[derive(Debug, Deserialize)]
@@ -39,7 +39,7 @@ struct ReleaseManifest {
     assets: Vec<Asset>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct Asset {
     name: String,
     browser_download_url: String,
@@ -126,32 +126,57 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
         .iter()
         .find(|a| a.name == asset_name)
         .with_context(|| format!("no asset named {asset_name} in release"))?;
-    let checksum_asset = manifest
-        .assets
-        .iter()
-        .find(|a| a.name == "checksums.txt")
-        .context("no checksums.txt in release")?;
 
     // DS-AUD-B09: acquire an update sidecar lock so two concurrent updates
     // don't clobber each other's temp/backup files.
     let lock_path = update_lock_path(&binary_path);
     let lock_file = acquire_update_lock(&lock_path)?;
 
-    println!("downloading checksums.txt...");
-    let checksum_bytes =
-        download_bounded(&checksum_asset.browser_download_url, MAX_MANIFEST_BYTES).await?;
-    let checksum_text = String::from_utf8_lossy(&checksum_bytes);
-    let expected_hash = parse_checksum(&checksum_text, &asset_name)
-        .with_context(|| format!("no checksum entry for {asset_name}"))?;
+    // DS-AUD-B09: verify the release via a signed manifest (Ed25519) when
+    // available. This authenticates the publisher, not just transport
+    // integrity. Unsigned releases fall back to checksums.txt with a warning.
+    let (expected_hash, expected_size) = match try_fetch_signed_manifest(&manifest, latest_version)
+        .await?
+    {
+        SignedManifestResult::Verified(signed) => {
+            println!("  signed manifest verified (Ed25519 signature OK)");
+            let asset_entry = signed
+                .find_asset(&asset_name)
+                .with_context(|| format!("asset {asset_name} not in signed manifest"))?;
+            (asset_entry.sha256.clone(), Some(asset_entry.size))
+        }
+        SignedManifestResult::UnsignedChecksums(checksum_asset) => {
+            println!(
+                "  WARNING: no signed manifest in release — falling back to unsigned checksums.txt"
+            );
+            let checksum_bytes =
+                download_bounded(&checksum_asset.browser_download_url, MAX_MANIFEST_BYTES).await?;
+            let checksum_text = String::from_utf8_lossy(&checksum_bytes);
+            let hash = parse_checksum(&checksum_text, &asset_name)
+                .with_context(|| format!("no checksum entry for {asset_name}"))?;
+            (hash, None)
+        }
+        SignedManifestResult::None => {
+            bail!(
+                "release has neither a signed manifest nor checksums.txt — refusing to update from unauthenticated source"
+            );
+        }
+    };
 
     println!("downloading {asset_name}...");
-    let (binary_tmp, actual_hash) =
+    let (binary_tmp, actual_hash, actual_size) =
         download_streaming(&asset.browser_download_url, MAX_BINARY_BYTES).await?;
 
     println!("verifying checksum...");
     if actual_hash != expected_hash {
         let _ = std::fs::remove_file(&binary_tmp);
         bail!("checksum mismatch: expected {expected_hash}, got {actual_hash}");
+    }
+    if let Some(exp_size) = expected_size
+        && actual_size != exp_size
+    {
+        let _ = std::fs::remove_file(&binary_tmp);
+        bail!("size mismatch: signed manifest says {exp_size} bytes, got {actual_size}");
     }
     println!("  checksum OK");
 
@@ -265,6 +290,72 @@ async fn fetch_manifest(url: &str) -> Result<ReleaseManifest> {
     Ok(manifest)
 }
 
+/// Result of attempting to fetch and verify a signed manifest from a release.
+enum SignedManifestResult {
+    /// Signature verified — the contained hash/size are publisher-authenticated.
+    Verified(update_manifest::SignedManifest),
+    /// No signed manifest asset, but a `checksums.txt` exists (unsigned fallback).
+    UnsignedChecksums(Asset),
+    /// Neither signed manifest nor checksums.txt — refuse to update.
+    None,
+}
+
+/// DS-AUD-B09: look for `deve-sub-manifest.json` + `deve-sub-manifest.json.sig`
+/// assets in the release. If both exist, download and verify the Ed25519
+/// signature. If the signature is invalid or from the wrong key, abort (do NOT
+/// fall back to unsigned checksums — a failed signature is an attack signal,
+/// not a missing-manifest condition). If no signed manifest assets exist,
+/// return the `checksums.txt` asset for unsigned fallback.
+async fn try_fetch_signed_manifest(
+    release: &ReleaseManifest,
+    expected_version: &str,
+) -> Result<SignedManifestResult> {
+    let manifest_asset = release
+        .assets
+        .iter()
+        .find(|a| a.name == "deve-sub-manifest.json");
+    let sig_asset = release
+        .assets
+        .iter()
+        .find(|a| a.name == "deve-sub-manifest.json.sig");
+
+    match (manifest_asset, sig_asset) {
+        (Some(m), Some(s)) => {
+            println!("downloading signed manifest...");
+            let manifest_bytes =
+                download_bounded(&m.browser_download_url, MAX_MANIFEST_BYTES).await?;
+            let sig_bytes = download_bounded(&s.browser_download_url, MAX_MANIFEST_BYTES).await?;
+
+            let signed = update_manifest::verify_signed_manifest(&manifest_bytes, &sig_bytes)?;
+
+            // WHY: the signed manifest's version must match the release tag.
+            // A mismatch means the signature is over a different version's
+            // manifest — a potential downgrade or replay attack.
+            if signed.version != expected_version {
+                bail!(
+                    "signed manifest version {} does not match release tag {} — refusing update",
+                    signed.version,
+                    expected_version
+                );
+            }
+            Ok(SignedManifestResult::Verified(signed))
+        }
+        (None, None) => {
+            let checksum_asset = release.assets.iter().find(|a| a.name == "checksums.txt");
+            match checksum_asset {
+                Some(c) => Ok(SignedManifestResult::UnsignedChecksums(c.clone())),
+                None => Ok(SignedManifestResult::None),
+            }
+        }
+        _ => {
+            // One exists without the other — suspicious, refuse.
+            bail!(
+                "release has a partial signed manifest (need both deve-sub-manifest.json and .sig) — refusing update"
+            );
+        }
+    }
+}
+
 /// Download a URL into memory with an upper size bound (DS-AUD-B09).
 async fn download_bounded(url: &str, max_bytes: u64) -> Result<Vec<u8>> {
     let client = reqwest::Client::builder()
@@ -283,8 +374,9 @@ async fn download_bounded(url: &str, max_bytes: u64) -> Result<Vec<u8>> {
 }
 
 /// Stream a download to a temp file, computing SHA-256 incrementally and
-/// enforcing a max size. Returns (temp_file_path, sha256_hex) (DS-AUD-B09).
-async fn download_streaming(url: &str, max_bytes: u64) -> Result<(PathBuf, String)> {
+/// enforcing a max size. Returns (temp_file_path, sha256_hex, total_bytes)
+/// (DS-AUD-B09).
+async fn download_streaming(url: &str, max_bytes: u64) -> Result<(PathBuf, String, u64)> {
     use futures_util::StreamExt;
     let client = reqwest::Client::builder()
         .user_agent(format!("deve-sub/{}", env!("CARGO_PKG_VERSION")))
@@ -316,7 +408,7 @@ async fn download_streaming(url: &str, max_bytes: u64) -> Result<(PathBuf, Strin
         .context("failed to fsync downloaded temp file")?;
     let hash = hasher.finalize();
     let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-    Ok((tmp, hex))
+    Ok((tmp, hex, total))
 }
 
 fn platform_asset_name() -> Result<String> {

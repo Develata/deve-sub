@@ -19,6 +19,7 @@ mod serve;
 mod subscription_cmds;
 mod template_cmds;
 mod update;
+mod update_manifest;
 
 /// Deve Sub — self-hosted proxy subscription infrastructure manager.
 #[derive(Parser)]

@@ -20,7 +20,9 @@ cases:
     steps: []
     assertions: ["进入管理员初始化", "不出现默认弱密码"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-002
     title: 中英文切换
     priority: P0
@@ -30,7 +32,9 @@ cases:
     steps: []
     assertions: ["当前页面和导航即时切换", "刷新后保留"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-003
     title: 日间/夜间
     priority: P0
@@ -40,7 +44,9 @@ cases:
     steps: []
     assertions: ["所有页面无不可读文字"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-004
     title: Minimal Warm
     priority: P0
@@ -50,7 +56,9 @@ cases:
     steps: []
     assertions: ["布局和设计 Token 正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-005
     title: Fantasy Violet
     priority: P0
@@ -60,7 +68,9 @@ cases:
     steps: []
     assertions: ["棋盘背景、装饰和卡片仍保持可读"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-006
     title: 自定义主题
     priority: P0
@@ -70,7 +80,9 @@ cases:
     steps: []
     assertions: ["修改颜色、Logo 后持久化"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-007
     title: 减少动画
     priority: P0
@@ -80,7 +92,9 @@ cases:
     steps: []
     assertions: ["系统设置后关闭非必要动画"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-008
     title: 10,000 节点
     priority: P0
@@ -90,7 +104,9 @@ cases:
     steps: []
     assertions: ["滚动、筛选和选择不明显卡顿"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-009
     title: 移动端
     priority: P0
@@ -100,7 +116,9 @@ cases:
     steps: []
     assertions: ["能查看订阅、刷新源和复制链接"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UI-010
     title: 键盘导航
     priority: P0
@@ -110,7 +128,9 @@ cases:
     steps: []
     assertions: ["导航、表格和对话框可使用键盘"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: AUTH-001
     title: 初始化管理员
     priority: P0
@@ -120,7 +140,12 @@ cases:
     steps: []
     assertions: ["成功创建且只能执行一次"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/auth_flow.rs::setup_admin_succeeds_once"
+        - "apps/server/tests/auth_flow.rs::setup_admin_rejects_when_initialized"
+        - "apps/server/tests/auth_flow.rs::auth_status_reports_initialized_flag"
+      status: pass
   - id: AUTH-002
     title: 正确登录
     priority: P0
@@ -130,7 +155,11 @@ cases:
     steps: []
     assertions: ["创建安全 Session"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/auth_flow.rs::login_with_correct_credentials"
+        - "apps/server/tests/auth_flow.rs::me_with_valid_session"
+      status: pass
   - id: AUTH-003
     title: 错误密码
     priority: P0
@@ -140,7 +169,11 @@ cases:
     steps: []
     assertions: ["不泄露用户名是否存在"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/auth_flow.rs::login_with_wrong_password"
+        - "apps/server/tests/auth_flow.rs::me_without_session"
+      status: pass
   - id: AUTH-004
     title: 登录限流
     priority: P0
@@ -150,7 +183,13 @@ cases:
     steps: []
     assertions: ["超阈值后暂时限制"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/security.rs::login_rate_limited_after_threshold"
+        - "apps/server/tests/security.rs::rate_limiting_per_ip"
+        - "apps/server/tests/security.rs::rate_limiting_applies_to_nonexistent_user"
+        - "apps/server/tests/security.rs::successful_login_resets_counter"
+      status: pass
   - id: AUTH-005
     title: 2FA
     priority: P0
@@ -160,7 +199,13 @@ cases:
     steps: []
     assertions: ["开启、登录、关闭完整通过"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/twofa.rs::twofa_login_with_totp_code"
+        - "apps/server/tests/twofa.rs::twofa_login_wrong_totp_code"
+        - "apps/server/tests/twofa.rs::twofa_login_invalid_challenge_token"
+        - "apps/server/tests/twofa.rs::setup_twofa_when_already_enabled"
+      status: pass
   - id: AUTH-006
     title: 恢复码
     priority: P0
@@ -170,7 +215,13 @@ cases:
     steps: []
     assertions: ["单次使用后立即失效"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/twofa.rs::recovery_code_single_use"
+        - "apps/server/tests/twofa.rs::regenerate_recovery_codes"
+        - "apps/server/tests/twofa.rs::disable_twofa"
+        - "apps/server/tests/twofa.rs::disable_twofa_wrong_password"
+      status: pass
   - id: AUTH-007
     title: 禁用用户
     priority: P0
@@ -180,7 +231,12 @@ cases:
     steps: []
     assertions: ["现有 Session 被撤销"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/user_management.rs::disable_user_revokes_sessions"
+        - "apps/server/tests/user_management.rs::admin_cannot_disable_self"
+        - "apps/server/tests/user_management.rs::disable_nonexistent_user_404"
+      status: pass
   - id: AUTH-008
     title: 普通用户越权
     priority: P0
@@ -190,7 +246,12 @@ cases:
     steps: []
     assertions: ["无法访问管理员资源"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/user_management.rs::regular_user_forbidden_on_admin_routes"
+        - "apps/server/tests/source_management.rs::regular_user_forbidden_on_source_routes"
+        - "apps/server/tests/source_refresh.rs::non_admin_forbidden"
+      status: pass
   - id: AUTH-009
     title: Token 重置
     priority: P0
@@ -200,7 +261,11 @@ cases:
     steps: []
     assertions: ["旧订阅 Token 失效"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_management.rs::sub002_rotate_token_returns_new_plaintext"
+        - "apps/server/tests/subscription_delivery.rs::del019_no_grace_old_token_immediately_invalid"
+      status: pass
   - id: AUTH-010
     title: 强制注销
     priority: P0
@@ -210,7 +275,11 @@ cases:
     steps: []
     assertions: ["指定会话立即失效"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/user_management.rs::force_logout_revokes_sessions"
+        - "apps/server/tests/user_management.rs::force_logout_nonexistent_user_404"
+      status: pass
   - id: SRC-001
     title: 新建 HTTP 源
     priority: P0
@@ -220,7 +289,17 @@ cases:
     steps: []
     assertions: ["保存并脱敏显示凭据"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/source_management.rs::admin_can_create_source"
+        - "apps/server/tests/source_management.rs::admin_can_get_source_by_id"
+        - "apps/server/tests/source_management.rs::admin_can_list_sources"
+        - "apps/server/tests/source_management.rs::admin_can_update_source"
+        - "apps/server/tests/source_management.rs::admin_can_delete_source"
+        - "apps/server/tests/source_management.rs::defaults_applied"
+        - "apps/server/tests/source_management.rs::delete_nonexistent_returns_404"
+        - "apps/server/tests/source_management.rs::duplicate_name_returns_conflict"
+      status: pass
   - id: SRC-002
     title: 手动刷新
     priority: P0
@@ -260,7 +339,10 @@ cases:
     steps: []
     assertions: ["未变化返回 304 时不重复解析"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/refresh_source.rs::refresh_304_not_modified_preserves_old_snapshot"
+      status: pass
   - id: SRC-005
     title: 抓取失败
     priority: P0
@@ -270,7 +352,12 @@ cases:
     steps: []
     assertions: ["保留上次成功节点"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/source_refresh.rs::refresh_fetch_failure_marks_job_failed"
+        - "crates/deve-sub-application/tests/refresh_source.rs::fetch_failure_disables_source_when_keep_on_fail_false"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::failed_reconcile_preserves_old_snapshot"
+      status: pass
   - id: SRC-006
     title: 解析为零节点
     priority: P0
@@ -280,7 +367,11 @@ cases:
     steps: []
     assertions: ["不覆盖旧 Snapshot"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/parse_for_import.rs::parse_for_import_empty_input_yields_no_nodes"
+        - "crates/deve-sub-application/tests/refresh_source.rs::zero_node_refresh_preserves_old_snapshot"
+      status: pass
   - id: SRC-007
     title: 响应过大
     priority: P0
@@ -290,7 +381,11 @@ cases:
     steps: []
     assertions: ["中止并记录明确错误"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/src/source/parse.rs::max_nodes_accepted"
+        - "crates/deve-sub-application/src/source/parse.rs::too_many_nodes_rejected"
+      status: pass
   - id: SRC-008
     title: 请求超时
     priority: P0
@@ -300,7 +395,9 @@ cases:
     steps: []
     assertions: ["任务超时且可重试"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: SRC-009
     title: 取消刷新
     priority: P0
@@ -324,7 +421,18 @@ cases:
     steps: []
     assertions: ["包含和排除规则正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/src/source/filter.rs::no_rules_keeps_all"
+        - "crates/deve-sub-application/src/source/filter.rs::include_protocols_keeps_only_matching"
+        - "crates/deve-sub-application/src/source/filter.rs::exclude_protocols_drops_matching"
+        - "crates/deve-sub-application/src/source/filter.rs::include_regions_keeps_only_matching"
+        - "crates/deve-sub-application/src/source/filter.rs::exclude_regions_drops_matching"
+        - "crates/deve-sub-application/src/source/filter.rs::protocol_match_is_case_insensitive"
+        - "crates/deve-sub-application/src/source/filter.rs::two_phase_pipeline_protocol_then_region"
+        - "crates/deve-sub-application/src/source/filter.rs::region_phase_noop_when_no_region_rules"
+        - "crates/deve-sub-application/src/source/filter.rs::entries_without_node_are_skipped"
+      status: pass
   - id: SRC-011
     title: IPv6 URL
     priority: P0
@@ -334,7 +442,9 @@ cases:
     steps: []
     assertions: ["能抓取 IPv6 literal 源"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: SRC-012
     title: 压缩响应
     priority: P0
@@ -344,7 +454,12 @@ cases:
     steps: []
     assertions: ["gzip、br、zstd 正确处理"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::gzip_response_decompressed"
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::brotli_response_decompressed"
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::zstd_response_decompressed"
+      status: pass
   - id: SRC-013
     title: 多个刷新
     priority: P0
@@ -354,7 +469,11 @@ cases:
     steps: []
     assertions: ["并发受控且互不污染"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/source_refresh.rs::concurrent_refresh_returns_409"
+        - "crates/deve-sub-application/tests/refresh_source.rs::concurrent_refreshes_do_not_cross_pollinate"
+      status: pass
   - id: SRC-014
     title: Diff
     priority: P0
@@ -364,7 +483,16 @@ cases:
     steps: []
     assertions: ["新增、删除、修改数量正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::first_refresh_inserts_new_nodes"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::new_snapshot_replaces_active"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::missing_nodes_marked_on_subsequent_refresh"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::missing_node_reactivated_on_reappearance"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::duplicate_node_does_not_create_pool_entry"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::node_bound_by_two_sources_not_missing_when_one_drops"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::reconcile_preserves_distinct_credentials_at_same_endpoint"
+      status: pass
   - id: PARSE-001
     title: VLESS Reality URI
     priority: P0
@@ -374,7 +502,10 @@ cases:
     steps: []
     assertions: ["所有 Reality 字段无损"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/vless_reality_round_trip.rs"
+      status: pass
   - id: PARSE-002
     title: HY2 URI
     priority: P0
@@ -384,7 +515,13 @@ cases:
     steps: []
     assertions: ["obfs、端口跳跃和证书字段无损"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/hysteria2_round_trip.rs::hysteria2_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/hysteria2_round_trip.rs::hysteria2_parse_field_fidelity"
+        - "crates/deve-sub-protocol/tests/hysteria2_round_trip.rs::hysteria2_ipv6_round_trip"
+        - "crates/deve-sub-protocol/tests/hysteria2_round_trip.rs::hysteria2_obfs_round_trip"
+      status: pass
   - id: PARSE-003
     title: TUIC v5 URI
     priority: P0
@@ -394,7 +531,12 @@ cases:
     steps: []
     assertions: ["心跳和拥塞字段无损"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/tuic_v5_round_trip.rs::tuic_v5_congestion_controller_round_trip"
+        - "crates/deve-sub-protocol/tests/tuic_v5_round_trip.rs::tuic_v5_heartbeat_round_trip"
+        - "crates/deve-sub-protocol/tests/tuic_v5_round_trip.rs::tuic_v5_invalid_udp_relay_mode_returns_error"
+      status: pass
   - id: PARSE-004
     title: Naive URI
     priority: P0
@@ -404,7 +546,12 @@ cases:
     steps: []
     assertions: ["不降级为 HTTP"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/naive_round_trip.rs::naive_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/naive_round_trip.rs::naive_parse_field_fidelity"
+        - "crates/deve-sub-protocol/tests/naive_round_trip.rs::naive_ipv6_round_trip"
+      status: pass
   - id: PARSE-005
     title: Mihomo YAML
     priority: P0
@@ -414,7 +561,17 @@ cases:
     steps: []
     assertions: ["可解析支持协议和 IPv6"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_parses_vmess"
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_parses_hysteria2"
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_parses_shadowsocks"
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_parses_trojan_ws"
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_parses_tuic_v5"
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_parses_vless_reality_ipv6"
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_multiple_proxies"
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_missing_proxies_key_errors"
+      status: pass
   - id: PARSE-006
     title: sing-box JSON
     priority: P0
@@ -424,7 +581,17 @@ cases:
     steps: []
     assertions: ["可解析 Outbound"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_shadowsocks"
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_hysteria2"
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_trojan_ws"
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_tuic_v5"
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_vless_reality_ipv6"
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_vmess_packet_encoding"
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_invalid_json_errors"
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_missing_outbounds_errors"
+      status: pass
   - id: PARSE-007
     title: Xray JSON
     priority: P0
@@ -434,7 +601,10 @@ cases:
     steps: []
     assertions: ["可解析 Outbound"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/xray_v2ray.rs"
+      status: pass
   - id: PARSE-008
     title: V2Ray JSON
     priority: P0
@@ -444,7 +614,10 @@ cases:
     steps: []
     assertions: ["可解析 Outbound"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/xray_v2ray.rs"
+      status: pass
   - id: PARSE-009
     title: Shadowrocket
     priority: P0
@@ -454,7 +627,11 @@ cases:
     steps: []
     assertions: ["分享列表正确解析"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/uri_list.rs::shadowrocket_parses_share_list"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_shadowrocket_no_panic"
+      status: pass
   - id: PARSE-010
     title: Base64 Padding
     priority: P0
@@ -464,7 +641,13 @@ cases:
     steps: []
     assertions: ["有无 Padding 都正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/shadowsocks_round_trip.rs::shadowsocks_invalid_base64_returns_error"
+        - "crates/deve-sub-protocol/tests/shadowsocks_round_trip.rs::shadowsocks_sip002_with_padding"
+        - "crates/deve-sub-protocol/tests/shadowsocks_round_trip.rs::shadowsocks_legacy_base64_with_slash"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_base64_subscription_no_panic"
+      status: pass
   - id: PARSE-011
     title: URL 编码
     priority: P0
@@ -474,7 +657,9 @@ cases:
     steps: []
     assertions: ["中文名称和特殊符号无损"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: PARSE-012
     title: IPv6 URI
     priority: P0
@@ -484,7 +669,14 @@ cases:
     steps: []
     assertions: ["导出地址自动加方括号"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/hysteria2_round_trip.rs::hysteria2_ipv6_round_trip"
+        - "crates/deve-sub-protocol/tests/naive_round_trip.rs::naive_ipv6_round_trip"
+        - "crates/deve-sub-protocol/tests/shadowsocks_round_trip.rs::shadowsocks_ipv6_round_trip"
+        - "crates/deve-sub-protocol/tests/mihomo.rs::mihomo_parses_vless_reality_ipv6"
+        - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_vless_reality_ipv6"
+      status: pass
   - id: PARSE-013
     title: short-id 纯数字
     priority: P0
@@ -494,7 +686,11 @@ cases:
     steps: []
     assertions: ["导出仍是字符串"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-domain/tests/golden_vless_reality.rs::vless_reality_short_id_stays_string_in_json"
+        - "crates/deve-sub-domain/src/tls.rs::reality_short_id_is_string"
+      status: pass
   - id: PARSE-014
     title: allowInsecure=0
     priority: P0
@@ -504,7 +700,12 @@ cases:
     steps: []
     assertions: ["输出证书校验为 false，不反转"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-domain/tests/golden_vless_reality.rs::vless_reality_allow_insecure_zero_is_some_false"
+        - "crates/deve-sub-protocol/tests/vless_reality_round_trip.rs::allow_insecure_one_is_some_true"
+        - "crates/deve-sub-domain/tests/proptest_scaffold.rs::tls_skip_cert_verify_never_coerces_to_some_true"
+      status: pass
   - id: PARSE-015
     title: 未提供 allowInsecure
     priority: P0
@@ -514,7 +715,12 @@ cases:
     steps: []
     assertions: ["保持 None，不擅自补值"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/vless_reality_round_trip.rs::absent_allow_insecure_is_none"
+        - "crates/deve-sub-domain/tests/golden_hysteria2.rs::hysteria2_absent_allow_insecure_is_none"
+        - "crates/deve-sub-protocol/tests/trojan_round_trip.rs::trojan_absent_skip_cert_verify_is_none"
+      status: pass
   - id: PARSE-016
     title: 一行一个 URI
     priority: P0
@@ -524,7 +730,11 @@ cases:
     steps: []
     assertions: ["输出格式和换行正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/uri_list.rs"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_uri_list_no_panic"
+      status: pass
   - id: PARSE-017
     title: Round-trip
     priority: P0
@@ -534,7 +744,16 @@ cases:
     steps: []
     assertions: ["输入→模型→同格式输出语义一致"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::vless_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::vmess_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::trojan_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::shadowsocks_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::hysteria2_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::tuic_round_trip_idempotent"
+        - "crates/deve-sub-protocol/tests/property_round_trip.rs::naive_round_trip_idempotent"
+      status: pass
   - id: PARSE-018
     title: 非法输入 Fuzz
     priority: P0
@@ -544,7 +763,17 @@ cases:
     steps: []
     assertions: ["不崩溃、不无限分配"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_uri_no_panic"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_uri_list_no_panic"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_base64_subscription_no_panic"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_mihomo_yaml_no_panic"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_singbox_json_no_panic"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_xray_json_no_panic"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_v2ray_json_no_panic"
+        - "crates/deve-sub-protocol/tests/fuzz_illegal_input.rs::fuzz_parse_shadowrocket_no_panic"
+      status: pass
   - id: NODE-001
     title: 粘贴批量节点
     priority: P0
@@ -554,7 +783,14 @@ cases:
     steps: []
     assertions: ["成功、失败和重复分别统计"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/node_pool.rs::admin_can_import_nodes"
+        - "apps/server/tests/node_pool.rs::import_duplicate_is_counted_not_overwritten"
+        - "apps/server/tests/node_pool.rs::import_empty_content_returns_400"
+        - "apps/server/tests/node_pool.rs::import_unparseable_returns_400"
+        - "apps/server/tests/node_pool.rs::list_returns_imported_nodes"
+      status: pass
   - id: NODE-002
     title: 文件导入
     priority: P0
@@ -564,7 +800,9 @@ cases:
     steps: []
     assertions: ["大文件流式处理"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: NODE-003
     title: 自动去重
     priority: P0
@@ -574,7 +812,13 @@ cases:
     steps: []
     assertions: ["不误删不同凭据节点"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/node_pool.rs::import_duplicate_is_counted_not_overwritten"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_queries.rs::import_truly_identical_node_dedups"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_queries.rs::import_distinct_credentials_creates_distinct_nodes"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::reconcile_preserves_distinct_credentials_at_same_endpoint"
+      status: pass
   - id: NODE-004
     title: 批量启停
     priority: P0
@@ -584,7 +828,11 @@ cases:
     steps: []
     assertions: ["状态全部正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_004_batch_enable_disable"
+        - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::batch_set_enabled_preserves_other_fields"
+      status: pass
   - id: NODE-005
     title: 批量标签
     priority: P0
@@ -594,7 +842,12 @@ cases:
     steps: []
     assertions: ["标签查询即时更新"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_005_batch_tags"
+        - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::batch_set_tags_for_multiple_nodes"
+        - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::set_node_tags_replaces_tags"
+      status: pass
   - id: NODE-006
     title: 人工地区
     priority: P0
@@ -604,7 +857,11 @@ cases:
     steps: []
     assertions: ["不被后续自动识别覆盖"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_006_manual_region_survives_auto_detection"
+        - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::patch_override_region_preserves_other_fields"
+      status: pass
   - id: NODE-007
     title: 自动地区 IPv4
     priority: P0
@@ -614,7 +871,10 @@ cases:
     steps: []
     assertions: ["本地 GeoIP 正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_007_auto_region_ipv4"
+      status: pass
   - id: NODE-008
     title: 自动地区 IPv6
     priority: P0
@@ -624,7 +884,10 @@ cases:
     steps: []
     assertions: ["IPv6 GeoIP 正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_008_auto_region_ipv6"
+      status: pass
   - id: NODE-009
     title: 双栈域名
     priority: P0
@@ -634,7 +897,10 @@ cases:
     steps: []
     assertions: ["候选 IP 均被记录"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_009_dual_stack_candidate_ips"
+      status: pass
   - id: NODE-010
     title: 人工覆写
     priority: P0
@@ -644,7 +910,11 @@ cases:
     steps: []
     assertions: ["上游刷新后仍生效"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_010_override_survives_refresh"
+        - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::override_crud_round_trip"
+      status: pass
   - id: NODE-011
     title: 上游删除
     priority: P0
@@ -654,7 +924,12 @@ cases:
     steps: []
     assertions: ["节点标记缺失，不直接消失"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::missing_nodes_marked_on_subsequent_refresh"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::missing_node_reactivated_on_reappearance"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_queries.rs::list_nodes_active_only_excludes_missing"
+      status: pass
   - id: NODE-012
     title: TCP 延迟
     priority: P0
@@ -664,7 +939,11 @@ cases:
     steps: []
     assertions: ["记录连接 RTT 和错误分类"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/probes.rs::tcp_probe_records_rtt_for_live_endpoint"
+        - "apps/server/tests/probes.rs::tcp_probe_closed_port_classified_as_refused"
+      status: pass
   - id: NODE-013
     title: QUIC 延迟
     priority: P0
@@ -674,7 +953,10 @@ cases:
     steps: []
     assertions: ["HY2/TUIC 记录握手 RTT"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/probes.rs::quic_probe_records_rtt_for_live_endpoint"
+      status: pass
   - id: NODE-014
     title: UDP 无响应
     priority: P0
@@ -684,7 +966,10 @@ cases:
     steps: []
     assertions: ["不伪造延迟或直接判死"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/probes.rs::quic_probe_silent_udp_endpoint_times_out"
+      status: pass
   - id: NODE-015
     title: 真实代理测速
     priority: P0
@@ -694,7 +979,10 @@ cases:
     steps: []
     assertions: ["Runner 结果正确回传"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/probes.rs::real_proxy_probe_run_via_api_produces_results"
+      status: pass
   - id: NODE-016
     title: 批量取消测速
     priority: P0
@@ -704,7 +992,10 @@ cases:
     steps: []
     assertions: ["未完成任务被取消"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/probes.rs::batch_cancel_probe_run_aborts_inflight_and_skips_pending"
+      status: pass
   - id: NODE-017
     title: 链式代理
     priority: P0
@@ -714,7 +1005,12 @@ cases:
     steps: []
     assertions: ["完整链可保存和测试"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/node_pool.rs::node_chain_can_be_set_and_read"
+        - "apps/server/tests/node_pool.rs::node_chain_idempotent_set"
+        - "apps/server/tests/node_pool.rs::node_chain_nonexistent_node_rejected"
+      status: pass
   - id: NODE-018
     title: 代理环
     priority: P0
@@ -724,7 +1020,12 @@ cases:
     steps: []
     assertions: ["保存前拒绝并展示路径"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/node_pool.rs::node_chain_cycle_rejected"
+        - "apps/server/tests/node_pool.rs::node_chain_self_reference_rejected"
+        - "apps/server/tests/node_pool.rs::node_chain_duplicate_rejected"
+      status: pass
   - id: GEN-001
     title: 新建 V3 模板
     priority: P0
@@ -734,7 +1035,10 @@ cases:
     steps: []
     assertions: ["Schema 验证通过"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen001_template_crud_roundtrip"
+      status: pass
   - id: GEN-002
     title: 非法模板
     priority: P0
@@ -744,7 +1048,10 @@ cases:
     steps: []
     assertions: ["返回字段级错误"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen002_invalid_template_rejected"
+      status: pass
   - id: GEN-003
     title: 模板版本
     priority: P0
@@ -754,7 +1061,10 @@ cases:
     steps: []
     assertions: ["编辑创建新版本"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen003_edit_creates_new_version"
+      status: pass
   - id: GEN-004
     title: 模板回滚
     priority: P0
@@ -764,7 +1074,11 @@ cases:
     steps: []
     assertions: ["恢复后生成内容一致"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen004_rollback_restores_prior_version"
+        - "apps/server/tests/template_management.rs::gen004b_rollback_rejects_version_owned_by_other_template"
+      status: pass
   - id: GEN-005
     title: 动态选择
     priority: P0
@@ -774,7 +1088,10 @@ cases:
     steps: []
     assertions: ["新节点自动进入结果"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen005_dynamic_selection_includes_new_nodes"
+      status: pass
   - id: GEN-006
     title: 固定快照
     priority: P0
@@ -784,7 +1101,10 @@ cases:
     steps: []
     assertions: ["新节点不会自动加入"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen006_fixed_selection_excludes_new_nodes"
+      status: pass
   - id: GEN-007
     title: 按地区分组
     priority: P0
@@ -794,7 +1114,10 @@ cases:
     steps: []
     assertions: ["分组成员正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen007_quick_group_by_region"
+      status: pass
   - id: GEN-008
     title: 按协议分组
     priority: P0
@@ -804,7 +1127,10 @@ cases:
     steps: []
     assertions: ["分组成员正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen008_quick_group_by_protocol"
+      status: pass
   - id: GEN-009
     title: 拖拽排序
     priority: P0
@@ -814,7 +1140,10 @@ cases:
     steps: []
     assertions: ["保存并重新打开顺序一致"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen009_drag_sort_persists_order"
+      status: pass
   - id: GEN-010
     title: 多中转组
     priority: P0
@@ -824,7 +1153,10 @@ cases:
     steps: []
     assertions: ["UI 不溢出，生成正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen010_multi_relay_group_resolves"
+      status: pass
   - id: GEN-011
     title: 删除节点
     priority: P0
@@ -834,7 +1166,10 @@ cases:
     steps: []
     assertions: ["相关组引用被提示处理"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen011_node_deletion_reports_missing_refs"
+      status: pass
   - id: GEN-012
     title: 循环组依赖
     priority: P0
@@ -844,7 +1179,10 @@ cases:
     steps: []
     assertions: ["服务端拒绝"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen012_cyclic_group_dependency_rejected"
+      status: pass
   - id: GEN-013
     title: 目标不兼容
     priority: P0
@@ -854,7 +1192,10 @@ cases:
     steps: []
     assertions: ["节点被排除并生成报告"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen013_incompatible_nodes_excluded_with_report"
+      status: pass
   - id: GEN-014
     title: 严格模式
     priority: P0
@@ -864,7 +1205,10 @@ cases:
     steps: []
     assertions: ["存在不兼容节点时生成失败"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen014_strict_mode_fails_lenient_succeeds"
+      status: pass
   - id: GEN-015
     title: 原子发布
     priority: P0
@@ -874,7 +1218,11 @@ cases:
     steps: []
     assertions: ["生成失败继续返回旧版本"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen015_failed_generation_preserves_old_active"
+        - "apps/server/tests/template_management.rs::gen015b_empty_pool_preserves_active"
+      status: pass
   - id: GEN-016
     title: 预览一致性
     priority: P0
@@ -884,7 +1232,10 @@ cases:
     steps: []
     assertions: ["预览内容等于发布版本"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/template_management.rs::gen016_preview_matches_published_output"
+      status: pass
   - id: OUT-001
     title: Mihomo
     priority: P0
@@ -894,7 +1245,11 @@ cases:
     steps: []
     assertions: ["官方 Core 可加载"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_passes"
+        - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_rejects_garbage"
+      status: pass
   - id: OUT-002
     title: FlClash
     priority: P0
@@ -904,7 +1259,11 @@ cases:
     steps: []
     assertions: ["指定测试版本可导入"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-emitter/tests/out002_flclash.rs::out002_flclash_mihomo_yaml_round_trip"
+        - "crates/deve-sub-emitter/tests/out002_flclash.rs::out002_flclash_mihomo_yaml_rejects_garbage"
+      status: pass
   - id: OUT-003
     title: sing-box
     priority: P0
@@ -914,7 +1273,11 @@ cases:
     steps: []
     assertions: ["check 验证通过"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-emitter/tests/out003_singbox_check.rs::out003_singbox_check_passes"
+        - "crates/deve-sub-emitter/tests/out003_singbox_check.rs::out003_singbox_check_rejects_garbage"
+      status: pass
   - id: OUT-004
     title: Xray
     priority: P0
@@ -924,7 +1287,11 @@ cases:
     steps: []
     assertions: ["配置验证通过"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-emitter/tests/out004_xray_check.rs::out004_xray_check_passes"
+        - "crates/deve-sub-emitter/tests/out004_xray_check.rs::out004_xray_check_rejects_garbage"
+      status: pass
   - id: OUT-005
     title: v2rayN
     priority: P0
@@ -934,7 +1301,10 @@ cases:
     steps: []
     assertions: ["URI 列表可导入"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-emitter/tests/out005_007_uri_list.rs::out005_v2rayn_uri_list_round_trip"
+      status: pass
   - id: OUT-006
     title: v2rayNG
     priority: P0
@@ -944,7 +1314,10 @@ cases:
     steps: []
     assertions: ["URI 列表可导入"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-emitter/tests/out005_007_uri_list.rs::out006_v2rayng_uri_list_round_trip"
+      status: pass
   - id: OUT-007
     title: Shadowrocket
     priority: P0
@@ -954,7 +1327,10 @@ cases:
     steps: []
     assertions: ["测试设备或格式 Fixture 通过"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-emitter/tests/out005_007_uri_list.rs::out007_shadowrocket_base64_round_trip"
+      status: pass
   - id: OUT-008
     title: ETag
     priority: P0
@@ -964,7 +1340,13 @@ cases:
     steps: []
     assertions: ["未变化请求返回 304"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del002_conditional_get_returns_304"
+        - "apps/server/tests/subscription_delivery.rs::del003_non_matching_etag_returns_200"
+        - "apps/server/tests/subscription_delivery.rs::del004_if_none_match_star_returns_304"
+        - "apps/server/tests/subscription_delivery.rs::del010_cache_hit_returns_same_content"
+      status: pass
   - id: OUT-009
     title: Token 错误
     priority: P0
@@ -974,7 +1356,11 @@ cases:
     steps: []
     assertions: ["返回 404 或受控错误，不泄露存在性"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del005_bad_token_returns_404_no_leak"
+        - "apps/server/tests/subscription_delivery.rs::del014_bad_short_code_returns_404_no_leak"
+      status: pass
   - id: OUT-010
     title: 用户过期
     priority: P0
@@ -984,7 +1370,10 @@ cases:
     steps: []
     assertions: ["按策略拒绝下载"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del022_expired_subscription_returns_403"
+      status: pass
   - id: OUT-011
     title: 流量超额
     priority: P0
@@ -994,7 +1383,10 @@ cases:
     steps: []
     assertions: ["按策略拒绝下载"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del023_traffic_exceeded_returns_429"
+      status: pass
   - id: OUT-012
     title: Token 轮换
     priority: P0
@@ -1004,7 +1396,14 @@ cases:
     steps: []
     assertions: ["宽限期和失效时间正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del018_old_token_valid_during_grace"
+        - "apps/server/tests/subscription_delivery.rs::del019_no_grace_old_token_immediately_invalid"
+        - "apps/server/tests/subscription_delivery.rs::del020_permanent_grace_old_token_always_valid"
+        - "apps/server/tests/subscription_delivery.rs::del021_grace_cleanup_clears_expired"
+        - "apps/server/tests/subscription_management.rs::sub002_rotate_token_returns_new_plaintext"
+      status: pass
   - id: OUT-013
     title: 短码冲突
     priority: P0
@@ -1014,7 +1413,11 @@ cases:
     steps: []
     assertions: ["原子拒绝重复值"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del013_short_code_delivery"
+        - "apps/server/tests/subscription_delivery.rs::del015_regenerate_short_code_replaces_old"
+      status: pass
   - id: OUT-014
     title: 并发生成
     priority: P0
@@ -1024,7 +1427,10 @@ cases:
     steps: []
     assertions: ["所有客户端只看到完整版本"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del012_concurrent_delivery_all_complete"
+      status: pass
   - id: PROBE-001
     title: Nezha
     priority: P1
@@ -1034,7 +1440,10 @@ cases:
     steps: []
     assertions: ["流量同步正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/probe_sync.rs::probe001_nezha_sync_writes_traffic_and_snapshot"
+      status: pass
   - id: PROBE-002
     title: DStatus
     priority: P1
@@ -1044,7 +1453,10 @@ cases:
     steps: []
     assertions: ["流量同步正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/probe_sync.rs::probe002_dstatus_sync_writes_traffic_and_snapshot"
+      status: pass
   - id: PROBE-003
     title: Komari
     priority: P1
@@ -1054,7 +1466,10 @@ cases:
     steps: []
     assertions: ["流量同步正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/probe_sync.rs::probe003_komari_sync_writes_traffic_and_snapshot"
+      status: pass
   - id: PROBE-004
     title: 数据源失败
     priority: P1
@@ -1064,7 +1479,10 @@ cases:
     steps: []
     assertions: ["保留旧统计并标记过期"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/dashboard.rs::probe004_sync_failure_preserves_stale_stats_and_marks_failed"
+      status: pass
   - id: PROBE-005
     title: 多源聚合
     priority: P1
@@ -1074,7 +1492,10 @@ cases:
     steps: []
     assertions: ["计算过程可追溯"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/dashboard.rs::probe005_multi_source_aggregation_dashboard_traceability"
+      status: pass
   - id: CLI-001
     title: Headless 启动
     priority: P0
@@ -1084,7 +1505,9 @@ cases:
     steps: []
     assertions: ["无 Web UI，API 与订阅正常"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: CLI-002
     title: stdin 导入
     priority: P0
@@ -1094,7 +1517,9 @@ cases:
     steps: []
     assertions: ["节点正确导入"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: CLI-003
     title: stdout 导出
     priority: P0
@@ -1104,7 +1529,9 @@ cases:
     steps: []
     assertions: ["一行一个 URI"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: CLI-004
     title: JSON 输出
     priority: P0
@@ -1114,7 +1541,9 @@ cases:
     steps: []
     assertions: ["可用于自动化脚本"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: CLI-005
     title: doctor
     priority: P0
@@ -1124,7 +1553,9 @@ cases:
     steps: []
     assertions: ["检测数据库、目录、网络和版本"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: CLI-006
     title: Health live/ready subcommand
     priority: P1
@@ -1134,7 +1565,11 @@ cases:
     steps: []
     assertions: ["deve-sub health live exits 0 on 2xx, exit 1 on non-2xx or connection failure", "deve-sub health ready exits 0 on 2xx, exit 1 on non-2xx or connection failure"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/cli/tests/health.rs::health_live_connection_refused_exits_1"
+        - "apps/cli/tests/health.rs::health_ready_connection_refused_exits_1"
+      status: pass
   - id: DEPLOY-001
     title: SQLite Compose
     priority: P1
@@ -1144,7 +1579,9 @@ cases:
     steps: []
     assertions: ["一条命令启动并健康"]
     fixtures: []
-    evidence: not-run
+    evidence:
+      tests: []
+      status: not-run
   - id: DEPLOY-002
     title: Linux 安装
     priority: P1
@@ -1154,7 +1591,9 @@ cases:
     steps: []
     assertions: ["systemd 正常运行"]
     fixtures: []
-    evidence: not-run
+    evidence:
+      tests: []
+      status: not-run
   - id: DEPLOY-003
     title: amd64 镜像
     priority: P1
@@ -1164,7 +1603,9 @@ cases:
     steps: []
     assertions: ["启动通过"]
     fixtures: []
-    evidence: not-run
+    evidence:
+      tests: []
+      status: not-run
   - id: DEPLOY-004
     title: arm64 镜像
     priority: P1
@@ -1174,7 +1615,9 @@ cases:
     steps: []
     assertions: ["启动通过"]
     fixtures: []
-    evidence: not-run
+    evidence:
+      tests: []
+      status: not-run
   - id: DEPLOY-005
     title: Docker healthcheck via internalized health command
     priority: P1
@@ -1184,7 +1627,9 @@ cases:
     steps: []
     assertions: ["Docker HEALTHCHECK uses deve-sub health live, container becomes healthy within 60s"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: UPDATE-001
     title: 签名更新
     priority: P1
@@ -1194,7 +1639,14 @@ cases:
     steps: []
     assertions: ["正常更新并健康"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/cli/src/update.rs::is_newer_semver_basic"
+        - "apps/cli/src/update.rs::is_newer_semver_prerelease"
+        - "apps/cli/src/update.rs::is_newer_rejects_invalid_semver"
+        - "apps/cli/src/update.rs::parse_checksum_finds_entry"
+        - "apps/cli/src/update.rs::backup_and_lock_path_are_siblings"
+      status: pass
   - id: UPDATE-002
     title: 更新失败
     priority: P1
@@ -1204,7 +1656,9 @@ cases:
     steps: []
     assertions: ["自动回滚"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: SEC-001
     title: localhost SSRF
     priority: P0
@@ -1214,7 +1668,11 @@ cases:
     steps: []
     assertions: ["默认阻止"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::sec_001_localhost_ssrf_blocked"
+        - "crates/deve-sub-security/src/ssrf.rs::check_ip_literal_ipv6_loopback"
+      status: pass
   - id: SEC-002
     title: 私网 SSRF
     priority: P0
@@ -1224,7 +1682,10 @@ cases:
     steps: []
     assertions: ["无白名单时阻止"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::sec_002_private_network_ssrf_blocked"
+      status: pass
   - id: SEC-003
     title: DNS 重绑定
     priority: P0
@@ -1234,7 +1695,11 @@ cases:
     steps: []
     assertions: ["解析与连接目标均校验"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::fetcher_pins_ssrf_checker_ip"
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::ssrf_checker_called_before_connect"
+      status: pass
   - id: SEC-004
     title: 重定向到内网
     priority: P0
@@ -1244,7 +1709,10 @@ cases:
     steps: []
     assertions: ["每一跳重新阻止"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::redirect_to_internal_rejected"
+      status: pass
   - id: SEC-005
     title: YAML Bomb
     priority: P0
@@ -1254,7 +1722,9 @@ cases:
     steps: []
     assertions: ["限制资源并拒绝"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: SEC-006
     title: 路径穿越
     priority: P0
@@ -1264,7 +1734,10 @@ cases:
     steps: []
     assertions: ["上传名称无法越界"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/security.rs::sec006_path_traversal_in_delivery_url"
+      status: pass
   - id: SEC-007
     title: 真实 IP 伪造
     priority: P0
@@ -1274,7 +1747,10 @@ cases:
     steps: []
     assertions: ["非可信代理 Header 被忽略"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/security.rs::sec007_untrusted_proxy_headers_ignored"
+      status: pass
   - id: SEC-008
     title: SPA 路由
     priority: P0
@@ -1284,7 +1760,10 @@ cases:
     steps: []
     assertions: ["/nodes 等不计入短码爆破"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/security.rs::sec008_spa_routes_serve_web_not_short_code"
+      status: pass
   - id: SEC-009
     title: Token 日志
     priority: P0
@@ -1294,7 +1773,12 @@ cases:
     steps: []
     assertions: ["日志中不可见完整 Token"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_management.rs::sec009_token_not_in_get_or_list_responses"
+        - "apps/server/src/logging.rs::redacts_sub_token"
+        - "apps/server/src/logging.rs::redacts_s_short_code"
+      status: pass
   - id: SEC-010
     title: CSRF
     priority: P0
@@ -1304,7 +1788,14 @@ cases:
     steps: []
     assertions: ["跨站写请求失败"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/security.rs::csrf_allows_same_origin_post"
+        - "apps/server/tests/security.rs::csrf_rejects_cross_origin_post"
+        - "apps/server/tests/security.rs::csrf_does_not_apply_to_get"
+        - "apps/server/src/csrf.rs::origin_matches_host_https"
+        - "apps/server/src/csrf.rs::origin_mismatch_different_host"
+      status: pass
   - id: PERF-001
     title: 10k 节点解析
     priority: P1
@@ -1314,7 +1805,9 @@ cases:
     steps: []
     assertions: ["满足内存和耗时基线"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: PERF-002
     title: 10k 节点列表
     priority: P1
@@ -1324,7 +1817,9 @@ cases:
     steps: []
     assertions: ["P95 交互满足预算"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests: []
+      status: not-run
   - id: PERF-003
     title: 缓存订阅
     priority: P1
@@ -1334,7 +1829,12 @@ cases:
     steps: []
     assertions: ["P95 小于 500 ms"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del010_cache_hit_returns_same_content"
+        - "crates/deve-sub-application/tests/generation_pipeline_regression.rs::generate_cache_hit_returns_honest_cache_warnings"
+        - "crates/deve-sub-domain/src/template/cache.rs::cache_key_is_deterministic"
+      status: pass
   - id: PERF-004
     title: 无缓存生成
     priority: P1
@@ -1344,7 +1844,10 @@ cases:
     steps: []
     assertions: ["P95 小于 3 秒，不含抓取"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-application/tests/generation_pipeline_regression.rs::generate_strict_mode_does_not_hit_lenient_cache"
+      status: pass
   - id: PERF-005
     title: 并发订阅下载
     priority: P1
@@ -1354,7 +1857,10 @@ cases:
     steps: []
     assertions: ["不返回部分内容"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/subscription_delivery.rs::del012_concurrent_delivery_all_complete"
+      status: pass
   - id: PERF-006
     title: 长时间运行
     priority: P1
@@ -1364,7 +1870,9 @@ cases:
     steps: []
     assertions: ["WAL、内存和任务数不持续增长"]
     fixtures: []
-    evidence: not-run
+    evidence:
+      tests: []
+      status: not-run
   - id: PARSE-019
     title: WireGuard URI
     priority: P1
@@ -1374,7 +1882,10 @@ cases:
     steps: []
     assertions: ["wireguard:// URI round-trip 语义等价"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/wireguard_round_trip.rs"
+      status: pass
   - id: PARSE-020
     title: WireGuard Mihomo YAML
     priority: P1
@@ -1384,7 +1895,10 @@ cases:
     steps: []
     assertions: ["WireGuard mihomo YAML round-trip 语义等价"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/wireguard_round_trip.rs"
+      status: pass
   - id: PARSE-021
     title: WireGuard sing-box JSON
     priority: P1
@@ -1394,7 +1908,10 @@ cases:
     steps: []
     assertions: ["WireGuard sing-box JSON round-trip 语义等价"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/wireguard_round_trip.rs"
+      status: pass
   - id: PARSE-022
     title: AnyTLS URI
     priority: P1
@@ -1404,7 +1921,13 @@ cases:
     steps: []
     assertions: ["anytls:// URI round-trip 语义等价"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/anytls_round_trip.rs::anytls_uri_parse_full_fidelity"
+        - "crates/deve-sub-protocol/tests/anytls_round_trip.rs::anytls_uri_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/anytls_round_trip.rs::anytls_uri_missing_password_errors"
+        - "crates/deve-sub-protocol/tests/anytls_round_trip.rs::anytls_uri_missing_port_errors"
+      status: pass
   - id: PARSE-023
     title: AnyTLS Mihomo/sing-box
     priority: P1
@@ -1414,7 +1937,13 @@ cases:
     steps: []
     assertions: ["AnyTLS mihomo/sing-box round-trip 语义等价"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/anytls_round_trip.rs::mihomo_anytls_full_fidelity"
+        - "crates/deve-sub-protocol/tests/anytls_round_trip.rs::mihomo_anytls_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/anytls_round_trip.rs::singbox_anytls_full_fidelity"
+        - "crates/deve-sub-protocol/tests/anytls_round_trip.rs::singbox_anytls_round_trip_semantic"
+      status: pass
   - id: PARSE-024
     title: Snell URI
     priority: P1
@@ -1424,7 +1953,11 @@ cases:
     steps: []
     assertions: ["snell:// URI round-trip 语义等价"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/snell_round_trip.rs::mihomo_snell_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/snell_round_trip.rs::mihomo_snell_default_version_v1"
+      status: pass
   - id: PARSE-025
     title: Snell Mihomo/sing-box
     priority: P1
@@ -1434,7 +1967,14 @@ cases:
     steps: []
     assertions: ["Snell mihomo/sing-box round-trip；v4 双发，v1/2/3/5 在 sing-box 排除并报告"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/snell_round_trip.rs::compat_mihomo_accepts_snell_v1_through_v5"
+        - "crates/deve-sub-protocol/tests/snell_round_trip.rs::compat_singbox_accepts_snell_v4"
+        - "crates/deve-sub-protocol/tests/snell_round_trip.rs::compat_singbox_accepts_snell_v6"
+        - "crates/deve-sub-protocol/tests/snell_round_trip.rs::compat_singbox_excludes_snell_v3"
+        - "crates/deve-sub-protocol/tests/snell_round_trip.rs::compat_xray_excludes_snell"
+      status: pass
   - id: PARSE-026
     title: ShadowTLS sing-box/Mihomo
     priority: P1
@@ -1444,7 +1984,16 @@ cases:
     steps: []
     assertions: ["ShadowTLS sing-box 独立类型 + mihomo obfs 投影 round-trip"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::shadowtls_uri_parse_basic"
+        - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::shadowtls_uri_round_trip"
+        - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::mihomo_shadowtls_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::singbox_shadowtls_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_mihomo_accepts_shadowtls"
+        - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_singbox_accepts_shadowtls"
+        - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_xray_excludes_shadowtls"
+      status: pass
   - id: PARSE-027
     title: xhttp transport
     priority: P1
@@ -1454,7 +2003,10 @@ cases:
     steps: []
     assertions: ["VLESS+xhttp URI → mihomo/Xray emit round-trip；sing-box 排除"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs"
+      status: pass
   - id: OUT-015
     title: JSON profile
     priority: P1
@@ -1464,7 +2016,13 @@ cases:
     steps: []
     assertions: ["emit_json → parse JSON → 节点等价"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_full_fidelity_accepts_all"
+        - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_multi_node_round_trip"
+        - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_single_node_round_trip"
+        - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_valid_json_array"
+      status: pass
   - id: AUDIT-001
     title: 审计日志查询
     priority: P1
@@ -1474,7 +2032,15 @@ cases:
     steps: []
     assertions: ["GET /api/v1/audit-logs 支持 actor/action/target/date 过滤和游标分页"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/audit_log.rs::audit_log_query_returns_entries"
+        - "apps/server/tests/audit_log.rs::audit_log_query_filter_by_action"
+        - "apps/server/tests/audit_log.rs::audit_log_query_filter_by_actor"
+        - "apps/server/tests/audit_log.rs::audit_log_query_pagination"
+        - "apps/server/tests/audit_log.rs::audit_log_query_requires_admin"
+        - "apps/server/tests/audit_log.rs::audit_log_query_requires_auth"
+      status: pass
   - id: AUDIT-002
     title: Auth 操作审计
     priority: P1
@@ -1484,7 +2050,10 @@ cases:
     steps: []
     assertions: ["login/logout/2FA/user CRUD 产生 audit_log 行，actor/action/target 正确"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/audit_log.rs::auth_login_logout_audited"
+      status: pass
   - id: AUDIT-003
     title: CRUD 操作审计
     priority: P1
@@ -1494,7 +2063,15 @@ cases:
     steps: []
     assertions: ["source/subscription/template/probe source CRUD 产生 audit_log 行"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/audit_crud.rs::source_crud_audited"
+        - "apps/server/tests/audit_crud.rs::template_crud_audited"
+        - "apps/server/tests/audit_crud.rs::subscription_crud_audited"
+        - "apps/server/tests/audit_crud.rs::probe_source_crud_audited"
+        - "apps/server/tests/audit_crud.rs::source_create_audit_has_correct_target"
+        - "apps/server/tests/audit_log.rs::user_management_audited"
+      status: pass
   - id: TRAFFIC-001
     title: 每日流量快照
     priority: P1
@@ -1504,7 +2081,11 @@ cases:
     steps: []
     assertions: ["聚合任务对每订阅按日 sum 流量记录，upsert traffic_daily_snapshots"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/traffic_history.rs::traffic001_daily_snapshot_aggregation"
+        - "apps/server/tests/traffic_history.rs::traffic001_aggregation_is_idempotent"
+      status: pass
   - id: TRAFFIC-002
     title: 流量历史查询
     priority: P1
@@ -1514,7 +2095,13 @@ cases:
     steps: []
     assertions: ["GET /api/v1/dashboard/traffic/history?days=30 返回连续日数据，缺失日填零"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "apps/server/tests/traffic_history.rs::traffic002_history_api_continuous_with_gaps"
+        - "apps/server/tests/traffic_history.rs::traffic002_history_api_global_aggregation"
+        - "apps/server/tests/traffic_history.rs::traffic002_history_api_invalid_subscription_id"
+        - "apps/server/tests/traffic_history.rs::traffic002_history_api_requires_auth"
+      status: pass
   - id: BACKUP-001
     title: 备份创建
     priority: P2
@@ -1524,7 +2111,10 @@ cases:
     steps: []
     assertions: ["deve-sub backup --output 生成含 manifest/database/config/metadata 的 tar"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
+      status: pass
   - id: BACKUP-002
     title: 备份内容验证
     priority: P2
@@ -1534,7 +2124,11 @@ cases:
     steps: []
     assertions: ["快照数据库行数与 manifest 一致"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
+        - "crates/deve-sub-storage-sqlite/tests/schema_verify.rs::verify_ok_on_fully_migrated_db"
+      status: pass
   - id: BACKUP-003
     title: 恢复+验证
     priority: P2
@@ -1544,7 +2138,11 @@ cases:
     steps: []
     assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
+        - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
+      status: pass
   - id: BACKUP-004
     title: 恢复时前向迁移
     priority: P2
@@ -1554,4 +2152,7 @@ cases:
     steps: []
     assertions: ["旧 schema 备份恢复后前向迁移到当前 schema，数据完整"]
     fixtures: []
-    evidence: pass
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
+      status: pass

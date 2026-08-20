@@ -35,6 +35,39 @@ jobs:
           cargo run --locked --all-features --bin deve-sub -- openapi > /tmp/openapi.json
           diff -u /tmp/openapi.json docs/openapi/openapi.json
 
+  # WHY (B-19): external validator tests are #[ignore] by default so dev
+  # `cargo test` reports them honestly as ignored, not false-positive pass.
+  # This job installs the real binaries and runs `--ignored` so the release
+  # gate only passes when actual validation occurs.
+  compatibility:
+    name: compatibility-validators
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Install mihomo
+        run: |
+          curl -fsSL https://github.com/MetaCubeX/mihomo/releases/download/v1.19.0/mihomo-linux-amd64-v1.19.0.gz -o /tmp/mihomo.gz
+          gunzip -f /tmp/mihomo.gz
+          chmod +x /tmp/mihomo
+          sudo mv /tmp/mihomo /usr/local/bin/mihomo
+          mihomo -v
+      - name: Install sing-box
+        run: |
+          curl -fsSL https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz -o /tmp/sing-box.tar.gz
+          tar xzf /tmp/sing-box.tar.gz -C /tmp
+          sudo mv /tmp/sing-box-1.13.14-linux-amd64/sing-box /usr/local/bin/sing-box
+          sing-box version
+      - name: Install xray
+        run: |
+          curl -fsSL https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip -o /tmp/xray.zip
+          unzip -o /tmp/xray.zip -d /tmp/xray
+          sudo mv /tmp/xray/xray /usr/local/bin/xray
+          xray version
+      - name: Run validator tests
+        run: cargo test --locked -p deve-sub-emitter --test out001_mihomo_check --test out003_singbox_check --test out004_xray_check -- --ignored --test-threads=1
+
   docs:
     name: docs-and-contracts
     runs-on: ubuntu-latest

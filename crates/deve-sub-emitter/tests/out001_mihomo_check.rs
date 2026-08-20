@@ -2,8 +2,12 @@
 //!
 //! Emits a multi-protocol subscription via `emit_mihomo`, wraps the
 //! `proxies:` array in a minimal Mihomo config, and validates it with
-//! `mihomo -t -f <file>`. The test is skipped when the `mihomo` binary
-//! is not on PATH.
+//! `mihomo -t -f <file>`.
+//!
+//! WHY #[ignore]: these tests require the `mihomo` binary on PATH. Without
+//! it, `cargo test` reports them as `ignored` (honest), not `pass` (which
+//! would be a false positive per B-19). The release gate runs them via
+//! `cargo test -- --ignored` in a CI job that installs the binary.
 
 #![allow(clippy::expect_used)]
 
@@ -24,10 +28,10 @@ fn mihomo_available() -> bool {
 /// OUT-001: emitted Mihomo YAML passes `mihomo -t` for every supported
 /// protocol.
 #[test]
+#[ignore = "requires mihomo binary on PATH; run with cargo test -- --ignored"]
 fn out001_mihomo_check_passes() {
     if !mihomo_available() {
-        eprintln!("skip: mihomo binary not on PATH");
-        return;
+        panic!("mihomo binary not on PATH — required for release gate validation (B-19)");
     }
 
     let nodes = common::compatible_nodes(deve_sub_compatibility::ProfileKind::Mihomo);
@@ -59,10 +63,10 @@ fn out001_mihomo_check_passes() {
 /// OUT-001 (negative): malformed YAML is rejected by `mihomo -t`,
 /// proving the check is a real validation, not a no-op.
 #[test]
+#[ignore = "requires mihomo binary on PATH; run with cargo test -- --ignored"]
 fn out001_mihomo_check_rejects_garbage() {
     if !mihomo_available() {
-        eprintln!("skip: mihomo binary not on PATH");
-        return;
+        panic!("mihomo binary not on PATH — required for release gate validation (B-19)");
     }
 
     let tmp = NamedTempFile::new().expect("temp file");

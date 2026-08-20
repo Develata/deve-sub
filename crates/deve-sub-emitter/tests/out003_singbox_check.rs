@@ -1,9 +1,12 @@
 //! OUT-003: sing-box `check` validation.
 //!
 //! Emits a multi-protocol subscription via `emit_singbox` and pipes the
-//! output through `sing-box check -c <file>`. The test is skipped when
-//! the `sing-box` binary is not on PATH (CI without the tool still gets
-//! fmt/clippy/test coverage from the rest of the suite).
+//! output through `sing-box check -c <file>`.
+//!
+//! WHY #[ignore]: these tests require the `sing-box` binary on PATH. Without
+//! it, `cargo test` reports them as `ignored` (honest), not `pass` (which
+//! would be a false positive per B-19). The release gate runs them via
+//! `cargo test -- --ignored` in a CI job that installs the binary.
 
 #![allow(clippy::expect_used)]
 
@@ -24,10 +27,10 @@ fn singbox_available() -> bool {
 /// OUT-003: emitted sing-box JSON passes `sing-box check` for every
 /// supported protocol.
 #[test]
+#[ignore = "requires sing-box binary on PATH; run with cargo test -- --ignored"]
 fn out003_singbox_check_passes() {
     if !singbox_available() {
-        eprintln!("skip: sing-box binary not on PATH");
-        return;
+        panic!("sing-box binary not on PATH — required for release gate validation (B-19)");
     }
 
     let nodes = common::compatible_nodes(deve_sub_compatibility::ProfileKind::SingBox);
@@ -54,10 +57,10 @@ fn out003_singbox_check_passes() {
 /// OUT-003 (negative): malformed JSON is rejected by `sing-box check`,
 /// proving the check is a real validation, not a no-op.
 #[test]
+#[ignore = "requires sing-box binary on PATH; run with cargo test -- --ignored"]
 fn out003_singbox_check_rejects_garbage() {
     if !singbox_available() {
-        eprintln!("skip: sing-box binary not on PATH");
-        return;
+        panic!("sing-box binary not on PATH — required for release gate validation (B-19)");
     }
 
     let tmp = NamedTempFile::new().expect("temp file");

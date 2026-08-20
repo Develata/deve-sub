@@ -1,8 +1,12 @@
 //! OUT-004: Xray config validation.
 //!
 //! Emits a multi-protocol subscription via `emit_xray` and validates the
-//! JSON with `xray run -test -config <file>`. The test is skipped when
-//! the `xray` binary is not on PATH.
+//! JSON with `xray run -test -config <file>`.
+//!
+//! WHY #[ignore]: these tests require the `xray` binary on PATH. Without
+//! it, `cargo test` reports them as `ignored` (honest), not `pass` (which
+//! would be a false positive per B-19). The release gate runs them via
+//! `cargo test -- --ignored` in a CI job that installs the binary.
 
 #![allow(clippy::expect_used)]
 
@@ -21,10 +25,10 @@ fn xray_available() -> bool {
 /// OUT-004: emitted Xray JSON passes `xray run -test` for every
 /// supported protocol.
 #[test]
+#[ignore = "requires xray binary on PATH; run with cargo test -- --ignored"]
 fn out004_xray_check_passes() {
     if !xray_available() {
-        eprintln!("skip: xray binary not on PATH");
-        return;
+        panic!("xray binary not on PATH — required for release gate validation (B-19)");
     }
 
     let nodes = common::compatible_nodes(deve_sub_compatibility::ProfileKind::Xray);
@@ -55,10 +59,10 @@ fn out004_xray_check_passes() {
 /// OUT-004 (negative): malformed JSON is rejected by `xray run -test`,
 /// proving the check is a real validation, not a no-op.
 #[test]
+#[ignore = "requires xray binary on PATH; run with cargo test -- --ignored"]
 fn out004_xray_check_rejects_garbage() {
     if !xray_available() {
-        eprintln!("skip: xray binary not on PATH");
-        return;
+        panic!("xray binary not on PATH — required for release gate validation (B-19)");
     }
 
     let tmp = tempfile::Builder::new()

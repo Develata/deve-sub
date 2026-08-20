@@ -14,9 +14,16 @@ items). `planned` is not `pass`.
 
 | Metric | Count |
 |---|---|
-| Total cases | 132 |
+| Total cases | 153 |
 | P0 (core) | 115 |
-| P1 (infrastructure/performance) | 17 |
+| P1 (infrastructure/performance) | 34 |
+| Evidence: pass | 124 |
+| Evidence: not-run | 29 |
+
+The `pass` / `not-run` counts are derived from `matrix.yaml` `evidence.status`
+fields. A case is `pass` only when backed by at least one executable test
+listed in `evidence.tests`. Cases without executable evidence are honestly
+marked `not-run`.
 
 ## Parameterized dimensions
 
@@ -35,7 +42,9 @@ values where applicable:
 ### UI — Base and UI (10 cases)
 
 UI-001 through UI-010. Covers first-run init, i18n, theme, 10k node
-performance, mobile, and keyboard navigation.
+performance, mobile, and keyboard navigation. Visual/UI cases have no
+automated test backing and are `not-run` pending manual or browser-automation
+evidence.
 
 ### AUTH — Authentication and Users (10 cases)
 
@@ -49,11 +58,12 @@ SRC-001 through SRC-014. Covers source CRUD, manual/auto refresh, ETag, failure
 retention, zero-node guard, response limits, timeout, cancel, filtering, IPv6,
 compression, concurrency, diff.
 
-### PARSE — Parsing and Export (18 cases)
+### PARSE — Parsing and Export (27 cases)
 
-PARSE-001 through PARSE-018. Covers P0 protocol golden tests, input format
+PARSE-001 through PARSE-027. Covers P0 protocol golden tests, input format
 parsing, Base64 padding, URL encoding, IPv6, short-id regression,
-allowInsecure three-state, round-trip property, fuzz.
+allowInsecure three-state, round-trip property, fuzz, WireGuard, AnyTLS, Snell,
+ShadowTLS, xhttp transport.
 
 ### NODE — Node Management (18 cases)
 
@@ -68,26 +78,28 @@ GEN-001 through GEN-016. Covers template CRUD, versioning, rollback, dynamic/
 snapshot selection, grouping, drag-and-drop, cycle detection, compatibility
 report, strict mode, atomic publish, preview consistency.
 
-### OUT — Subscription Output (14 cases)
+### OUT — Subscription Output (15 cases)
 
-OUT-001 through OUT-014. Covers P0 client compatibility, ETag, token error,
+OUT-001 through OUT-015. Covers P0 client compatibility, ETag, token error,
 expiry, traffic quota, token rotation, short code conflict, concurrent
-generation.
+generation, JSON profile.
 
 ### PROBE — Probes (5 cases, P1)
 
 PROBE-001 through PROBE-005. Covers Nezha, DStatus, Komari, data source
 failure, multi-source aggregation.
 
-### CLI — Headless and CLI (5 cases)
+### CLI — Headless and CLI (6 cases)
 
-CLI-001 through CLI-005. Covers headless mode, stdin import, stdout export,
-JSON output, doctor.
+CLI-001 through CLI-006. Covers headless mode, stdin import, stdout export,
+JSON output, doctor, Health live/ready subcommand.
 
 ### DEPLOY — Deployment (5 cases, P1)
 
 DEPLOY-001 through DEPLOY-005. Covers SQLite Compose, Linux install, amd64/arm64
-images, Docker healthcheck via internalized `deve-sub health`.
+images, Docker healthcheck via internalized `deve-sub health`. Deployment
+cases have no automated test backing and are `not-run` pending manual or CI
+environment evidence.
 
 ### UPDATE — Update Mechanism (2 cases, P1)
 
@@ -102,6 +114,21 @@ traversal, IP spoofing, SPA routing, token logging, CSRF.
 
 PERF-001 through PERF-006. Covers 10k parsing, 10k list, cached subscription,
 uncached generation, concurrent download, long-running soak.
+
+### AUDIT — Audit Logging (3 cases)
+
+AUDIT-001 through AUDIT-003. Covers audit log query, auth operation audit, and
+CRUD operation audit.
+
+### TRAFFIC — Traffic History (2 cases)
+
+TRAFFIC-001 through TRAFFIC-002. Covers daily traffic snapshot aggregation and
+traffic history query API.
+
+### BACKUP — Backup and Restore (4 cases)
+
+BACKUP-001 through BACKUP-004. Covers backup creation, content verification,
+restore with verification, and forward migration during restore.
 
 ## Authority
 

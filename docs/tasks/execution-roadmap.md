@@ -67,7 +67,8 @@ guard, DNS pinning, redirect re-check, body size limit, timeout, gzip/deflate/
 brotli/zstd decompression, ETag), node pool (dedup, override, manual region,
 GeoIP, batch ops), source filter rules (two-phase protocol + region filter),
 concurrent refresh scheduler (semaphore-bounded), zero-node guard, 369 tests.
-SRC-001–014, NODE-001/003–011, SEC-001–005 all pass.
+SRC-001–014, NODE-001/003–011, SEC-001–004, SEC-006–010 pass; SEC-005
+(YAML bomb) is not-run pending a dedicated test.
 
 M5 (Generator and V3 Template) is complete — V3 subscription template
 aggregate (versioned, declarative YAML with `apiVersion: deve-sub.io/v1`),
@@ -94,34 +95,32 @@ Komari), probe source failure handling (preserve stale stats), multi-source
 traffic aggregation with dashboard traceability. PROBE-001 through PROBE-005
 all pass; NODE-012 through NODE-018 all pass.
 
-## Next milestones
+## Remaining acceptance gaps
 
-All milestones (M0–M11) are complete. The remaining work is closing the
-deferred P0/P1 acceptance cases (44 planned, 5 not-run). See the acceptance
-matrix for the full list. The highest-priority clusters are:
+All milestones (M0–M11) are complete. The acceptance matrix currently has
+124 cases backed by executable tests (`evidence: pass`) and 29 cases without
+executable evidence (`evidence: not-run`). See
+[`docs/acceptance-matrix.md`](../acceptance-matrix.md) and
+[`tests/acceptance/matrix.yaml`](../../tests/acceptance/matrix.yaml) for the
+authoritative per-case status. The not-run clusters are:
 
-- **SEC-001/002** (P0, backend-testable): localhost and private-network SSRF.
-- **CLI-006** (P1): `deve-sub health live/ready` subcommand.
-- **SRC-004/005/014, NODE-012..018, GEN-005..012** (P0, API-testable):
-  integration tests via the REST API.
-- **OUT-001..007** (P0, compatibility): round-trip validation with real proxy
-  clients (Mihomo, sing-box, Xray, v2rayN, v2rayNG, Shadowrocket, FlClash).
-- **UI-001..010, SRC-002, NODE-016, GEN-007..011** (P0, frontend): Dioxus Web
-  frontend build — the largest remaining cluster.
-- **DEPLOY-001..004, PERF-006** (P1, infra): Docker Compose smoke, VM install,
-  multi-arch CI, 30-minute soak — require Docker/VM infrastructure.
+- **UI-001..010** (P0, frontend): Dioxus Web visual/UI cases — no automated
+  test backing; require manual or browser-automation evidence.
+- **CLI-001..005** (P0/P1, CLI): headless mode, stdin import, stdout export,
+  JSON output, doctor — no dedicated CLI integration tests.
+- **DEPLOY-001..005** (P1, infra): Docker Compose smoke, Linux install,
+  multi-arch images, Docker healthcheck — require Docker/VM infrastructure.
+- **PERF-001/002/006** (P1, perf): 10k node parsing, 10k node list, long-running
+  soak — require benchmark harness or soak environment.
+- **SRC-008, SRC-011** (P0): request timeout, IPv6 URL fetch — no dedicated
+  adapter tests.
+- **PARSE-011** (P0): URL encoding edge cases — no dedicated parser test.
+- **NODE-002** (P0): file import — no dedicated test.
+- **UPDATE-002** (P1): update failure rollback — no dedicated test.
+- **SEC-005** (P0): YAML bomb — no dedicated test.
 
-M9 (Protocol and Output Expansion) — WireGuard, AnyTLS, Snell, ShadowTLS typed
-configs + URI/container parsers/emitters, xhttp transport, JSON output
-profile. Blueprint: `docs/plan/milestones/M9-protocol-output-expansion.md`.
-
-M10 (Observability and Audit) — traffic history charts (daily snapshots +
-background aggregation job), audit log query API (infrastructure + wiring).
-Blueprint: `docs/plan/milestones/M10-observability-and-audit.md`.
-
-M11 (Archive and Snapshot) — `deve-sub backup` and `deve-sub restore` CLI,
-versioned backup format, restore-verify path. Low priority. Blueprint:
-`docs/plan/milestones/M11-archive-and-snapshot.md`.
+CLI-006 (Health live/ready subcommand) and all M9/M10/M11 acceptance cases now
+have executable test backing and are `pass`.
 
 ## M5 review follow-ups (M6 backlog)
 

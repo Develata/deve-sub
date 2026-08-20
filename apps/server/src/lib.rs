@@ -17,7 +17,9 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
+use deve_sub_application::{
+    DbHealthPort, GeoIpPort, JobSupervisor, LoginRateLimiter, SubscriptionFetcher,
+};
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
     NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
@@ -93,6 +95,7 @@ pub struct AppState {
     pub quic_probe: Arc<dyn LatencyProbe>,
     pub real_proxy_probe: Arc<dyn LatencyProbe>,
     pub cancelled_flags: Arc<Mutex<HashMap<deve_sub_kernel::ProbeRunId, Arc<AtomicBool>>>>,
+    pub job_supervisor: Arc<JobSupervisor>,
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,

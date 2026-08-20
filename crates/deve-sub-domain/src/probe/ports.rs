@@ -50,6 +50,10 @@ pub trait LatencyRecordRepository: Send + Sync {
     /// Insert a latency record.
     async fn create(&self, record: &LatencyRecord) -> Result<(), ProbeError>;
 
+    /// Insert multiple latency records in a single transaction (B-14).
+    /// Either all records are inserted or none (atomic).
+    async fn batch_create(&self, records: &[LatencyRecord]) -> Result<(), ProbeError>;
+
     /// List recent latency records for a node, ordered by `measured_at` desc.
     /// Returns up to `limit` records.
     async fn list_for_node(

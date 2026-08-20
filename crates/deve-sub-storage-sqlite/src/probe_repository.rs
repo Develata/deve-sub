@@ -453,6 +453,44 @@ impl LatencyRecordRepository for SqliteLatencyRecordRepository {
         Ok(())
     }
 
+    async fn batch_create(&self, records: &[LatencyRecord]) -> Result<(), ProbeError> {
+        if records.is_empty() {
+            return Ok(());
+        }
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ProbeError::Storage(e.to_string()))?;
+        for record in records {
+            let measured_at = format_ts(record.measured_at).map_err(ProbeError::Storage)?;
+            let error_class = if record.error_class == ErrorClass::Ok {
+                None
+            } else {
+                Some(record.error_class.as_db_char())
+            };
+            sqlx::query(
+                "INSERT INTO latency_records \
+                 (id, run_id, node_id, probe_type, rtt_ms, error_class, measured_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(record.id.to_string())
+            .bind(record.run_id.to_string())
+            .bind(record.node_id.to_string())
+            .bind(record.probe_type.as_db_char())
+            .bind(record.rtt_ms.map(i64::from))
+            .bind(error_class)
+            .bind(measured_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ProbeError::Storage(e.to_string()))?;
+        }
+        tx.commit()
+            .await
+            .map_err(|e| ProbeError::Storage(e.to_string()))?;
+        Ok(())
+    }
+
     async fn list_for_node(
         &self,
         node_id: NodeId,

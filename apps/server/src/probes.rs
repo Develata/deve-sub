@@ -636,8 +636,9 @@ async fn create_probe_run(
     let flags_map = Arc::clone(&state.cancelled_flags);
     let run_id = run.id;
 
-    tokio::spawn(async move {
-        execute_probe_run(
+    let supervisor = Arc::clone(&state.job_supervisor);
+    supervisor.spawn(async move {
+        if let Err(e) = execute_probe_run(
             run_id,
             node_ids,
             probe_type,
@@ -646,7 +647,9 @@ async fn create_probe_run(
             RunnerConfig::default(),
         )
         .await
-        .ok();
+        {
+            tracing::error!(error = %e, %run_id, "probe run failed");
+        }
         if let Ok(mut flags) = flags_map.lock() {
             flags.remove(&run_id);
         }

@@ -1,4 +1,4 @@
-//! Probe runner: batch latency probing with semaphore-bounded concurrency,
+//! Probe runner: batch latency probing with bounded concurrency,
 //! observable progress, and cancellation support (constraint #20).
 //!
 //! The runner is a built-in background job, not a separate service. It is
@@ -6,8 +6,9 @@
 //! (cancellation flag, NODE-016), and safely shut down on server stop. See
 //! `docs/plan/milestones/M7-probes-and-detection.md` §"Probe runner".
 
+use std::collections::HashSet;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use deve_sub_domain::{
@@ -15,8 +16,7 @@ use deve_sub_domain::{
     NodePoolRepository, ProbeError, ProbeRunRepository, ProbeRunResult, ProbeRunStatus, ProbeType,
 };
 use deve_sub_kernel::{LatencyRecordId, NodeId, ProbeRunId, Timestamp};
-use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
+use futures_util::stream::{self, StreamExt};
 
 /// Default per-probe timeout (5 seconds).
 pub const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -27,9 +27,7 @@ pub const DEFAULT_CONCURRENCY: usize = 32;
 /// Configuration for a probe runner execution.
 #[derive(Debug, Clone)]
 pub struct RunnerConfig {
-    /// Per-probe timeout.
     pub timeout: Duration,
-    /// Maximum concurrent probes.
     pub concurrency: usize,
 }
 
@@ -47,172 +45,168 @@ impl Default for RunnerConfig {
 /// `execute_probe_run` under the clippy argument limit.
 #[derive(Clone)]
 pub struct RunnerDeps {
-    /// The latency probe adapter (TCP connect, QUIC handshake, or real proxy).
     pub probe: Arc<dyn LatencyProbe>,
-    /// Node pool repository — used to fetch node endpoints by ID.
     pub pool_repo: Arc<dyn NodePoolRepository>,
-    /// Probe run repository — used to read and update run status/results.
     pub run_repo: Arc<dyn ProbeRunRepository>,
-    /// Latency record repository — persists per-node latency measurements.
     pub latency_repo: Arc<dyn LatencyRecordRepository>,
 }
 
-/// Execute a probe run: probe each node with semaphore-bounded concurrency,
-/// update the run status and results as probes complete, and respect
-/// cancellation.
+/// Execute a probe run: probe each node with bounded concurrency, update
+/// the run status and results as probes complete, and respect cancellation.
+///
+/// This is the public entry point. It wraps [`execute_probe_run_inner`] and
+/// ensures that any unexpected error writes a `Failed` terminal status, so
+/// no run is left in `Pending` or `Running` (B-14).
 ///
 /// # Cancellation
-/// If `cancelled` is set to `true` (by `cancel_probe_run`), in-flight probes
-/// are allowed to finish their current attempt (bounded by `timeout`), and
-/// pending probes are skipped. The run status becomes `Cancelled`.
+/// If `cancelled` is set to `true`, in-flight probes are allowed to finish
+/// their current attempt (bounded by `timeout`), and pending probes are
+/// skipped. The run status becomes `Cancelled`.
 ///
 /// # Errors
-/// Returns [`ProbeError::Storage`] if a repository update fails.
+/// Returns [`ProbeError::Storage`] if a repository update fails. The `Failed`
+/// status is written best-effort before returning.
 pub async fn execute_probe_run(
     run_id: ProbeRunId,
     node_ids: Vec<NodeId>,
     probe_type: ProbeType,
     deps: RunnerDeps,
-    cancelled: Arc<AtomicBool>,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
     config: RunnerConfig,
 ) -> Result<(), ProbeError> {
-    // If the run was cancelled before the runner picked it up (cancel_probe_run
-    // marked it Cancelled in the DB directly because no flag was registered
-    // yet), respect that and exit without overwriting the terminal status.
+    let result = execute_probe_run_inner(
+        run_id,
+        node_ids,
+        probe_type,
+        deps.clone(),
+        cancelled,
+        config,
+    )
+    .await;
+
+    if let Err(ref e) = result {
+        tracing::error!(error = %e, %run_id, "probe run failed, writing Failed status");
+        let _ = deps
+            .run_repo
+            .update_status(run_id, ProbeRunStatus::Failed, &[], Some(Timestamp::now()))
+            .await;
+    }
+
+    result
+}
+
+async fn execute_probe_run_inner(
+    run_id: ProbeRunId,
+    node_ids: Vec<NodeId>,
+    probe_type: ProbeType,
+    deps: RunnerDeps,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+    config: RunnerConfig,
+) -> Result<(), ProbeError> {
+    // If the run was cancelled before the runner picked it up, exit without
+    // overwriting the terminal status.
     if let Some(existing) = deps.run_repo.find_by_id(run_id).await?
         && existing.status.is_terminal()
     {
         return Ok(());
     }
 
-    // WHY: a cancel can arrive between the `find_by_id` terminal check above
-    // and this `Running` write, flipping the row to `Cancelled`. If that
-    // happens our `Running` write hits the terminal guard (W-F) and returns
-    // `RunAlreadyTerminal`. We do NOT exit early here — the cancel flag is
-    // already set, so all probe tasks will skip immediately (checking the
-    // flag before acquiring a semaphore permit). We still collect the
-    // per-node skip results and persist them via `update_results` at the end
-    // so the user sees a complete result set, not an empty row.
-    if let Err(deve_sub_domain::ProbeError::RunAlreadyTerminal) = deps
+    // WHY: a cancel can arrive between the terminal check above and this
+    // `Running` write. If so, the terminal guard returns `RunAlreadyTerminal`
+    // and we continue — the cancel flag is already set, so all probes skip.
+    // Non-terminal errors propagate so the outer wrapper writes `Failed`.
+    if let Err(e) = deps
         .run_repo
         .update_status(run_id, ProbeRunStatus::Running, &[], None)
         .await
     {
-        tracing::info!(
-            run_id = %run_id,
-            "probe run already terminal at Running transition; probes will skip"
-        );
+        if matches!(e, ProbeError::RunAlreadyTerminal) {
+            tracing::info!(%run_id, "probe run already terminal at Running transition; probes will skip");
+        } else {
+            return Err(e);
+        }
     }
 
-    let semaphore = Arc::new(Semaphore::new(config.concurrency));
-    let mut join_set: JoinSet<LatencyResult> = JoinSet::new();
+    // Dedup node IDs while preserving order (B-14).
+    let mut seen = HashSet::new();
+    let node_ids: Vec<NodeId> = node_ids.into_iter().filter(|id| seen.insert(*id)).collect();
 
-    // Spawn a task per node, each acquiring a semaphore permit.
-    for node_id in &node_ids {
-        let node_id = *node_id;
-        let permit_sem = Arc::clone(&semaphore);
-        let probe = Arc::clone(&deps.probe);
-        let pool = Arc::clone(&deps.pool_repo);
-        let cancelled = Arc::clone(&cancelled);
-        let timeout = config.timeout;
-
-        join_set.spawn(async move {
-            // If already cancelled before starting, skip.
-            if cancelled.load(Ordering::Relaxed) {
-                return LatencyResult {
-                    node_id,
-                    rtt_ms: None,
-                    error_class: ErrorClass::Ok,
-                };
-            }
-            // Acquire a permit (blocks if at concurrency limit).
-            let _permit = permit_sem.acquire().await;
-            // Re-check cancellation after acquiring.
-            if cancelled.load(Ordering::Relaxed) {
-                return LatencyResult {
-                    node_id,
-                    rtt_ms: None,
-                    error_class: ErrorClass::Ok,
-                };
-            }
-            // Fetch the node from the pool.
-            let node = match pool.get_node(node_id).await {
-                Ok(Some(entry)) => entry.node,
-                Ok(None) => {
+    // Probe each node with bounded concurrency. `buffer_unordered` runs at
+    // most `concurrency` futures at a time — unlike the previous JoinSet
+    // approach which spawned a Tokio task per node (10k tasks for 10k nodes).
+    let results: Vec<LatencyResult> = stream::iter(node_ids.iter().copied())
+        .map(|node_id| {
+            let probe = Arc::clone(&deps.probe);
+            let pool = Arc::clone(&deps.pool_repo);
+            let cancelled = Arc::clone(&cancelled);
+            let timeout = config.timeout;
+            async move {
+                if cancelled.load(Ordering::Relaxed) {
                     return LatencyResult {
                         node_id,
                         rtt_ms: None,
-                        error_class: ErrorClass::DnsFailed,
+                        error_class: ErrorClass::Ok,
                     };
                 }
-                Err(_) => {
-                    return LatencyResult {
-                        node_id,
-                        rtt_ms: None,
-                        error_class: ErrorClass::DnsFailed,
-                    };
-                }
-            };
-            // WHY: no outer tokio::time::timeout wrapper here — each
-            // LatencyProbe implementation applies its own internal timeout
-            // to every I/O step (dial, handshake, HTTP round-trip) using the
-            // same `timeout` budget, so a wrapper would double-count the
-            // deadline and race with the inner timeout's classification
-            // (W-Y). The probe is the single deadline authority.
-            probe.probe(&node, timeout).await
+                let node = match pool.get_node(node_id).await {
+                    Ok(Some(entry)) => entry.node,
+                    Ok(None) => {
+                        return LatencyResult {
+                            node_id,
+                            rtt_ms: None,
+                            error_class: ErrorClass::DnsFailed,
+                        };
+                    }
+                    Err(_) => {
+                        return LatencyResult {
+                            node_id,
+                            rtt_ms: None,
+                            error_class: ErrorClass::DnsFailed,
+                        };
+                    }
+                };
+                // WHY: no outer tokio::time::timeout wrapper — each
+                // LatencyProbe implementation applies its own internal
+                // timeout to every I/O step using the same `timeout` budget
+                // (W-Y). The probe is the single deadline authority.
+                probe.probe(&node, timeout).await
+            }
+        })
+        .buffer_unordered(config.concurrency)
+        .collect()
+        .await;
+
+    // Process results into run results + latency records.
+    let mut run_results: Vec<ProbeRunResult> = Vec::with_capacity(results.len());
+    let mut latency_records: Vec<LatencyRecord> = Vec::with_capacity(results.len());
+    for r in results {
+        let skipped = cancelled.load(Ordering::Relaxed)
+            && r.rtt_ms.is_none()
+            && r.error_class == ErrorClass::Ok;
+        if !skipped {
+            latency_records.push(LatencyRecord {
+                id: LatencyRecordId::new(),
+                run_id,
+                node_id: r.node_id,
+                probe_type,
+                rtt_ms: r.rtt_ms,
+                error_class: r.error_class,
+                measured_at: Timestamp::now(),
+            });
+        }
+        run_results.push(ProbeRunResult {
+            node_id: r.node_id,
+            rtt_ms: r.rtt_ms,
+            error_class: r.error_class,
+            skipped,
         });
     }
 
-    // Collect results as tasks complete.
-    let mut results: Vec<ProbeRunResult> = Vec::with_capacity(node_ids.len());
-    let mut latency_records: Vec<LatencyRecord> = Vec::with_capacity(node_ids.len());
-    while let Some(res) = join_set.join_next().await {
-        match res {
-            Ok(r) => {
-                let skipped = cancelled.load(Ordering::Relaxed)
-                    && r.rtt_ms.is_none()
-                    && r.error_class == ErrorClass::Ok;
-                // Persist a latency record for every attempted (non-skipped)
-                // probe so the latency query API has data. Skipped probes
-                // (cancelled before start) produce no record.
-                if !skipped {
-                    latency_records.push(LatencyRecord {
-                        id: LatencyRecordId::new(),
-                        run_id,
-                        node_id: r.node_id,
-                        probe_type,
-                        rtt_ms: r.rtt_ms,
-                        error_class: r.error_class,
-                        measured_at: Timestamp::now(),
-                    });
-                }
-                results.push(ProbeRunResult {
-                    node_id: r.node_id,
-                    rtt_ms: r.rtt_ms,
-                    error_class: r.error_class,
-                    skipped,
-                });
-            }
-            Err(_) => {
-                // Task panicked; tokio::time::timeout already handles
-                // timeouts. A JoinError here is a panic — the node's result
-                // is simply absent from the results vector.
-            }
-        }
-    }
-
-    // Persist latency records. A storage failure here does not discard the
-    // run results already collected — we log and continue so the probe run
-    // status still reflects what the probes observed.
-    for record in &latency_records {
-        if let Err(e) = deps.latency_repo.create(record).await {
-            tracing::warn!(
-                error = %e,
-                node_id = %record.node_id,
-                run_id = %run_id,
-                "failed to persist latency record"
-            );
-        }
+    // Batch persist latency records (B-14). A storage failure here is logged,
+    // not fatal — the run status still reflects what the probes observed.
+    // `batch_create` is a no-op for empty slices.
+    if let Err(e) = deps.latency_repo.batch_create(&latency_records).await {
+        tracing::warn!(error = %e, %run_id, "failed to batch persist latency records");
     }
 
     // Determine final status.
@@ -224,36 +218,23 @@ pub async fn execute_probe_run(
     };
 
     // WHY: a cancel can fire the flag AND persist `Cancelled` between our
-    // `cancelled.load()` above and this write. If so, the terminal guard in
-    // `update_status` (W-F) returns `RunAlreadyTerminal`. That is the cancel
-    // winning the race — the user already received a 200 for `Cancelled`, so
-    // we must not overwrite it with `Completed`. Still persist the diagnostic
-    // results via `update_results` (status-less write) so the user sees the
-    // partial probe data that was collected before the cancel.
+    // `cancelled.load()` and this write. If so, the terminal guard returns
+    // `RunAlreadyTerminal` — the user already received a 200 for `Cancelled`,
+    // so we must not overwrite it. Still persist diagnostic results.
     match deps
         .run_repo
-        .update_status(run_id, final_status, &results, completed_at)
+        .update_status(run_id, final_status, &run_results, completed_at)
         .await
     {
         Ok(()) => {}
-        Err(deve_sub_domain::ProbeError::RunAlreadyTerminal) => {
-            tracing::info!(
-                run_id = %run_id,
-                "probe run became terminal via concurrent cancel; status write skipped"
-            );
-            // Best-effort persist of diagnostic results onto the terminal
-            // row. A storage failure here is logged, not fatal — the run
-            // is already terminal and the user's cancel 200 is intact.
+        Err(ProbeError::RunAlreadyTerminal) => {
+            tracing::info!(%run_id, "probe run became terminal via concurrent cancel; status write skipped");
             if let Err(e) = deps
                 .run_repo
-                .update_results(run_id, &results, completed_at)
+                .update_results(run_id, &run_results, completed_at)
                 .await
             {
-                tracing::warn!(
-                    error = %e,
-                    run_id = %run_id,
-                    "failed to persist diagnostic results after concurrent cancel"
-                );
+                tracing::warn!(error = %e, %run_id, "failed to persist diagnostic results after concurrent cancel");
             }
             return Ok(());
         }

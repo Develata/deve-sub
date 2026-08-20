@@ -11,6 +11,7 @@ pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod health;
+pub mod job_supervisor;
 pub mod probe;
 pub mod source;
 pub mod subscription;
@@ -19,6 +20,7 @@ pub mod template;
 pub use auth::{AuthError, LoginRateLimiter};
 pub use config::{AppConfig, IssueSeverity, ValidationIssue};
 pub use health::{DbHealthPort, HealthError, HealthStatus, HealthView};
+pub use job_supervisor::JobSupervisor;
 pub use probe::{
     CreateProbeSourceParams, ProbeAppError, RunnerConfig, StartProbeRunParams,
     UpdateProbeSourceParams, cancel_probe_run, create_probe_source, delete_probe_source,

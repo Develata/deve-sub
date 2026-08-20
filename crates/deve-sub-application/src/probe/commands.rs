@@ -161,6 +161,9 @@ pub async fn delete_probe_source(
     Ok(())
 }
 
+/// Maximum number of node IDs allowed in a single probe run (B-14).
+pub const MAX_PROBE_NODE_IDS: usize = 10_000;
+
 /// Parameters for starting a probe run.
 #[derive(Debug, Clone)]
 pub struct StartProbeRunParams {
@@ -172,7 +175,8 @@ pub struct StartProbeRunParams {
 /// executes it asynchronously.
 ///
 /// # Errors
-/// Returns [`ProbeAppError::InvalidInput`] if the node list is empty.
+/// Returns [`ProbeAppError::InvalidInput`] if the node list is empty or
+/// exceeds [`MAX_PROBE_NODE_IDS`].
 pub async fn start_probe_run(
     run_repo: &dyn ProbeRunRepository,
     params: StartProbeRunParams,
@@ -181,6 +185,11 @@ pub async fn start_probe_run(
         return Err(ProbeAppError::InvalidInput(
             "node_ids must not be empty".to_owned(),
         ));
+    }
+    if params.node_ids.len() > MAX_PROBE_NODE_IDS {
+        return Err(ProbeAppError::InvalidInput(format!(
+            "node_ids must not exceed {MAX_PROBE_NODE_IDS}"
+        )));
     }
     let run = ProbeRun {
         id: ProbeRunId::new(),

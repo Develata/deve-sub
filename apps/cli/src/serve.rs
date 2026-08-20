@@ -13,8 +13,8 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 
 use deve_sub_application::{
-    DbHealthPort, GeoIpPort, GraceTokenCleanupScheduler, LoginRateLimiter, RefreshScheduler,
-    SubscriptionFetcher, TrafficDailySnapshotScheduler,
+    DbHealthPort, GeoIpPort, GraceTokenCleanupScheduler, JobSupervisor, LoginRateLimiter,
+    RefreshScheduler, SubscriptionFetcher, TrafficDailySnapshotScheduler,
 };
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
@@ -191,6 +191,11 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let db_health: Arc<dyn DbHealthPort> =
         Arc::new(deve_sub_storage_sqlite::SqliteHealthCheck::new(db));
 
+    let cancelled_flags: Arc<
+        Mutex<HashMap<deve_sub_kernel::ProbeRunId, Arc<std::sync::atomic::AtomicBool>>>,
+    > = Arc::new(Mutex::new(HashMap::new()));
+    let job_supervisor = Arc::new(JobSupervisor::new());
+
     let state = AppState {
         config: config.clone(),
         master_key,
@@ -220,7 +225,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         tcp_probe,
         quic_probe,
         real_proxy_probe,
-        cancelled_flags: Arc::new(Mutex::new(HashMap::new())),
+        cancelled_flags: Arc::clone(&cancelled_flags),
+        job_supervisor: Arc::clone(&job_supervisor),
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
         rate_limiter,
@@ -292,7 +298,18 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let _ = scheduler_handle.await;
     let _ = grace_handle.await;
     let _ = traffic_snapshot_handle.await;
-    tracing::info!("refresh scheduler stopped, server exiting");
+
+    // B-14: cancel all in-flight probe runs so the runner writes Cancelled
+    // terminal status, then wait for probe jobs to finish within a timeout.
+    // Tasks that don't finish are aborted; their runs stay in Running and
+    // are recovered as Failed on the next process start.
+    if let Ok(flags) = cancelled_flags.lock() {
+        for flag in flags.values() {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    job_supervisor.shutdown(Duration::from_secs(30)).await;
+    tracing::info!("background jobs stopped, server exiting");
 
     Ok(())
 }

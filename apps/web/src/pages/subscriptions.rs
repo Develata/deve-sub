@@ -85,7 +85,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         modal.set(Modal::Create);
     };
 
-    let open_edit = move |s: SubscriptionDto| {
+    let mut open_edit = move |s: SubscriptionDto| {
         f_name.set(s.name.clone());
         f_slug.set(s.slug.clone());
         f_template.set(s.template_id.clone());
@@ -98,22 +98,22 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         modal.set(Modal::Edit(s));
     };
 
-    let open_delete = move |s: SubscriptionDto| {
+    let mut open_delete = move |s: SubscriptionDto| {
         form_error.set(String::new());
         modal.set(Modal::Delete(s));
     };
 
-    let open_temp_link = move |s: SubscriptionDto| {
+    let mut open_temp_link = move |s: SubscriptionDto| {
         f_temp_expiry.set(String::new());
         form_error.set(String::new());
         modal.set(Modal::TempLink(s));
     };
 
-    let close_modal = move |_| {
+    let close_modal = move |_: Event<MouseData>| {
         modal.set(Modal::None);
     };
 
-    let do_rotate = move |id: String| {
+    let mut do_rotate = move |id: String| {
         info_msg.set(String::new());
         spawn(async move {
             let path = format!("/subscriptions/{id}/rotate-token");
@@ -128,7 +128,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         });
     };
 
-    let do_regen_short_code = move |id: String| {
+    let mut do_regen_short_code = move |id: String| {
         info_msg.set(String::new());
         spawn(async move {
             let path = format!("/subscriptions/{id}/regenerate-short-code");

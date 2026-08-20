@@ -17,7 +17,7 @@ use crate::pages::node_types::{
     TagDto, TagResponse,
 };
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct TagModalProps {
     lang: Signal<Language>,
     /// Node IDs to assign tags to. Length 1 = single, >1 = batch.

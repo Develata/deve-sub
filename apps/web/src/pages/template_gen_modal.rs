@@ -8,7 +8,7 @@ use crate::i18n::{Language, t};
 use crate::pages::template_types::{GenerationResultDto, Modal, PROFILES};
 use crate::pages::util::copy_to_clipboard;
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct TemplateGenModalProps {
     lang: Signal<Language>,
     modal: Signal<Modal>,
@@ -22,7 +22,7 @@ pub struct TemplateGenModalProps {
     on_run: EventHandler<()>,
 }
 
-pub fn TemplateGenModal(props: TemplateGenModalProps) -> Element {
+pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
     let l = *props.lang.read();
     let show = matches!(
         *props.modal.read(),
@@ -99,10 +99,10 @@ pub fn TemplateGenModal(props: TemplateGenModalProps) -> Element {
                             }
                             div { class: "flex flex-wrap gap-4 text-xs",
                                 span { class: "text-stone-500 dark:text-stone-400",
-                                    {t(l, "tpl.included")}: " {result.included_node_ids.len()}"
+                                    "{t(l, \"tpl.included\")}: {result.included_node_ids.len()}"
                                 }
                                 span { class: "text-stone-500 dark:text-stone-400",
-                                    {t(l, "tpl.excluded")}: " {result.excluded.len()}"
+                                    "{t(l, \"tpl.excluded\")}: {result.excluded.len()}"
                                 }
                             }
                             if !result.excluded.is_empty() {
@@ -121,7 +121,7 @@ pub fn TemplateGenModal(props: TemplateGenModalProps) -> Element {
                                     button {
                                         class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
                                         onclick: move |_| {
-                                            let c = result.content.clone();
+                                            let c = props.gen_result.read().as_ref().map(|r| r.content.clone()).unwrap_or_default();
                                             spawn(async move { let _ = copy_to_clipboard(&c).await; });
                                         },
                                         {t(l, "common.copy")}

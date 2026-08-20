@@ -8,7 +8,7 @@ use crate::api::send;
 use crate::i18n::{Language, format_t, t};
 use crate::pages::node_types::{ImportNodesRequest, ImportNodesResponse, SourceTypeDto};
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct ImportModalProps {
     lang: Signal<Language>,
     on_close: EventHandler<()>,

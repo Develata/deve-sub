@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use crate::i18n::{Language, t};
 use crate::pages::user_types::{Modal, ROLES};
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct UserModalsProps {
     lang: Signal<Language>,
     modal: Signal<Modal>,
@@ -20,7 +20,7 @@ pub struct UserModalsProps {
     on_submit: EventHandler<()>,
 }
 
-pub fn UserModals(props: UserModalsProps) -> Element {
+pub fn UserModals(mut props: UserModalsProps) -> Element {
     let l = *props.lang.read();
     let is_create_modal = matches!(*props.modal.read(), Modal::Create);
     let is_disable_modal = matches!(*props.modal.read(), Modal::Disable(_));

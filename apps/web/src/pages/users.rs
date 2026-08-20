@@ -21,7 +21,7 @@ pub fn UsersPage(props: UsersProps) -> Element {
     let mut loading = use_signal(|| true);
     let mut error = use_signal(|| String::new());
     let mut modal = use_signal(|| Modal::None);
-    let mut form_error = use_signal(|| String::new);
+    let mut form_error = use_signal(|| String::new());
     let mut saving = use_signal(|| false);
     let mut info_msg = use_signal(|| String::new());
 
@@ -55,12 +55,12 @@ pub fn UsersPage(props: UsersProps) -> Element {
         modal.set(Modal::Create);
     };
 
-    let open_disable = move |u: UserDto| {
+    let mut open_disable = move |u: UserDto| {
         form_error.set(String::new());
         modal.set(Modal::Disable(u));
     };
 
-    let open_force_logout = move |u: UserDto| {
+    let mut open_force_logout = move |u: UserDto| {
         form_error.set(String::new());
         modal.set(Modal::ForceLogout(u));
     };

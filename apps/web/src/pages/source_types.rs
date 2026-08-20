@@ -73,7 +73,7 @@ impl SourceTypeDto {
     ];
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SourceFilterRulesDto {
     #[serde(default)]
     pub include_protocols: Vec<String>,
@@ -85,7 +85,7 @@ pub struct SourceFilterRulesDto {
     pub exclude_regions: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceDto {
     pub id: String,
     pub name: String,

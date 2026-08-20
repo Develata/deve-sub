@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use crate::i18n::{Language, t};
 use crate::pages::template_types::Modal;
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct TemplateModalsProps {
     lang: Signal<Language>,
     modal: Signal<Modal>,
@@ -20,7 +20,7 @@ pub struct TemplateModalsProps {
     on_submit: EventHandler<()>,
 }
 
-pub fn TemplateModals(props: TemplateModalsProps) -> Element {
+pub fn TemplateModals(mut props: TemplateModalsProps) -> Element {
     let l = *props.lang.read();
     let is_form_modal = matches!(*props.modal.read(), Modal::Create | Modal::Edit(_));
     let is_delete_modal = matches!(*props.modal.read(), Modal::Delete(_));

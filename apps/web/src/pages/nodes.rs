@@ -94,7 +94,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
         });
     };
 
-    let batch_set_enabled = move |enabled: bool| {
+    let mut batch_set_enabled = move |enabled: bool| {
         let ids: Vec<String> = selected.read().iter().cloned().collect();
         if ids.is_empty() {
             return;
@@ -382,39 +382,39 @@ pub fn NodesPage(props: NodesProps) -> Element {
 
         // Modals.
         match &*modal.read() {
-            NodeModal::None => {}
-            NodeModal::Import => {
+            NodeModal::None => rsx! {},
+            NodeModal::Import => rsx! {
                 ImportModal {
                     lang: props.lang,
                     on_close: move |_| modal.set(NodeModal::None),
                     on_success: move |_| fetch_nodes(),
                 }
-            }
-            NodeModal::Tags(ids) => {
+            },
+            NodeModal::Tags(ids) => rsx! {
                 TagModal {
                     lang: props.lang,
                     node_ids: ids.clone(),
                     on_close: move |_| modal.set(NodeModal::None),
                     on_success: move |_| fetch_nodes(),
                 }
-            }
-            NodeModal::SetRegion(id) => {
+            },
+            NodeModal::SetRegion(id) => rsx! {
                 RegionModal {
                     lang: props.lang,
                     node_id: id.clone(),
                     on_close: move |_| modal.set(NodeModal::None),
                     on_success: move |_| fetch_nodes(),
                 }
-            }
-            NodeModal::Override(id) => {
+            },
+            NodeModal::Override(id) => rsx! {
                 OverrideModal {
                     lang: props.lang,
                     node_id: id.clone(),
                     on_close: move |_| modal.set(NodeModal::None),
                     on_success: move |_| fetch_nodes(),
                 }
-            }
-            NodeModal::Chain(id, chain) => {
+            },
+            NodeModal::Chain(id, chain) => rsx! {
                 ChainModal {
                     lang: props.lang,
                     node_id: id.clone(),
@@ -422,7 +422,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     on_close: move |_| modal.set(NodeModal::None),
                     on_success: move |_| fetch_nodes(),
                 }
-            }
+            },
         }
     }
 }

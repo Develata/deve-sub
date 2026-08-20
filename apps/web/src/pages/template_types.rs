@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TemplateDto {
     pub id: String,
     pub name: String,
@@ -36,7 +36,7 @@ pub struct UpdateTemplateRequest {
     pub spec_yaml: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TemplateVersionDto {
     pub id: String,
     pub template_id: String,

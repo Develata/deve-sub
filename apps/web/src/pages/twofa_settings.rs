@@ -110,7 +110,7 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
         });
     };
 
-    let do_verify = move |_| {
+    let mut do_verify = move || {
         let code = verify_code.read().clone();
         if code.is_empty() {
             return;
@@ -140,7 +140,7 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
         error.set(String::new());
     };
 
-    let do_disable = move |_| {
+    let mut do_disable = move || {
         let pwd = password.read().clone();
         if pwd.is_empty() {
             return;
@@ -165,7 +165,7 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
         });
     };
 
-    let do_regenerate = move |_| {
+    let mut do_regenerate = move || {
         let pwd = password.read().clone();
         if pwd.is_empty() {
             return;
@@ -268,7 +268,7 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
                             maxlength: "6",
                             value: "{verify_code}",
                             oninput: move |e| verify_code.set(e.value()),
-                            onkeydown: move |e| { if e.key() == Key::Enter { do_verify(()); } },
+                            onkeydown: move |e| { if e.key() == Key::Enter { do_verify(); } },
                         }
                     }
                     div { class: "flex gap-2",
@@ -280,7 +280,7 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
                         button {
                             class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
                             disabled: *loading.read(),
-                            onclick: do_verify,
+                            onclick: move |_| do_verify(),
                             if *loading.read() { {t(l, "common.loading")} } else { {t(l, "auth.2fa_submit")} }
                         }
                     }
@@ -317,8 +317,8 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
                             oninput: move |e| password.set(e.value()),
                             onkeydown: move |e| {
                                 if e.key() == Key::Enter {
-                                    if is_disable_prompt { do_disable(()); }
-                                    else { do_regenerate(()); }
+                                    if is_disable_prompt { do_disable(); }
+                                    else { do_regenerate(); }
                                 }
                             },
                         }
@@ -333,14 +333,14 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
                             button {
                                 class: "rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50",
                                 disabled: *loading.read(),
-                                onclick: do_disable,
+                                onclick: move |_| do_disable(),
                                 if *loading.read() { {t(l, "common.loading")} } else { {t(l, "2fa.disable")} }
                             }
                         } else {
                             button {
                                 class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
                                 disabled: *loading.read(),
-                                onclick: do_regenerate,
+                                onclick: move |_| do_regenerate(),
                                 if *loading.read() { {t(l, "common.loading")} } else { {t(l, "2fa.regenerate")} }
                             }
                         }

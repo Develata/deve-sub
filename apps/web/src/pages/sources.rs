@@ -31,7 +31,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
     let mut refreshing_id = use_signal(|| String::new());
     let mut refresh_msg = use_signal(|| String::new());
     let mut modal = use_signal(|| Modal::None);
-    let mut form_error = use_signal(|| String::new);
+    let mut form_error = use_signal(|| String::new());
     let mut saving = use_signal(|| false);
 
     let mut f_name = use_signal(String::new);
@@ -74,7 +74,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         modal.set(Modal::Create);
     };
 
-    let open_edit = move |source: SourceDto| {
+    let mut open_edit = move |source: SourceDto| {
         f_name.set(source.name.clone());
         f_url.set(source.url.clone());
         f_type.set(source.source_type);
@@ -87,7 +87,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         modal.set(Modal::Edit(source));
     };
 
-    let open_delete = move |source: SourceDto| {
+    let mut open_delete = move |source: SourceDto| {
         form_error.set(String::new());
         modal.set(Modal::Delete(source));
     };
@@ -96,7 +96,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         modal.set(Modal::None);
     };
 
-    let do_refresh = move |id: String| {
+    let mut do_refresh = move |id: String| {
         refreshing_id.set(id.clone());
         refresh_msg.set(String::new());
         spawn(async move {

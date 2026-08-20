@@ -13,7 +13,7 @@ use crate::api::{get, send};
 use crate::i18n::{Language, t};
 use crate::pages::node_types::{ListNodesResponse, NodeChainResponse, NodeDto, SetNodeChainRequest};
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct ChainModalProps {
     lang: Signal<Language>,
     node_id: String,
@@ -52,11 +52,11 @@ pub fn ChainModal(props: ChainModalProps) -> Element {
         .cloned()
         .collect();
 
-    let add_node = move |id: String| {
+    let mut add_node = move |id: String| {
         chain.write().push(id);
     };
 
-    let remove_at = move |idx: usize| {
+    let mut remove_at = move |idx: usize| {
         chain.write().remove(idx);
     };
 

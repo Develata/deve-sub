@@ -47,7 +47,7 @@ impl TriBool {
     }
 }
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct OverrideModalProps {
     lang: Signal<Language>,
     node_id: String,
@@ -66,6 +66,11 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
     let mut f_sort = use_signal(|| 0_i64);
     let mut saving = use_signal(|| false);
     let mut error = use_signal(String::new);
+
+    // WHY: clone node_id before closures so both `submit` and
+    // `delete_override` can own a copy without re-borrowing `props.node_id`,
+    // which RFC 2229 disjoint-capture would move into the first closure.
+    let delete_nid = props.node_id.clone();
 
     let submit = move |_| {
         saving.set(true);
@@ -99,7 +104,7 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
     let delete_override = move |_| {
         saving.set(true);
         error.set(String::new());
-        let nid = props.node_id.clone();
+        let nid = delete_nid.clone();
         spawn(async move {
             let path = format!("/nodes/{nid}/override");
             match crate::api::delete(&path).await {
@@ -224,7 +229,7 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
     }
 }
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct RegionModalProps {
     lang: Signal<Language>,
     node_id: String,

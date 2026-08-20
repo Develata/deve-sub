@@ -35,7 +35,7 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
 
     let mut versions = use_signal(Vec::<TemplateVersionDto>::new);
     let mut ver_loading = use_signal(|| false);
-    let mut ver_error = use_signal(|| String::new);
+    let mut ver_error = use_signal(|| String::new());
 
     let mut gen_profile = use_signal(|| "mihomo".to_string());
     let mut gen_mode = use_signal(|| "lenient".to_string());
@@ -70,7 +70,7 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         modal.set(Modal::Create);
     };
 
-    let open_edit = move |t: TemplateDto| {
+    let mut open_edit = move |t: TemplateDto| {
         f_name.set(t.name.clone());
         f_desc.set(t.description.clone());
         f_spec.set(String::new());
@@ -96,12 +96,12 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         modal.set(Modal::Edit(t));
     };
 
-    let open_delete = move |t: TemplateDto| {
+    let mut open_delete = move |t: TemplateDto| {
         form_error.set(String::new());
         modal.set(Modal::Delete(t));
     };
 
-    let open_versions = move |t: TemplateDto| {
+    let mut open_versions = move |t: TemplateDto| {
         ver_error.set(String::new());
         versions.set(Vec::new());
         modal.set(Modal::Versions(t.clone()));
@@ -127,7 +127,7 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         }
     };
 
-    let open_generate = move |t: TemplateDto| {
+    let mut open_generate = move |t: TemplateDto| {
         gen_profile.set("mihomo".to_string());
         gen_mode.set("lenient".to_string());
         gen_result.set(None);
@@ -136,7 +136,7 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         modal.set(Modal::Generate(t));
     };
 
-    let open_preview = move |t: TemplateDto| {
+    let mut open_preview = move |t: TemplateDto| {
         gen_profile.set("mihomo".to_string());
         gen_mode.set("lenient".to_string());
         gen_result.set(None);

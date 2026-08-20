@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use crate::i18n::{Language, t};
 use crate::pages::template_types::{Modal, TemplateVersionDto};
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct TemplateVersionsProps {
     lang: Signal<Language>,
     modal: Signal<Modal>,

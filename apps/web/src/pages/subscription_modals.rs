@@ -6,10 +6,10 @@ use dioxus::prelude::*;
 
 use crate::i18n::{Language, t};
 use crate::pages::subscription_types::{Modal, PROFILES};
-use crate::pages::templates::TemplateDto;
+use crate::pages::template_types::TemplateDto;
 use crate::pages::util::copy_to_clipboard;
 
-#[derive(Props, Clone)]
+#[derive(Props, Clone, PartialEq)]
 pub struct SubscriptionModalsProps {
     lang: Signal<Language>,
     modal: Signal<Modal>,
@@ -28,7 +28,7 @@ pub struct SubscriptionModalsProps {
     on_submit: EventHandler<()>,
 }
 
-pub fn SubscriptionModals(props: SubscriptionModalsProps) -> Element {
+pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
     let l = *props.lang.read();
     let is_form_modal = matches!(*props.modal.read(), Modal::Create | Modal::Edit(_));
     let is_delete_modal = matches!(*props.modal.read(), Modal::Delete(_));
@@ -93,7 +93,7 @@ pub fn SubscriptionModals(props: SubscriptionModalsProps) -> Element {
                             input {
                                 class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
                                 r#type: "number",
-                                value: "{props.f_traffic.read().map(|v| v.to_string()).unwrap_or_default()}",
+                                value: "{(*props.f_traffic.read()).map(|v| v.to_string()).unwrap_or_default()}",
                                 oninput: move |e| {
                                     let v = e.value();
                                     props.f_traffic.set(if v.is_empty() { None } else { v.parse::<u64>().ok() });

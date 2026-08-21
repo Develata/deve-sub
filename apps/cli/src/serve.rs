@@ -35,6 +35,30 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let mut config = load_config(&args.config)?;
     args.apply_overrides(&mut config);
 
+    // P0-06: validate config before anything else. Errors are fatal;
+    // Warnings are logged but do not block startup.
+    let issues = config.validate();
+    let errors: Vec<_> = issues
+        .iter()
+        .filter(|i| i.severity == deve_sub_application::IssueSeverity::Error)
+        .collect();
+    for issue in &issues {
+        match issue.severity {
+            deve_sub_application::IssueSeverity::Error => {
+                tracing::error!(issue = %issue.message, "config validation error");
+            }
+            deve_sub_application::IssueSeverity::Warning => {
+                tracing::warn!(issue = %issue.message, "config validation warning");
+            }
+        }
+    }
+    if !errors.is_empty() {
+        anyhow::bail!(
+            "config validation failed with {} error(s); run `deve-sub config validate` for details",
+            errors.len()
+        );
+    }
+
     let bind: SocketAddr = config.server.bind.parse().context("invalid bind address")?;
 
     tracing::info!(

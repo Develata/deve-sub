@@ -122,8 +122,17 @@ async fn health_live(State(state): State<AppState>) -> Json<HealthLiveResponse> 
 
 /// Readiness probe — returns 200 if the service is ready to serve requests.
 ///
-/// Checks database connectivity. Returns 503 with `degraded` status if the
-/// database is unreachable.
+/// Checks database connectivity and, when `serve_web` is enabled, that the
+/// web dist directory exists. Returns 503 with `degraded` status if any
+/// check fails.
+///
+/// WHY (P0-06): `web_dist_dir` missing is a WARNING in `AppConfig::validate`
+/// (non-fatal at startup — the placeholder page is served) but Degraded here
+/// (runtime readiness gate). The split is intentional: `validate` runs once
+/// at boot and allows proceeding with a known degradation (operator may
+/// serve the placeholder intentionally); `health_ready` runs continuously
+/// and tells the orchestrator this instance should not receive traffic
+/// until the dist is present.
 #[utoipa::path(
     get,
     path = "/health/ready",
@@ -134,8 +143,13 @@ async fn health_live(State(state): State<AppState>) -> Json<HealthLiveResponse> 
 )]
 async fn health_ready(State(state): State<AppState>) -> (StatusCode, Json<HealthReadyResponse>) {
     let db_ok = state.db_health.check().await.is_ok();
+    let web_ok = if state.config.server.serve_web {
+        std::path::Path::new(&state.config.server.web_dist_dir).exists()
+    } else {
+        true
+    };
 
-    let status = if db_ok {
+    let status = if db_ok && web_ok {
         HealthStatus::Healthy
     } else {
         HealthStatus::Degraded
@@ -146,7 +160,7 @@ async fn health_ready(State(state): State<AppState>) -> (StatusCode, Json<Health
         &state.config.product_name,
         env!("CARGO_PKG_VERSION"),
     );
-    let code = if db_ok {
+    let code = if db_ok && web_ok {
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Root application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
     /// Product display name, centralized here to avoid hardcoded scattering.
     #[serde(default = "default_product_name")]
@@ -31,6 +32,7 @@ pub struct AppConfig {
 
 /// HTTP server bind configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServerConfig {
     /// Bind address.
     ///
@@ -57,6 +59,7 @@ pub struct ServerConfig {
 
 /// Database configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DatabaseConfig {
     /// SQLite database file path.
     #[serde(default = "default_db_path")]
@@ -65,6 +68,7 @@ pub struct DatabaseConfig {
 
 /// Security configuration for auth, HMAC, and encryption.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     /// Path to the master key file (32 bytes of random data).
     /// Used for HMAC-SHA256 of session tokens and XChaCha20-Poly1305
@@ -75,8 +79,8 @@ pub struct SecurityConfig {
 
     /// Whether to auto-generate the master key if the file is missing.
     ///
-    /// When `true` (the default), a missing key file is silently generated
-    /// with a warning — convenient for local development. When `false`, the
+    /// When `true`, a missing key file is silently generated with a warning
+    /// — convenient for local development. When `false` (the default), the
     /// server refuses to start if the key file does not exist, preventing
     /// silent key loss in production (which would invalidate all sessions,
     /// recovery codes, and encrypted TOTP secrets).
@@ -85,8 +89,8 @@ pub struct SecurityConfig {
     /// only a `tracing::warn`. If the path is misconfigured or the mount is
     /// lost, the server starts with a fresh key and all existing
     /// HMAC-derived data (sessions, recovery codes) and encrypted data
-    /// (TOTP secrets) become unrecoverable. Setting this to `false` in
-    /// production makes such misconfiguration a hard failure.
+    /// (TOTP secrets) become unrecoverable. Defaulting to fail-closed
+    /// forces the operator to explicitly opt in (ADR-0007 §7).
     #[serde(default = "default_allow_master_key_generation")]
     pub allow_master_key_generation: bool,
 
@@ -246,6 +250,7 @@ fn default_trust_proxy_headers() -> bool {
 
 /// GeoIP configuration for auto-region detection (NODE-007/008/009).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GeoIpConfig {
     /// Path to the MaxMind `.mmdb` database file. `None` or missing file
     /// disables auto-region (graceful degradation).
@@ -510,5 +515,42 @@ mod tests {
         assert!(issues.iter().any(|i| {
             i.severity == IssueSeverity::Warning && i.message.contains("trust_proxy_headers")
         }));
+    }
+
+    /// P0-06: `deny_unknown_fields` rejects top-level typos so a misspelled
+    /// config key is caught at load instead of being silently ignored.
+    #[test]
+    fn deny_unknown_fields_rejects_top_level_typo() {
+        let json = r#"{"prodcut_name": "Deve Sub"}"#;
+        let result: Result<AppConfig, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "unknown top-level field must be rejected");
+        let msg = result.expect_err("already asserted is_err").to_string();
+        assert!(
+            msg.contains("unknown field") && msg.contains("prodcut_name"),
+            "error should name the unknown field, got: {msg}"
+        );
+    }
+
+    /// P0-06: `deny_unknown_fields` rejects typos in nested config sections.
+    #[test]
+    fn deny_unknown_fields_rejects_nested_typo() {
+        let json = r#"{"server": {"bind": "127.0.0.1:8080", "bimd": "0.0.0.0:9090"}}"#;
+        let result: Result<AppConfig, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "unknown nested field must be rejected");
+        let msg = result.expect_err("already asserted is_err").to_string();
+        assert!(
+            msg.contains("unknown field") && msg.contains("bimd"),
+            "error should name the unknown nested field, got: {msg}"
+        );
+    }
+
+    /// P0-06: a minimal valid config with only known fields deserializes
+    /// successfully (regression guard alongside the rejection tests).
+    #[test]
+    fn deny_unknown_fields_accepts_minimal_valid_config() {
+        let json = r#"{}"#;
+        let config: AppConfig =
+            serde_json::from_str(json).expect("empty JSON must use serde defaults");
+        assert_eq!(config.server.bind, "127.0.0.1:8080");
     }
 }

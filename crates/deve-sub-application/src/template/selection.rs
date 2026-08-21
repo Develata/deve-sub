@@ -259,10 +259,6 @@ async fn fetch_explicit_entries(
 
 /// Apply sort order to a list of node IDs using the display names from the
 /// pool entries.
-///
-/// `SortOrder::Latency` is not yet supported (latency data arrives with
-/// url-test probes in a later slice); it falls back to ascending alphabetical
-/// order for now.
 pub fn apply_sort_order(node_ids: &mut [NodeId], entries: &[NodePoolEntry], sort_order: SortOrder) {
     let name_by_id: std::collections::HashMap<NodeId, &str> = entries
         .iter()
@@ -273,7 +269,7 @@ pub fn apply_sort_order(node_ids: &mut [NodeId], entries: &[NodePoolEntry], sort
         let name_a = name_by_id.get(a).copied().unwrap_or("");
         let name_b = name_by_id.get(b).copied().unwrap_or("");
         match sort_order {
-            SortOrder::Asc | SortOrder::Latency => name_a.cmp(name_b),
+            SortOrder::Asc => name_a.cmp(name_b),
             SortOrder::Desc => name_b.cmp(name_a),
         }
     });

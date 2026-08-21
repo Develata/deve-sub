@@ -597,7 +597,7 @@ fn assemble_groups(
 
             if let Some(sort) = spec.sort_order {
                 match sort {
-                    deve_sub_domain::SortOrder::Asc | deve_sub_domain::SortOrder::Latency => {
+                    deve_sub_domain::SortOrder::Asc => {
                         members.sort();
                     }
                     deve_sub_domain::SortOrder::Desc => {

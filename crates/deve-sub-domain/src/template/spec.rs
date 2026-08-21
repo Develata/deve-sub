@@ -130,6 +130,17 @@ pub struct QuickGroupFilter {
 }
 
 /// Sort order applied to a group's rendered member list.
+///
+/// WHY (P0-13): a `Latency` variant existed here but was never implemented —
+/// both call sites silently fell back to ascending alphabetical order,
+/// violating the "no silent semantic fallback" rule (constraint #7). The
+/// variant was removed rather than left as dead public contract.
+///
+/// No data migration is needed: the project is pre-first-tagged-release (no
+/// production install base), no code path ever produced `sort_order: "latency"`,
+/// and no migration or seed inserts it. If this enum is later extended with
+/// latency-based sort, add a new variant with a round-trip test before
+/// exposing it in the public template spec.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SortOrder {
@@ -137,8 +148,6 @@ pub enum SortOrder {
     Asc,
     /// Descending alphabetical.
     Desc,
-    /// By measured latency (requires url-test metadata).
-    Latency,
 }
 
 /// Node selection mode for the template.

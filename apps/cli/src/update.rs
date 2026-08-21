@@ -401,7 +401,6 @@ async fn download_streaming(
     max_bytes: u64,
     target_dir: &Path,
 ) -> Result<(PathBuf, String, u64)> {
-    use futures_util::StreamExt;
     let client = reqwest::Client::builder()
         .user_agent(format!("deve-sub/{}", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(300))
@@ -414,6 +413,25 @@ async fn download_streaming(
     let tmp = target_dir.join(format!(".deve-sub-update-{}.tmp", std::process::id()));
     let mut file = std::fs::File::create(&tmp)
         .with_context(|| format!("failed to create temp file {}", tmp.display()))?;
+
+    // WHY (review): on any error from download_body the temp file is
+    // removed — stream error, write failure, fsync failure, or size limit.
+    // Without this, a failed download leaves a partial file on disk in the
+    // target binary's directory.
+    let result = download_body(resp, &mut file, max_bytes).await;
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    let (hex, total) = result?;
+    Ok((tmp, hex, total))
+}
+
+async fn download_body(
+    resp: reqwest::Response,
+    file: &mut std::fs::File,
+    max_bytes: u64,
+) -> Result<(String, u64)> {
+    use futures_util::StreamExt;
     let mut hasher = Sha256::new();
     let mut total: u64 = 0;
     let mut stream = resp.bytes_stream();
@@ -421,18 +439,17 @@ async fn download_streaming(
         let chunk = chunk.context("download stream error")?;
         total += chunk.len() as u64;
         if total > max_bytes {
-            let _ = std::fs::remove_file(&tmp);
-            bail!("download from {url} exceeds {max_bytes} bytes — aborting");
+            bail!("download exceeds {max_bytes} bytes — aborting");
         }
         hasher.update(&chunk);
-        std::io::Write::write_all(&mut file, &chunk)
+        std::io::Write::write_all(file, &chunk)
             .context("failed to write download chunk to temp file")?;
     }
     file.sync_all()
         .context("failed to fsync downloaded temp file")?;
     let hash = hasher.finalize();
     let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-    Ok((tmp, hex, total))
+    Ok((hex, total))
 }
 
 fn platform_asset_name() -> Result<String> {

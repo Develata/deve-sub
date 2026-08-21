@@ -454,8 +454,9 @@ cases:
     assertions: ["能抓取 IPv6 literal 源"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "crates/deve-sub-adapters/tests/http_fetcher.rs::src_011_ipv6_literal_url_fetch"
+      status: pass
   - id: SRC-012
     title: 压缩响应
     priority: P0

@@ -257,6 +257,54 @@ def check_coverage(matrix_ids: set[str]) -> int:
     return 1 if failures else 0
 
 
+def check_test_symbols(yaml_data: dict) -> int:
+    """Verify that test symbols referenced in evidence exist on disk."""
+    failures = 0
+    checked = 0
+    rust_fn_re = re.compile(r"\bfn\s+(\w+)\s*\(")
+    ts_test_re = re.compile(r"""test\s*\(\s*['"].*?(\w[\w-]*)""")
+    for case in yaml_data.get("cases", []):
+        ev = case.get("evidence", {})
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("status") != "pass":
+            continue
+        tests = ev.get("tests", [])
+        for ref in tests:
+            if not isinstance(ref, str) or "::" not in ref:
+                continue
+            path_str, symbol = ref.rsplit("::", 1)
+            checked += 1
+            path = ROOT / path_str
+            if not path.is_file():
+                print(f"FAIL: {case['id']} references missing file: {path_str}", file=sys.stderr)
+                failures += 1
+                continue
+            text = _read_text(path)
+            if text is None:
+                failures += 1
+                continue
+            if path_str.endswith(".rs"):
+                symbols = set(rust_fn_re.findall(text))
+                if symbol not in symbols:
+                    print(
+                        f"FAIL: {case['id']} references missing symbol '{symbol}' in {path_str}",
+                        file=sys.stderr,
+                    )
+                    failures += 1
+            elif path_str.endswith((".ts", ".js")):
+                ts_names = set(ts_test_re.findall(text))
+                if symbol not in ts_names:
+                    print(
+                        f"FAIL: {case['id']} references missing test '{symbol}' in {path_str}",
+                        file=sys.stderr,
+                    )
+                    failures += 1
+    if failures == 0:
+        print(f"OK: {checked} test symbol references verified.")
+    return 1 if failures else 0
+
+
 def check_openapi() -> int:
     if not OPENAPI.is_file():
         print("OK: docs/openapi/openapi.json not present yet (pending utoipa export, M2+).")
@@ -279,6 +327,13 @@ def main() -> int:
     rc, yaml_ids = check_matrix_yaml()
     exit_code |= rc
     if rc == 0:
+        print("=== Test symbol references ===")
+        data = _load_yaml(MATRIX_YAML)
+        if data is not None:
+            exit_code |= check_test_symbols(data)
+        else:
+            print("SKIP: YAML reload failed.", file=sys.stderr)
+            exit_code |= 1
         print("=== Acceptance matrix (TSV) ===")
         exit_code |= check_matrix_tsv(yaml_ids)
         print("=== Coverage matrix ===")

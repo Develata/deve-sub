@@ -14,7 +14,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use deve_sub_adapters::{HttpFetcher, SsrfChecker};
+use deve_sub_adapters::{HttpFetcher, PermissiveSsrfChecker, SsrfChecker};
 use deve_sub_application::{FetchError, FetchResult, SubscriptionFetcher};
 use deve_sub_security::SsrfError;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -338,5 +338,52 @@ async fn sec_002_private_network_ssrf_blocked() {
             matches!(result, Err(FetchError::Ssrf(_))),
             "SEC-002: private URL {url} should be SSRF-blocked, got {result:?}"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SRC-011: IPv6 literal URL fetch
+// ---------------------------------------------------------------------------
+
+/// Start a mock HTTP server on `[::1]:0` and return the actual address.
+async fn start_mock_server_ipv6(response: Vec<u8>) -> std::net::SocketAddr {
+    let listener = tokio::net::TcpListener::bind("[::1]:0")
+        .await
+        .expect("bind [::1]");
+    let addr = listener.local_addr().expect("local_addr");
+    tokio::spawn(async move {
+        if let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = [0u8; 4096];
+            let _ = tokio::time::timeout(Duration::from_millis(500), stream.read(&mut buf)).await;
+            let _ = stream.write_all(&response).await;
+            let _ = stream.flush().await;
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    addr
+}
+
+/// SRC-011: fetching a URL with an IPv6 literal host connects and reads the
+/// body. Uses `PermissiveSsrfChecker` (which allows `::1` for test harnesses)
+/// and a mock server bound to `[::1]:0`. This exercises the full path: URL
+/// parse → SSRF check (IPv6 literal parsed via `host.parse::<IpAddr>()`) →
+/// IP-literal skip of DNS pinning → reqwest connect → body read.
+#[tokio::test]
+async fn src_011_ipv6_literal_url_fetch() {
+    let response = http_response("200 OK", &[("Content-Type", "text/plain")], ORIGINAL_BODY);
+    let addr = start_mock_server_ipv6(response).await;
+
+    let fetcher = HttpFetcher::with_checker(PermissiveSsrfChecker).timeout(5);
+    let url = format!("http://[::1]:{}/sub", addr.port());
+    let result = fetcher.fetch(&url, None).await;
+
+    match result {
+        Ok(FetchResult::Ok { body, .. }) => {
+            assert_eq!(
+                body, ORIGINAL_BODY,
+                "IPv6 literal fetch should return the mock body"
+            );
+        }
+        other => panic!("SRC-011: expected Ok, got {other:?}"),
     }
 }

@@ -29,7 +29,7 @@ SRC-007	响应过大	P0	Security	pass
 SRC-008	请求超时	P0	Integration	pass
 SRC-009	取消刷新	P0	Integration	pass
 SRC-010	条件过滤	P0	Unit/E2E	pass
-SRC-011	IPv6 URL	P0	Integration	not-run
+SRC-011	IPv6 URL	P0	Integration	pass
 SRC-012	压缩响应	P0	Integration	pass
 SRC-013	多个刷新	P0	Integration	pass
 SRC-014	Diff	P0	Integration	pass

@@ -5931,7 +5931,7 @@
     "/health/ready": {
       "get": {
         "summary": "Readiness probe — returns 200 if the service is ready to serve requests.",
-        "description": "Checks database connectivity. Returns 503 with `degraded` status if the\ndatabase is unreachable.",
+        "description": "Checks database connectivity and, when `serve_web` is enabled, that the\nweb dist directory exists. Returns 503 with `degraded` status if any\ncheck fails.\n\nWHY (P0-06): `web_dist_dir` missing is a WARNING in `AppConfig::validate`\n(non-fatal at startup — the placeholder page is served) but Degraded here\n(runtime readiness gate). The split is intentional: `validate` runs once\nat boot and allows proceeding with a known degradation (operator may\nserve the placeholder intentionally); `health_ready` runs continuously\nand tells the orchestrator this instance should not receive traffic\nuntil the dist is present.",
         "operationId": "health_ready",
         "responses": {
           "200": {

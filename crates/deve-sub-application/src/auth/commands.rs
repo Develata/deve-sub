@@ -186,6 +186,13 @@ pub async fn login(params: LoginParams<'_>) -> Result<LoginOutcome, AuthError> {
         ip,
         session_ttl,
     } = params;
+    // WHY (P0-12): validate input length before rate-limiter and DB lookup.
+    // Rejecting obviously invalid input early avoids consuming rate-limiter
+    // slots with garbage keys and matches the boundary validation in
+    // setup_admin and create_user. This does not leak user existence —
+    // the check is purely on input length, not on whether the user exists.
+    validate_credentials(username, password)?;
+
     // WHY: check the rate limiter BEFORE looking up the user so that
     // non-existent usernames also get rate-limited. This prevents username
     // enumeration via rate-limiting behavior differences (AUTH-003).

@@ -103,8 +103,14 @@ impl LoginRateLimiter for InMemoryLoginRateLimiter {
                 if locked_until > now {
                     return Err(AuthError::RateLimited);
                 }
-                // Lockout expired — reset the counter.
-                entry.failed_attempts = 0;
+                // WHY (P0-12): lockout expired — clear the lockout but KEEP
+                // the failure count. Previously the counter was reset to 0,
+                // letting an attacker try max_attempts passwords every
+                // lockout_duration cycle. Keeping the count means the next
+                // single failure immediately re-locks (failed_attempts is
+                // already >= max_attempts), reducing the brute-force rate
+                // from max_attempts per cycle to 1 per cycle. Only a
+                // successful login (record_success) clears the counter.
                 entry.locked_until = None;
             }
         }
@@ -213,7 +219,57 @@ mod tests {
         ));
         // Wait for lockout to expire.
         std::thread::sleep(Duration::from_millis(20));
-        // Should be allowed now — lockout expired and counter reset.
+        // Should be allowed now — lockout expired (counter retained, not
+        // reset — see P0-12 hard-cap test below).
+        assert!(limiter.check("alice", None).is_ok());
+    }
+
+    /// P0-12: after lockout expiry, the failure count is retained so a
+    /// single new failure immediately re-locks. This reduces the brute-force
+    /// rate from max_attempts per lockout cycle to 1 per cycle.
+    #[test]
+    fn p0_12_hard_cap_re_locks_after_single_failure() {
+        let limiter = InMemoryLoginRateLimiter::new(3, Duration::from_millis(10));
+        // Exhaust the initial budget: 3 failures → locked.
+        limiter.record_failure("alice", None);
+        limiter.record_failure("alice", None);
+        limiter.record_failure("alice", None);
+        assert!(matches!(
+            limiter.check("alice", None),
+            Err(AuthError::RateLimited)
+        ));
+        // Wait for lockout to expire.
+        std::thread::sleep(Duration::from_millis(20));
+        // Lockout expired — check passes (1 try granted).
+        assert!(limiter.check("alice", None).is_ok());
+        // A single failure immediately re-locks because failed_attempts
+        // is still 3 (>= max_attempts).
+        limiter.record_failure("alice", None);
+        assert!(matches!(
+            limiter.check("alice", None),
+            Err(AuthError::RateLimited)
+        ));
+    }
+
+    /// P0-12: record_success clears the counter, so a legitimate user who
+    /// fat-fingered their password and waited out the lockout gets a full
+    /// fresh budget after a successful login.
+    #[test]
+    fn p0_12_success_clears_counter_after_lockout() {
+        let limiter = InMemoryLoginRateLimiter::new(2, Duration::from_millis(10));
+        limiter.record_failure("alice", None);
+        limiter.record_failure("alice", None);
+        assert!(matches!(
+            limiter.check("alice", None),
+            Err(AuthError::RateLimited)
+        ));
+        std::thread::sleep(Duration::from_millis(20));
+        // Lockout expired — check passes.
+        assert!(limiter.check("alice", None).is_ok());
+        // Successful login clears the counter.
+        limiter.record_success("alice", None);
+        // Should now have a full fresh budget (2 tries).
+        limiter.record_failure("alice", None);
         assert!(limiter.check("alice", None).is_ok());
     }
 }

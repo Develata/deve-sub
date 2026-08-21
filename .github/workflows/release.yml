@@ -137,6 +137,20 @@ jobs:
           cd release
           sha256sum deve-sub-linux-amd64 deve-sub-linux-arm64 > checksums.txt
 
+      # WHY (P0-04): sign the release manifest with the Ed25519 release key
+      # so `deve-sub update` can authenticate the publisher, not just verify
+      # transport integrity. The signing key seed is a repository secret
+      # (DEVE_SUB_RELEASE_KEY_SEED); it never enters the repo or logs. The
+      # corresponding public key is embedded in apps/cli/src/update_manifest.rs.
+      # If the secret is missing, this step fails and no release is published
+      # (fail-closed — an unsigned release is worse than no release).
+      - name: Sign release manifest
+        env:
+          DEVE_SUB_RELEASE_KEY_SEED: ${{ secrets.DEVE_SUB_RELEASE_KEY_SEED }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          scripts/sign-release-manifest.sh release "$VERSION" x86_64-unknown-linux-gnu
+
       - name: Generate SBOM
         run: |
           cargo install cargo-cyclonedx --locked
@@ -151,6 +165,8 @@ jobs:
             release/deve-sub-linux-amd64
             release/deve-sub-linux-arm64
             release/checksums.txt
+            release/deve-sub-manifest.json
+            release/deve-sub-manifest.json.sig
             release/deve-sub-sbom.json
 
   docker-release:

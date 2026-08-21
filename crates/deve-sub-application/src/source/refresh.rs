@@ -6,8 +6,9 @@
 //!   per-source lease via the DB partial unique index).
 //! - Updates the job's `phase` before each step so progress is observable
 //!   (SRC-002: "创建任务并显示进度").
-//! - Checks the cancel flag before and after each phase (SRC-009: "取消后
-//!   不发布半成品").
+//! - Checks the cancel flag before each phase (SRC-009: "取消后
+//!   不发布半成品"). No check after reconcile — once the snapshot is
+//!   committed, the refresh must proceed to Completed (P0-09).
 //! - Writes a terminal status (Completed / Failed / Cancelled) on every exit
 //!   path so no job is left in Pending or Running.
 //! - The snapshot publish (deactivate old + insert new) remains the final
@@ -99,8 +100,10 @@ pub async fn start_refresh_job(
 /// Execute a refresh job to completion. The job must already be in `Running`
 /// status (created via [`start_refresh_job`]).
 ///
-/// Checks `cancelled` before and after each phase. On cancel, writes
+/// Checks `cancelled` before each phase. On cancel, writes
 /// `Cancelled` terminal status and returns [`SourceAppError::Cancelled`].
+/// No cancel check after the reconcile commit — once the snapshot is
+/// published, the job must be marked Completed (P0-09).
 /// On any other error, writes `Failed` terminal status with the error
 /// message and returns the error.
 ///
@@ -291,16 +294,16 @@ async fn execute_refresh_inner(
         .await
         .map_err(map_source_error)?;
 
-    if cancelled.load(Ordering::Relaxed) {
-        return Err(SourceAppError::Cancelled);
-    }
-
     // ── Phase: Publishing ──
-    // WHY: the snapshot is published as the final atomic step. The reconcile
-    // transaction already deactivated the old snapshot and inserted the new
-    // one (see SqliteSourceSnapshotRepository::create). A cancelled refresh
-    // never reaches this point — the cancel checks above abort before
-    // reconcile, so no half-built snapshot is published (SRC-009).
+    // WHY (P0-09): no cancel check after reconcile. The reconcile call
+    // atomically commits the new snapshot and node pool changes. If a
+    // cancel signal arrives during or after the commit, the data is
+    // already published — returning Cancelled would mark the job as
+    // Cancelled while the refresh was actually applied, a lie. Once
+    // reconcile has committed, the refresh must proceed to Completed.
+    // Cancel checks before each phase (lines above) are sufficient to
+    // prevent unwanted refreshes; a cancel that arrives after the last
+    // pre-reconcile check (line 257) is too late to stop the commit.
     deps.job_repo
         .update_phase(job_id, RefreshPhase::Publishing)
         .await

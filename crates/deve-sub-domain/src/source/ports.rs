@@ -353,6 +353,9 @@ pub trait SourceRefreshJobRepository: Send + Sync {
 
     /// Update the job's current phase (progress indicator). Called before
     /// each phase: fetching, parsing, enriching, reconciling, publishing.
+    /// Also refreshes `started_at` as a heartbeat so the scheduler's
+    /// stale-lease sweep does not kill a long-running but active job
+    /// (P0-10).
     async fn update_phase(
         &self,
         id: deve_sub_kernel::SourceRefreshJobId,
@@ -401,18 +404,20 @@ pub trait SourceRefreshJobRepository: Send + Sync {
     /// releases those orphaned leases. Returns the count of recovered jobs.
     async fn recover_crashed_jobs(&self) -> Result<u64, SourceError>;
 
-    /// Mark `Running` jobs whose `started_at` is older than `max_age` as
+    /// Mark `Running` jobs whose `started_at` is older than `cutoff` as
     /// `Failed` (scheduler tick lease sweep).
     ///
-    /// WHY: a refresh that exceeds `max_age` is presumed dead — the runner
-    /// task may have been killed by the OS, panicked without unwinding, or
-    /// the host lost power. Unlike [`recover_crashed_jobs`](Self::recover_crashed_jobs)
-    /// (a blanket startup sweep), this is a bounded age-based check run at
-    /// each scheduler tick so a hung job does not hold the lease for the
-    /// entire uptime. Returns the count of recovered jobs.
+    /// WHY: a refresh that has not progressed in `max_age` is presumed dead
+    /// — the runner task may have been killed by the OS, panicked without
+    /// unwinding, or the host lost power. Unlike
+    /// [`recover_crashed_jobs`](Self::recover_crashed_jobs) (a blanket
+    /// startup sweep), this is a bounded age-based check run at each
+    /// scheduler tick so a hung job does not hold the lease for the entire
+    /// uptime. Returns the count of recovered jobs.
     ///
-    /// `cutoff` is the `started_at` threshold; any `Running` job with
-    /// `started_at < cutoff` is marked `Failed` with the given `reason`.
+    /// `started_at` is refreshed on each phase transition (heartbeat), so
+    /// `cutoff` effectively means "no phase transition in this duration" —
+    /// not "total job duration" (P0-10).
     async fn recover_stale_jobs(&self, cutoff: Timestamp, reason: &str)
     -> Result<u64, SourceError>;
 }

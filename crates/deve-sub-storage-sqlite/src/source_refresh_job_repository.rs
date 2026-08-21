@@ -168,8 +168,18 @@ impl SourceRefreshJobRepository for SqliteSourceRefreshJobRepository {
         id: SourceRefreshJobId,
         phase: RefreshPhase,
     ) -> Result<(), SourceError> {
-        sqlx::query("UPDATE source_refresh_jobs SET phase = ? WHERE id = ?")
+        // WHY (P0-10 review): `started_at` is updated here as a heartbeat.
+        // The scheduler's stale-lease sweep (`recover_stale_jobs`) uses
+        // `started_at < cutoff` to find dead jobs. Without this update, a
+        // legitimate refresh exceeding `lease_timeout` (default 600s) would
+        // be killed even though it is actively progressing through phases.
+        // Updating `started_at` on each phase transition means the sweep
+        // only kills jobs that have been stuck in a SINGLE phase for longer
+        // than `lease_timeout` — not jobs whose total duration exceeds it.
+        let now = format_ts(deve_sub_kernel::Timestamp::now()).map_err(SourceError::Storage)?;
+        sqlx::query("UPDATE source_refresh_jobs SET phase = ?, started_at = ? WHERE id = ?")
             .bind(phase.as_db_str())
+            .bind(now)
             .bind(id.to_string())
             .execute(&self.pool)
             .await

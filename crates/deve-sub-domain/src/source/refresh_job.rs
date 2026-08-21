@@ -139,7 +139,9 @@ pub struct SourceRefreshJob {
     pub status: SourceRefreshJobStatus,
     /// Current phase (progress indicator).
     pub phase: RefreshPhase,
-    /// When the job was created/started.
+    /// When the job was created, updated on each phase transition as a
+    /// heartbeat (P0-10). The scheduler's stale-lease sweep treats a
+    /// `started_at` older than `lease_timeout` as evidence the job is dead.
     pub started_at: Timestamp,
     /// When the job reached a terminal status. `None` if still running.
     pub finished_at: Option<Timestamp>,

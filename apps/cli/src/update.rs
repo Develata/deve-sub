@@ -132,6 +132,13 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
     let lock_path = update_lock_path(&binary_path);
     let lock_file = acquire_update_lock(&lock_path)?;
 
+    // P0-05: best-effort cleanup of orphaned temp files left in /tmp by
+    // previous failed updates (the old download_streaming wrote there).
+    // These are harmless but accumulate over time on systems that update
+    // frequently. Only removes files matching the old naming pattern;
+    // never touches the new same-dir temp files.
+    cleanup_legacy_tmp_files();
+
     // DS-AUD-B09: verify the release via a signed manifest (Ed25519) when
     // available. This authenticates the publisher, not just transport
     // integrity. Unsigned releases fall back to checksums.txt with a warning.
@@ -164,8 +171,12 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
     };
 
     println!("downloading {asset_name}...");
+    let target_dir = binary_path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     let (binary_tmp, actual_hash, actual_size) =
-        download_streaming(&asset.browser_download_url, MAX_BINARY_BYTES).await?;
+        download_streaming(&asset.browser_download_url, MAX_BINARY_BYTES, target_dir).await?;
 
     println!("verifying checksum...");
     if actual_hash != expected_hash {
@@ -376,7 +387,20 @@ async fn download_bounded(url: &str, max_bytes: u64) -> Result<Vec<u8>> {
 /// Stream a download to a temp file, computing SHA-256 incrementally and
 /// enforcing a max size. Returns (temp_file_path, sha256_hex, total_bytes)
 /// (DS-AUD-B09).
-async fn download_streaming(url: &str, max_bytes: u64) -> Result<(PathBuf, String, u64)> {
+///
+/// WHY (P0-05): the temp file is created in `target_dir` (the target
+/// binary's parent directory), NOT `std::env::temp_dir()`. The final
+/// install step is `fs::rename(tmp, target)`, and `rename` fails with
+/// `EXDEV` if the source and destination are on different filesystems.
+/// `/tmp` is typically a separate tmpfs/ext4 mount from `/usr/local/bin`,
+/// so a `/tmp` temp file makes the atomic swap fail on every standard
+/// Linux deployment. Keeping the temp file on the same filesystem as the
+/// target guarantees the rename is atomic.
+async fn download_streaming(
+    url: &str,
+    max_bytes: u64,
+    target_dir: &Path,
+) -> Result<(PathBuf, String, u64)> {
     use futures_util::StreamExt;
     let client = reqwest::Client::builder()
         .user_agent(format!("deve-sub/{}", env!("CARGO_PKG_VERSION")))
@@ -387,7 +411,7 @@ async fn download_streaming(url: &str, max_bytes: u64) -> Result<(PathBuf, Strin
         bail!("download from {url} returned {}", resp.status());
     }
 
-    let tmp = std::env::temp_dir().join(format!("deve-sub-update-{}.bin", std::process::id()));
+    let tmp = target_dir.join(format!(".deve-sub-update-{}.tmp", std::process::id()));
     let mut file = std::fs::File::create(&tmp)
         .with_context(|| format!("failed to create temp file {}", tmp.display()))?;
     let mut hasher = Sha256::new();
@@ -459,6 +483,25 @@ fn update_lock_path(binary: &Path) -> PathBuf {
         p.set_file_name(format!("{}.deve-sub.update.lock", name.to_string_lossy()));
     }
     p
+}
+
+/// P0-05: best-effort removal of orphaned temp files left in `/tmp` by
+/// previous failed updates. The old `download_streaming` wrote to
+/// `/tmp/deve-sub-update-{pid}.bin`; if the process was killed before
+/// cleanup, those files linger. This sweeps them on the next update run.
+/// Errors are silently ignored — cleanup is best-effort, not a gate.
+fn cleanup_legacy_tmp_files() {
+    let tmp_dir = std::env::temp_dir();
+    let Ok(entries) = std::fs::read_dir(&tmp_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("deve-sub-update-") && name.ends_with(".bin") {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
 }
 
 /// DS-AUD-B09: acquire an exclusive sidecar lock so two concurrent updates

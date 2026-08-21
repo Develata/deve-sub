@@ -99,6 +99,36 @@ if [ "$(id -u)" -ne 0 ]; then
     err "root privileges required (run with sudo or pipe to sudo sh)"
 fi
 
+# WHY (P0-03): stop the running service BEFORE overwriting the binary so
+# the old process is not left with a swapped-out executable (ETXTBSY on
+# Linux prevents overwriting a running binary's file, but `install` may
+# succeed by unlinking+creating — leaving the old process with a deleted
+# inode and the new file orphaned until restart). Stopping first is the
+# safe upgrade ordering. `|| true` because the service may not exist yet
+# (first install).
+systemctl stop deve-sub 2>/dev/null || true
+
+# WHY (P0-03): back up the existing binary so we can roll back if a later
+# step (key init, migrate, service start) fails. First install has no
+# prior binary to back up.
+BINARY_BACKUP=""
+if [ -f "$BIN_PATH" ]; then
+    BINARY_BACKUP="$TMPDIR/deve-sub.bak"
+    cp -a "$BIN_PATH" "$BINARY_BACKUP"
+fi
+
+# WHY (P0-03): trap fires on ANY exit. If the exit code is non-zero (set -e
+# failure, signal, or explicit err), roll back the binary before cleaning
+# up the temp dir. On exit 0 (success), only clean up. This ensures a
+# failed key init / migrate / service start restores the previous binary.
+rollback_binary() {
+    if [ -n "$BINARY_BACKUP" ] && [ -f "$BINARY_BACKUP" ]; then
+        info "rolling back to previous binary..."
+        install -m 0755 "$BINARY_BACKUP" "$BIN_PATH"
+    fi
+}
+trap 'rc=$?; if [ "$rc" -ne 0 ]; then rollback_binary; fi; rm -rf "$TMPDIR"' EXIT
+
 info "installing binary to $BIN_PATH..."
 install -m 0755 "$TMPDIR/$ASSET" "$BIN_PATH"
 
@@ -135,9 +165,17 @@ info "initializing master key..."
 # data/master.key — systemd WorkingDirectory=$DATA_DIR would resolve
 # that relative default to $DATA_DIR/data/master.key, an extra segment
 # the operator cannot guess).
-sudo -u "$DEVE_USER" "$BIN_PATH" key init \
-    --key-path "$DATA_DIR/master.key" \
-    --db-path "$DATA_DIR/deve-sub.db"
+#
+# WHY (P0-03): only run `key init` on FIRST install (key file absent).
+# On upgrade the key already exists and `key init` would bail, breaking
+# idempotency. Migrations and service restart handle the upgrade path.
+if [ ! -f "$DATA_DIR/master.key" ]; then
+    sudo -u "$DEVE_USER" "$BIN_PATH" key init \
+        --key-path "$DATA_DIR/master.key" \
+        --db-path "$DATA_DIR/deve-sub.db"
+else
+    info "  master key already exists — skipping key init"
+fi
 
 info "running database migrations..."
 # WHY: migrate before writing the service unit and starting, so a migration

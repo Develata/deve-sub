@@ -137,13 +137,22 @@ jobs:
           cd release
           sha256sum deve-sub-linux-amd64 deve-sub-linux-arm64 > checksums.txt
 
+      # WHY (P0-04): verify that DEVE_SUB_RELEASE_KEY_SEED derives the same
+      # public key embedded in apps/cli/src/update_manifest.rs. This runs
+      # before signing so a key mismatch aborts the release rather than
+      # publishing artifacts that `deve-sub update` would reject.
+      - name: Verify release key correspondence
+        env:
+          DEVE_SUB_RELEASE_KEY_SEED: ${{ secrets.DEVE_SUB_RELEASE_KEY_SEED }}
+        run: scripts/verify-release-key.sh
+
       # WHY (P0-04): sign the release manifest with the Ed25519 release key
       # so `deve-sub update` can authenticate the publisher, not just verify
       # transport integrity. The signing key seed is a repository secret
-      # (DEVE_SUB_RELEASE_KEY_SEED); it never enters the repo or logs. The
-      # corresponding public key is embedded in apps/cli/src/update_manifest.rs.
-      # If the secret is missing, this step fails and no release is published
-      # (fail-closed — an unsigned release is worse than no release).
+      # (DEVE_SUB_RELEASE_KEY_SEED). The corresponding public key is embedded
+      # in apps/cli/src/update_manifest.rs. If the secret is missing, this
+      # step fails and no release is published (fail-closed — an unsigned
+      # release is worse than no release).
       - name: Sign release manifest
         env:
           DEVE_SUB_RELEASE_KEY_SEED: ${{ secrets.DEVE_SUB_RELEASE_KEY_SEED }}

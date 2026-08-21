@@ -36,8 +36,19 @@ use serde::{Deserialize, Serialize};
 /// The key below is the development release key (P0-04). It MUST be rotated
 /// to a production key before the first public release. The corresponding
 /// private key seed is stored as a GitHub Actions secret
-/// (`DEVE_SUB_RELEASE_KEY_SEED`) and never enters the repository. See
-/// `scripts/sign-release-manifest.sh` for the signing procedure.
+/// (`DEVE_SUB_RELEASE_KEY_SEED`).
+///
+/// WHY the seed must differ from any value that has ever appeared in the
+/// repository: Ed25519 derives the public key deterministically from the
+/// seed, so anyone with the seed can forge signatures. The development seed
+/// was used to generate this public key and the fixture in
+/// `tests/fixtures/`; it is NOT the production secret. Before the first
+/// public release, rotate to a fresh seed generated on an air-gapped host,
+/// update this constant to the new public key, regenerate the fixture, and
+/// store the new seed as `DEVE_SUB_RELEASE_KEY_SEED`.
+///
+/// See `scripts/sign-release-manifest.sh` for the signing procedure and
+/// `scripts/verify-release-key.sh` for the CI seed↔public-key check.
 const RELEASE_PUBLIC_KEY: [u8; 32] = [
     0x0f, 0x38, 0xc5, 0x97, 0x58, 0xf1, 0x98, 0x54, 0x70, 0x22, 0x31, 0xf1, 0xb8, 0x8d, 0xe1, 0xaa,
     0x69, 0x37, 0xcf, 0xc7, 0x20, 0x57, 0x44, 0xc2, 0xee, 0x44, 0xeb, 0x6d, 0x7b, 0x35, 0x5c, 0x76,
@@ -260,44 +271,35 @@ mod tests {
         assert!(manifest.find_asset("nonexistent").is_none());
     }
 
-    /// P0-04: verify that a manifest signed with the release key SEED (the
-    /// same seed stored as DEVE_SUB_RELEASE_KEY_SEED in GitHub Actions and
-    /// used by scripts/sign-release-manifest.sh) passes
-    /// `verify_signed_manifest` — which uses the embedded
-    /// `RELEASE_PUBLIC_KEY`. This is the cross-language compatibility proof:
-    /// Python `cryptography` signs, Rust `ed25519_dalek` verifies, and the
-    /// embedded public key matches the signing seed.
+    /// P0-04: verify that the fixture manifest — signed offline by the
+    /// release key holder using `scripts/sign-release-manifest.sh` (Python
+    /// `cryptography` Ed25519) — passes `verify_signed_manifest`, which uses
+    /// the embedded `RELEASE_PUBLIC_KEY` (Rust `ed25519_dalek`).
+    ///
+    /// This is the cross-language compatibility proof: Python signs, Rust
+    /// verifies, and the embedded public key accepts the signature. The
+    /// fixture contains only the manifest JSON and the 64-byte signature —
+    /// the signing seed is NEVER in the repository.
+    ///
+    /// WHY fixture-based (not seed-based): hardcoding the seed in a test
+    /// would publish the private key, defeating the entire signing scheme.
+    /// The seed↔public-key correspondence is verified in CI (see
+    /// `scripts/verify-release-key.sh`) where the secret is available.
     #[test]
-    fn embedded_key_matches_release_seed() {
-        // WHY: this seed is the development release key seed (P0-04). It
-        // corresponds to the RELEASE_PUBLIC_KEY embedded above. If either
-        // is changed without updating the other, this test fails —
-        // preventing a key-mismatch that would make every `deve-sub update`
-        // reject signed releases.
-        let seed: [u8; 32] = [
-            0x83, 0xb8, 0xd0, 0xb7, 0xc9, 0x5e, 0x0f, 0x8e, 0x95, 0xde, 0x92, 0x03, 0x74, 0x62,
-            0x54, 0xda, 0xe5, 0xb8, 0xf8, 0xf8, 0xf9, 0xc4, 0xac, 0x04, 0x6c, 0x9c, 0x16, 0xe3,
-            0x1c, 0x7d, 0xb8, 0xbd,
-        ];
-        let signing_key = SigningKey::from_bytes(&seed);
-        let manifest = SignedManifest {
-            version: "0.2.0".to_owned(),
-            target: "x86_64-unknown-linux-gnu".to_owned(),
-            assets: vec![ManifestAsset {
-                name: "deve-sub-linux-amd64".to_owned(),
-                sha256: "abc123".to_owned(),
-                size: 1024,
-            }],
-        };
-        let json = serde_json::to_vec(&manifest).unwrap();
-        let sig = signing_key.sign(&json);
+    fn embedded_key_verifies_fixture_signature() {
+        let manifest_bytes = include_bytes!("../tests/fixtures/test-manifest.json");
+        let sig_bytes = include_bytes!("../tests/fixtures/test-manifest.json.sig");
 
-        // verify_signed_manifest uses RELEASE_PUBLIC_KEY (the embedded key).
-        let result = verify_signed_manifest(&json, &sig.to_bytes());
+        let result = verify_signed_manifest(manifest_bytes, sig_bytes);
         assert!(
             result.is_ok(),
-            "manifest signed with release seed must verify against embedded public key"
+            "fixture signed by release key must verify against embedded public key"
         );
+        let manifest = result.unwrap();
+        assert_eq!(manifest.version, "0.2.0");
+        assert_eq!(manifest.target, "x86_64-unknown-linux-gnu");
+        assert_eq!(manifest.assets.len(), 1);
+        assert_eq!(manifest.assets[0].name, "deve-sub-linux-amd64");
     }
 
     /// Test helper: verify with an explicit public key (not the embedded one).

@@ -239,7 +239,7 @@ async fn login_rate_limited_after_threshold() {
             .clone()
             .oneshot(post_json(
                 "/api/v1/auth/login",
-                r#"{"username":"admin","password":"wrong"}"#,
+                r#"{"username":"admin","password":"wrong-pw"}"#,
             ))
             .await
             .expect("response");
@@ -251,7 +251,7 @@ async fn login_rate_limited_after_threshold() {
         .clone()
         .oneshot(post_json(
             "/api/v1/auth/login",
-            r#"{"username":"admin","password":"wrong"}"#,
+            r#"{"username":"admin","password":"wrong-pw"}"#,
         ))
         .await
         .expect("response");
@@ -262,7 +262,7 @@ async fn login_rate_limited_after_threshold() {
         .clone()
         .oneshot(post_json(
             "/api/v1/auth/login",
-            r#"{"username":"admin","password":"wrong"}"#,
+            r#"{"username":"admin","password":"wrong-pw"}"#,
         ))
         .await
         .expect("response");
@@ -300,7 +300,7 @@ async fn rate_limiting_applies_to_nonexistent_user() {
             .clone()
             .oneshot(post_json(
                 "/api/v1/auth/login",
-                r#"{"username":"ghost","password":"wrong"}"#,
+                r#"{"username":"ghost","password":"wrong-pw"}"#,
             ))
             .await
             .expect("response");
@@ -312,7 +312,7 @@ async fn rate_limiting_applies_to_nonexistent_user() {
         .clone()
         .oneshot(post_json(
             "/api/v1/auth/login",
-            r#"{"username":"ghost","password":"wrong"}"#,
+            r#"{"username":"ghost","password":"wrong-pw"}"#,
         ))
         .await
         .expect("response");
@@ -332,7 +332,7 @@ async fn successful_login_resets_counter() {
             .clone()
             .oneshot(post_json(
                 "/api/v1/auth/login",
-                r#"{"username":"admin","password":"wrong"}"#,
+                r#"{"username":"admin","password":"wrong-pw"}"#,
             ))
             .await
             .expect("response");
@@ -355,7 +355,7 @@ async fn successful_login_resets_counter() {
             .clone()
             .oneshot(post_json(
                 "/api/v1/auth/login",
-                r#"{"username":"admin","password":"wrong"}"#,
+                r#"{"username":"admin","password":"wrong-pw"}"#,
             ))
             .await
             .expect("response");
@@ -377,7 +377,7 @@ async fn rate_limiting_per_ip() {
             .clone()
             .oneshot(post_json_with_xff(
                 "/api/v1/auth/login",
-                r#"{"username":"admin","password":"wrong"}"#,
+                r#"{"username":"admin","password":"wrong-pw"}"#,
                 "10.0.0.1",
             ))
             .await
@@ -389,7 +389,7 @@ async fn rate_limiting_per_ip() {
         .clone()
         .oneshot(post_json_with_xff(
             "/api/v1/auth/login",
-            r#"{"username":"ghost","password":"wrong"}"#,
+            r#"{"username":"ghost","password":"wrong-pw"}"#,
             "10.0.0.1",
         ))
         .await
@@ -402,7 +402,7 @@ async fn rate_limiting_per_ip() {
         .clone()
         .oneshot(post_json_with_xff(
             "/api/v1/auth/login",
-            r#"{"username":"admin","password":"wrong"}"#,
+            r#"{"username":"admin","password":"wrong-pw"}"#,
             "10.0.0.2",
         ))
         .await
@@ -414,7 +414,7 @@ async fn rate_limiting_per_ip() {
         .clone()
         .oneshot(post_json_with_xff(
             "/api/v1/auth/login",
-            r#"{"username":"ghost","password":"wrong"}"#,
+            r#"{"username":"ghost","password":"wrong-pw"}"#,
             "10.0.0.2",
         ))
         .await
@@ -533,7 +533,7 @@ async fn sec007_untrusted_proxy_headers_ignored() {
                     .header("content-type", "application/json")
                     .header("x-forwarded-for", format!("10.0.0.{i}"))
                     .body(Body::from(
-                        r#"{"username":"admin","password":"wrong"}"#.to_owned(),
+                        r#"{"username":"admin","password":"wrong-pw"}"#.to_owned(),
                     ))
                     .expect("request"),
             )
@@ -551,7 +551,7 @@ async fn sec007_untrusted_proxy_headers_ignored() {
                 .header("content-type", "application/json")
                 .header("x-forwarded-for", "99.99.99.99")
                 .body(Body::from(
-                    r#"{"username":"admin","password":"wrong"}"#.to_owned(),
+                    r#"{"username":"admin","password":"wrong-pw"}"#.to_owned(),
                 ))
                 .expect("request"),
         )

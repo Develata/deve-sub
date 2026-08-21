@@ -289,6 +289,7 @@ async fn login(
             "invalid_credentials",
             "invalid username or password",
         ),
+        auth::AuthError::InvalidInput(msg) => err(StatusCode::BAD_REQUEST, "invalid_input", msg),
         auth::AuthError::RateLimited => err(
             StatusCode::TOO_MANY_REQUESTS,
             "rate_limited",

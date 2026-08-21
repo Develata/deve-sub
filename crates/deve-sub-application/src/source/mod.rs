@@ -29,6 +29,7 @@ pub use node_commands::{
 };
 pub use parse::{ImportParseResult, ParseContentError, parse_content, parse_for_import};
 pub use refresh::{
-    RefreshDeps, RefreshResult, execute_refresh_job, signal_cancel, start_refresh_job,
+    RefreshDeps, RefreshResult, execute_refresh_job, recover_crashed_refresh_jobs,
+    recover_stale_refresh_jobs, signal_cancel, start_refresh_job,
 };
 pub use scheduler::RefreshScheduler;

@@ -283,6 +283,20 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         Err(e) => tracing::warn!(error = %e, "failed to recover crashed probe runs"),
     }
 
+    // Crash recovery (constraint #20): mark any source refresh jobs left in
+    // Pending or Running as Failed. A stuck Running job holds the per-source
+    // lease (partial UNIQUE index) and blocks all future refreshes for that
+    // source (P0-10).
+    match deve_sub_application::recover_crashed_refresh_jobs(state.refresh_job_repo.as_ref()).await
+    {
+        Ok(n) if n > 0 => tracing::info!(
+            recovered = n,
+            "marked crashed source refresh jobs as failed"
+        ),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = %e, "failed to recover crashed source refresh jobs"),
+    }
+
     let scheduler_rx = shutdown_tx.subscribe();
     let scheduler_handle = tokio::spawn(async move {
         scheduler

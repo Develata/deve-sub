@@ -30,6 +30,7 @@ pub use probe::{
 pub use source::{
     FetchError, FetchResult, GeoIpPort, ImportParseResult, ParseContentError, RefreshScheduler,
     SourceAppError, SubscriptionFetcher, parse_content, parse_for_import,
+    recover_crashed_refresh_jobs, recover_stale_refresh_jobs,
 };
 pub use subscription::{
     CreateSubscriptionParams, CreateSubscriptionResult, GraceTokenCleanupScheduler,

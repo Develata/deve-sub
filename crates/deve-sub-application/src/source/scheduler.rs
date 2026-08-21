@@ -24,6 +24,10 @@ use super::refresh::{RefreshDeps, execute_refresh_job, start_refresh_job};
 
 const DEFAULT_TICK_SECS: u64 = 60;
 const DEFAULT_MAX_CONCURRENCY: usize = 4;
+/// A refresh job whose `started_at` is older than this is presumed dead
+/// (killed, panicked without unwind, or host lost power) and its lease is
+/// reclaimed at each tick (P0-10).
+const DEFAULT_LEASE_TIMEOUT_SECS: u64 = 600;
 
 pub struct RefreshScheduler {
     source_repo: std::sync::Arc<dyn SourceRepository>,
@@ -34,6 +38,7 @@ pub struct RefreshScheduler {
     geoip: std::sync::Arc<dyn GeoIpPort>,
     tick_interval: Duration,
     max_concurrency: usize,
+    lease_timeout: Duration,
 }
 
 impl RefreshScheduler {
@@ -55,6 +60,7 @@ impl RefreshScheduler {
             geoip,
             tick_interval: Duration::from_secs(DEFAULT_TICK_SECS),
             max_concurrency: DEFAULT_MAX_CONCURRENCY,
+            lease_timeout: Duration::from_secs(DEFAULT_LEASE_TIMEOUT_SECS),
         }
     }
 
@@ -67,6 +73,14 @@ impl RefreshScheduler {
     #[must_use]
     pub fn max_concurrency(mut self, max: usize) -> Self {
         self.max_concurrency = max.max(1);
+        self
+    }
+
+    /// Set the lease timeout after which a `Running` refresh job is presumed
+    /// dead and its lease is reclaimed at each scheduler tick (P0-10).
+    #[must_use]
+    pub fn lease_timeout(mut self, timeout: Duration) -> Self {
+        self.lease_timeout = timeout;
         self
     }
 
@@ -99,7 +113,13 @@ impl RefreshScheduler {
     /// lease (DB partial unique index on `source_refresh_jobs`) prevents
     /// concurrent refreshes even if the scheduler and a manual API call
     /// race.
+    ///
+    /// P0-10: before scanning due sources, reclaim leases held by `Running`
+    /// jobs older than `lease_timeout`. A job stuck in `Running` (runner
+    /// killed, panicked without unwind, or host lost power) otherwise
+    /// blocks all future refreshes for that source for the entire uptime.
     async fn tick(&self) {
+        self.reclaim_stale_leases().await;
         let due = self.collect_due_sources().await;
         if due.is_empty() {
             return;
@@ -239,5 +259,37 @@ impl RefreshScheduler {
             }
         }
         due
+    }
+
+    /// Reclaim leases held by `Running` refresh jobs older than
+    /// `lease_timeout` (P0-10).
+    ///
+    /// A job stuck in `Running` — the runner task was killed, panicked
+    /// without unwinding, or the host lost power — holds the per-source
+    /// lease via the partial UNIQUE index `idx_refresh_jobs_lease` and
+    /// blocks all future refreshes for that source. This sweep marks
+    /// those jobs as `Failed` so the lease is released and the next tick
+    /// can start a fresh refresh.
+    async fn reclaim_stale_leases(&self) {
+        let now = deve_sub_kernel::Timestamp::now();
+        let cutoff = now
+            - time::Duration::seconds(
+                i64::try_from(self.lease_timeout.as_secs()).unwrap_or(i64::MAX),
+            );
+        match super::refresh::recover_stale_refresh_jobs(
+            self.job_repo.as_ref(),
+            cutoff,
+            "lease timed out (scheduler stale-lease sweep)",
+        )
+        .await
+        {
+            Ok(n) if n > 0 => {
+                tracing::info!(recovered = n, "reclaimed stale refresh job leases");
+            }
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to reclaim stale refresh job leases");
+            }
+        }
     }
 }

@@ -390,4 +390,29 @@ pub trait SourceRefreshJobRepository: Send + Sync {
         source_id: SourceId,
         limit: u32,
     ) -> Result<Vec<SourceRefreshJob>, SourceError>;
+
+    /// Mark all jobs left in `Pending` or `Running` status as `Failed`
+    /// (crash recovery on startup, constraint #20).
+    ///
+    /// WHY: if the process crashes mid-refresh, the job row stays in
+    /// `Running` forever. Because the per-source lease is enforced by a
+    /// partial UNIQUE index on `(source_id) WHERE status = 'R'`, a stuck
+    /// Running row blocks all future refreshes for that source. This method
+    /// releases those orphaned leases. Returns the count of recovered jobs.
+    async fn recover_crashed_jobs(&self) -> Result<u64, SourceError>;
+
+    /// Mark `Running` jobs whose `started_at` is older than `max_age` as
+    /// `Failed` (scheduler tick lease sweep).
+    ///
+    /// WHY: a refresh that exceeds `max_age` is presumed dead — the runner
+    /// task may have been killed by the OS, panicked without unwinding, or
+    /// the host lost power. Unlike [`recover_crashed_jobs`](Self::recover_crashed_jobs)
+    /// (a blanket startup sweep), this is a bounded age-based check run at
+    /// each scheduler tick so a hung job does not hold the lease for the
+    /// entire uptime. Returns the count of recovered jobs.
+    ///
+    /// `cutoff` is the `started_at` threshold; any `Running` job with
+    /// `started_at < cutoff` is marked `Failed` with the given `reason`.
+    async fn recover_stale_jobs(&self, cutoff: Timestamp, reason: &str)
+    -> Result<u64, SourceError>;
 }

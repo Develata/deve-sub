@@ -10,7 +10,7 @@ use deve_sub_domain::source::refresh_job::{
     RefreshPhase, SourceRefreshJob, SourceRefreshJobStatus,
 };
 use deve_sub_domain::{SourceError, SourceRefreshJobRepository};
-use deve_sub_kernel::{SourceId, SourceRefreshJobId};
+use deve_sub_kernel::{SourceId, SourceRefreshJobId, Timestamp};
 use sqlx::sqlite::SqlitePool;
 
 use crate::timestamp::{format_ts, parse_ts};
@@ -258,5 +258,40 @@ impl SourceRefreshJobRepository for SqliteSourceRefreshJobRepository {
         .await
         .map_err(|e| SourceError::Storage(e.to_string()))?;
         rows.iter().map(|r| r.to_domain()).collect()
+    }
+
+    async fn recover_crashed_jobs(&self) -> Result<u64, SourceError> {
+        let now = format_ts(deve_sub_kernel::Timestamp::now()).map_err(SourceError::Storage)?;
+        let result = sqlx::query(
+            "UPDATE source_refresh_jobs \
+             SET status = 'F', finished_at = ?, error_message = 'process crashed during refresh' \
+             WHERE status = 'P' OR status = 'R'",
+        )
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SourceError::Storage(e.to_string()))?;
+        Ok(result.rows_affected())
+    }
+
+    async fn recover_stale_jobs(
+        &self,
+        cutoff: Timestamp,
+        reason: &str,
+    ) -> Result<u64, SourceError> {
+        let cutoff_str = format_ts(cutoff).map_err(SourceError::Storage)?;
+        let now = format_ts(deve_sub_kernel::Timestamp::now()).map_err(SourceError::Storage)?;
+        let result = sqlx::query(
+            "UPDATE source_refresh_jobs \
+             SET status = 'F', finished_at = ?, error_message = ? \
+             WHERE status = 'R' AND started_at < ?",
+        )
+        .bind(now)
+        .bind(reason)
+        .bind(cutoff_str)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SourceError::Storage(e.to_string()))?;
+        Ok(result.rows_affected())
     }
 }

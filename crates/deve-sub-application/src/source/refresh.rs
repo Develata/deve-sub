@@ -348,3 +348,40 @@ fn map_lease_error(e: SourceError) -> SourceAppError {
         other => SourceAppError::Source(other),
     }
 }
+
+/// Mark all source refresh jobs left in `Pending` or `Running` status as
+/// `Failed` (crash recovery on startup, constraint #20). Returns the count
+/// of recovered jobs.
+///
+/// Mirrors [`probe::recover_crashed_runs`](crate::probe::recover_crashed_runs)
+/// for the source refresh job lease: a process crash mid-refresh leaves the
+/// job row in `Running`, and the partial UNIQUE index
+/// `idx_refresh_jobs_lease` then blocks all future refreshes for that
+/// source. Calling this on startup releases those orphaned leases (P0-10).
+///
+/// # Errors
+/// Returns [`SourceAppError::Source`] if the storage update fails.
+pub async fn recover_crashed_refresh_jobs(
+    job_repo: &dyn SourceRefreshJobRepository,
+) -> Result<u64, SourceAppError> {
+    Ok(job_repo.recover_crashed_jobs().await?)
+}
+
+/// Mark `Running` refresh jobs whose `started_at` is older than `cutoff` as
+/// `Failed` (scheduler tick lease sweep). Returns the count of recovered
+/// jobs.
+///
+/// A refresh that exceeds the lease timeout is presumed dead — the runner
+/// task was killed, panicked without unwinding, or the host lost power.
+/// This bounded age-based check runs at each scheduler tick so a hung job
+/// does not hold the lease for the entire uptime (P0-10).
+///
+/// # Errors
+/// Returns [`SourceAppError::Source`] if the storage update fails.
+pub async fn recover_stale_refresh_jobs(
+    job_repo: &dyn SourceRefreshJobRepository,
+    cutoff: Timestamp,
+    reason: &str,
+) -> Result<u64, SourceAppError> {
+    Ok(job_repo.recover_stale_jobs(cutoff, reason).await?)
+}

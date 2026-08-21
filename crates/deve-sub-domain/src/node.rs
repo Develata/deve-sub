@@ -148,11 +148,15 @@ impl NodeChain {
 /// struct field declaration order. The resulting string is the input to the
 /// keyed HMAC identity fingerprint.
 ///
-/// WHY: `id`, `display_name`, `source`, `extras`, `region`, `tags`, `chain`,
-/// `udp`, `multiplex`, and `congestion` are excluded — they are either
-/// assigned by the pool, user-facing metadata, or negotiated at runtime, and
-/// do not distinguish otherwise-identical proxy endpoints. Two nodes that
-/// differ ONLY in these fields are the same endpoint and should dedup.
+/// WHY: `id`, `display_name`, `source`, `region`, `tags`, and `chain` are
+/// excluded — they are assigned by the pool, user-facing metadata, or
+/// negotiated at runtime, and do not distinguish otherwise-identical proxy
+/// endpoints. Two nodes that differ ONLY in these fields are the same
+/// endpoint and should dedup. `udp`, `multiplex`, `congestion`, and
+/// `extras` ARE included (P0-08): two nodes at the same endpoint with the
+/// same credentials but different UDP capability, multiplex settings,
+/// congestion control, or protocol-specific extra fields are functionally
+/// different proxies and must NOT be collapsed.
 #[derive(Debug, Clone, Serialize)]
 struct NodeIdentityRef<'a> {
     protocol: &'a ProtocolKind,
@@ -162,6 +166,10 @@ struct NodeIdentityRef<'a> {
     tls: &'a Option<TlsConfig>,
     transport: &'a Option<Transport>,
     obfuscation: &'a Option<Obfuscation>,
+    udp: &'a UdpCapability,
+    multiplex: &'a Option<MultiplexConfig>,
+    congestion: &'a Option<CongestionConfig>,
+    extras: &'a BTreeMap<String, serde_json::Value>,
 }
 
 impl Node {
@@ -169,10 +177,10 @@ impl Node {
     ///
     /// Two nodes with the same canonical identity are considered the same
     /// proxy endpoint and deduplicated in the pool. Fields that distinguish
-    /// endpoints — credentials, SNI, transport path, Reality keys, etc. —
-    /// are included; metadata fields (`id`, `display_name`, `source`,
-    /// `extras`, `region`, `tags`, `chain`, `udp`, `multiplex`,
-    /// `congestion`) are not.
+    /// endpoints — credentials, SNI, transport path, Reality keys, UDP
+    /// capability, multiplex, congestion control, extras — are included;
+    /// metadata fields (`id`, `display_name`, `source`, `region`, `tags`,
+    /// `chain`) are not.
     ///
     /// Keys are sorted alphabetically by going through `serde_json::Value`
     /// (BTreeMap-backed by default), giving canonical JSON independent of
@@ -193,6 +201,10 @@ impl Node {
             tls: &self.tls,
             transport: &self.transport,
             obfuscation: &self.obfuscation,
+            udp: &self.udp,
+            multiplex: &self.multiplex,
+            congestion: &self.congestion,
+            extras: &self.extras,
         })?;
         serde_json::to_string(&v)
     }

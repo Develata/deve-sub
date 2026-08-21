@@ -363,6 +363,75 @@ async fn migration_0004_applies_and_schema_is_correct() {
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
 
+/// P0-02: a populated DB upgraded through migration 0017 must not fail on
+/// the unique index. All existing rows receive the '' default fingerprint;
+/// two or more non-missing nodes with '' must coexist without violating
+/// idx_nodes_dedup. The index excludes empty fingerprints from the unique
+/// constraint, while still enforcing uniqueness for real fingerprints.
+#[tokio::test]
+async fn migration_0017_populated_db_upgrade_succeeds() {
+    let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    let db_path = tmp
+        .into_temp_path()
+        .keep()
+        .expect("failed to keep temp path");
+
+    let pool = create_test_pool(&db_path).await;
+    run_migrations(&pool).await;
+
+    // WHY: simulate a populated DB where existing nodes have the default
+    // empty fingerprint (the state after upgrading through 0017).
+    for i in 1..=3u32 {
+        let id = format!("01J0NODE00POPULATED{i:014}");
+        sqlx::query(
+            "INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind("vless")
+        .bind(format!("host{i}.example.com"))
+        .bind(443_i64)
+        .bind("")
+        .execute(&pool)
+        .await
+        .expect("empty-fingerprint non-missing node must not collide");
+    }
+
+    // Real fingerprints are still uniquely constrained.
+    sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind("01J0NODE00REALFP000000001")
+    .bind("vless")
+    .bind("real.example.com")
+    .bind(443_i64)
+    .bind("fp-real-001")
+    .execute(&pool)
+    .await
+    .expect("first real-fingerprint insert");
+
+    let dup_result = sqlx::query(
+        "INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) \
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind("01J0NODE00REALFP000000002")
+    .bind("vless")
+    .bind("real.example.com")
+    .bind(443_i64)
+    .bind("fp-real-001")
+    .execute(&pool)
+    .await;
+    assert!(
+        dup_result.is_err(),
+        "duplicate real fingerprint must still be rejected by idx_nodes_dedup"
+    );
+
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
+}
+
 #[tokio::test]
 async fn migration_0004_is_idempotent() {
     let tmp = tempfile::NamedTempFile::new().expect("failed to create temp file");

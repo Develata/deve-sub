@@ -16,9 +16,12 @@ ALTER TABLE nodes ADD COLUMN identity_fingerprint TEXT NOT NULL DEFAULT '';
 
 DROP INDEX IF EXISTS idx_nodes_dedup;
 
--- WHY: partial unique index guarantees at most one active (non-missing)
--- node per identity fingerprint. Missing nodes are exempt so a node can
--- be marked missing and later reactivated without violating the
--- constraint. Multiple missing rows with the same fingerprint are
--- allowed (the dedup queries take the first).
-CREATE UNIQUE INDEX idx_nodes_dedup ON nodes(identity_fingerprint) WHERE missing_from_source = 0;
+-- WHY (P0-02): the partial unique index excludes rows with empty
+-- fingerprints (identity_fingerprint != ''). Without this guard, a
+-- populated DB upgraded through this migration would fail: all existing
+-- rows receive the '' default, and two or more non-missing nodes would
+-- violate a unique constraint on ''. Excluding '' lets legacy rows
+-- coexist until re-imported with a real fingerprint; new nodes with
+-- actual fingerprints are still uniquely constrained.
+CREATE UNIQUE INDEX idx_nodes_dedup ON nodes(identity_fingerprint)
+    WHERE missing_from_source = 0 AND identity_fingerprint != '';

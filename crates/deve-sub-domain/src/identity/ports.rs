@@ -108,8 +108,25 @@ pub trait RecoveryCodeRepository: Send + Sync {
         code_hash: &str,
     ) -> Result<Option<RecoveryCode>, IdentityError>;
 
-    /// Mark a recovery code as used.
-    async fn mark_used(&self, id: RecoveryCodeId) -> Result<(), IdentityError>;
+    /// Atomically mark a recovery code as used and create a new session in a
+    /// single transaction.
+    ///
+    /// WHY: `login_2fa`'s recovery-code path must consume the code and create
+    /// the session in one atomic step. Without this, a failure between
+    /// `mark_used` and `session_repo.create` would burn a recovery code
+    /// without granting a session — the user loses a code and stays locked
+    /// out (AUTH-006, P0-11).
+    ///
+    /// Returns [`IdentityError::RecoveryCodeNotFound`] if the code was
+    /// already used or does not exist (the `AND used = 0` guard prevents
+    /// concurrent double-use). The session insert happens only after the
+    /// code is consumed, inside the same transaction; a session failure
+    /// rolls back the consumption.
+    async fn mark_used_and_create_session(
+        &self,
+        recovery_code_id: RecoveryCodeId,
+        session: &Session,
+    ) -> Result<(), IdentityError>;
 
     /// Delete all recovery codes for a user.
     async fn delete_all_for_user(&self, user_id: UserId) -> Result<(), IdentityError>;

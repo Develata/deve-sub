@@ -5,7 +5,7 @@
 //! regenerated or when 2FA is disabled.
 
 use async_trait::async_trait;
-use deve_sub_domain::{IdentityError, RecoveryCode, RecoveryCodeRepository};
+use deve_sub_domain::{IdentityError, RecoveryCode, RecoveryCodeRepository, Session};
 use deve_sub_kernel::{RecoveryCodeId, UserId};
 use sqlx::sqlite::SqlitePool;
 
@@ -115,19 +115,55 @@ impl RecoveryCodeRepository for SqliteRecoveryCodeRepository {
         row.map(|r| r.to_domain()).transpose()
     }
 
-    async fn mark_used(&self, id: RecoveryCodeId) -> Result<(), IdentityError> {
-        // WHY: `AND used = 0` prevents concurrent double-use. SQLite counts a
-        // matched-but-unchanged row in `rows_affected()`, so without this
-        // guard a no-op UPDATE (1→1) would return 1 and two concurrent
-        // requests could both "succeed" (AUTH-006).
+    async fn mark_used_and_create_session(
+        &self,
+        recovery_code_id: RecoveryCodeId,
+        session: &Session,
+    ) -> Result<(), IdentityError> {
+        // WHY: consume the recovery code and insert the session in one
+        // transaction so a session-insert failure rolls back the code
+        // consumption. Without this, `login_2fa` could burn a recovery code
+        // without granting a session, leaving the user one code poorer and
+        // still locked out (AUTH-006, P0-11).
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| IdentityError::Storage(e.to_string()))?;
+
         let result = sqlx::query("UPDATE recovery_codes SET used = 1 WHERE id = ? AND used = 0")
-            .bind(id.to_string())
-            .execute(&self.pool)
+            .bind(recovery_code_id.to_string())
+            .execute(&mut *tx)
             .await
             .map_err(|e| IdentityError::Storage(e.to_string()))?;
         if result.rows_affected() == 0 {
+            // WHY: drop tx explicitly to roll back; `begin` acquired a write
+            // lock that must be released before returning.
+            drop(tx);
             return Err(IdentityError::RecoveryCodeNotFound);
         }
+
+        let created_at =
+            crate::timestamp::format_ts(session.created_at).map_err(IdentityError::Storage)?;
+        let expires_at =
+            crate::timestamp::format_ts(session.expires_at).map_err(IdentityError::Storage)?;
+        sqlx::query(
+            "INSERT INTO sessions (id, user_id, token_hash, created_at, expires_at, revoked) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(session.id.to_string())
+        .bind(session.user_id.to_string())
+        .bind(&session.token_hash)
+        .bind(created_at)
+        .bind(expires_at)
+        .bind(session.revoked as i64)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| IdentityError::Storage(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| IdentityError::Storage(e.to_string()))?;
         Ok(())
     }
 

@@ -9,7 +9,7 @@ use deve_sub_domain::{
     IdentityError, RecoveryCode, RecoveryCodeRepository, Session, SessionRepository, TotpSecret,
     TotpSecretRepository, User, UserRepository,
 };
-use deve_sub_kernel::{Timestamp, UserId};
+use deve_sub_kernel::{RecoveryCodeId, Timestamp, UserId};
 use deve_sub_security::{
     MasterKey, PURPOSE_RECOVERY, PURPOSE_SESSION, decrypt, encrypt, generate_recovery_codes,
     generate_session_token, hmac_digest, normalize_recovery_code, totp_generate_secret,
@@ -299,6 +299,14 @@ pub async fn login_2fa(
     // brute-force attempts.
     rate_limiter.check(&user.username, ip)?;
 
+    // WHY: when the recovery-code path finds a matching unused code, it does
+    // NOT consume it here. Consumption is deferred to
+    // `mark_used_and_create_session` after the session is built, so the code
+    // is burned only when the session is also persisted. Without this, a
+    // failure between `mark_used` and `session_repo.create` would burn a
+    // recovery code without granting a session (AUTH-006, P0-11).
+    let mut recovery_code_to_consume: Option<RecoveryCodeId> = None;
+
     let code_valid = if code.len() == 6 && code.chars().all(|c| c.is_ascii_digit()) {
         // TOTP code path
         let code_u32: u32 = code.parse().map_err(|_| AuthError::InvalidTwoFactorCode)?;
@@ -325,14 +333,8 @@ pub async fn login_2fa(
             .await?
         {
             Some(recovery_code) => {
-                // WHY: if mark_used fails with RecoveryCodeNotFound, another
-                // concurrent request already consumed this code. Return
-                // false to enforce single-use (AUTH-006).
-                match recovery_code_repo.mark_used(recovery_code.id).await {
-                    Ok(()) => true,
-                    Err(IdentityError::RecoveryCodeNotFound) => false,
-                    Err(other) => return Err(AuthError::Identity(other)),
-                }
+                recovery_code_to_consume = Some(recovery_code.id);
+                true
             }
             None => false,
         }
@@ -348,7 +350,26 @@ pub async fn login_2fa(
     let token_hash = hmac_digest(PURPOSE_SESSION, &token, master_key.as_bytes())?;
     let expires_at = now + session_ttl;
     let session = Session::new(user.id, token_hash, expires_at);
-    session_repo.create(&session).await?;
+
+    if let Some(recovery_code_id) = recovery_code_to_consume {
+        // WHY: atomic consume + session create in one transaction. If another
+        // concurrent request consumed the code between find_unused_by_hash and
+        // here, mark_used_and_create_session returns RecoveryCodeNotFound —
+        // treat as a failed attempt, matching the previous mark_used behavior
+        // (AUTH-006).
+        recovery_code_repo
+            .mark_used_and_create_session(recovery_code_id, &session)
+            .await
+            .map_err(|e| match e {
+                IdentityError::RecoveryCodeNotFound => {
+                    rate_limiter.record_failure(&user.username, ip);
+                    AuthError::InvalidTwoFactorCode
+                }
+                other => AuthError::Identity(other),
+            })?;
+    } else {
+        session_repo.create(&session).await?;
+    }
 
     // WHY: update last_login_at on every successful 2FA login, matching the
     // non-2FA login path. `let _ =` ignores storage failure — the login

@@ -152,7 +152,7 @@ fn mihomo_emits_ss_plugin() {
     });
     let output = emit_mihomo(&[node]).expect("emit");
     assert!(
-        output.contains("plugin: v2ray-plugin"),
+        output.contains("plugin: \"v2ray-plugin\""),
         "must emit plugin name"
     );
     assert!(

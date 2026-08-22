@@ -408,14 +408,26 @@ fn parse_hysteria2(entry: &Value) -> Result<Node, ParseError> {
         password: get_str(entry, "obfs-password"),
     });
 
-    let congestion =
-        (get_str(entry, "up").is_some() || get_str(entry, "down").is_some()).then(|| {
-            CongestionConfig {
-                controller: CongestionController::Bbr,
-                up_bps: get_str(entry, "up").and_then(|s| crate::uri::parse_bandwidth(&s).ok()),
-                down_bps: get_str(entry, "down").and_then(|s| crate::uri::parse_bandwidth(&s).ok()),
-            }
-        });
+    let up_bps = get_str(entry, "up").and_then(|s| crate::uri::parse_bandwidth(&s).ok());
+    let down_bps = get_str(entry, "down").and_then(|s| crate::uri::parse_bandwidth(&s).ok());
+    let controller = get_str(entry, "congestion-controller").map(|c| match c.as_str() {
+        "bbr" => CongestionController::Bbr,
+        "cubic" => CongestionController::Cubic,
+        "new_reno" => CongestionController::NewReno,
+        other => CongestionController::Other(other.to_owned()),
+    });
+    // WHY: preserve congestion-controller on round-trip. Create
+    // CongestionConfig when any of up/down/controller is present,
+    // defaulting to Bbr when only bandwidth is specified.
+    let congestion = if up_bps.is_some() || down_bps.is_some() || controller.is_some() {
+        Some(CongestionConfig {
+            controller: controller.unwrap_or(CongestionController::Bbr),
+            up_bps,
+            down_bps,
+        })
+    } else {
+        None
+    };
 
     // WHY: mihomo stores `hop-interval` as a string of seconds (min 5,
     // default 30 in mihomo). The canonical model stores a Duration. See P3.

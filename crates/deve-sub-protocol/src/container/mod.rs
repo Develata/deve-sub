@@ -68,7 +68,13 @@ pub(crate) fn get_port(v: &Value, key: &str) -> Result<Option<u16>, ParseError> 
             .map(Some)
             .map_err(|_| ParseError::InvalidPort(s.to_owned()));
     }
-    Ok(None)
+    // WHY: returning Ok(None) here would silently drop a present-but-
+    // non-numeric port, hiding malformed configs. Surface it as an error
+    // so the caller can record the entry as Unsupported rather than
+    // emitting a node with a missing port.
+    Err(ParseError::InvalidPort(format!(
+        "port field `{key}` has non-numeric value: {port_val}"
+    )))
 }
 
 /// Parse a host string into a [`Host`], reusing the URI parser's logic.

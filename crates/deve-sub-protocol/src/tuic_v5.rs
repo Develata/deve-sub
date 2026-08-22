@@ -18,6 +18,7 @@ use deve_sub_domain::{
     ProtocolKind, TuicV5Config, UdpRelayMode,
 };
 
+use crate::container::default_tls_enabled;
 use crate::error::ParseError;
 use crate::uri::{
     build_common_tls, collect_query, decode_fragment, decode_userinfo, node_shell, parse_bool,
@@ -42,7 +43,12 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
     let display_name = decode_fragment(url);
     let query: HashMap<String, String> = collect_query(url);
 
-    let tls = build_common_tls(&query, &["skip-cert-verify", "insecure"], None)?;
+    // WHY: TUIC is QUIC-based and always uses TLS. Even without explicit
+    // TLS query params, force `tls` to Some with defaults.
+    let tls = Some(
+        build_common_tls(&query, &["skip-cert-verify", "insecure"], None)?
+            .unwrap_or_else(default_tls_enabled),
+    );
 
     let congestion = query.get("congestion-controller").map(|v| {
         let controller = match v.as_str() {

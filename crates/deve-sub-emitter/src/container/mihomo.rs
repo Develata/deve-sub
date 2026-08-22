@@ -240,7 +240,7 @@ fn emit_ss(
     // Boolean values emit as bare YAML bools so mihomo's struct decoder
     // parses them with the correct type. See E1.
     if let Some(ref p) = cfg.plugin {
-        entry.push_str(&format!("\n    plugin: {p}"));
+        entry.push_str(&format!("\n    plugin: {}", yaml_dq(p)));
         if let Some(ref opts) = cfg.plugin_opts {
             entry.push_str("\n    plugin-opts:");
             for pair in opts.split(';') {
@@ -342,6 +342,13 @@ fn emit_hysteria2(
     // the Hysteria2Option `up`/`down` string fields. format_bandwidth
     // produces the canonical Mbps/Kbps/bps form. See E2.
     if let Some(ref cong) = node.congestion {
+        let controller = match &cong.controller {
+            CongestionController::Bbr => "bbr",
+            CongestionController::Cubic => "cubic",
+            CongestionController::NewReno => "new_reno",
+            CongestionController::Other(n) => n.as_str(),
+        };
+        entry.push_str(&format!("\n    congestion-controller: {controller}"));
         if let Some(up) = cong.up_bps {
             entry.push_str(&format!("\n    up: \"{}\"", format_bandwidth(up)));
         }
@@ -798,8 +805,8 @@ fn push_transport_opts(transport: &Transport, entry: &mut String) {
                         yaml_dq(host)
                     ));
                 }
+                entry.push_str("\n      v2ray-http-upgrade: true");
             }
-            entry.push_str("\n      v2ray-http-upgrade: true");
         }
         TransportKind::Grpc => {
             if let Some(ref path) = transport.path {

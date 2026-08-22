@@ -479,16 +479,13 @@ fn parse_wireguard(entry: &Value) -> Result<Node, ParseError> {
         })
         .collect::<Result<Vec<_>, ParseError>>()?;
 
-    let (server, port) = peers_arr
+    let (host, port) = peers_arr
         .first()
         .and_then(|p| {
             let endpoint = get_str(p, "endpoint")?;
-            let (host_str, port_str) = endpoint.rsplit_once(':')?;
-            let port: u16 = port_str.parse().ok()?;
-            Some((host_str.to_owned(), port))
+            crate::uri::parse_host_port(&endpoint).ok()
         })
         .ok_or(ParseError::MissingField("peer endpoint"))?;
-    let host = parse_host_str(&server)?;
 
     let config = ProtocolConfig::WireGuard(WireGuardConfig {
         private_key: secret_key,

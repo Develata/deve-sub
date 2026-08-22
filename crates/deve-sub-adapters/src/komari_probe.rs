@@ -98,9 +98,12 @@ impl KomariProbeAdapter {
         }
     }
 
-    async fn fetch_nodes(&self, endpoint: &str) -> Result<Vec<KomariNode>, ProbeError> {
+    async fn fetch_nodes(
+        &self,
+        client: &reqwest::Client,
+        endpoint: &str,
+    ) -> Result<Vec<KomariNode>, ProbeError> {
         let url = format!("{endpoint}/api/nodes");
-        let client = build_ssrf_client(self.ssrf.as_ref(), &url).await?;
 
         let resp = client
             .get(&url)
@@ -129,11 +132,11 @@ impl KomariProbeAdapter {
 
     async fn fetch_latest_counters(
         &self,
+        client: &reqwest::Client,
         endpoint: &str,
         uuid: &str,
     ) -> Result<Option<(u64, u64)>, ProbeError> {
         let url = format!("{endpoint}/api/records/load?uuid={uuid}&load_type=network&hours=1");
-        let client = build_ssrf_client(self.ssrf.as_ref(), &url).await?;
 
         let resp = client
             .get(&url)
@@ -174,7 +177,12 @@ impl KomariProbeAdapter {
 impl ProbeSourceAdapter for KomariProbeAdapter {
     async fn sync_traffic(&self, source: &ProbeSource) -> Result<ProbeSyncResult, ProbeError> {
         let last_snapshot = Self::parse_snapshot(source)?;
-        let nodes = self.fetch_nodes(&source.endpoint_url).await?;
+        // WHY: one client for the whole sync — every per-node request targets
+        // the same endpoint host, so the SSRF check and DNS pinning are done
+        // once and the connection pool is reused across nodes instead of
+        // building (and TLS-handshaking) a client per node.
+        let client = build_ssrf_client(self.ssrf.as_ref(), &source.endpoint_url).await?;
+        let nodes = self.fetch_nodes(&client, &source.endpoint_url).await?;
 
         let now = Timestamp::now();
         let mut samples = Vec::new();
@@ -182,29 +190,46 @@ impl ProbeSourceAdapter for KomariProbeAdapter {
 
         for node in &nodes {
             let uuid = &node.uuid;
-            let latest = self
-                .fetch_latest_counters(&source.endpoint_url, uuid)
-                .await?;
+            // WHY: a single failing node must not abort the whole sync —
+            // skip it and keep the remaining nodes' samples. Its counters
+            // are absent from the new snapshot, so the next sync treats it
+            // as a first sighting (baseline-only) instead of double-counting.
+            let latest = match self
+                .fetch_latest_counters(&client, &source.endpoint_url, uuid)
+                .await
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(uuid = %uuid, error = %e, "Komari per-node fetch failed; skipping");
+                    continue;
+                }
+            };
 
             let (net_in, net_out) = match latest {
                 Some(v) => v,
                 None => continue,
             };
 
-            let (prev_in, prev_out) = match last_snapshot.servers.get(uuid) {
-                Some(prev) => (prev.net_in, prev.net_out),
+            let (delta_in, delta_out) = match last_snapshot.servers.get(uuid) {
+                Some(prev) => {
+                    let din = if net_in >= prev.net_in {
+                        net_in - prev.net_in
+                    } else {
+                        net_in
+                    };
+                    let dout = if net_out >= prev.net_out {
+                        net_out - prev.net_out
+                    } else {
+                        net_out
+                    };
+                    (din, dout)
+                }
+                // WHY: first sighting records the baseline only — the panel
+                // counter is a lifetime cumulative; attributing it as fresh
+                // traffic would instantly exhaust the quota of a newly
+                // bound long-running panel (never double-count, under-count
+                // is safe).
                 None => (0, 0),
-            };
-
-            let delta_in = if net_in >= prev_in {
-                net_in - prev_in
-            } else {
-                net_in
-            };
-            let delta_out = if net_out >= prev_out {
-                net_out - prev_out
-            } else {
-                net_out
             };
 
             new_snapshot

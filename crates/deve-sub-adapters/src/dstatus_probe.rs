@@ -131,18 +131,17 @@ impl ProbeSourceAdapter for DStatusProbeAdapter {
 
         for (node_id, node_data) in &response.data {
             let current_used = node_data.traffic_stats.used;
-            let prev_used = last_snapshot
-                .nodes
-                .get(node_id)
-                .map(|e| e.used)
-                .unwrap_or(0);
-
-            // WHY: if current < previous, the billing cycle reset. Treat the
-            // new value as the full delta (no negative traffic).
-            let delta = if current_used >= prev_used {
-                current_used - prev_used
-            } else {
-                current_used
+            // WHY: first sighting (no previous snapshot entry) records the
+            // baseline only — the panel counter is a cumulative billing
+            // value; attributing it as fresh traffic would instantly exhaust
+            // the quota of a newly bound long-running panel (never
+            // double-count, under-count is safe).
+            let delta = match last_snapshot.nodes.get(node_id) {
+                Some(prev) if current_used >= prev.used => current_used - prev.used,
+                // WHY: current < previous means the billing cycle reset;
+                // treat the new value as the full delta (no negative traffic).
+                Some(_) => current_used,
+                None => 0,
             };
 
             new_snapshot

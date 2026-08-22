@@ -13,7 +13,9 @@
 //! - gzip/deflate/brotli/zstd: automatic decompression (SRC-012).
 //! - ETag/If-None-Match: conditional fetch, 304 → NotModified.
 
+use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -38,6 +40,20 @@ const DEFAULT_MAX_REDIRECTS: usize = 3;
 /// body is only used for the `FetchError::Http` diagnostic message and is
 /// logged at `warn` level, so a short prefix suffices and limits info-leak.
 const ERROR_BODY_CAP: usize = 1024;
+
+/// Maximum distinct hostnames with cached clients before the cache is
+/// cleared wholesale.
+///
+/// WHY: bounds memory (one pooled client per host). Subscription sources are
+/// operator-configured and few (tens), so a full-clear-at-cap policy is
+/// sufficient — LRU bookkeeping would add complexity for no practical gain.
+const CLIENT_CACHE_MAX_HOSTS: usize = 64;
+
+/// A cached per-host client plus the pinned IPs it was built with.
+struct PinnedClient {
+    ips: Vec<IpAddr>,
+    client: reqwest::Client,
+}
 
 /// SSRF checker abstraction.
 ///
@@ -121,6 +137,10 @@ pub struct HttpFetcher<C: SsrfChecker = ProductionSsrfChecker> {
     max_body_size: usize,
     max_redirects: usize,
     user_agent: String,
+    /// Per-hostname clients with pinned DNS. Reusing a client across fetches
+    /// of the same host keeps the connection pool (TCP + TLS keep-alive)
+    /// alive instead of re-handshaking on every refresh tick.
+    client_cache: Mutex<HashMap<String, PinnedClient>>,
 }
 
 impl HttpFetcher<ProductionSsrfChecker> {
@@ -147,6 +167,7 @@ impl<C: SsrfChecker> HttpFetcher<C> {
             max_body_size: DEFAULT_MAX_BODY_SIZE,
             max_redirects: DEFAULT_MAX_REDIRECTS,
             user_agent: "deve-sub/0.1".to_owned(),
+            client_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -197,26 +218,7 @@ impl<C: SsrfChecker> HttpFetcher<C> {
             .await
             .map_err(|e| FetchError::Ssrf(e.to_string()))?;
 
-        let mut builder = reqwest::Client::builder()
-            .timeout(self.timeout)
-            .redirect(reqwest::redirect::Policy::none())
-            .gzip(true)
-            .deflate(true)
-            .brotli(true)
-            .zstd(true)
-            .user_agent(self.user_agent.clone());
-
-        // WHY: pin DNS only for domain names. IP literals connect directly
-        // and have already been validated by the SSRF checker.
-        if host.parse::<IpAddr>().is_err() {
-            let socket_addrs: Vec<SocketAddr> =
-                safe_ips.iter().map(|ip| SocketAddr::new(*ip, 0)).collect();
-            builder = builder.resolve_to_addrs(host, &socket_addrs);
-        }
-
-        let client = builder
-            .build()
-            .map_err(|e| FetchError::Connection(e.to_string()))?;
+        let client = self.client_for(host, &safe_ips)?;
 
         let mut request = client.get(url);
         if let Some(etag) = etag {
@@ -224,6 +226,57 @@ impl<C: SsrfChecker> HttpFetcher<C> {
         }
 
         request.send().await.map_err(|e| self.map_error(e))
+    }
+
+    /// Return a pooled client for `host`, pinning DNS to `ips`.
+    ///
+    /// WHY: a per-fetch `reqwest::Client` discards the connection pool on
+    /// every refresh tick (fresh TCP + TLS handshake). Caching one client per
+    /// hostname keeps keep-alive connections. The entry records the pinned
+    /// IPs it was built with; when the SSRF check returns a DIFFERENT set
+    /// (DNS change / rebinding attempt), the client is rebuilt so pinning
+    /// always reflects the freshly validated addresses. The guard is not
+    /// held across any `.await`.
+    fn client_for(&self, host: &str, ips: &[IpAddr]) -> Result<reqwest::Client, FetchError> {
+        let mut cache = self.client_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(entry) = cache.get(host)
+            && entry.ips == ips
+        {
+            return Ok(entry.client.clone());
+        }
+
+        let mut builder = reqwest::Client::builder()
+            .timeout(self.timeout)
+            .redirect(reqwest::redirect::Policy::none())
+            .gzip(true)
+            .deflate(true)
+            .brotli(true)
+            .zstd(true)
+            .user_agent(&self.user_agent);
+
+        // WHY: pin DNS only for domain names. IP literals connect directly
+        // and have already been validated by the SSRF checker.
+        if host.parse::<IpAddr>().is_err() {
+            let socket_addrs: Vec<SocketAddr> =
+                ips.iter().map(|ip| SocketAddr::new(*ip, 0)).collect();
+            builder = builder.resolve_to_addrs(host, &socket_addrs);
+        }
+
+        let client = builder
+            .build()
+            .map_err(|e| FetchError::Connection(e.to_string()))?;
+
+        if cache.len() >= CLIENT_CACHE_MAX_HOSTS {
+            cache.clear();
+        }
+        cache.insert(
+            host.to_owned(),
+            PinnedClient {
+                ips: ips.to_vec(),
+                client: client.clone(),
+            },
+        );
+        Ok(client)
     }
 
     /// Read the response body with a size limit.
@@ -259,7 +312,14 @@ impl<C: SsrfChecker> HttpFetcher<C> {
         if e.is_timeout() {
             FetchError::Timeout(self.timeout.as_secs())
         } else {
-            FetchError::Connection(e.to_string())
+            // WHY: reqwest's Display embeds the full request URL, which for
+            // airport subscriptions carries the token in the query string.
+            // The underlying source error carries the same diagnostic detail
+            // (connect refused, DNS failure, TLS error) without the URL.
+            let detail = std::error::Error::source(&e)
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "connection error".to_owned());
+            FetchError::Connection(detail)
         }
     }
 }

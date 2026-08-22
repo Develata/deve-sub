@@ -418,7 +418,10 @@ async fn probe001_nezha_sync_writes_traffic_and_snapshot() {
         .expect("sync");
     assert_eq!(sync_resp.status(), StatusCode::OK);
     let sync_json = body_to_json(sync_resp).await;
-    assert_eq!(sync_json["samples_written"], 2);
+    // WHY: first sighting records baselines only (delta contract) — a panel's
+    // lifetime counters must not land as fresh traffic on a newly bound
+    // subscription.
+    assert_eq!(sync_json["samples_written"], 0);
     assert_eq!(sync_json["snapshot_updated"], true);
     assert!(
         sync_json["source"]["last_sync_at"].as_str().is_some(),
@@ -441,13 +444,13 @@ async fn probe001_nezha_sync_writes_traffic_and_snapshot() {
     let traffic_json = body_to_json(traffic_resp).await;
     let total_upload = traffic_json["upload"].as_u64().expect("upload");
     let total_download = traffic_json["download"].as_u64().expect("download");
-    assert!(
-        total_upload >= 15_000,
-        "first sync upload should include both servers' counters: {total_upload}"
+    assert_eq!(
+        total_upload, 0,
+        "first sync must not attribute baseline counters as traffic"
     );
-    assert!(
-        total_download >= 26_000,
-        "first sync download should include both servers' counters: {total_download}"
+    assert_eq!(
+        total_download, 0,
+        "first sync must not attribute baseline counters as traffic"
     );
 
     mock.bump();
@@ -707,7 +710,8 @@ async fn probe002_dstatus_sync_writes_traffic_and_snapshot() {
         .expect("sync");
     assert_eq!(sync_resp.status(), StatusCode::OK);
     let sync_json = body_to_json(sync_resp).await;
-    assert_eq!(sync_json["samples_written"], 2);
+    // First sighting records baselines only (delta contract).
+    assert_eq!(sync_json["samples_written"], 0);
     assert_eq!(sync_json["snapshot_updated"], true);
 
     let traffic_resp = router
@@ -725,9 +729,9 @@ async fn probe002_dstatus_sync_writes_traffic_and_snapshot() {
     assert_eq!(traffic_resp.status(), StatusCode::OK);
     let traffic_json = body_to_json(traffic_resp).await;
     let total_download = traffic_json["download"].as_u64().expect("download");
-    assert!(
-        total_download >= 15_000_000_000,
-        "first sync download should include both nodes: {total_download}"
+    assert_eq!(
+        total_download, 0,
+        "first sync must not attribute baseline counters as traffic"
     );
 
     mock.bump();
@@ -898,7 +902,8 @@ async fn probe003_komari_sync_writes_traffic_and_snapshot() {
         .expect("sync");
     assert_eq!(sync_resp.status(), StatusCode::OK);
     let sync_json = body_to_json(sync_resp).await;
-    assert_eq!(sync_json["samples_written"], 2);
+    // First sighting records baselines only (delta contract).
+    assert_eq!(sync_json["samples_written"], 0);
     assert_eq!(sync_json["snapshot_updated"], true);
 
     let traffic_resp = router
@@ -917,13 +922,13 @@ async fn probe003_komari_sync_writes_traffic_and_snapshot() {
     let traffic_json = body_to_json(traffic_resp).await;
     let total_upload = traffic_json["upload"].as_u64().expect("upload");
     let total_download = traffic_json["download"].as_u64().expect("download");
-    assert!(
-        total_upload >= 15_000,
-        "first sync upload should include both servers: {total_upload}"
+    assert_eq!(
+        total_upload, 0,
+        "first sync must not attribute baseline counters as traffic"
     );
-    assert!(
-        total_download >= 26_000,
-        "first sync download should include both servers: {total_download}"
+    assert_eq!(
+        total_download, 0,
+        "first sync must not attribute baseline counters as traffic"
     );
 
     mock.bump();

@@ -10,7 +10,6 @@
 //! adapter Port" and PROBE-001.
 
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -19,39 +18,9 @@ use deve_sub_domain::{
 };
 use deve_sub_kernel::Timestamp;
 use serde::Deserialize;
-use url::Url;
 
 use crate::SsrfChecker;
-
-/// Maximum bytes read from an error response body for diagnostics.
-///
-/// WHY: bounds memory on the non-2xx path so a hostile panel cannot exhaust
-/// memory via a large error body, and limits injection of remote content into
-/// logs/DB/API responses. Matches `HttpFetcher::ERROR_BODY_CAP`.
-const ERROR_BODY_CAP: usize = 1024;
-
-/// Maximum bytes read from a success response body.
-///
-/// WHY: a compromised or buggy panel could return an enormous JSON body. The
-/// Nezha server list is bounded by the panel's server count, so 1 MiB is
-/// generous while preventing unbounded memory growth.
-const SUCCESS_BODY_CAP: usize = 1024 * 1024;
-
-/// Default request timeout: 30 seconds.
-const DEFAULT_TIMEOUT_SECS: u64 = 30;
-
-/// Read up to `cap` bytes of a response body.
-async fn read_body_capped(mut response: reqwest::Response, cap: usize) -> String {
-    let mut body = Vec::new();
-    while let Ok(Some(chunk)) = response.chunk().await {
-        body.extend_from_slice(&chunk);
-        if body.len() >= cap {
-            body.truncate(cap);
-            break;
-        }
-    }
-    String::from_utf8_lossy(&body).into_owned()
-}
+use crate::probe_common::{self, SUCCESS_BODY_CAP};
 
 #[derive(Deserialize)]
 struct NezhaServerState {
@@ -125,41 +94,9 @@ impl NezhaProbeAdapter {
         token: &str,
     ) -> Result<Vec<NezhaServer>, ProbeError> {
         let url = format!("{endpoint}/api/v1/server");
-        let parsed = Url::parse(&url)
-            .map_err(|e| ProbeError::ProbeFailed(format!("invalid endpoint URL: {e}")))?;
-        let host = parsed
-            .host_str()
-            .ok_or_else(|| ProbeError::ProbeFailed("endpoint URL has no hostname".to_owned()))?;
-
-        // WHY: SSRF guard prevents an admin-configured endpoint from pointing
-        // at internal addresses (loopback, private, link-local, CGNAT) and
-        // mitigates DNS rebinding by returning the validated IPs. Mirrors
-        // HttpFetcher's protection (SEC-001-005).
-        let safe_ips = self
-            .ssrf
-            .check(&url)
-            .await
-            .map_err(|e| ProbeError::ProbeFailed(format!("SSRF check failed: {e}")))?;
-
-        let mut builder = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-            // WHY: disable auto-redirect so a compromised panel cannot
-            // redirect the server to internal addresses after the SSRF
-            // check passes.
-            .redirect(reqwest::redirect::Policy::none());
-
-        // WHY: pin DNS to the validated IPs to prevent DNS rebinding between
-        // the SSRF check and the actual request. IP literals connect directly
-        // and were already validated by the SSRF checker.
-        if host.parse::<IpAddr>().is_err() {
-            let socket_addrs: Vec<SocketAddr> =
-                safe_ips.iter().map(|ip| SocketAddr::new(*ip, 0)).collect();
-            builder = builder.resolve_to_addrs(host, &socket_addrs);
-        }
-
-        let client = builder
-            .build()
-            .map_err(|e| ProbeError::ProbeFailed(format!("HTTP client build failed: {e}")))?;
+        // SSRF guard + DNS pinning live in probe_common (shared with the
+        // DStatus and Komari adapters, SEC-001-005).
+        let client = probe_common::build_ssrf_client(self.ssrf.as_ref(), &url).await?;
 
         let resp = client
             .get(&url)
@@ -170,20 +107,18 @@ impl NezhaProbeAdapter {
 
         let status = resp.status();
         if !status.is_success() {
-            let body = read_body_capped(resp, ERROR_BODY_CAP).await;
+            let body = probe_common::read_error_body(resp).await;
             return Err(ProbeError::ProbeFailed(format!(
                 "Nezha API returned {status}: {body}"
             )));
         }
 
-        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
-        let body = if body.len() >= SUCCESS_BODY_CAP {
+        let body = probe_common::read_body_capped(resp, SUCCESS_BODY_CAP).await;
+        if body.len() >= SUCCESS_BODY_CAP {
             return Err(ProbeError::ProbeFailed(format!(
                 "Nezha API response body exceeds {SUCCESS_BODY_CAP} bytes"
             )));
-        } else {
-            body
-        };
+        }
         serde_json::from_str::<Vec<NezhaServer>>(&body)
             .map_err(|e| ProbeError::ProbeFailed(format!("Nezha API response parse failed: {e}")))
     }
@@ -212,7 +147,13 @@ impl NezhaProbeAdapter {
                     };
                     (din, dout)
                 }
-                None => (srv.state.net_in_transfer, srv.state.net_out_transfer),
+                // WHY: first sighting of a server — the panel counter is a
+                // lifetime/billing cumulative. Attributing it as fresh
+                // traffic would instantly add terabytes to quota enforcement
+                // when a long-running panel is first bound. Record the
+                // baseline only; deltas start from the NEXT sync (never
+                // double-count, under-count is safe).
+                None => (0, 0),
             };
 
             new_snapshot.servers.insert(
@@ -293,18 +234,16 @@ mod tests {
     }
 
     #[test]
-    fn compute_samples_first_sync_returns_full_counters() {
+    fn compute_samples_first_sync_records_baseline_only() {
+        // WHY: first sync attributes ZERO traffic — panel counters are
+        // lifetime cumulatives; recording them would instantly exhaust a
+        // newly bound subscription's quota. Baselines are captured in the
+        // snapshot so the next sync can compute real deltas.
         let servers = vec![mk_server(1, 1000, 2000), mk_server(2, 500, 600)];
         let last = CounterSnapshot::default();
         let (samples, snapshot) = NezhaProbeAdapter::compute_samples(&servers, &last);
 
-        assert_eq!(samples.len(), 2);
-        assert_eq!(samples[0].external_server_id, "1");
-        assert_eq!(samples[0].upload, 1000);
-        assert_eq!(samples[0].download, 2000);
-        assert_eq!(samples[1].external_server_id, "2");
-        assert_eq!(samples[1].upload, 500);
-        assert_eq!(samples[1].download, 600);
+        assert!(samples.is_empty(), "first sync must not emit samples");
         assert_eq!(snapshot.servers.get("1").expect("server 1").net_in, 1000);
         assert_eq!(snapshot.servers.get("2").expect("server 2").net_out, 600);
     }

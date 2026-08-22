@@ -529,7 +529,19 @@ async fn probe004_sync_failure_preserves_stale_stats_and_marks_failed() {
     let sync1 = sync_source(&router, &cookie, &source_id).await;
     assert_eq!(sync1.status(), StatusCode::OK);
     let sync1_json = body_to_json(sync1).await;
-    assert_eq!(sync1_json["samples_written"], 1);
+    // WHY: first sighting records the panel's lifetime counters as baseline
+    // only (delta contract) — attributing them as fresh traffic would
+    // instantly add terabytes to a newly bound subscription's quota.
+    assert_eq!(sync1_json["samples_written"], 0);
+
+    // Advance the mock panel counters, then sync again: this sync emits the
+    // real delta.
+    mock.net_in.fetch_add(5_000, Ordering::Relaxed);
+    mock.net_out.fetch_add(7_000, Ordering::Relaxed);
+    let sync1b = sync_source(&router, &cookie, &source_id).await;
+    assert_eq!(sync1b.status(), StatusCode::OK);
+    let sync1b_json = body_to_json(sync1b).await;
+    assert_eq!(sync1b_json["samples_written"], 1);
 
     // Verify traffic records exist.
     let traffic_resp = router
@@ -548,12 +560,12 @@ async fn probe004_sync_failure_preserves_stale_stats_and_marks_failed() {
     let upload_after_success = traffic_json["upload"].as_u64().expect("upload");
     let download_after_success = traffic_json["download"].as_u64().expect("download");
     assert!(
-        upload_after_success >= 10_000,
-        "first sync should write upload bytes: {upload_after_success}"
+        upload_after_success >= 5_000,
+        "delta sync should write the upload delta: {upload_after_success}"
     );
     assert!(
-        download_after_success >= 20_000,
-        "first sync should write download bytes: {download_after_success}"
+        download_after_success >= 7_000,
+        "delta sync should write the download delta: {download_after_success}"
     );
 
     // Verify last_sync_status = Ok after successful sync (untagged enum:
@@ -668,11 +680,24 @@ async fn probe005_multi_source_aggregation_dashboard_traceability() {
     )
     .await;
 
-    // Sync both.
+    // Sync both. The first sync records the panels' lifetime counters as
+    // baselines only (delta contract), so advance the counters and sync a
+    // second round to emit real traffic samples.
     let sync_nezha = sync_source(&router, &cookie, &nezha_id).await;
     assert_eq!(sync_nezha.status(), StatusCode::OK);
     let sync_dstatus = sync_source(&router, &cookie, &dstatus_id).await;
     assert_eq!(sync_dstatus.status(), StatusCode::OK);
+
+    nezha_mock.net_in.fetch_add(3_000_000, Ordering::Relaxed);
+    nezha_mock.net_out.fetch_add(4_000_000, Ordering::Relaxed);
+    dstatus_mock
+        .used_a
+        .fetch_add(2_000_000_000, Ordering::Relaxed);
+
+    let sync_nezha2 = sync_source(&router, &cookie, &nezha_id).await;
+    assert_eq!(sync_nezha2.status(), StatusCode::OK);
+    let sync_dstatus2 = sync_source(&router, &cookie, &dstatus_id).await;
+    assert_eq!(sync_dstatus2.status(), StatusCode::OK);
 
     // Query the dashboard traffic aggregate.
     let dashboard = get_dashboard_traffic(&router, &cookie).await;

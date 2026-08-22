@@ -55,6 +55,17 @@ pub struct ServerConfig {
     /// to the placeholder HTML if the directory does not exist.
     #[serde(default = "default_web_dist_dir")]
     pub web_dist_dir: String,
+
+    /// Origins allowed by CORS, e.g. `["https://sub.example.com"]`.
+    ///
+    /// WHY: the web UI is same-origin by default, so CORS headers are
+    /// unnecessary — an empty list emits no CORS layer at all and the
+    /// browser's same-origin policy governs cross-origin access. Only an
+    /// operator hosting the UI on a different origin needs to list it here.
+    /// Mutating API routes additionally validate the `Origin` header against
+    /// the session's own origin (CSRF), which this list does not relax.
+    #[serde(default)]
+    pub allowed_origins: Vec<String>,
 }
 
 /// Database configuration.
@@ -162,6 +173,7 @@ impl Default for ServerConfig {
             bind: default_bind_addr(),
             serve_web: default_serve_web(),
             web_dist_dir: default_web_dist_dir(),
+            allowed_origins: Vec::new(),
         }
     }
 }

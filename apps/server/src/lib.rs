@@ -113,7 +113,8 @@ pub struct AppState {
 /// 1. `SetRequestIdLayer` — assign `x-request-id` before tracing
 /// 2. `TraceLayer` — structured per-request logs
 /// 3. `PropagateRequestIdLayer` — copy `x-request-id` to response
-/// 4. `CorsLayer` — permissive CORS for development
+/// 4. `CorsLayer` — only when `server.allowed_origins` is non-empty (the
+///    default same-origin deployment needs no CORS headers)
 /// 5. `CompressionLayer` — gzip compression
 ///
 /// CSRF protection (`Origin` header validation) is applied to the API router
@@ -145,12 +146,38 @@ pub fn build_router(state: AppState) -> Router {
         router.fallback(|| async { StatusCode::NOT_FOUND.into_response() })
     };
 
+    let router = router.layer(CompressionLayer::new());
+    let router = match cors_layer(&state.config.server.allowed_origins) {
+        Some(cors) => router.layer(cors),
+        None => router,
+    };
     router
-        .layer(CompressionLayer::new())
-        .layer(CorsLayer::permissive())
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(crate::logging::redacting_trace_layer())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+}
+
+/// Build a restrictive CORS layer from the configured origin allowlist.
+///
+/// WHY: `CorsLayer::permissive()` allowed every origin by default, which is
+/// the wrong production posture even with cookie-auth guarded by CSRF Origin
+/// validation — non-credentialed cross-origin reads were unconstrained. The
+/// web UI is same-origin by default, so an empty list emits NO CORS layer
+/// (same-origin requests do not use CORS); a non-empty list emits exactly
+/// those origins. Invalid entries are skipped with a warning rather than
+/// aborting startup.
+fn cors_layer(allowed_origins: &[String]) -> Option<CorsLayer> {
+    let mut origins = Vec::with_capacity(allowed_origins.len());
+    for raw in allowed_origins {
+        match raw.parse::<axum::http::HeaderValue>() {
+            Ok(value) => origins.push(value),
+            Err(e) => tracing::warn!(origin = raw, error = %e, "invalid allowed_origin skipped"),
+        }
+    }
+    if origins.is_empty() {
+        return None;
+    }
+    Some(CorsLayer::new().allow_origin(origins))
 }
 
 /// Run the HTTP server on the given bind address.

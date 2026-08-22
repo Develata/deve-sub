@@ -194,12 +194,11 @@ impl SourceRepository for SqliteSourceRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+                        if crate::error_classify::is_unique_violation(&e) {
                 SourceError::NameExists
-            } else {
-                SourceError::Storage(msg)
-            }
+                } else {
+                SourceError::Storage(e.to_string())
+                }
         })?;
         Ok(())
     }
@@ -293,11 +292,10 @@ impl SourceRepository for SqliteSourceRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 SourceError::NameExists
             } else {
-                SourceError::Storage(msg)
+                SourceError::Storage(e.to_string())
             }
         })?;
         if result.rows_affected() == 0 {

@@ -102,12 +102,11 @@ impl UserRepository for SqliteUserRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+                        if crate::error_classify::is_unique_violation(&e) {
                 IdentityError::UsernameExists
-            } else {
-                IdentityError::Storage(msg)
-            }
+                } else {
+                IdentityError::Storage(e.to_string())
+                }
         })?;
         Ok(())
     }

@@ -7,6 +7,7 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 pub mod audit_log_repository;
+pub mod error_classify;
 pub mod generation_cache_repository;
 pub mod node_override_repository;
 pub mod node_pool_repository;

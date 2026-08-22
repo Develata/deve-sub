@@ -82,12 +82,11 @@ impl TemplateRepository for SqliteTemplateRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+                        if crate::error_classify::is_unique_violation(&e) {
                 TemplateError::NameExists
-            } else {
-                TemplateError::Storage(msg)
-            }
+                } else {
+                TemplateError::Storage(e.to_string())
+                }
         })?;
         Ok(())
     }
@@ -130,12 +129,11 @@ impl TemplateRepository for SqliteTemplateRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+                        if crate::error_classify::is_unique_violation(&e) {
                 TemplateError::NameExists
-            } else {
-                TemplateError::Storage(msg)
-            }
+                } else {
+                TemplateError::Storage(e.to_string())
+                }
         })?;
 
         sqlx::query(
@@ -224,11 +222,10 @@ impl TemplateRepository for SqliteTemplateRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 TemplateError::NameExists
             } else {
-                TemplateError::Storage(msg)
+                TemplateError::Storage(e.to_string())
             }
         })?;
         if result.rows_affected() == 0 {
@@ -328,11 +325,10 @@ impl TemplateRepository for SqliteTemplateRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 TemplateError::NameExists
             } else {
-                TemplateError::Storage(msg)
+                TemplateError::Storage(e.to_string())
             }
         })?;
         if result.rows_affected() == 0 {

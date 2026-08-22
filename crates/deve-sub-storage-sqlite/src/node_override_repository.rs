@@ -78,6 +78,11 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
     async fn upsert_override(&self, ov: &NodeOverride) -> Result<(), SourceError> {
         let enabled_i = ov.enabled.map(i64::from);
         let skip_cert_verify_i = ov.skip_cert_verify.map(i64::from);
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         sqlx::query(
             "INSERT INTO node_overrides \
              (id, node_id, display_name, region, enabled, sni, skip_cert_verify, fingerprint, sort_order) \
@@ -97,9 +102,15 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
         .bind(skip_cert_verify_i)
         .bind(&ov.fingerprint)
         .bind(ov.sort_order)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| SourceError::Storage(e.to_string()))?;
+        // Overrides alter generation output (enabled, display_name, region,
+        // sort_order) — invalidate the generation cache (migration 0008).
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+        tx.commit()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
     }
 
@@ -117,9 +128,19 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
     }
 
     async fn delete_override(&self, node_id: NodeId) -> Result<(), SourceError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         sqlx::query("DELETE FROM node_overrides WHERE node_id = ?")
             .bind(node_id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        // Reverting to source-provided values changes generation output.
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+        tx.commit()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
@@ -135,6 +156,11 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
         // existing id and all other fields are preserved. Passing None for
         // region clears the manual region (NODE-006).
         let new_id = NodeOverrideId::new();
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         sqlx::query(
             "INSERT INTO node_overrides (id, node_id, region) VALUES (?, ?, ?) \
              ON CONFLICT(node_id) DO UPDATE SET region = excluded.region",
@@ -142,9 +168,14 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
         .bind(new_id.to_string())
         .bind(node_id.to_string())
         .bind(&region)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| SourceError::Storage(e.to_string()))?;
+        // Region feeds region filters in node selection — bump the cache.
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+        tx.commit()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
     }
 
@@ -177,6 +208,8 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
             .map_err(|e| SourceError::Storage(e.to_string()))?;
             count += result.rows_affected();
         }
+        // Enabled toggles change which nodes emitters include.
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
         tx.commit()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
@@ -202,6 +235,8 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
                 .await
                 .map_err(|e| SourceError::Storage(e.to_string()))?;
         }
+        // Tags drive tag-based node selection in generation.
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
         tx.commit()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
@@ -232,6 +267,7 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
                     .map_err(|e| SourceError::Storage(e.to_string()))?;
             }
         }
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
         tx.commit()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
@@ -255,11 +291,10 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
             .execute(&self.pool)
             .await
             .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("UNIQUE") {
+                if crate::error_classify::is_unique_violation(&e) {
                     SourceError::TagExists
                 } else {
-                    SourceError::Storage(msg)
+                    SourceError::Storage(e.to_string())
                 }
             })?;
         Ok(Tag {
@@ -270,16 +305,26 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
     }
 
     async fn delete_tag(&self, tag_id: TagId) -> Result<(), SourceError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         // WHY: ON DELETE CASCADE in migration 0004 removes node_tags rows
-        // referencing this tag automatically. No manual cascade needed.
+        // referencing this tag automatically — those removals change
+        // tag-based selection, so the pool revision must bump too.
         let result = sqlx::query("DELETE FROM tags WHERE id = ?")
             .bind(tag_id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
         if result.rows_affected() == 0 {
             return Err(SourceError::TagNotFound);
         }
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+        tx.commit()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
     }
 }

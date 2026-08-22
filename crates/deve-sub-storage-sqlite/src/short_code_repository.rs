@@ -63,15 +63,14 @@ impl ShortCodeRepository for SqliteShortCodeRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
             // WHY: UNIQUE(code) is the only unique constraint on this table.
             // A violation means the CSPRNG-generated code collided with an
             // existing one (OUT-013). The application layer retries with a
             // fresh code.
-            if msg.contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 SubscriptionError::ShortCodeExists
             } else {
-                SubscriptionError::Storage(msg)
+                SubscriptionError::Storage(e.to_string())
             }
         })?;
         Ok(())
@@ -118,11 +117,10 @@ impl ShortCodeRepository for SqliteShortCodeRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 SubscriptionError::ShortCodeExists
             } else {
-                SubscriptionError::Storage(msg)
+                SubscriptionError::Storage(e.to_string())
             }
         })?;
 

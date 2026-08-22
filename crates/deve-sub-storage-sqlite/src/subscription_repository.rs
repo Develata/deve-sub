@@ -139,13 +139,12 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
             // WHY: UNIQUE(owner_id, slug) is the only unique constraint on
             // this table. A violation means the slug is taken for this owner.
-            if msg.contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 SubscriptionError::SlugExists
             } else {
-                SubscriptionError::Storage(msg)
+                SubscriptionError::Storage(e.to_string())
             }
         })?;
         Ok(())
@@ -207,11 +206,10 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
         .execute(&mut *tx)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 SubscriptionError::SlugExists
             } else {
-                SubscriptionError::Storage(msg)
+                SubscriptionError::Storage(e.to_string())
             }
         })?;
 
@@ -342,11 +340,10 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 SubscriptionError::SlugExists
             } else {
-                SubscriptionError::Storage(msg)
+                SubscriptionError::Storage(e.to_string())
             }
         })?;
         if result.rows_affected() == 0 {

@@ -417,3 +417,126 @@ async fn list_nodes_returns_tags() {
     assert_eq!(got.tags.len(), 1, "get_node also returns tags");
     assert_eq!(got.tags[0].name, "Production");
 }
+
+/// Pool-affecting override mutations must bump the global pool revision
+/// (migration 0008) so the generation cache key changes — otherwise admins
+/// toggling a node's enabled flag keep serving stale cached subscriptions
+/// until the next source refresh.
+#[tokio::test]
+async fn override_mutations_bump_pool_revision() {
+    use deve_sub_domain::PoolMetaRepository;
+    use deve_sub_storage_sqlite::SqlitePoolMetaRepository;
+
+    let db = TestDb::new().await;
+    let override_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
+    let meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+    let node_id = import_node(&db).await;
+
+    let before = meta_repo.get_revision().await.expect("revision before");
+
+    override_repo
+        .upsert_override(&make_override(node_id))
+        .await
+        .expect("upsert");
+    let after_upsert = meta_repo
+        .get_revision()
+        .await
+        .expect("revision after upsert");
+    assert!(
+        after_upsert.value() > before.value(),
+        "upsert must bump revision"
+    );
+
+    override_repo
+        .patch_override_region(node_id, Some("DE".to_owned()))
+        .await
+        .expect("patch region");
+    let after_patch = meta_repo
+        .get_revision()
+        .await
+        .expect("revision after patch");
+    assert!(
+        after_patch.value() > after_upsert.value(),
+        "patch must bump revision"
+    );
+
+    override_repo
+        .delete_override(node_id)
+        .await
+        .expect("delete");
+    let after_delete = meta_repo
+        .get_revision()
+        .await
+        .expect("revision after delete");
+    assert!(
+        after_delete.value() > after_patch.value(),
+        "delete must bump revision"
+    );
+}
+
+/// Tag assignment and tag deletion (which cascades node_tags) must also
+/// bump the revision: tags drive tag-based node selection.
+#[tokio::test]
+async fn tag_mutations_bump_pool_revision() {
+    use deve_sub_domain::PoolMetaRepository;
+    use deve_sub_storage_sqlite::SqlitePoolMetaRepository;
+
+    let db = TestDb::new().await;
+    let override_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
+    let meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+    let node_id = import_node(&db).await;
+
+    let tag = override_repo
+        .create_tag("rev-tag", None)
+        .await
+        .expect("create tag");
+    let before = meta_repo.get_revision().await.expect("revision before");
+
+    override_repo
+        .set_node_tags(node_id, &[tag.id])
+        .await
+        .expect("set tags");
+    let after_set = meta_repo.get_revision().await.expect("revision after set");
+    assert!(
+        after_set.value() > before.value(),
+        "set_node_tags must bump"
+    );
+
+    override_repo.delete_tag(tag.id).await.expect("delete tag");
+    let after_delete = meta_repo
+        .get_revision()
+        .await
+        .expect("revision after delete");
+    assert!(
+        after_delete.value() > after_set.value(),
+        "delete_tag must bump"
+    );
+}
+
+/// Chain writes alter emitted output and must bump the revision (NODE-017).
+#[tokio::test]
+async fn set_node_chain_bumps_pool_revision() {
+    use deve_sub_domain::PoolMetaRepository;
+    use deve_sub_storage_sqlite::SqlitePoolMetaRepository;
+
+    let db = TestDb::new().await;
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let node_a = trojan_node(TROJAN_A);
+    let node_b = trojan_node(TROJAN_B);
+    let id_a = node_a.id;
+    pool_repo
+        .import_nodes(vec![node_a, node_b])
+        .await
+        .expect("import");
+
+    let before = meta_repo.get_revision().await.expect("revision before");
+    pool_repo
+        .set_node_chain(id_a, Some(&[trojan_node(TROJAN_B).id]))
+        .await
+        .expect("set chain");
+    let after = meta_repo.get_revision().await.expect("revision after");
+    assert!(after.value() > before.value(), "set_node_chain must bump");
+}

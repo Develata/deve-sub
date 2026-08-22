@@ -349,9 +349,9 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
 
-    let _ = scheduler_handle.await;
-    let _ = grace_handle.await;
-    let _ = traffic_snapshot_handle.await;
+    stop_scheduler(scheduler_handle, "refresh-scheduler").await;
+    stop_scheduler(grace_handle, "grace-token-scheduler").await;
+    stop_scheduler(traffic_snapshot_handle, "traffic-snapshot-scheduler").await;
 
     // B-14: cancel all in-flight probe runs so the runner writes Cancelled
     // terminal status, then wait for probe jobs to finish within a timeout.
@@ -366,6 +366,27 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     tracing::info!("background jobs stopped, server exiting");
 
     Ok(())
+}
+
+/// Await a scheduler task with a bounded grace period (constraint #20).
+///
+/// WHY: `RefreshScheduler::run` only observes the shutdown signal between
+/// ticks; a tick with slow in-flight fetches (up to the HTTP timeout each)
+/// would otherwise hold process exit open indefinitely. After the grace
+/// period the task is aborted — refresh jobs are lease-tracked in the DB and
+/// recovered as Failed on next start, so aborting mid-tick loses nothing.
+async fn stop_scheduler(mut handle: tokio::task::JoinHandle<()>, name: &'static str) {
+    match tokio::time::timeout(Duration::from_secs(30), &mut handle).await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => tracing::warn!(task = name, error = %e, "scheduler task panicked"),
+        Err(_) => {
+            tracing::warn!(
+                task = name,
+                "scheduler exceeded 30s shutdown grace — aborting"
+            );
+            handle.abort();
+        }
+    }
 }
 
 /// Create a shutdown future that listens for SIGTERM and SIGINT.

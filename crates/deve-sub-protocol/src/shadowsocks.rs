@@ -44,38 +44,59 @@ pub(crate) fn parse(uri: &str) -> Result<Node, ParseError> {
     // WHY: Check for SIP002 vs legacy *before* stripping path. Legacy Base64
     // uses the standard alphabet which includes `/`, so blindly splitting on
     // `/` would corrupt the Base64 body. Only SIP002 has a path component.
-    let (method, password, host, port) =
-        if let Some((userinfo, host_port_path)) = authority_and_path.split_once('@') {
-            // SIP002: userinfo is Base64URL(method:password)@host:port[/path].
-            // Strip path only for SIP002 (Base64URL uses `-`/`_`, never `/`).
-            let host_port = host_port_path.split('/').next().unwrap_or(host_port_path);
+    let (method, password, host, port) = if let Some((userinfo, host_port_path)) =
+        authority_and_path.split_once('@')
+    {
+        // SIP002: userinfo is Base64URL(method:password)@host:port[/path].
+        // Strip path only for SIP002 (Base64URL uses `-`/`_`, never `/`).
+        let host_port = host_port_path.split('/').next().unwrap_or(host_port_path);
 
-            let decoded = decode_base64_flexible(userinfo)?;
-            let decoded_str =
-                String::from_utf8(decoded).map_err(|e| ParseError::InvalidBase64(e.to_string()))?;
-            let (method, password) = decoded_str
-                .split_once(':')
-                .ok_or(ParseError::MissingField("method:password in userinfo"))?;
-
-            let (host, port) = parse_host_port(host_port)?;
-
-            (method.to_owned(), password.to_owned(), host, port)
-        } else {
-            // Legacy: entire authority is Base64(method:password@host:port).
-            // Do NOT strip path — the Base64 body may contain `/`.
-            let decoded = decode_base64_flexible(authority_and_path)?;
-            let decoded_str =
-                String::from_utf8(decoded).map_err(|e| ParseError::InvalidBase64(e.to_string()))?;
-            let (userinfo, host_port) = decoded_str.split_once('@').ok_or(
-                ParseError::MissingField("method:password@host:port in legacy base64"),
-            )?;
-            let (method, password) = userinfo
-                .split_once(':')
-                .ok_or(ParseError::MissingField("method:password"))?;
-
-            let (host, port) = parse_host_port(host_port)?;
-            (method.to_owned(), password.to_owned(), host, port)
+        // WHY: SIP002 (2022 edition) also permits plain `method:password`
+        // userinfo. The two forms are unambiguous — Base64 never contains
+        // ':' — so fall back to plain only when Base64 decoding fails AND
+        // the userinfo could be a valid plain form (must contain ':').
+        // The structural separator is the FIRST raw ':'; each part is
+        // percent-decoded afterwards so an encoded `%3A` in the password
+        // does not split.
+        let (decoded_str, plain) = match decode_base64_flexible(userinfo) {
+            Ok(bytes) => (
+                String::from_utf8(bytes).map_err(|e| ParseError::InvalidBase64(e.to_string()))?,
+                false,
+            ),
+            Err(_) if userinfo.contains(':') => (userinfo.to_owned(), true),
+            Err(_) => return Err(ParseError::InvalidBase64(userinfo.to_owned())),
         };
+        let (method, password) = decoded_str
+            .split_once(':')
+            .ok_or(ParseError::MissingField("method:password in userinfo"))?;
+        let (method, password) = if plain {
+            (
+                crate::uri::decode_userinfo(method),
+                crate::uri::decode_userinfo(password),
+            )
+        } else {
+            (method.to_owned(), password.to_owned())
+        };
+
+        let (host, port) = parse_host_port(host_port)?;
+
+        (method, password, host, port)
+    } else {
+        // Legacy: entire authority is Base64(method:password@host:port).
+        // Do NOT strip path — the Base64 body may contain `/`.
+        let decoded = decode_base64_flexible(authority_and_path)?;
+        let decoded_str =
+            String::from_utf8(decoded).map_err(|e| ParseError::InvalidBase64(e.to_string()))?;
+        let (userinfo, host_port) = decoded_str.split_once('@').ok_or(ParseError::MissingField(
+            "method:password@host:port in legacy base64",
+        ))?;
+        let (method, password) = userinfo
+            .split_once(':')
+            .ok_or(ParseError::MissingField("method:password"))?;
+
+        let (host, port) = parse_host_port(host_port)?;
+        (method.to_owned(), password.to_owned(), host, port)
+    };
 
     // Parse plugin from query parameter `plugin=name;opt1=v1;opt2=v2`.
     let (plugin, plugin_opts) = match query {

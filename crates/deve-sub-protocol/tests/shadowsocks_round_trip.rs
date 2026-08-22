@@ -168,3 +168,21 @@ fn shadowsocks_legacy_base64_with_slash() {
     };
     assert_eq!(cfg.method, "aes-256-gcm");
 }
+
+/// SIP002 (2022 edition) allows plain `method:password` userinfo. Base64
+/// never contains ':', so the parser must accept it via the plain fallback.
+#[test]
+fn shadowsocks_plain_userinfo_sip002_2022() {
+    let uri = "ss://aes-256-gcm:p%40ss@example.com:8388#Plain";
+    let node = deve_sub_protocol::parse_uri(uri).expect("parse");
+    assert_eq!(node.protocol, ProtocolKind::Shadowsocks);
+    let ProtocolConfig::Shadowsocks(cfg) = &node.config else {
+        panic!("expected Shadowsocks");
+    };
+    assert_eq!(cfg.method, "aes-256-gcm");
+    match &node.authentication {
+        deve_sub_domain::Authentication::Password { password } => assert_eq!(password, "p@ss"),
+        other => panic!("expected password auth, got {other:?}"),
+    }
+    assert_eq!(node.endpoint.port, 8388);
+}

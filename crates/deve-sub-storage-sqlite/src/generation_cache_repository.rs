@@ -15,6 +15,11 @@ pub struct SqliteGenerationCacheRepository {
     pool: SqlitePool,
 }
 
+/// Retention bound: inactive entries kept per (template_id, profile) as the
+/// find_latest last-good fallback pool; older inactive entries are pruned on
+/// every store.
+const INACTIVE_RETAIN: i64 = 8;
+
 impl SqliteGenerationCacheRepository {
     #[must_use]
     pub fn new(pool: SqlitePool) -> Self {
@@ -95,7 +100,41 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         row.map(|r| r.to_domain()).transpose()
     }
 
+    async fn find_latest(
+        &self,
+        template_id: TemplateId,
+        profile: &str,
+        selection_mode: &str,
+        selection_payload: &str,
+    ) -> Result<Option<GenerationCacheEntry>, TemplateError> {
+        // WHY: order by id, not pool_revision — ULID ids are monotonic by
+        // creation time, so this is the newest stored entry for the
+        // selection shape even if revisions were bumped without storing.
+        let row: Option<CacheRow> = sqlx::query_as(
+            "SELECT id, template_id, template_version, profile, mode, selection_mode, \
+             selection_payload, pool_revision, cache_key, content, is_active \
+             FROM generation_cache \
+             WHERE template_id = ? AND profile = ? AND selection_mode = ? \
+             AND selection_payload = ? \
+             ORDER BY id DESC LIMIT 1",
+        )
+        .bind(template_id.to_string())
+        .bind(profile)
+        .bind(selection_mode)
+        .bind(selection_payload)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| TemplateError::Storage(e.to_string()))?;
+        row.map(|r| r.to_domain()).transpose()
+    }
+
     async fn store(&self, entry: &GenerationCacheEntry) -> Result<(), TemplateError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
         sqlx::query(
             "INSERT INTO generation_cache \
              (id, template_id, template_version, profile, mode, selection_mode, \
@@ -113,9 +152,33 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         .bind(&entry.cache_key)
         .bind(&entry.content)
         .bind(i64::from(entry.is_active))
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
+        // Retention: prune inactive entries beyond the newest INACTIVE_RETAIN
+        // for this (template_id, profile). WHY: repeated regenerations (e.g.
+        // every pool-revision bump via delivery) insert one row each; without
+        // a bound the table grows unboundedly. The active entry is excluded
+        // so the published version is never pruned, and the newest inactive
+        // entries remain available as the find_latest last-good fallback
+        // (constraint #19).
+        sqlx::query(
+            "DELETE FROM generation_cache WHERE id IN (\
+                 SELECT id FROM generation_cache \
+                 WHERE template_id = ? AND profile = ? AND is_active = 0 \
+                 ORDER BY id DESC LIMIT -1 OFFSET ?)",
+        )
+        .bind(entry.template_id.to_string())
+        .bind(&entry.profile)
+        .bind(INACTIVE_RETAIN)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| TemplateError::Storage(e.to_string()))?;
         Ok(())
     }
 

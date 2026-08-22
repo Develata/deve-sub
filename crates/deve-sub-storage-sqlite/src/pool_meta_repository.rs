@@ -14,6 +14,21 @@ pub struct SqlitePoolMetaRepository {
     pool: SqlitePool,
 }
 
+/// Bump the global pool revision inside an existing transaction.
+///
+/// WHY: pool mutations that change generation output (reconcile, import,
+/// override/tag/chain writes) must bump the revision in the SAME
+/// transaction as the mutation — otherwise a generation running between the
+/// two writes could cache content under the old revision (migration 0008:
+/// "bumped on every node pool mutation").
+pub(crate) async fn bump_revision_tx(tx: &mut sqlx::SqliteConnection) -> Result<(), SourceError> {
+    sqlx::query("UPDATE pool_meta SET revision = revision + 1 WHERE id = 1")
+        .execute(tx)
+        .await
+        .map_err(|e| SourceError::Storage(e.to_string()))?;
+    Ok(())
+}
+
 impl SqlitePoolMetaRepository {
     #[must_use]
     pub fn new(pool: SqlitePool) -> Self {

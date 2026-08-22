@@ -151,6 +151,13 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
         .await
         .expect("drop 0020 subscription_short_codes unique");
 
+    // Reverse migration 0021: drop the retention index so forward-migrating
+    // through 0021 (CREATE INDEX idx_latency_records_measured) succeeds.
+    sqlx::query("DROP INDEX IF EXISTS idx_latency_records_measured")
+        .execute(&pool)
+        .await
+        .expect("reverse 0021 index");
+
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
         .execute(&pool)
         .await

@@ -108,6 +108,13 @@ pub trait ProbeRunRepository: Send + Sync {
     /// startup). Returns the count of recovered runs.
     async fn recover_crashed_runs(&self) -> Result<u64, ProbeError>;
 
+    /// Delete all runs created strictly before `cutoff`; their latency
+    /// records are removed by cascade. Returns the number of runs deleted.
+    ///
+    /// Retention hook invoked by the daily maintenance tick so
+    /// `probe_runs`/`latency_records` stay bounded. Idempotent.
+    async fn prune_older_than(&self, cutoff: Timestamp) -> Result<u64, ProbeError>;
+
     /// Delete a probe run and its results.
     async fn delete(&self, id: ProbeRunId) -> Result<(), ProbeError>;
 }
@@ -143,5 +150,14 @@ pub trait ProbeSourceAdapter: Send + Sync {
     /// - compute upload/download deltas (cumulative models) or current usage
     ///   (quota models);
     /// - encrypt the new counter snapshot for persistence.
+    ///
+    /// Delta contract (review C-4, all three adapters):
+    /// - first sighting of a node (no prior snapshot) records a BASELINE
+    ///   only — sample upload/download are zero, never the cumulative
+    ///   counters;
+    /// - a cumulative counter that DECREASED (panel reset) records the
+    ///   current value as the delta for this interval;
+    /// - a node visible now but absent from the prior snapshot is a first
+    ///   sighting (baseline-only), not a reset.
     async fn sync_traffic(&self, source: &ProbeSource) -> Result<ProbeSyncResult, ProbeError>;
 }

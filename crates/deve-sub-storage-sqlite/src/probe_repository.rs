@@ -232,7 +232,7 @@ impl ProbeSourceRepository for SqliteProbeSourceRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            if e.to_string().contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 ProbeError::NameExists
             } else {
                 ProbeError::Storage(e.to_string())
@@ -347,7 +347,7 @@ impl ProbeSourceRepository for SqliteProbeSourceRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            if e.to_string().contains("UNIQUE") {
+            if crate::error_classify::is_unique_violation(&e) {
                 ProbeError::NameExists
             } else {
                 ProbeError::Storage(e.to_string())
@@ -787,6 +787,20 @@ impl ProbeRunRepository for SqliteProbeRunRepository {
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ProbeError::Storage(e.to_string()))?;
+        Ok(result.rows_affected())
+    }
+
+    async fn prune_older_than(&self, cutoff: Timestamp) -> Result<u64, ProbeError> {
+        // created_at strings are canonical whole-second UTC (see
+        // format_ts), so string comparison against the cutoff is exact.
+        let cutoff_iso = format_ts(cutoff).map_err(ProbeError::Storage)?;
+        // WHY: deleting the run cascades latency_records, so one statement
+        // bounds both tables.
+        let result = sqlx::query("DELETE FROM probe_runs WHERE created_at < ?")
+            .bind(cutoff_iso)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ProbeError::Storage(e.to_string()))?;
         Ok(result.rows_affected())
     }
 

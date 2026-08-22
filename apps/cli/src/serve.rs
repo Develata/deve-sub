@@ -321,6 +321,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let traffic_snapshot_scheduler = TrafficDailySnapshotScheduler::new(
         Arc::clone(&state.traffic_repo),
         Arc::clone(&state.traffic_daily_snapshot_repo),
+        Arc::clone(&state.probe_run_repo),
     );
     let traffic_snapshot_rx = shutdown_tx.subscribe();
     let traffic_snapshot_handle = tokio::spawn(async move {

@@ -27,6 +27,11 @@ use sqlx::sqlite::SqlitePool;
 use crate::node_row::{NODE_COLUMNS, NodeRow};
 use crate::timestamp::format_ts;
 
+/// Retention bound: newest snapshots kept per source; older ones are pruned
+/// at the end of each reconcile transaction (cascade removes their
+/// source_items).
+const SOURCE_SNAPSHOT_RETAIN: i64 = 10;
+
 /// SQLite-backed node pool repository.
 pub struct SqliteNodePoolRepository {
     pool: SqlitePool,
@@ -341,10 +346,25 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         // are invalidated. WHY: the cache key includes pool_revision; bumping
         // here ensures a post-refresh generation produces a new cache entry
         // rather than serving stale content (GEN-015, constraint #19).
-        sqlx::query("UPDATE pool_meta SET revision = revision + 1 WHERE id = 1")
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+
+        // 8. Retention: keep only the newest SOURCE_SNAPSHOT_RETAIN snapshots
+        // for this source. WHY: source_items rows (one per node per refresh)
+        // are the dominant storage growth path; ON DELETE CASCADE removes
+        // them with their snapshot. The snapshot inserted above is the
+        // highest-version row for this source, so the active snapshot is
+        // never pruned.
+        sqlx::query(
+            "DELETE FROM source_snapshots WHERE source_id = ? AND id NOT IN \
+             (SELECT id FROM source_snapshots WHERE source_id = ? \
+              ORDER BY version DESC LIMIT ?)",
+        )
+        .bind(input.source_id.to_string())
+        .bind(input.source_id.to_string())
+        .bind(SOURCE_SNAPSHOT_RETAIN)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| SourceError::Storage(e.to_string()))?;
 
         tx.commit()
             .await
@@ -542,10 +562,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         // Bump the global pool revision so stale generation cache entries are
         // invalidated. WHY: same as reconcile — the cache key includes
         // pool_revision (GEN-015).
-        sqlx::query("UPDATE pool_meta SET revision = revision + 1 WHERE id = 1")
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
 
         tx.commit()
             .await
@@ -617,15 +634,25 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             }
             None => None,
         };
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         let result = sqlx::query("UPDATE nodes SET chain_json = ? WHERE id = ?")
             .bind(&chain_json)
             .bind(node_id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
         if result.rows_affected() == 0 {
             return Err(SourceError::NodeNotFound(node_id.to_string()));
         }
+        // Chain changes alter emitted output (NODE-017) — invalidate cache.
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+        tx.commit()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
     }
 }

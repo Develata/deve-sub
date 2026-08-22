@@ -78,11 +78,22 @@ async fn get_dashboard_latency(
 async fn get_dashboard_traffic(
     State(state): State<AppState>,
     _admin: AdminUser,
-    Query(_q): Query<DashboardTrafficQuery>,
+    Query(q): Query<DashboardTrafficQuery>,
 ) -> Result<Json<DashboardTrafficResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let subscription_filter = match &q.subscription_id {
+        Some(sub_id_str) => Some(SubscriptionId::parse(sub_id_str).map_err(|_| {
+            err(
+                StatusCode::BAD_REQUEST,
+                "invalid_subscription_id",
+                "subscription_id is not a valid ULID",
+            )
+        })?),
+        None => None,
+    };
     let aggregate = build_dashboard_traffic(
         state.traffic_repo.as_ref(),
         state.probe_source_repo.as_ref(),
+        subscription_filter,
     )
     .await
     .map_err(map_dashboard_error)?;

@@ -22,15 +22,24 @@ use super::error::TemplateAppError;
 /// against the profile's capability matrix. Compatible nodes go into
 /// `included_node_ids`; incompatible nodes go into `excluded` with a reason.
 ///
-/// Returns a domain [`CompatibilityReport`]; the delivery layer maps it to
-/// `CompatibilityReportDto` at the API boundary.
+/// Returns a domain [`CompatibilityReport`] plus the fetched pool entries
+/// keyed by node ID. The caller reuses the entries for emission instead of
+/// re-fetching them from the pool (PERF-17: the generation pipeline otherwise
+/// calls `get_nodes` twice — once here and once before emit). The delivery
+/// layer maps the report to `CompatibilityReportDto` at the API boundary.
 ///
 /// This is a read-only operation.
 pub async fn check_compatibility(
     node_ids: &[NodeId],
     profile: ProfileKind,
     pool_repo: &dyn NodePoolRepository,
-) -> Result<CompatibilityReport, TemplateAppError> {
+) -> Result<
+    (
+        CompatibilityReport,
+        std::collections::HashMap<NodeId, NodePoolEntry>,
+    ),
+    TemplateAppError,
+> {
     let cap = capability_for(profile);
     let entries = fetch_nodes(node_ids, pool_repo).await?;
 
@@ -55,11 +64,14 @@ pub async fn check_compatibility(
         }
     }
 
-    Ok(CompatibilityReport {
-        profile: profile.as_kebab().to_owned(),
-        included_node_ids: included,
-        excluded,
-    })
+    Ok((
+        CompatibilityReport {
+            profile: profile.as_kebab().to_owned(),
+            included_node_ids: included,
+            excluded,
+        },
+        entries,
+    ))
 }
 
 async fn fetch_nodes(
@@ -130,7 +142,7 @@ mod tests {
     async fn unknown_node_reported_as_excluded() {
         let id = NodeId::parse("01KZAAAAAAAAAAAAAAAAAAAAAA").expect("ulid");
         let pool = EmptyPool;
-        let report = check_compatibility(&[id], ProfileKind::Mihomo, &pool)
+        let (report, _entries) = check_compatibility(&[id], ProfileKind::Mihomo, &pool)
             .await
             .expect("compat");
         assert!(report.included_node_ids.is_empty());

@@ -54,7 +54,7 @@ async fn get_traffic(
         .map_err(|e| map_traffic_error(e, "get_traffic"))?;
 
     Ok(Json(TrafficSummaryResponse {
-        subscription_id: id,
+        subscription_id: subscription_id.to_string(),
         upload: summary.upload,
         download: summary.download,
         total: summary.total(),

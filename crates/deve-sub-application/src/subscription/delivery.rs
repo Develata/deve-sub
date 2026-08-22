@@ -51,6 +51,19 @@ pub struct DeliveryResult {
     pub subscription_userinfo: String,
 }
 
+/// The outcome of a delivery request: either full content or a 304
+/// Not-Modified signal when the client's `If-None-Match` matches the current
+/// ETag. The `NotModified` variant carries only the ETag, avoiding the cost
+/// of building response headers and cloning content when the client already
+/// has the latest version (PERF-21).
+#[derive(Debug, Clone)]
+pub enum DeliveryOutcome {
+    /// Full content delivery (200 OK).
+    Content(DeliveryResult),
+    /// Client's cache is current (304 Not Modified). Contains the ETag.
+    NotModified(String),
+}
+
 /// Bundled storage and crypto dependencies for delivery. Passing these as a
 /// single struct keeps the delivery functions under the argument-count lint
 /// and mirrors the `AppState` grouping the Delivery layer already holds.
@@ -96,7 +109,8 @@ pub async fn deliver_subscription(
     token_plaintext: &str,
     profile: Option<&str>,
     user_agent: Option<&str>,
-) -> Result<DeliveryResult, SubscriptionAppError> {
+    if_none_match: Option<&str>,
+) -> Result<DeliveryOutcome, SubscriptionAppError> {
     let token_digest = hmac_digest(
         PURPOSE_SUBSCRIPTION_TOKEN,
         token_plaintext,
@@ -129,7 +143,7 @@ pub async fn deliver_subscription(
         .await?
         .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
 
-    deliver_for_subscription(deps, &subscription, profile, user_agent).await
+    deliver_for_subscription(deps, &subscription, profile, user_agent, if_none_match).await
 }
 
 /// Resolve a short code to subscription content (`GET /s/{code}`).
@@ -150,7 +164,8 @@ pub async fn deliver_by_short_code(
     code: &str,
     profile: Option<&str>,
     user_agent: Option<&str>,
-) -> Result<DeliveryResult, SubscriptionAppError> {
+    if_none_match: Option<&str>,
+) -> Result<DeliveryOutcome, SubscriptionAppError> {
     let short_code = deps
         .short_code_repo
         .find_by_code(code)
@@ -163,7 +178,7 @@ pub async fn deliver_by_short_code(
         .await?
         .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
 
-    deliver_for_subscription(deps, &subscription, profile, user_agent).await
+    deliver_for_subscription(deps, &subscription, profile, user_agent, if_none_match).await
 }
 
 /// Resolve a temp link token to subscription content (`GET /sub/{temp_token}`).
@@ -185,7 +200,8 @@ pub async fn deliver_by_temp_link(
     token_plaintext: &str,
     profile: Option<&str>,
     user_agent: Option<&str>,
-) -> Result<DeliveryResult, SubscriptionAppError> {
+    if_none_match: Option<&str>,
+) -> Result<DeliveryOutcome, SubscriptionAppError> {
     let token_digest = hmac_digest(
         PURPOSE_SUBSCRIPTION_TOKEN,
         token_plaintext,
@@ -208,7 +224,7 @@ pub async fn deliver_by_temp_link(
         .await?
         .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
 
-    deliver_for_subscription(deps, &subscription, profile, user_agent).await
+    deliver_for_subscription(deps, &subscription, profile, user_agent, if_none_match).await
 }
 
 /// Shared delivery pipeline: given a resolved subscription, check access
@@ -226,7 +242,8 @@ async fn deliver_for_subscription(
     subscription: &Subscription,
     profile: Option<&str>,
     user_agent: Option<&str>,
-) -> Result<DeliveryResult, SubscriptionAppError> {
+    if_none_match: Option<&str>,
+) -> Result<DeliveryOutcome, SubscriptionAppError> {
     if !subscription.enabled {
         return Err(SubscriptionAppError::SubscriptionDisabled);
     }
@@ -288,19 +305,26 @@ async fn deliver_for_subscription(
     .map_err(|e| SubscriptionAppError::GenerationFailed(e.to_string()))?;
 
     let etag = compute_etag(&result.content);
+
+    if let Some(inm) = if_none_match
+        && etag_matches(inm, &etag)
+    {
+        return Ok(DeliveryOutcome::NotModified(etag));
+    }
+
     let content_type = content_type_for(resolved_profile);
     let content_disposition = content_disposition_for(resolved_profile, &subscription.slug);
     let subscription_userinfo =
         build_subscription_userinfo(subscription, &sub_traffic, user.traffic_quota);
 
-    Ok(DeliveryResult {
+    Ok(DeliveryOutcome::Content(DeliveryResult {
         content: result.content,
         profile: resolved_profile.as_kebab().to_owned(),
         etag,
         content_type,
         content_disposition,
         subscription_userinfo,
-    })
+    }))
 }
 
 /// Resolve the target profile from the explicit path segment or User-Agent.
@@ -388,11 +412,27 @@ fn compute_etag(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     let digest = hasher.finalize();
+    const HEX_LOWER: &[u8; 16] = b"0123456789abcdef";
     let mut hex = String::with_capacity(64);
     for b in digest.iter() {
-        hex.push_str(&format!("{b:02x}"));
+        hex.push(HEX_LOWER[(b >> 4) as usize] as char);
+        hex.push(HEX_LOWER[(b & 0x0f) as usize] as char);
     }
     format!("\"{hex}\"")
+}
+
+/// Check whether an `If-None-Match` header value matches an ETag.
+///
+/// Handles `*` (always matches), exact match, weak-prefix `W/` match, and
+/// comma-separated lists.
+fn etag_matches(if_none_match: &str, etag: &str) -> bool {
+    if if_none_match == "*" {
+        return true;
+    }
+    if_none_match
+        .split(',')
+        .map(|s| s.trim())
+        .any(|s| s == etag || s == format!("W/{}", etag))
 }
 
 /// Return the HTTP `Content-Type` for a profile.
@@ -469,6 +509,31 @@ mod tests {
     fn etag_is_deterministic() {
         assert_eq!(compute_etag("abc"), compute_etag("abc"));
         assert_ne!(compute_etag("abc"), compute_etag("abd"));
+    }
+
+    #[test]
+    fn etag_matches_exact() {
+        assert!(etag_matches("\"abc\"", "\"abc\""));
+    }
+
+    #[test]
+    fn etag_matches_star() {
+        assert!(etag_matches("*", "\"abc\""));
+    }
+
+    #[test]
+    fn etag_no_match() {
+        assert!(!etag_matches("\"def\"", "\"abc\""));
+    }
+
+    #[test]
+    fn etag_matches_multiple() {
+        assert!(etag_matches("\"def\", \"abc\"", "\"abc\""));
+    }
+
+    #[test]
+    fn etag_matches_weak_prefix() {
+        assert!(etag_matches("W/\"abc\"", "\"abc\""));
     }
 
     #[test]

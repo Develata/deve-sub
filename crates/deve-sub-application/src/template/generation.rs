@@ -18,7 +18,6 @@
 use std::collections::HashSet;
 
 use deve_sub_compatibility::{ProfileKind, capability_for, check_group_type};
-use deve_sub_domain::source::NodePoolEntry;
 use deve_sub_domain::source::NodePoolRepository;
 use deve_sub_domain::template::{
     GroupMember, ProxyGroup, TemplateRepository, TemplateVersionRepository,
@@ -329,7 +328,11 @@ async fn run_pipeline(
     all_ids.sort_unstable();
     all_ids.dedup();
 
-    let report = check_compatibility(&all_ids, profile, pool_repo).await?;
+    // WHY: check_compatibility fetches the pool entries once and returns them
+    // alongside the report; run_pipeline reuses them for emission instead of
+    // re-fetching via get_nodes (PERF-17: previously three get_nodes calls per
+    // generation — selection, compatibility, and emit fetch).
+    let (report, entry_by_id) = check_compatibility(&all_ids, profile, pool_repo).await?;
 
     if mode == GenerationMode::Strict && !report.excluded.is_empty() {
         return Err(TemplateAppError::Generation(
@@ -349,13 +352,6 @@ async fn run_pipeline(
             ));
         }
     }
-
-    let entries = pool_repo
-        .get_nodes(&report.included_node_ids)
-        .await
-        .map_err(|e| TemplateAppError::Storage(e.to_string()))?;
-    let entry_by_id: std::collections::HashMap<NodeId, NodePoolEntry> =
-        entries.into_iter().map(|e| (e.node.id, e)).collect();
 
     let mut nodes: Vec<(Node, i64)> = Vec::with_capacity(report.included_node_ids.len());
     for id in &report.included_node_ids {

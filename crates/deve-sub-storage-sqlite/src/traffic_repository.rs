@@ -34,6 +34,14 @@ struct AggregateRow {
     download: i64,
 }
 
+#[derive(sqlx::FromRow)]
+struct GroupedAggregateRow {
+    subscription_id: String,
+    source_kind: String,
+    upload: i64,
+    download: i64,
+}
+
 fn build_summary(rows: Vec<AggregateRow>) -> Result<TrafficSummary, SubscriptionError> {
     let mut upload: u64 = 0;
     let mut download: u64 = 0;
@@ -206,6 +214,60 @@ impl TrafficRepository for SqliteTrafficRepository {
                 SubscriptionId::parse(&s).map_err(|e| {
                     SubscriptionError::Storage(format!("invalid subscription id: {e}"))
                 })
+            })
+            .collect()
+    }
+
+    async fn summaries_by_subscription_in_range(
+        &self,
+        start_iso: &str,
+        end_iso: &str,
+    ) -> Result<Vec<(SubscriptionId, TrafficSummary)>, SubscriptionError> {
+        let rows: Vec<GroupedAggregateRow> = sqlx::query_as(
+            "SELECT subscription_id, source_kind, \
+                    SUM(upload) AS upload, SUM(download) AS download \
+             FROM subscription_traffic \
+             WHERE recorded_at >= ? AND recorded_at < ? \
+             GROUP BY subscription_id, source_kind",
+        )
+        .bind(start_iso)
+        .bind(end_iso)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+
+        // WHY: rows arrive grouped by (subscription_id, source_kind); fold
+        // consecutive rows into one TrafficSummary per subscription. A
+        // BTreeMap yields deterministic subscription order so aggregation
+        // output is stable across runs.
+        let mut by_sub: std::collections::BTreeMap<String, TrafficSummary> =
+            std::collections::BTreeMap::new();
+        for row in rows {
+            let kind = TrafficSourceKind::from_db_char(&row.source_kind).ok_or_else(|| {
+                SubscriptionError::Storage(format!("unknown source_kind '{}'", row.source_kind))
+            })?;
+            let u = row.upload.max(0) as u64;
+            let d = row.download.max(0) as u64;
+            let entry = by_sub
+                .entry(row.subscription_id)
+                .or_insert_with(|| TrafficSummary {
+                    upload: 0,
+                    download: 0,
+                    by_source: Vec::new(),
+                });
+            entry.upload = entry.upload.saturating_add(u);
+            entry.download = entry.download.saturating_add(d);
+            entry.by_source.push((kind, u, d));
+        }
+
+        by_sub
+            .into_iter()
+            .map(|(s, summary)| {
+                SubscriptionId::parse(&s)
+                    .map(|id| (id, summary))
+                    .map_err(|e| {
+                        SubscriptionError::Storage(format!("invalid subscription id '{s}': {e}"))
+                    })
             })
             .collect()
     }

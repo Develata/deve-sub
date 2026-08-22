@@ -47,11 +47,18 @@ pub struct ProbeSourceTrafficContribution {
 pub async fn build_dashboard_traffic(
     traffic_repo: &dyn TrafficRepository,
     probe_source_repo: &dyn ProbeSourceRepository,
+    subscription_filter: Option<SubscriptionId>,
 ) -> Result<DashboardTrafficAggregate, ProbeAppError> {
-    let summary = traffic_repo
-        .get_global_summary()
-        .await
-        .map_err(|e| ProbeAppError::Traffic(e.to_string()))?;
+    let summary = match subscription_filter {
+        Some(sub_id) => traffic_repo
+            .get_summary(sub_id)
+            .await
+            .map_err(|e| ProbeAppError::Traffic(e.to_string()))?,
+        None => traffic_repo
+            .get_global_summary()
+            .await
+            .map_err(|e| ProbeAppError::Traffic(e.to_string()))?,
+    };
 
     let attributions = traffic_repo
         .get_probe_traffic_attributions()
@@ -78,6 +85,11 @@ pub async fn build_dashboard_traffic(
         let Some(sub_id) = source.subscription_id else {
             continue;
         };
+        if let Some(filter) = subscription_filter
+            && sub_id != filter
+        {
+            continue;
+        }
         let prefix = source.kind.as_kebab().to_owned();
         let (upload, download) = attributions
             .iter()

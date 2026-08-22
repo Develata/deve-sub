@@ -298,20 +298,42 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         // 6. Mark missing: nodes previously bound to this source that were not
         // seen in this refresh. Their binding was deleted in step 4 and not
         // recreated. If no other source binds them, they become missing.
-        for old_node_id in old_bound.difference(&seen) {
-            let count: (i64,) =
-                sqlx::query_as("SELECT COUNT(*) FROM node_source_bindings WHERE node_id = ?")
-                    .bind(old_node_id)
-                    .fetch_one(&mut *tx)
+        let missing_candidates: Vec<String> = old_bound.difference(&seen).cloned().collect();
+        if !missing_candidates.is_empty() {
+            // WHY: fetch all remaining bindings in one grouped query per chunk
+            // instead of one COUNT per node (N+1). A candidate absent from the
+            // result has zero remaining bindings and must be marked missing.
+            let mut still_bound: HashSet<String> = HashSet::new();
+            for chunk in missing_candidates.chunks(500) {
+                let placeholders = std::iter::repeat_n("?,", chunk.len())
+                    .collect::<String>()
+                    .trim_end_matches(',')
+                    .to_owned();
+                let sql = format!(
+                    "SELECT node_id FROM node_source_bindings \
+                     WHERE node_id IN ({placeholders}) GROUP BY node_id"
+                );
+                let mut query = sqlx::query_as::<_, (String,)>(&sql);
+                for id in chunk {
+                    query = query.bind(id);
+                }
+                let rows: Vec<(String,)> = query
+                    .fetch_all(&mut *tx)
                     .await
                     .map_err(|e| SourceError::Storage(e.to_string()))?;
-            if count.0 == 0 {
-                sqlx::query("UPDATE nodes SET missing_from_source = 1 WHERE id = ?")
-                    .bind(old_node_id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(|e| SourceError::Storage(e.to_string()))?;
-                result.missing_nodes += 1;
+                for (id,) in rows {
+                    still_bound.insert(id);
+                }
+            }
+            for old_node_id in &missing_candidates {
+                if !still_bound.contains(old_node_id) {
+                    sqlx::query("UPDATE nodes SET missing_from_source = 1 WHERE id = ?")
+                        .bind(old_node_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| SourceError::Storage(e.to_string()))?;
+                    result.missing_nodes += 1;
+                }
             }
         }
 
@@ -403,26 +425,33 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let placeholders = std::iter::repeat_n("?,", ids.len())
-            .collect::<String>()
-            .trim_end_matches(',')
-            .to_owned();
-        let sql = format!(
-            "SELECT {NODE_COLUMNS} FROM nodes n \
-             LEFT JOIN node_overrides o ON o.node_id = n.id \
-             WHERE n.id IN ({placeholders})"
-        );
-        let mut query = sqlx::query_as::<_, NodeRow>(&sql);
-        for id in ids {
-            query = query.bind(id.to_string());
+        // WHY: SQLite default SQLITE_MAX_VARIABLE_NUMBER is 999. Binding
+        // more than 998 IDs in a single IN-clause fails at runtime. Chunk
+        // into batches of 500 (safe margin) and merge results.
+        let mut entries = Vec::with_capacity(ids.len());
+        for chunk in ids.chunks(500) {
+            let placeholders = std::iter::repeat_n("?,", chunk.len())
+                .collect::<String>()
+                .trim_end_matches(',')
+                .to_owned();
+            let sql = format!(
+                "SELECT {NODE_COLUMNS} FROM nodes n \
+                 LEFT JOIN node_overrides o ON o.node_id = n.id \
+                 WHERE n.id IN ({placeholders})"
+            );
+            let mut query = sqlx::query_as::<_, NodeRow>(&sql);
+            for id in chunk {
+                query = query.bind(id.to_string());
+            }
+            let rows: Vec<NodeRow> = query
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| SourceError::Storage(e.to_string()))?;
+            for r in &rows {
+                entries.push(r.to_pool_entry(self.master_key.as_deref())?);
+            }
         }
-        let rows: Vec<NodeRow> = query
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        rows.iter()
-            .map(|r| r.to_pool_entry(self.master_key.as_deref()))
-            .collect()
+        Ok(entries)
     }
 
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError> {
@@ -551,22 +580,25 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let placeholders = std::iter::repeat_n("?,", ids.len())
-            .collect::<String>()
-            .trim_end_matches(',')
-            .to_owned();
-        let sql = format!("SELECT id FROM nodes WHERE id IN ({placeholders})");
-        let mut query = sqlx::query_as::<_, (String,)>(&sql);
-        for id in ids {
-            query = query.bind(id.to_string());
-        }
-        let rows = query
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        let mut result: Vec<NodeId> = Vec::with_capacity(rows.len());
-        for (id_str,) in rows {
-            result.push(NodeId::parse(&id_str).map_err(|e| SourceError::Storage(e.to_string()))?);
+        let mut result: Vec<NodeId> = Vec::with_capacity(ids.len());
+        for chunk in ids.chunks(500) {
+            let placeholders = std::iter::repeat_n("?,", chunk.len())
+                .collect::<String>()
+                .trim_end_matches(',')
+                .to_owned();
+            let sql = format!("SELECT id FROM nodes WHERE id IN ({placeholders})");
+            let mut query = sqlx::query_as::<_, (String,)>(&sql);
+            for id in chunk {
+                query = query.bind(id.to_string());
+            }
+            let rows = query
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| SourceError::Storage(e.to_string()))?;
+            for (id_str,) in rows {
+                result
+                    .push(NodeId::parse(&id_str).map_err(|e| SourceError::Storage(e.to_string()))?);
+            }
         }
         Ok(result)
     }

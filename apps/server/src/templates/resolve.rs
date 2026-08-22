@@ -210,16 +210,17 @@ pub(super) async fn check_compatibility_route(
     all_ids.sort();
     all_ids.dedup();
 
-    let report = template::check_compatibility(&all_ids, profile, state.pool_repo.as_ref())
-        .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "compatibility: check_compatibility failed");
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                "failed to check compatibility",
-            )
-        })?;
+    let (report, _entries) =
+        template::check_compatibility(&all_ids, profile, state.pool_repo.as_ref())
+            .await
+            .map_err(|e| {
+                tracing::warn!(error = %e, "compatibility: check_compatibility failed");
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal",
+                    "failed to check compatibility",
+                )
+            })?;
 
     Ok(Json(compat_report_to_dto(&report)))
 }

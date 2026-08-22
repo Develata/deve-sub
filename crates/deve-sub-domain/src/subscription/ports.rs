@@ -294,6 +294,18 @@ pub trait TrafficRepository: Send + Sync {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<SubscriptionId>, SubscriptionError>;
+
+    /// Sum traffic records grouped by subscription for the timestamp range
+    /// `[start_iso, end_iso)`, returning one [`TrafficSummary`] per
+    /// subscription that has records in the range. Replaces the
+    /// per-subscription `get_summary_in_range` loop in the M10 aggregation
+    /// job — one `GROUP BY subscription_id, source_kind` query instead of
+    /// 1 + N (PERF-18).
+    async fn summaries_by_subscription_in_range(
+        &self,
+        start_iso: &str,
+        end_iso: &str,
+    ) -> Result<Vec<(SubscriptionId, TrafficSummary)>, SubscriptionError>;
 }
 
 /// Storage boundary for daily traffic snapshots (M10).

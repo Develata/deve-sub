@@ -21,7 +21,7 @@ pub use commands::{
     regenerate_short_code, revoke_temp_link, rotate_token, update_subscription,
 };
 pub use delivery::{
-    DeliveryDeps, DeliveryResult, deliver_by_short_code, deliver_by_temp_link,
+    DeliveryDeps, DeliveryOutcome, DeliveryResult, deliver_by_short_code, deliver_by_temp_link,
     deliver_subscription, detect_profile_from_user_agent,
 };
 pub use error::SubscriptionAppError;

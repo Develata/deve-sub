@@ -36,46 +36,23 @@ pub async fn aggregate_daily_traffic(
     day_start_iso: &str,
     day_end_iso: &str,
 ) -> Result<usize, SubscriptionError> {
-    let sub_ids = traffic_repo
-        .subscriptions_with_traffic_in_range(day_start_iso, day_end_iso)
+    let summaries = traffic_repo
+        .summaries_by_subscription_in_range(day_start_iso, day_end_iso)
         .await?;
 
     let mut count = 0;
-    for sub_id in sub_ids {
-        let summary = get_daily_summary(traffic_repo, sub_id, day_start_iso, day_end_iso).await?;
+    for (sub_id, summary) in summaries {
         let snapshot = TrafficDailySnapshot::new(
             sub_id,
             day.to_owned(),
-            summary.total_upload,
-            summary.total_download,
+            summary.upload,
+            summary.download,
             summary.by_source,
         );
         snapshot_repo.upsert(&snapshot).await?;
         count += 1;
     }
     Ok(count)
-}
-
-struct DailySummary {
-    total_upload: u64,
-    total_download: u64,
-    by_source: Vec<(TrafficSourceKind, u64, u64)>,
-}
-
-async fn get_daily_summary(
-    traffic_repo: &dyn TrafficRepository,
-    subscription_id: SubscriptionId,
-    day_start_iso: &str,
-    day_end_iso: &str,
-) -> Result<DailySummary, SubscriptionError> {
-    let summary = traffic_repo
-        .get_summary_in_range(subscription_id, day_start_iso, day_end_iso)
-        .await?;
-    Ok(DailySummary {
-        total_upload: summary.upload,
-        total_download: summary.download,
-        by_source: summary.by_source,
-    })
 }
 
 /// A single day's traffic data point for the history chart.

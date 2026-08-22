@@ -70,9 +70,11 @@ impl CacheKeyParams<'_> {
         hasher.update(b"|");
         hasher.update(self.pool_revision.value().to_string().as_bytes());
         let digest = hasher.finalize();
+        const HEX_LOWER: &[u8; 16] = b"0123456789abcdef";
         let mut out = String::with_capacity(64);
         for b in digest.iter() {
-            out.push_str(&format!("{b:02x}"));
+            out.push(HEX_LOWER[(b >> 4) as usize] as char);
+            out.push(HEX_LOWER[(b & 0x0f) as usize] as char);
         }
         out
     }

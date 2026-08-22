@@ -38,7 +38,18 @@ async fn deliver_with_profile(
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_owned());
-    deliver_token(&state, &token, Some(&profile), ua.as_deref(), &headers).await
+    let inm = headers
+        .get("if-none-match")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+    deliver_token(
+        &state,
+        &token,
+        Some(&profile),
+        ua.as_deref(),
+        inm.as_deref(),
+    )
+    .await
 }
 
 /// `GET /sub/{token}` — deliver a subscription with User-Agent auto-detect.
@@ -51,7 +62,11 @@ async fn deliver_auto(
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_owned());
-    deliver_token(&state, &token, None, ua.as_deref(), &headers).await
+    let inm = headers
+        .get("if-none-match")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+    deliver_token(&state, &token, None, ua.as_deref(), inm.as_deref()).await
 }
 
 /// `GET /s/{code}/{profile}` — deliver via short code for an explicit profile.
@@ -60,7 +75,11 @@ async fn deliver_short_code_with_profile(
     Path((code, profile)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    deliver_code(&state, &code, Some(&profile), None, &headers).await
+    let inm = headers
+        .get("if-none-match")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+    deliver_code(&state, &code, Some(&profile), None, inm.as_deref()).await
 }
 
 /// `GET /s/{code}` — deliver via short code with User-Agent auto-detect.
@@ -73,7 +92,11 @@ async fn deliver_short_code_auto(
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_owned());
-    deliver_code(&state, &code, None, ua.as_deref(), &headers).await
+    let inm = headers
+        .get("if-none-match")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+    deliver_code(&state, &code, None, ua.as_deref(), inm.as_deref()).await
 }
 
 /// Token-based delivery: try permanent token first, fall back to temp link
@@ -88,21 +111,23 @@ async fn deliver_token(
     token: &str,
     profile: Option<&str>,
     user_agent: Option<&str>,
-    headers: &HeaderMap,
+    if_none_match: Option<&str>,
 ) -> Response {
     let deps = make_deps(state);
-    let result = subscription::deliver_subscription(&deps, token, profile, user_agent).await;
+    let result =
+        subscription::deliver_subscription(&deps, token, profile, user_agent, if_none_match).await;
 
     let result = match result {
-        Ok(d) => return ok_or_304(d, headers),
+        Ok(outcome) => return map_delivery_outcome(outcome),
         Err(subscription::SubscriptionAppError::TokenNotFound) => {
-            subscription::deliver_by_temp_link(&deps, token, profile, user_agent).await
+            subscription::deliver_by_temp_link(&deps, token, profile, user_agent, if_none_match)
+                .await
         }
         Err(e) => return map_delivery_error(e),
     };
 
     match result {
-        Ok(d) => ok_or_304(d, headers),
+        Ok(outcome) => map_delivery_outcome(outcome),
         Err(e) => map_delivery_error(e),
     }
 }
@@ -113,13 +138,14 @@ async fn deliver_code(
     code: &str,
     profile: Option<&str>,
     user_agent: Option<&str>,
-    headers: &HeaderMap,
+    if_none_match: Option<&str>,
 ) -> Response {
     let deps = make_deps(state);
-    let result = subscription::deliver_by_short_code(&deps, code, profile, user_agent).await;
+    let result =
+        subscription::deliver_by_short_code(&deps, code, profile, user_agent, if_none_match).await;
 
     match result {
-        Ok(d) => ok_or_304(d, headers),
+        Ok(outcome) => map_delivery_outcome(outcome),
         Err(e) => map_delivery_error(e),
     }
 }
@@ -141,32 +167,11 @@ fn make_deps(state: &AppState) -> subscription::DeliveryDeps<'_> {
     }
 }
 
-fn ok_or_304(delivery: subscription::DeliveryResult, headers: &HeaderMap) -> Response {
-    let if_none_match = headers
-        .get("if-none-match")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_owned());
-
-    if let Some(inm) = if_none_match
-        && etag_matches(&inm, &delivery.etag)
-    {
-        return not_modified(&delivery.etag);
+fn map_delivery_outcome(outcome: subscription::DeliveryOutcome) -> Response {
+    match outcome {
+        subscription::DeliveryOutcome::Content(delivery) => ok_response(delivery),
+        subscription::DeliveryOutcome::NotModified(etag) => not_modified(&etag),
     }
-
-    ok_response(delivery)
-}
-
-/// Check whether the `If-None-Match` header matches the current ETag.
-///
-/// Handles both exact match and `*` (always matches).
-fn etag_matches(if_none_match: &str, etag: &str) -> bool {
-    if if_none_match == "*" {
-        return true;
-    }
-    if_none_match
-        .split(',')
-        .map(|s| s.trim())
-        .any(|s| s == etag || s == format!("W/{}", etag))
 }
 
 /// Build a 200 OK response with delivery headers and content.
@@ -267,34 +272,4 @@ pub fn register_delivery_routes(router: Router<AppState>) -> Router<AppState> {
         .route("/sub/{token}", get(deliver_auto))
         .route("/s/{code}/{profile}", get(deliver_short_code_with_profile))
         .route("/s/{code}", get(deliver_short_code_auto))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn etag_matches_exact() {
-        assert!(etag_matches("\"abc\"", "\"abc\""));
-    }
-
-    #[test]
-    fn etag_matches_star() {
-        assert!(etag_matches("*", "\"abc\""));
-    }
-
-    #[test]
-    fn etag_no_match() {
-        assert!(!etag_matches("\"def\"", "\"abc\""));
-    }
-
-    #[test]
-    fn etag_matches_multiple() {
-        assert!(etag_matches("\"def\", \"abc\"", "\"abc\""));
-    }
-
-    #[test]
-    fn etag_matches_weak_prefix() {
-        assert!(etag_matches("W/\"abc\"", "\"abc\""));
-    }
 }

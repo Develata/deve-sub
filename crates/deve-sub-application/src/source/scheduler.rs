@@ -17,6 +17,7 @@ use std::time::Duration;
 use deve_sub_domain::{
     NodePoolRepository, SourceRefreshJobRepository, SourceRepository, SourceSnapshotRepository,
 };
+use futures_util::stream::{self, StreamExt};
 
 use super::fetcher::SubscriptionFetcher;
 use super::geoip::GeoIpPort;
@@ -107,7 +108,7 @@ impl RefreshScheduler {
     /// concurrently (SRC-013). Each refresh is independent — separate
     /// source_id, separate snapshot, separate reconcile transaction — so
     /// concurrent execution cannot cross-pollute. Concurrency is capped by
-    /// `max_concurrency` via a semaphore to bound resource usage.
+    /// `max_concurrency` to bound resource usage.
     ///
     /// B-15: each refresh goes through the job lifecycle. The per-source
     /// lease (DB partial unique index on `source_refresh_jobs`) prevents
@@ -130,66 +131,63 @@ impl RefreshScheduler {
             "refreshing due sources concurrently"
         );
 
-        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(self.max_concurrency));
-        let mut set = tokio::task::JoinSet::new();
-        for source_id in due {
-            let source_repo = self.source_repo.clone();
-            let snapshot_repo = self.snapshot_repo.clone();
-            let pool_repo = self.pool_repo.clone();
-            let job_repo = self.job_repo.clone();
-            let fetcher = self.fetcher.clone();
-            let geoip = self.geoip.clone();
-            let permit = semaphore.clone();
-            set.spawn(async move {
-                #[allow(clippy::expect_used, reason = "semaphore is never closed by us")]
-                let _permit = permit
-                    .acquire_owned()
-                    .await
-                    .expect("scheduler semaphore is never closed");
-                let deps = RefreshDeps {
-                    source_repo: source_repo.as_ref(),
-                    snapshot_repo: snapshot_repo.as_ref(),
-                    pool_repo: pool_repo.as_ref(),
-                    job_repo: job_repo.as_ref(),
-                    fetcher: fetcher.as_ref(),
-                    geoip: geoip.as_ref(),
-                };
-                let cancelled = AtomicBool::new(false);
-                match start_refresh_job(&deps, source_id).await {
-                    Ok(job_id) => {
-                        let result =
-                            execute_refresh_job(&deps, job_id, source_id, &cancelled).await;
-                        (source_id, result)
-                    }
-                    Err(e) => (source_id, Err(e)),
-                }
-            });
-        }
-
-        while let Some(join_result) = set.join_next().await {
-            match join_result {
-                Ok((source_id, result)) => match &result {
-                    Ok(r) => {
-                        if r.not_modified {
-                            tracing::info!(source = %source_id, "auto-refresh: not modified");
-                        } else {
-                            tracing::info!(
-                                source = %source_id,
-                                version = r.snapshot.version,
-                                new = r.reconcile.new_nodes,
-                                dup = r.reconcile.duplicate_nodes,
-                                reactivated = r.reconcile.reactivated_nodes,
-                                missing = r.reconcile.missing_nodes,
-                                "auto-refresh: completed"
-                            );
+        // WHY: `buffer_unordered` runs at most `max_concurrency` refresh
+        // futures at a time on the current task, unlike the previous JoinSet
+        // approach which spawned a Tokio task per due source (thousands of
+        // tasks for thousands of sources). Each refresh is independent —
+        // separate source_id, snapshot, and reconcile transaction — so
+        // bounded concurrency cannot cross-pollute (SRC-013).
+        let results: Vec<_> = stream::iter(due)
+            .map(|source_id| {
+                let source_repo = self.source_repo.clone();
+                let snapshot_repo = self.snapshot_repo.clone();
+                let pool_repo = self.pool_repo.clone();
+                let job_repo = self.job_repo.clone();
+                let fetcher = self.fetcher.clone();
+                let geoip = self.geoip.clone();
+                async move {
+                    let deps = RefreshDeps {
+                        source_repo: source_repo.as_ref(),
+                        snapshot_repo: snapshot_repo.as_ref(),
+                        pool_repo: pool_repo.as_ref(),
+                        job_repo: job_repo.as_ref(),
+                        fetcher: fetcher.as_ref(),
+                        geoip: geoip.as_ref(),
+                    };
+                    let cancelled = AtomicBool::new(false);
+                    match start_refresh_job(&deps, source_id).await {
+                        Ok(job_id) => {
+                            let result =
+                                execute_refresh_job(&deps, job_id, source_id, &cancelled).await;
+                            (source_id, result)
                         }
+                        Err(e) => (source_id, Err(e)),
                     }
-                    Err(e) => {
-                        tracing::warn!(source = %source_id, error = %e, "auto-refresh: failed");
+                }
+            })
+            .buffer_unordered(self.max_concurrency)
+            .collect()
+            .await;
+
+        for (source_id, result) in results {
+            match &result {
+                Ok(r) => {
+                    if r.not_modified {
+                        tracing::info!(source = %source_id, "auto-refresh: not modified");
+                    } else {
+                        tracing::info!(
+                            source = %source_id,
+                            version = r.snapshot.version,
+                            new = r.reconcile.new_nodes,
+                            dup = r.reconcile.duplicate_nodes,
+                            reactivated = r.reconcile.reactivated_nodes,
+                            missing = r.reconcile.missing_nodes,
+                            "auto-refresh: completed"
+                        );
                     }
-                },
-                Err(join_err) => {
-                    tracing::warn!(error = %join_err, "refresh task panicked");
+                }
+                Err(e) => {
+                    tracing::warn!(source = %source_id, error = %e, "auto-refresh: failed");
                 }
             }
         }

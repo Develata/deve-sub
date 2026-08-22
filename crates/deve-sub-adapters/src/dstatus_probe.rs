@@ -23,7 +23,7 @@ use deve_sub_kernel::Timestamp;
 use serde::Deserialize;
 
 use crate::SsrfChecker;
-use crate::probe_common::{build_ssrf_client, read_error_body};
+use crate::probe_common::{SUCCESS_BODY_CAP, build_ssrf_client, read_body_capped, read_error_body};
 
 #[derive(Deserialize)]
 struct DStatusResponse {
@@ -108,10 +108,12 @@ impl DStatusProbeAdapter {
             )));
         }
 
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| ProbeError::ProbeFailed(format!("DStatus API body read failed: {e}")))?;
+        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
+        if body.len() >= SUCCESS_BODY_CAP {
+            return Err(ProbeError::ProbeFailed(format!(
+                "DStatus API response body exceeds {SUCCESS_BODY_CAP} bytes"
+            )));
+        }
         serde_json::from_str::<DStatusResponse>(&body)
             .map_err(|e| ProbeError::ProbeFailed(format!("DStatus API response parse failed: {e}")))
     }

@@ -19,5 +19,5 @@ pub use error::IdentityError;
 pub use ports::{RecoveryCodeRepository, SessionRepository, TotpSecretRepository, UserRepository};
 pub use recovery_code::RecoveryCode;
 pub use session::Session;
-pub use totp::TotpSecret;
+pub use totp::{TOTP_AAD_CONTEXT, TotpSecret};
 pub use user::{Role, User};

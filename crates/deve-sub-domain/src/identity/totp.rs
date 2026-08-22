@@ -7,6 +7,11 @@
 
 use deve_sub_kernel::{Timestamp, UserId};
 
+/// AAD context label binding TOTP ciphertexts to this column. Prevents
+/// ciphertext relocation attacks across encrypted columns that share the
+/// master key.
+pub const TOTP_AAD_CONTEXT: &[u8] = b"identity.totp_secret";
+
 /// Encrypted TOTP secret for a user.
 ///
 /// One per user. The `secret_ciphertext` includes the 16-byte Poly1305 tag.
@@ -15,10 +20,11 @@ use deve_sub_kernel::{Timestamp, UserId};
 pub struct TotpSecret {
     /// The user this secret belongs to.
     pub user_id: UserId,
-    /// XChaCha20-Poly1305 ciphertext (plaintext + 16-byte auth tag).
+    /// XChaCha20-Poly1305 ciphertext (plaintext + 16-byte auth tag), bound
+    /// to [`TOTP_AAD_CONTEXT`] as AAD.
     pub secret_ciphertext: Vec<u8>,
     /// 24-byte nonce for decryption.
-    pub nonce: Vec<u8>,
+    pub nonce: [u8; 24],
     /// When the secret was created.
     pub created_at: Timestamp,
 }
@@ -26,7 +32,7 @@ pub struct TotpSecret {
 impl TotpSecret {
     /// Create a new TOTP secret record from encrypted components.
     #[must_use]
-    pub fn new(user_id: UserId, secret_ciphertext: Vec<u8>, nonce: Vec<u8>) -> Self {
+    pub fn new(user_id: UserId, secret_ciphertext: Vec<u8>, nonce: [u8; 24]) -> Self {
         Self {
             user_id,
             secret_ciphertext,

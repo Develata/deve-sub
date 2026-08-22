@@ -34,11 +34,16 @@ struct TotpSecretRow {
 
 impl TotpSecretRow {
     fn to_domain(&self) -> Result<TotpSecret, IdentityError> {
+        let nonce: [u8; 24] = self
+            .nonce
+            .as_slice()
+            .try_into()
+            .map_err(|_| IdentityError::Storage("TOTP nonce is not 24 bytes".to_owned()))?;
         Ok(TotpSecret {
             user_id: UserId::parse(&self.user_id)
                 .map_err(|e| IdentityError::Storage(e.to_string()))?,
             secret_ciphertext: self.secret_ciphertext.clone(),
-            nonce: self.nonce.clone(),
+            nonce,
             created_at: crate::timestamp::parse_ts(&self.created_at)
                 .map_err(IdentityError::Storage)?,
         })
@@ -59,7 +64,7 @@ impl TotpSecretRepository for SqliteTotpSecretRepository {
         )
         .bind(secret.user_id.to_string())
         .bind(&secret.secret_ciphertext)
-        .bind(&secret.nonce)
+        .bind(&secret.nonce[..])
         .bind(created_at)
         .execute(&self.pool)
         .await

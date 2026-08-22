@@ -99,6 +99,26 @@ impl TempLinkRepository for SqliteTempLinkRepository {
         Ok(())
     }
 
+    async fn revoke_for_subscription(
+        &self,
+        subscription_id: SubscriptionId,
+        id: TempLinkId,
+    ) -> Result<(), SubscriptionError> {
+        let result = sqlx::query(
+            "UPDATE subscription_temp_links SET revoked = 1 \
+             WHERE id = ? AND subscription_id = ?",
+        )
+        .bind(id.to_string())
+        .bind(subscription_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(SubscriptionError::TempLinkNotFound);
+        }
+        Ok(())
+    }
+
     async fn delete_for_subscription(
         &self,
         subscription_id: SubscriptionId,

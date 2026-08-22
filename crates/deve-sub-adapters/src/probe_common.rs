@@ -23,16 +23,28 @@ use crate::SsrfChecker;
 /// logs/DB/API responses. Matches `HttpFetcher::ERROR_BODY_CAP`.
 pub const ERROR_BODY_CAP: usize = 1024;
 
+/// Maximum bytes read from a success response body.
+///
+/// WHY: a compromised or buggy panel could return an enormous JSON body.
+/// 1 MiB is generous for node/server lists while preventing unbounded memory
+/// growth.
+pub const SUCCESS_BODY_CAP: usize = 1024 * 1024;
+
 /// Default request timeout: 30 seconds.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// Read up to [`ERROR_BODY_CAP`] bytes of an error response body.
-pub async fn read_error_body(mut response: reqwest::Response) -> String {
+pub async fn read_error_body(response: reqwest::Response) -> String {
+    read_body_capped(response, ERROR_BODY_CAP).await
+}
+
+/// Read up to `cap` bytes of a response body, truncating at the cap.
+pub async fn read_body_capped(mut response: reqwest::Response, cap: usize) -> String {
     let mut body = Vec::new();
     while let Ok(Some(chunk)) = response.chunk().await {
         body.extend_from_slice(&chunk);
-        if body.len() >= ERROR_BODY_CAP {
-            body.truncate(ERROR_BODY_CAP);
+        if body.len() >= cap {
+            body.truncate(cap);
             break;
         }
     }

@@ -29,7 +29,7 @@ pub use endpoint::{DomainName, Endpoint, Host};
 pub use error::DomainError;
 pub use identity::{
     IdentityError, RecoveryCode, RecoveryCodeRepository, Role, Session, SessionRepository,
-    TotpSecret, TotpSecretRepository, User, UserRepository,
+    TOTP_AAD_CONTEXT, TotpSecret, TotpSecretRepository, User, UserRepository,
 };
 pub use node::{Authentication, Node, NodeChain, NodeSource, RegionAssignment, RegionMethod};
 pub use node_chain::{NodeChainEntry, NodeChainError, NodeChainGraph, NodeCyclePath};

@@ -21,7 +21,7 @@ use deve_sub_kernel::Timestamp;
 use serde::Deserialize;
 
 use crate::SsrfChecker;
-use crate::probe_common::{build_ssrf_client, read_error_body};
+use crate::probe_common::{SUCCESS_BODY_CAP, build_ssrf_client, read_body_capped, read_error_body};
 
 #[derive(Deserialize)]
 struct KomariNodesResponse {
@@ -116,10 +116,12 @@ impl KomariProbeAdapter {
             )));
         }
 
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| ProbeError::ProbeFailed(format!("Komari API body read failed: {e}")))?;
+        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
+        if body.len() >= SUCCESS_BODY_CAP {
+            return Err(ProbeError::ProbeFailed(format!(
+                "Komari API response body exceeds {SUCCESS_BODY_CAP} bytes"
+            )));
+        }
         serde_json::from_str::<KomariNodesResponse>(&body)
             .map(|r| r.data)
             .map_err(|e| ProbeError::ProbeFailed(format!("Komari nodes parse failed: {e}")))
@@ -147,10 +149,12 @@ impl KomariProbeAdapter {
             )));
         }
 
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| ProbeError::ProbeFailed(format!("Komari API body read failed: {e}")))?;
+        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
+        if body.len() >= SUCCESS_BODY_CAP {
+            return Err(ProbeError::ProbeFailed(format!(
+                "Komari API response body exceeds {SUCCESS_BODY_CAP} bytes"
+            )));
+        }
         let parsed: KomariRecordsResponse = serde_json::from_str(&body)
             .map_err(|e| ProbeError::ProbeFailed(format!("Komari records parse failed: {e}")))?;
 

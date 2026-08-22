@@ -6,14 +6,14 @@
 //! command. See `docs/plan/milestones/M2-auth-and-users.md` (Slice 4).
 
 use deve_sub_domain::{
-    IdentityError, RecoveryCode, RecoveryCodeRepository, Session, SessionRepository, TotpSecret,
-    TotpSecretRepository, User, UserRepository,
+    IdentityError, RecoveryCode, RecoveryCodeRepository, Session, SessionRepository,
+    TOTP_AAD_CONTEXT, TotpSecret, TotpSecretRepository, User, UserRepository,
 };
 use deve_sub_kernel::{RecoveryCodeId, Timestamp, UserId};
 use deve_sub_security::{
-    MasterKey, PURPOSE_RECOVERY, PURPOSE_SESSION, decrypt, encrypt, generate_recovery_codes,
-    generate_session_token, hmac_digest, normalize_recovery_code, totp_generate_secret,
-    totp_otpauth_uri, totp_verify_code, verify_password_async,
+    MasterKey, PURPOSE_RECOVERY, PURPOSE_SESSION, decrypt_aad, encrypt_aad,
+    generate_recovery_codes, generate_session_token, hmac_digest, normalize_recovery_code,
+    totp_generate_secret, totp_otpauth_uri, totp_verify_code, verify_password_async,
 };
 
 use super::challenge::verify_challenge_token;
@@ -55,8 +55,8 @@ pub async fn setup_2fa(
     }
 
     let secret = totp_generate_secret()?;
-    let (ciphertext, nonce) = encrypt(master_key.as_bytes(), &secret)?;
-    let totp_secret = TotpSecret::new(user_id, ciphertext, nonce.to_vec());
+    let (ciphertext, nonce) = encrypt_aad(master_key.as_bytes(), &secret, TOTP_AAD_CONTEXT)?;
+    let totp_secret = TotpSecret::new(user_id, ciphertext, nonce);
     totp_secret_repo.upsert(&totp_secret).await?;
 
     let secret_b32 = deve_sub_security::base32_secret(&secret);
@@ -115,10 +115,11 @@ pub async fn verify_2fa(
         .await?
         .ok_or(AuthError::TotpSecretNotFound)?;
 
-    let plaintext = decrypt(
+    let plaintext = decrypt_aad(
         master_key.as_bytes(),
         &stored_secret.secret_ciphertext,
         &stored_secret.nonce,
+        TOTP_AAD_CONTEXT,
     )?;
 
     if !totp_verify_code(&plaintext, code) {
@@ -316,10 +317,11 @@ pub async fn login_2fa(
             .await?
             .ok_or(AuthError::TotpSecretNotFound)?;
 
-        let plaintext = decrypt(
+        let plaintext = decrypt_aad(
             master_key.as_bytes(),
             &stored_secret.secret_ciphertext,
             &stored_secret.nonce,
+            TOTP_AAD_CONTEXT,
         )?;
 
         totp_verify_code(&plaintext, code_u32)

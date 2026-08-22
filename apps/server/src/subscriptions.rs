@@ -522,7 +522,7 @@ async fn revoke_temp_link(
     _admin: AdminUser,
     Path((id, temp_link_id)): Path<(String, String)>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    let _subscription_id = SubscriptionId::parse(&id).map_err(|_| {
+    let subscription_id = SubscriptionId::parse(&id).map_err(|_| {
         err(
             StatusCode::BAD_REQUEST,
             "invalid_id",
@@ -538,7 +538,7 @@ async fn revoke_temp_link(
         )
     })?;
 
-    subscription::revoke_temp_link(state.temp_link_repo.as_ref(), temp_link_id)
+    subscription::revoke_temp_link(state.temp_link_repo.as_ref(), subscription_id, temp_link_id)
         .await
         .map_err(|e| map_subscription_app_error(e, "revoke_temp_link"))?;
 

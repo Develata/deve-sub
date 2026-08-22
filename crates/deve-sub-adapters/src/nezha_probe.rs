@@ -30,16 +30,23 @@ use crate::SsrfChecker;
 /// logs/DB/API responses. Matches `HttpFetcher::ERROR_BODY_CAP`.
 const ERROR_BODY_CAP: usize = 1024;
 
+/// Maximum bytes read from a success response body.
+///
+/// WHY: a compromised or buggy panel could return an enormous JSON body. The
+/// Nezha server list is bounded by the panel's server count, so 1 MiB is
+/// generous while preventing unbounded memory growth.
+const SUCCESS_BODY_CAP: usize = 1024 * 1024;
+
 /// Default request timeout: 30 seconds.
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// Read up to [`ERROR_BODY_CAP`] bytes of an error response body.
-async fn read_error_body(mut response: reqwest::Response) -> String {
+/// Read up to `cap` bytes of a response body.
+async fn read_body_capped(mut response: reqwest::Response, cap: usize) -> String {
     let mut body = Vec::new();
     while let Ok(Some(chunk)) = response.chunk().await {
         body.extend_from_slice(&chunk);
-        if body.len() >= ERROR_BODY_CAP {
-            body.truncate(ERROR_BODY_CAP);
+        if body.len() >= cap {
+            body.truncate(cap);
             break;
         }
     }
@@ -163,19 +170,20 @@ impl NezhaProbeAdapter {
 
         let status = resp.status();
         if !status.is_success() {
-            // WHY: cap the error body to bound memory and limit injection of
-            // remote content into logs/DB/API responses. Matches
-            // `HttpFetcher::ERROR_BODY_CAP`.
-            let body = read_error_body(resp).await;
+            let body = read_body_capped(resp, ERROR_BODY_CAP).await;
             return Err(ProbeError::ProbeFailed(format!(
                 "Nezha API returned {status}: {body}"
             )));
         }
 
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| ProbeError::ProbeFailed(format!("Nezha API body read failed: {e}")))?;
+        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
+        let body = if body.len() >= SUCCESS_BODY_CAP {
+            return Err(ProbeError::ProbeFailed(format!(
+                "Nezha API response body exceeds {SUCCESS_BODY_CAP} bytes"
+            )));
+        } else {
+            body
+        };
         serde_json::from_str::<Vec<NezhaServer>>(&body)
             .map_err(|e| ProbeError::ProbeFailed(format!("Nezha API response parse failed: {e}")))
     }

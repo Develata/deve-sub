@@ -51,15 +51,29 @@ pub fn generate_session_token() -> Result<String, SecurityError> {
 /// # Errors
 /// Returns [`SecurityError::Crypto`] if the OS entropy source fails.
 pub fn generate_short_code() -> Result<String, SecurityError> {
-    let mut idx = [0u8; SHORT_CODE_LEN];
-    OsRng
-        .try_fill_bytes(&mut idx)
-        .map_err(|e| SecurityError::Crypto(format!("entropy source failure: {e}")))?;
-    let code: String = idx
-        .iter()
-        .map(|b| BASE62_ALPHABET[(*b % 62) as usize] as char)
-        .collect();
-    Ok(code)
+    const ALPHABET_LEN: u8 = 62;
+    // WHY: rejection sampling eliminates modulo bias. 256 % 62 = 8, so
+    // bytes >= 248 over-represent the first 8 alphabet chars without rejection.
+    const REJECT_THRESHOLD: u8 = 248;
+    let mut code = [0u8; SHORT_CODE_LEN];
+    let mut buf = [0u8; 16];
+    let mut buf_pos = buf.len();
+    let mut filled = 0;
+    while filled < SHORT_CODE_LEN {
+        if buf_pos >= buf.len() {
+            OsRng
+                .try_fill_bytes(&mut buf)
+                .map_err(|e| SecurityError::Crypto(format!("entropy source failure: {e}")))?;
+            buf_pos = 0;
+        }
+        let b = buf[buf_pos];
+        buf_pos += 1;
+        if b < REJECT_THRESHOLD {
+            code[filled] = BASE62_ALPHABET[(b % ALPHABET_LEN) as usize];
+            filled += 1;
+        }
+    }
+    Ok(code.iter().map(|&b| b as char).collect())
 }
 
 #[cfg(test)]

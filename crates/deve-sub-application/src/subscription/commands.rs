@@ -491,20 +491,24 @@ pub async fn create_temp_link(
     })
 }
 
-/// Revoke a temporary delivery link.
+/// Revoke a temporary delivery link, scoped to `subscription_id`.
 ///
 /// Marks the temp link as revoked so subsequent delivery via
-/// `GET /sub/{temp_token}` returns 404.
+/// `GET /sub/{temp_token}` returns 404. The `subscription_id` scope check
+/// prevents IDOR: a caller cannot revoke a temp link belonging to a different
+/// subscription.
 ///
 /// # Errors
-/// - [`SubscriptionAppError::TempLinkNotFound`] — no temp link matches the id.
+/// - [`SubscriptionAppError::TempLinkNotFound`] — no temp link matches both
+///   the id and the subscription id.
 /// - [`SubscriptionAppError::Subscription`] — storage error.
 pub async fn revoke_temp_link(
     temp_link_repo: &dyn TempLinkRepository,
+    subscription_id: SubscriptionId,
     temp_link_id: TempLinkId,
 ) -> Result<(), SubscriptionAppError> {
     temp_link_repo
-        .revoke(temp_link_id)
+        .revoke_for_subscription(subscription_id, temp_link_id)
         .await
         .map_err(map_subscription_error)
 }

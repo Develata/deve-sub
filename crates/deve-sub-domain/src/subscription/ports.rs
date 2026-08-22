@@ -206,6 +206,17 @@ pub trait TempLinkRepository: Send + Sync {
     /// [`SubscriptionError::TempLinkNotFound`] if no row matches.
     async fn revoke(&self, id: TempLinkId) -> Result<(), SubscriptionError>;
 
+    /// Mark a temp link as revoked, scoped to `subscription_id`. Returns
+    /// [`SubscriptionError::TempLinkNotFound`] if no row matches both the
+    /// link id and the subscription id. WHY: prevents IDOR — a caller with
+    /// knowledge of a temp link id from another subscription cannot revoke
+    /// it via a mismatched subscription path segment.
+    async fn revoke_for_subscription(
+        &self,
+        subscription_id: SubscriptionId,
+        id: TempLinkId,
+    ) -> Result<(), SubscriptionError>;
+
     /// Delete all temp links for a subscription. Called on subscription
     /// delete.
     async fn delete_for_subscription(

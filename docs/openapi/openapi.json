@@ -8393,29 +8393,57 @@
       "SyncStatusDto": {
         "oneOf": [
           {
-            "type": "null",
+            "type": "object",
             "description": "The last sync succeeded.",
-            "default": null
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok"
+                ]
+              }
+            }
           },
           {
             "type": "object",
             "description": "The last sync failed with the given message.",
             "required": [
-              "message"
+              "message",
+              "status"
             ],
             "properties": {
               "message": {
-                "type": "string"
+                "type": "string",
+                "description": "Failure reason."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
               }
             }
           },
           {
-            "type": "null",
+            "type": "object",
             "description": "Never synced or stale.",
-            "default": null
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "stale"
+                ]
+              }
+            }
           }
         ],
-        "description": "Sync status of a probe source's last traffic sync."
+        "description": "Sync status of a probe source's last traffic sync.\n\nInternally tagged (`{\"status\":\"ok\"}`, `{\"status\":\"failed\",\"message\":\"…\"}`,\n`{\"status\":\"stale\"}`). WHY: an untagged representation serializes the\n`Ok` and `Stale` unit variants to `null`, collapsing them on\ndeserialization — a stale source would round-trip as `Ok`."
       },
       "TagDto": {
         "type": "object",
@@ -8791,7 +8819,7 @@
       },
       "UpdateOverrideRequest": {
         "type": "object",
-        "description": "Request body for `PATCH /api/v1/nodes/{id}/override` (NODE-010).",
+        "description": "Request body for `PATCH /api/v1/nodes/{id}/override` (NODE-010).\n\nSemantics: FULL REPLACE, not a merge. The stored override is rebuilt\nfrom this request — a field that is absent/`null` CLEARS that override\n(the node falls back to its parsed/auto value). Clients must send the\ncomplete desired override state on every call.",
         "properties": {
           "display_name": {
             "type": [
@@ -8804,35 +8832,41 @@
             "type": [
               "boolean",
               "null"
-            ]
+            ],
+            "description": "Override enabled flag; `None` clears (natural status)."
           },
           "fingerprint": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Override TLS fingerprint; `None` clears."
           },
           "region": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Override region; `None` clears (revert to auto-detection)."
           },
           "skip_cert_verify": {
             "type": [
               "boolean",
               "null"
-            ]
+            ],
+            "description": "Override skip-cert-verify; `None` clears."
           },
           "sni": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Override SNI; `None` clears."
           },
           "sort_order": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Sort order for generation. Always required (defaults to 0 when\nabsent); sent value replaces the stored one."
           }
         }
       },

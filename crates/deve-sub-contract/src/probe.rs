@@ -67,13 +67,21 @@ pub enum ErrorClassDto {
 }
 
 /// Sync status of a probe source's last traffic sync.
+///
+/// Internally tagged (`{"status":"ok"}`, `{"status":"failed","message":"…"}`,
+/// `{"status":"stale"}`). WHY: an untagged representation serializes the
+/// `Ok` and `Stale` unit variants to `null`, collapsing them on
+/// deserialization — a stale source would round-trip as `Ok`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case", untagged)]
+#[serde(tag = "status", rename_all = "snake_case")]
 pub enum SyncStatusDto {
     /// The last sync succeeded.
     Ok,
     /// The last sync failed with the given message.
-    Failed { message: String },
+    Failed {
+        /// Failure reason.
+        message: String,
+    },
     /// Never synced or stale.
     Stale,
 }
@@ -255,4 +263,45 @@ pub struct SyncProbeTrafficResponse {
     pub samples_written: usize,
     /// Whether the encrypted counter snapshot was updated.
     pub snapshot_updated: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// All three variants must survive a JSON round trip. WHY: an earlier
+    /// untagged representation collapsed `Ok` and `Stale` to `null`.
+    #[test]
+    fn sync_status_round_trips_all_variants() {
+        for value in [
+            SyncStatusDto::Ok,
+            SyncStatusDto::Failed {
+                message: "upstream 500".to_owned(),
+            },
+            SyncStatusDto::Stale,
+        ] {
+            let json = serde_json::to_string(&value).expect("serialize");
+            let back: SyncStatusDto = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, value, "round trip failed for {json}");
+        }
+    }
+
+    #[test]
+    fn sync_status_wire_shape_is_tagged() {
+        assert_eq!(
+            serde_json::to_value(SyncStatusDto::Ok).expect("ser"),
+            serde_json::json!({"status": "ok"})
+        );
+        assert_eq!(
+            serde_json::to_value(SyncStatusDto::Stale).expect("ser"),
+            serde_json::json!({"status": "stale"})
+        );
+        assert_eq!(
+            serde_json::to_value(SyncStatusDto::Failed {
+                message: "boom".to_owned()
+            })
+            .expect("ser"),
+            serde_json::json!({"status": "failed", "message": "boom"})
+        );
+    }
 }

@@ -941,3 +941,68 @@ async fn strict_non_mihomo_no_container_fields_succeeds() {
         "proxy-only output must not contain proxy-groups"
     );
 }
+
+/// Constraint #19 (delivery side): when regeneration fails after a pool
+/// revision bump (here: every node disabled, so the pool yields no
+/// compatible node), `generate_for_delivery` must serve the last successful
+/// cached version for the same selection shape instead of erroring (503).
+#[tokio::test]
+async fn delivery_serves_last_good_version_when_regeneration_fails() {
+    use deve_sub_domain::NodeOverrideRepository;
+    use deve_sub_storage_sqlite::SqliteNodeOverrideRepository;
+
+    let db = TestDb::new(SPEC_MIHOMO_ONLY, "last-good").await;
+    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+    let pool_repo =
+        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+
+    let request = make_request(db.template_id, "mihomo");
+    let first = generate_for_delivery(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request.clone(),
+    )
+    .await
+    .expect("first delivery");
+    assert!(first.content.contains("proxies:"));
+
+    // Disable every node — overrides bump the pool revision (new cache key)
+    // and leave zero compatible nodes, so regeneration must fail.
+    let override_repo = SqliteNodeOverrideRepository::new(db.pool.clone());
+    let ids = [
+        deve_sub_kernel::NodeId::parse(TROJAN_ID_A).expect("a"),
+        deve_sub_kernel::NodeId::parse(TROJAN_ID_B).expect("b"),
+        deve_sub_kernel::NodeId::parse(TROJAN_ID_C).expect("c"),
+    ];
+    override_repo
+        .batch_set_enabled(&ids, false)
+        .await
+        .expect("disable all");
+
+    let second = generate_for_delivery(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request,
+    )
+    .await
+    .expect("delivery must fall back to last good version, not 503");
+
+    assert_eq!(first.content, second.content, "last good content served");
+    assert!(
+        second
+            .warnings
+            .iter()
+            .any(|w| w == "generation failed; served last successful version"),
+        "must warn that a stale version was served, got: {:?}",
+        second.warnings
+    );
+}

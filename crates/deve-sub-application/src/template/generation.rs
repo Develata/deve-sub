@@ -144,14 +144,55 @@ pub async fn generate_for_delivery(
         return Ok(cached_result(&cached));
     }
 
-    let result = run_pipeline(
+    // WHY (constraint #19): on-demand regeneration after a pool revision
+    // bump can fail (e.g. a template/selection that no longer matches any
+    // node). A previously generated entry for the SAME selection shape is
+    // the last successful version for this delivery — serve it instead of
+    // returning 503, with an explicit "stale" warning.
+    let result = match run_pipeline(
         &ctx.version,
         pool_repo,
         ctx.profile,
         request.mode,
         request.node_selection.as_ref(),
     )
-    .await?;
+    .await
+    {
+        Ok(r) => r,
+        Err(pipeline_err) => {
+            return match cache_repo
+                .find_latest(
+                    request.template_id,
+                    &request.profile,
+                    ctx.selection_mode,
+                    &ctx.selection_payload,
+                )
+                .await
+            {
+                Ok(Some(last_good)) => {
+                    tracing::warn!(
+                        template_id = %request.template_id,
+                        profile = %request.profile,
+                        error = %pipeline_err,
+                        "delivery generation failed; serving last good cached version"
+                    );
+                    let mut result = cached_result(&last_good);
+                    result
+                        .warnings
+                        .push("generation failed; served last successful version".to_owned());
+                    Ok(result)
+                }
+                Ok(None) => Err(pipeline_err),
+                Err(cache_err) => {
+                    tracing::warn!(
+                        error = %cache_err,
+                        "last-good cache lookup failed during generation failure"
+                    );
+                    Err(pipeline_err)
+                }
+            };
+        }
+    };
 
     let entry = GenerationCacheEntry {
         id: GenerationCacheId::new(),

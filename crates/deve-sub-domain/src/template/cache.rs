@@ -97,6 +97,23 @@ pub trait GenerationCacheRepository: Send + Sync {
         profile: &str,
     ) -> Result<Option<GenerationCacheEntry>, TemplateError>;
 
+    /// Find the most recent entry for a selection shape — same
+    /// `(template_id, profile, selection_mode, selection_payload)` —
+    /// regardless of pool revision or active flag.
+    ///
+    /// Ordering is by entry ID (ULIDs are monotonic by creation time), so
+    /// the result is the LAST successfully generated content for this
+    /// selection. Used by the delivery-side last-good fallback (constraint
+    /// #19): when regeneration fails after a pool revision bump, delivery
+    /// serves this entry instead of a 503.
+    async fn find_latest(
+        &self,
+        template_id: TemplateId,
+        profile: &str,
+        selection_mode: &str,
+        selection_payload: &str,
+    ) -> Result<Option<GenerationCacheEntry>, TemplateError>;
+
     /// Store a new cache entry as inactive (content only; no publish). The
     /// caller activates via [`activate`].
     async fn store(&self, entry: &GenerationCacheEntry) -> Result<(), TemplateError>;

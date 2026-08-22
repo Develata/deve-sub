@@ -136,29 +136,26 @@ impl RefreshScheduler {
         // approach which spawned a Tokio task per due source (thousands of
         // tasks for thousands of sources). Each refresh is independent —
         // separate source_id, snapshot, and reconcile transaction — so
-        // bounded concurrency cannot cross-pollute (SRC-013).
+        // bounded concurrency cannot cross-pollute (SRC-013). `deps` borrows
+        // from `&self`, so it is built once per tick instead of cloning six
+        // Arcs per due source.
+        let deps = RefreshDeps {
+            source_repo: self.source_repo.as_ref(),
+            snapshot_repo: self.snapshot_repo.as_ref(),
+            pool_repo: self.pool_repo.as_ref(),
+            job_repo: self.job_repo.as_ref(),
+            fetcher: self.fetcher.as_ref(),
+            geoip: self.geoip.as_ref(),
+        };
         let results: Vec<_> = stream::iter(due)
             .map(|source_id| {
-                let source_repo = self.source_repo.clone();
-                let snapshot_repo = self.snapshot_repo.clone();
-                let pool_repo = self.pool_repo.clone();
-                let job_repo = self.job_repo.clone();
-                let fetcher = self.fetcher.clone();
-                let geoip = self.geoip.clone();
+                let deps = &deps;
                 async move {
-                    let deps = RefreshDeps {
-                        source_repo: source_repo.as_ref(),
-                        snapshot_repo: snapshot_repo.as_ref(),
-                        pool_repo: pool_repo.as_ref(),
-                        job_repo: job_repo.as_ref(),
-                        fetcher: fetcher.as_ref(),
-                        geoip: geoip.as_ref(),
-                    };
                     let cancelled = AtomicBool::new(false);
-                    match start_refresh_job(&deps, source_id).await {
+                    match start_refresh_job(deps, source_id).await {
                         Ok(job_id) => {
                             let result =
-                                execute_refresh_job(&deps, job_id, source_id, &cancelled).await;
+                                execute_refresh_job(deps, job_id, source_id, &cancelled).await;
                             (source_id, result)
                         }
                         Err(e) => (source_id, Err(e)),

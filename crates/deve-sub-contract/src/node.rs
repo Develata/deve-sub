@@ -149,15 +149,27 @@ pub struct NodeOverrideDto {
 }
 
 /// Request body for `PATCH /api/v1/nodes/{id}/override` (NODE-010).
+///
+/// Semantics: FULL REPLACE, not a merge. The stored override is rebuilt
+/// from this request — a field that is absent/`null` CLEARS that override
+/// (the node falls back to its parsed/auto value). Clients must send the
+/// complete desired override state on every call.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateOverrideRequest {
     /// Override display name; `None` clears the override.
     pub display_name: Option<String>,
+    /// Override region; `None` clears (revert to auto-detection).
     pub region: Option<String>,
+    /// Override enabled flag; `None` clears (natural status).
     pub enabled: Option<bool>,
+    /// Override SNI; `None` clears.
     pub sni: Option<String>,
+    /// Override skip-cert-verify; `None` clears.
     pub skip_cert_verify: Option<bool>,
+    /// Override TLS fingerprint; `None` clears.
     pub fingerprint: Option<String>,
+    /// Sort order for generation. Always required (defaults to 0 when
+    /// absent); sent value replaces the stored one.
     #[serde(default)]
     pub sort_order: i64,
 }

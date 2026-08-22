@@ -19,7 +19,9 @@ pub struct RegionDetection {
     /// ISO region code or free-form label, or `None` if lookup failed.
     pub region: Option<String>,
     /// All resolved candidate IPs (NODE-009: dual-stack domains record both
-    /// IPv4 and IPv6 addresses).
+    /// IPv4 and IPv6 addresses). Implementations must return them sorted and
+    /// deduplicated so stored data and region selection are deterministic
+    /// across refreshes.
     pub candidate_ips: Vec<IpAddr>,
 }
 

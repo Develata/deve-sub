@@ -266,12 +266,16 @@ pub trait NodePoolRepository: Send + Sync {
 
     /// Import a batch of pre-parsed nodes manually (NODE-001/002/003).
     ///
-    /// Each node is deduplicated against the active pool by
-    /// `(protocol_kind, host, port)`: new nodes are inserted, duplicates
-    /// are counted but not overwritten (the existing node's credentials
-    /// are preserved — NODE-003). No source binding is created; manual
-    /// nodes exist in the pool without a `node_source_bindings` row.
-    /// The entire batch is committed atomically.
+    /// Each node is deduplicated against the active pool by node identity
+    /// fingerprint (B-12, migration 0017): new identities are inserted; an
+    /// identity already active is counted as a duplicate but not overwritten
+    /// (the existing node's credentials are preserved — NODE-003; a node
+    /// with different credentials has a different fingerprint and is a
+    /// distinct entry, not a duplicate). An identity currently marked
+    /// `missing_from_source` is reactivated in place instead of reinserted.
+    /// No source binding is created; manual nodes exist in the pool without
+    /// a `node_source_bindings` row. The entire batch is committed
+    /// atomically.
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError>;
 
     /// List all node chains in the pool. Returns one [`NodeChainEntry`] per

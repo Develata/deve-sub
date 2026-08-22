@@ -28,7 +28,10 @@ pub trait LoginRateLimiter: Send + Sync {
     /// the key is locked for `lockout_duration`.
     fn record_failure(&self, username: &str, ip: Option<&str>);
 
-    /// Record a successful login. Resets the failure counters for both
-    /// the username and IP.
+    /// Record a successful login. Resets the failure counter for the
+    /// username only — NOT the IP counter. Implementations must keep the
+    /// IP-level failure count so an attacker on a shared IP cannot reset it
+    /// by logging in as themselves, then resuming attacks on other users
+    /// from the same IP.
     fn record_success(&self, username: &str, ip: Option<&str>);
 }

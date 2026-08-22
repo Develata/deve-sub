@@ -140,6 +140,19 @@ impl NodeChain {
     }
 }
 
+/// Server-derived enrichment keys stored in `node.extras` that must NOT
+/// participate in identity fingerprinting (B-12).
+///
+/// WHY: unlike protocol-specific extras (which distinguish functionally
+/// different proxies), these keys are recomputed by the server on every
+/// refresh from external state — `candidate_ips` mirrors DNS resolution
+/// output, whose order rotates with resolver behavior and whose membership
+/// rotates with CDN DNS. Including them would change the fingerprint on an
+/// unchanged node, so each refresh would insert a new pool row and mark the
+/// old one missing, churning every downstream NodeId binding (tags, chains,
+/// overrides, traffic history) whenever DNS answers differ.
+const NON_IDENTITY_EXTRAS: &[&str] = &["candidate_ips"];
+
 /// Identity-relevant fields of a [`Node`], used for deduplication (B-12).
 ///
 /// Serialized via `serde_json::Value` (BTreeMap-backed by default, since the
@@ -157,6 +170,9 @@ impl NodeChain {
 /// same credentials but different UDP capability, multiplex settings,
 /// congestion control, or protocol-specific extra fields are functionally
 /// different proxies and must NOT be collapsed.
+///
+/// Exception: keys listed in [`NON_IDENTITY_EXTRAS`] are stripped from
+/// `extras` before serialization.
 #[derive(Debug, Clone, Serialize)]
 struct NodeIdentityRef<'a> {
     protocol: &'a ProtocolKind,
@@ -169,7 +185,7 @@ struct NodeIdentityRef<'a> {
     udp: &'a UdpCapability,
     multiplex: &'a Option<MultiplexConfig>,
     congestion: &'a Option<CongestionConfig>,
-    extras: &'a BTreeMap<String, serde_json::Value>,
+    extras: &'a BTreeMap<&'a str, &'a serde_json::Value>,
 }
 
 impl Node {
@@ -178,9 +194,10 @@ impl Node {
     /// Two nodes with the same canonical identity are considered the same
     /// proxy endpoint and deduplicated in the pool. Fields that distinguish
     /// endpoints — credentials, SNI, transport path, Reality keys, UDP
-    /// capability, multiplex, congestion control, extras — are included;
-    /// metadata fields (`id`, `display_name`, `source`, `region`, `tags`,
-    /// `chain`) are not.
+    /// capability, multiplex, congestion control, protocol-specific extras —
+    /// are included; metadata fields (`id`, `display_name`, `source`,
+    /// `region`, `tags`, `chain`) and enrichment keys
+    /// ([`NON_IDENTITY_EXTRAS`], e.g. `candidate_ips`) are not.
     ///
     /// Keys are sorted alphabetically by going through `serde_json::Value`
     /// (BTreeMap-backed by default), giving canonical JSON independent of
@@ -193,6 +210,16 @@ impl Node {
     /// Returns `serde_json::Error` if serialization fails (should not happen
     /// for in-memory `Node` values, but is propagated for correctness).
     pub fn canonical_identity_str(&self) -> Result<String, serde_json::Error> {
+        // WHY: enrichment keys in NON_IDENTITY_EXTRAS describe external
+        // state (DNS answers), not the node itself; filtering them here (at
+        // the single fingerprint input point) keeps the pool dedup stable
+        // across refreshes regardless of what enrichment writes.
+        let identity_extras: BTreeMap<&str, &serde_json::Value> = self
+            .extras
+            .iter()
+            .filter(|(k, _)| !NON_IDENTITY_EXTRAS.contains(&k.as_str()))
+            .map(|(k, v)| (k.as_str(), v))
+            .collect();
         let v = serde_json::to_value(NodeIdentityRef {
             protocol: &self.protocol,
             endpoint: &self.endpoint,
@@ -204,7 +231,7 @@ impl Node {
             udp: &self.udp,
             multiplex: &self.multiplex,
             congestion: &self.congestion,
-            extras: &self.extras,
+            extras: &identity_extras,
         })?;
         serde_json::to_string(&v)
     }
@@ -249,4 +276,106 @@ pub enum RegionMethod {
     Auto,
     /// Admin-authored override. Remote updates must not overwrite this.
     Manual,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::endpoint::{DomainName, Host};
+    use crate::protocol::UnsupportedNode;
+
+    fn minimal_node(extras: BTreeMap<String, serde_json::Value>) -> Node {
+        Node {
+            id: NodeId::new(),
+            display_name: "test".to_owned(),
+            protocol: ProtocolKind::Trojan,
+            config: ProtocolConfig::Unsupported(UnsupportedNode {
+                raw: serde_json::Value::Null,
+                raw_format: None,
+                reason: "test fixture".to_owned(),
+            }),
+            endpoint: Endpoint {
+                host: Host::Domain(DomainName::new("node.test.example".to_owned())),
+                port: 443,
+            },
+            authentication: Authentication::Password {
+                password: "TEST_PASSWORD".to_owned(),
+            },
+            transport: None,
+            tls: None,
+            udp: UdpCapability::default(),
+            multiplex: None,
+            obfuscation: None,
+            congestion: None,
+            chain: None,
+            source: NodeSource {
+                source_label: "reserved-test-source".to_owned(),
+                raw_uri: None,
+                imported_at: Timestamp::now(),
+            },
+            tags: vec![],
+            region: RegionAssignment {
+                method: RegionMethod::Auto,
+                value: None,
+            },
+            extras,
+        }
+    }
+
+    /// Enrichment keys (NON_IDENTITY_EXTRAS) must not change the identity:
+    /// DNS-dependent `candidate_ips` variation across refreshes would
+    /// otherwise churn the pool fingerprint.
+    #[test]
+    fn candidate_ips_do_not_affect_identity() {
+        let mut extras_a = BTreeMap::new();
+        extras_a.insert(
+            "candidate_ips".to_owned(),
+            serde_json::json!(["192.0.2.10", "2001:db8::1"]),
+        );
+        let mut extras_b = BTreeMap::new();
+        extras_b.insert(
+            "candidate_ips".to_owned(),
+            serde_json::json!(["2001:db8::25", "198.51.100.7", "203.0.113.9"]),
+        );
+
+        let a = minimal_node(extras_a).canonical_identity_str().expect("a");
+        let b = minimal_node(extras_b).canonical_identity_str().expect("b");
+        assert_eq!(a, b, "candidate_ips must be excluded from identity");
+    }
+
+    /// Protocol-specific extras ARE identity: a differing plugin option is a
+    /// functionally different proxy and must not dedup against the original.
+    #[test]
+    fn protocol_extras_do_affect_identity() {
+        let mut extras_a = BTreeMap::new();
+        extras_a.insert("plugin_opts".to_owned(), serde_json::json!("mode=ws"));
+        let mut extras_b = BTreeMap::new();
+        extras_b.insert("plugin_opts".to_owned(), serde_json::json!("mode=quic"));
+
+        let a = minimal_node(extras_a).canonical_identity_str().expect("a");
+        let b = minimal_node(extras_b).canonical_identity_str().expect("b");
+        assert_ne!(a, b, "protocol extras must stay in identity");
+    }
+
+    /// Lock the canonical JSON key order (B-12). The fingerprint input must
+    /// depend only on VALUES, never on map insertion order — this test fails
+    /// if serde_json's `preserve_order` feature is ever enabled workspace
+    /// -wide (nested objects would become insertion-ordered IndexMaps).
+    #[test]
+    fn canonical_identity_object_keys_are_sorted() {
+        let mut extras = BTreeMap::new();
+        extras.insert(
+            "nested".to_owned(),
+            serde_json::json!({"z_key": 1, "a_key": 2, "m_key": 3}),
+        );
+        let canonical = minimal_node(extras)
+            .canonical_identity_str()
+            .expect("canonical");
+
+        // The nested object's keys must appear sorted in the serialized form.
+        let z = canonical.find("\"z_key\"").expect("z_key present");
+        let a = canonical.find("\"a_key\"").expect("a_key present");
+        let m = canonical.find("\"m_key\"").expect("m_key present");
+        assert!(a < m && m < z, "nested object keys must serialize sorted");
+    }
 }

@@ -44,11 +44,18 @@ impl MaxMindGeoIp {
     /// Resolve a domain host to candidate IPs via `tokio::net::lookup_host`.
     /// WHY: a domain may resolve to multiple A/AAAA records; collecting all
     /// of them satisfies NODE-009 dual-stack recording.
+    ///
+    /// The result is sorted and deduplicated. WHY: resolver answer order
+    /// rotates (round-robin DNS), and the first candidate with a country
+    /// record wins the region lookup — without sorting, the same dual-CDN
+    /// domain could flip its detected region between refreshes.
     async fn resolve_host(host: &str) -> Result<Vec<IpAddr>, std::io::Error> {
-        let addrs: Vec<IpAddr> = tokio::net::lookup_host((host, 0u16))
+        let mut addrs: Vec<IpAddr> = tokio::net::lookup_host((host, 0u16))
             .await?
             .map(|sa| sa.ip())
             .collect();
+        addrs.sort_unstable();
+        addrs.dedup();
         Ok(addrs)
     }
 

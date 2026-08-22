@@ -34,7 +34,13 @@ pub enum SourceAppError {
     NodeChain(#[from] deve_sub_domain::NodeChainError),
 
     /// A fetch operation failed (SSRF, timeout, HTTP error, etc.).
-    #[error(transparent)]
+    ///
+    /// Display renders the REDACTED form: subscription URLs routinely embed
+    /// tokens in the query string, and the raw `FetchError` text can embed
+    /// the full URL (SSRF detail, connection errors) or the origin's error
+    /// body — none of which may reach the job table or logs (DS-AUD-030).
+    /// `Debug` still carries the full variant for development.
+    #[error("fetch failed: {}", .0.redacted())]
     Fetch(#[from] FetchError),
 
     /// Content parsing failed.
@@ -54,4 +60,30 @@ pub enum SourceAppError {
     /// A refresh is already in progress for this source (B-15 lease).
     #[error("refresh already in progress for source {0}")]
     RefreshInProgress(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// DS-AUD-030: the Display of a fetch error must not leak the URL
+    /// (subscription tokens ride in the query string) or the origin's
+    /// error body — both reach the job table and logs via `to_string()`.
+    #[test]
+    fn fetch_error_display_is_redacted() {
+        let err = SourceAppError::Fetch(FetchError::Ssrf(
+            "blocked: https://host/api/v1/client/subscribe?token=SECRET".to_owned(),
+        ));
+        let msg = err.to_string();
+        assert!(!msg.contains("SECRET"), "display leaked token: {msg}");
+        assert!(!msg.contains("host/api"), "display leaked URL: {msg}");
+
+        let err = SourceAppError::Fetch(FetchError::Http {
+            status: 500,
+            body: "origin secret diagnostic SECRET".to_owned(),
+        });
+        let msg = err.to_string();
+        assert!(!msg.contains("origin secret"), "display leaked body: {msg}");
+        assert!(msg.contains("500"), "status must remain: {msg}");
+    }
 }

@@ -1017,3 +1017,90 @@ async fn src_014_diff_counts_correct() {
     assert_eq!(r3.reconcile.missing_nodes, 2, "v3: D and E missing");
     assert_eq!(r3.reconcile.reactivated_nodes, 1, "v3: C reactivated");
 }
+
+/// SRC-006 (post-filter): a refresh whose entries parse but are ALL
+/// nullified by filter rules must NOT publish an empty snapshot over the
+/// active one — that would mark every bound node missing (constraint #19).
+#[tokio::test]
+async fn refresh_all_filtered_preserves_active_snapshot() {
+    let db = TestDb::new().await;
+    let source_repo = SqliteSourceRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+    let snapshot_repo = SqliteSourceSnapshotRepository::new(db.pool.clone());
+    let pool_repo = SqliteNodePoolRepository::new_with_key(
+        db.pool.clone(),
+        std::sync::Arc::clone(&db.master_key),
+    );
+
+    let source = create_source(&source_repo, "filtered-source").await;
+
+    let fetcher_v1 = MockFetcher::new(vec![MockResponse::Ok {
+        body: TROJAN_URI_LIST.as_bytes().to_vec(),
+        etag: Some("\"v1\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    run_refresh(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &db.pool,
+        &fetcher_v1,
+        &StubGeoIp,
+        source.id,
+    )
+    .await
+    .expect("first refresh");
+
+    // Add a filter that drops every protocol the source provides.
+    deve_sub_application::source::update_source(
+        &source_repo,
+        deve_sub_application::source::UpdateSourceParams {
+            id: source.id,
+            name: "filtered-source".to_owned(),
+            source_type: SourceType::UriList,
+            url: "https://example.com/sub".to_owned(),
+            auto_update: false,
+            update_interval_secs: 3600,
+            enabled: true,
+            keep_on_fail: true,
+            filter_rules: Some(deve_sub_domain::SourceFilterRules {
+                include_protocols: vec!["shadowsocks".to_owned()],
+                ..Default::default()
+            }),
+        },
+    )
+    .await
+    .expect("update source");
+
+    let fetcher_v2 = MockFetcher::new(vec![MockResponse::Ok {
+        body: TROJAN_URI_LIST.as_bytes().to_vec(),
+        etag: Some("\"v2\"".to_owned()),
+        content_type: Some("text/plain".to_owned()),
+    }]);
+    let err = run_refresh(
+        &source_repo,
+        &snapshot_repo,
+        &pool_repo,
+        &db.pool,
+        &fetcher_v2,
+        &StubGeoIp,
+        source.id,
+    )
+    .await
+    .expect_err("all-filtered refresh must fail");
+
+    assert!(
+        matches!(err, source::SourceAppError::ZeroNodes),
+        "expected ZeroNodes, got {err:?}"
+    );
+
+    let active = snapshot_repo
+        .find_active(source.id)
+        .await
+        .expect("find active")
+        .expect("active snapshot preserved");
+    assert_eq!(active.version, 1, "active snapshot must stay at v1");
+    assert_eq!(active.node_count, 2, "active snapshot nodes must be intact");
+}

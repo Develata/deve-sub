@@ -257,6 +257,17 @@ async fn execute_refresh_inner(
         apply_region_filter(&mut entries, rules);
     }
 
+    // WHY: the zero-node guard above runs pre-filter, where a source whose
+    // content parses but whose entries are ALL nullified by protocol/region
+    // filters (upstream protocol change, GeoIP data change) would slip
+    // through and publish an empty snapshot — deactivating the previous one
+    // and marking every bound node missing (constraint #19, SRC-006). The
+    // same strategy applies after the filter phase.
+    let valid_after_filter = entries.iter().filter(|e| e.node.is_some()).count();
+    if valid_after_filter == 0 && active.is_some() {
+        return Err(SourceAppError::ZeroNodes);
+    }
+
     if cancelled.load(Ordering::Relaxed) {
         return Err(SourceAppError::Cancelled);
     }

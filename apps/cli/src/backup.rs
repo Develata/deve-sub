@@ -40,6 +40,14 @@ use deve_sub_security::MasterKey;
 /// incompatibly.
 const BACKUP_FORMAT_VERSION: u32 = 1;
 
+/// Maximum accepted size for `manifest.json` inside a backup archive.
+///
+/// WHY: the real manifest (row counts for ~28 tables) is a few KB; 1 MiB is
+/// generous. `read_to_end` without a cap would let a corrupt or hostile
+/// archive declare an enormous manifest and buffer it fully (same class as
+/// DS-AUD-B09 item 7).
+const MAX_MANIFEST_JSON_BYTES: u64 = 1024 * 1024;
+
 /// Arguments for `deve-sub backup`.
 #[derive(Args)]
 pub struct BackupArgs {
@@ -563,9 +571,7 @@ fn write_tar(
     add_file_bytes(&mut builder, "manifest.json", manifest_json.as_bytes())?;
     add_file_bytes(&mut builder, "config.json", config_json.as_bytes())?;
     add_file_bytes(&mut builder, "metadata.json", metadata_json.as_bytes())?;
-
-    let snapshot_bytes = fs::read(snapshot_path).context("failed to read snapshot database")?;
-    add_file_bytes(&mut builder, "database.sqlite", &snapshot_bytes)?;
+    add_snapshot_streaming(&mut builder, snapshot_path)?;
 
     builder.finish().context("failed to finalize tar archive")?;
 
@@ -595,6 +601,36 @@ fn add_file_bytes<W: std::io::Write>(
     builder
         .append(&header, data)
         .with_context(|| format!("failed to append {name} to archive"))?;
+    Ok(())
+}
+
+/// Append the database snapshot to the archive by streaming from disk.
+///
+/// WHY: the snapshot is a full `VACUUM INTO` copy of the production DB and
+/// can be arbitrarily large; reading it into a `Vec<u8>` first would double
+/// the memory footprint of the backup command. `Builder::append` with a
+/// `File` reader streams via io::copy with bounded buffers. Mode stays 0600
+/// per DS-AUD-031 regardless of the on-disk snapshot's permissions.
+fn add_snapshot_streaming<W: std::io::Write>(
+    builder: &mut tar::Builder<W>,
+    snapshot_path: &Path,
+) -> Result<()> {
+    let file = fs::File::open(snapshot_path)
+        .with_context(|| format!("failed to open snapshot {}", snapshot_path.display()))?;
+    let size = file
+        .metadata()
+        .with_context(|| format!("failed to stat snapshot {}", snapshot_path.display()))?
+        .len();
+    let mut header = tar::Header::new_gnu();
+    header
+        .set_path("database.sqlite")
+        .context("invalid archive path")?;
+    header.set_size(size);
+    header.set_mode(0o600);
+    header.set_cksum();
+    builder
+        .append(&header, file)
+        .context("failed to append database.sqlite to archive")?;
     Ok(())
 }
 
@@ -629,8 +665,17 @@ fn extract_archive(archive_path: &Path, dest: &Path) -> Result<(BackupManifest, 
 
         match &name[..] {
             "manifest.json" => {
+                if entry.size() > MAX_MANIFEST_JSON_BYTES {
+                    bail!(
+                        "manifest.json entry exceeds {MAX_MANIFEST_JSON_BYTES} bytes — \
+                         refusing unbounded read"
+                    );
+                }
                 let mut buf = Vec::new();
-                entry.read_to_end(&mut buf).context("read manifest")?;
+                entry
+                    .take(MAX_MANIFEST_JSON_BYTES)
+                    .read_to_end(&mut buf)
+                    .context("read manifest")?;
                 manifest = Some(serde_json::from_slice(&buf).context("parse manifest.json")?);
             }
             "database.sqlite" => {

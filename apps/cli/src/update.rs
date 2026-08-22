@@ -291,14 +291,31 @@ async fn fetch_manifest(url: &str) -> Result<ReleaseManifest> {
     if !resp.status().is_success() {
         bail!("manifest fetch returned {}", resp.status());
     }
-    // DS-AUD-B09: bound the manifest body size.
-    let body = resp.bytes().await.context("failed to read manifest body")?;
-    if body.len() as u64 > MAX_MANIFEST_BYTES {
-        bail!("manifest body exceeds {MAX_MANIFEST_BYTES} bytes — refusing unbounded read");
-    }
+    // DS-AUD-B09: bound the manifest body size DURING the read.
+    let body = read_body_bounded(resp, MAX_MANIFEST_BYTES).await?;
     let manifest: ReleaseManifest =
         serde_json::from_slice(&body).context("failed to parse manifest JSON")?;
     Ok(manifest)
+}
+
+/// Read a response body into memory, enforcing `max_bytes` DURING the read,
+/// not after it. `resp.bytes()` buffers the entire body before returning, so
+/// a post-hoc length check would let a hostile server push an arbitrarily
+/// large payload into memory first (DS-AUD-B09 item 7 regression guard).
+async fn read_body_bounded(resp: reqwest::Response, max_bytes: u64) -> Result<Vec<u8>> {
+    use futures_util::StreamExt;
+    let mut body = Vec::new();
+    let mut stream = resp.bytes_stream();
+    let mut total: u64 = 0;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.context("failed to read response body")?;
+        total += chunk.len() as u64;
+        if total > max_bytes {
+            bail!("response body exceeds {max_bytes} bytes — refusing unbounded read");
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 /// Result of attempting to fetch and verify a signed manifest from a release.
@@ -367,7 +384,8 @@ async fn try_fetch_signed_manifest(
     }
 }
 
-/// Download a URL into memory with an upper size bound (DS-AUD-B09).
+/// Download a URL into memory with an upper size bound enforced during the
+/// read (DS-AUD-B09).
 async fn download_bounded(url: &str, max_bytes: u64) -> Result<Vec<u8>> {
     let client = reqwest::Client::builder()
         .user_agent(format!("deve-sub/{}", env!("CARGO_PKG_VERSION")))
@@ -377,11 +395,7 @@ async fn download_bounded(url: &str, max_bytes: u64) -> Result<Vec<u8>> {
     if !resp.status().is_success() {
         bail!("download from {url} returned {}", resp.status());
     }
-    let bytes = resp.bytes().await.context("failed to read response body")?;
-    if bytes.len() as u64 > max_bytes {
-        bail!("download from {url} exceeds {max_bytes} bytes — refusing unbounded read");
-    }
-    Ok(bytes.to_vec())
+    read_body_bounded(resp, max_bytes).await
 }
 
 /// Stream a download to a temp file, computing SHA-256 incrementally and

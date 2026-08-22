@@ -127,5 +127,9 @@ unwrap_used = "deny"
 expect_used = "deny"
 
 [profile.release]
+# Single codegen unit + thin LTO: cross-crate inlining across the workspace
+# (subscription generation, parsing) is the hot path; release builds run on
+# CI where the slower compile is acceptable.
+codegen-units = 1
 lto = "thin"
 strip = "debuginfo"

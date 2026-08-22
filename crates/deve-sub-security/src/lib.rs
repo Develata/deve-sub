@@ -37,7 +37,7 @@ pub use totp::{
     DIGITS as TOTP_DIGITS, PERIOD as TOTP_PERIOD, base32_decode, base32_secret,
     generate_code as totp_generate_code, generate_code_string as totp_generate_code_string,
     generate_secret as totp_generate_secret, otpauth_uri as totp_otpauth_uri,
-    verify_code as totp_verify_code,
+    verify_code as totp_verify_code, verify_code_timestep as totp_verify_code_timestep,
 };
 
 use thiserror::Error;

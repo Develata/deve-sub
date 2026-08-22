@@ -83,6 +83,16 @@ pub trait TotpSecretRepository: Send + Sync {
     /// Find the TOTP secret for a user.
     async fn find_by_user(&self, user_id: UserId) -> Result<Option<TotpSecret>, IdentityError>;
 
+    /// Atomically record the timestep of an accepted TOTP code (replay
+    /// protection, RFC 6238 §5.2). Returns `Ok(false)` — without mutating
+    /// state — if `timestep` was already used or is older than the recorded
+    /// one; the caller must reject that code as a replay.
+    async fn record_used_timestep(
+        &self,
+        user_id: UserId,
+        timestep: u64,
+    ) -> Result<bool, IdentityError>;
+
     /// Delete the TOTP secret for a user.
     async fn delete(&self, user_id: UserId) -> Result<(), IdentityError>;
 }

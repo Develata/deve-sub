@@ -107,20 +107,32 @@ pub fn generate_code_string(secret: &[u8]) -> String {
 /// `true` if the code matches any step in `[now - WINDOW, now + WINDOW]`.
 #[must_use]
 pub fn verify_code(secret: &[u8], code: u32) -> bool {
+    verify_code_timestep(secret, code).is_some()
+}
+
+/// Verify a TOTP code and return the matched timestep (RFC 6238 counter).
+///
+/// # Returns
+/// `Some(timestep)` if the code matches a step in
+/// `[now - WINDOW, now + WINDOW]`, `None` otherwise. Callers enforcing replay
+/// protection (RFC 6238 §5.2) must reject a timestep that was already
+/// accepted.
+#[must_use]
+pub fn verify_code_timestep(secret: &[u8], code: u32) -> Option<u64> {
     let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
     let current_counter = counter(now);
 
     // WHY: check all steps in the window to tolerate clock skew. We check
     // without early return to keep timing constant regardless of which step
     // matched (mitigates timing side-channel on the match position).
-    let mut valid = false;
+    let mut matched = None;
     for offset in 0..=2 * WINDOW {
         let candidate_counter = current_counter.saturating_sub(WINDOW) + offset;
         if hotp(secret, candidate_counter) == code {
-            valid = true;
+            matched = Some(candidate_counter);
         }
     }
-    valid
+    matched
 }
 
 /// Percent-encode a string per RFC 3986 (unreserved characters only).

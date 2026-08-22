@@ -412,6 +412,71 @@ async fn twofa_login_wrong_totp_code() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+/// RFC 6238 §5.2: a TOTP code accepted once must be rejected on reuse
+/// within its validity window (replay protection, review A-4).
+#[tokio::test]
+async fn twofa_totp_code_replay_is_rejected() {
+    let app = TestApp::new().await;
+    let router = app.router();
+
+    let cookie = setup_admin_and_login(&router).await;
+    let (_recovery_codes, secret_bytes) = setup_2fa(&router, &cookie).await;
+
+    let _ = router
+        .clone()
+        .oneshot(post_json_with_cookie(
+            "/api/v1/auth/logout",
+            r#"{}"#,
+            &cookie,
+        ))
+        .await;
+
+    // Login → 2FA challenge → succeed with the current TOTP code.
+    async fn challenge(router: &axum::Router) -> String {
+        let response = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/auth/login",
+                r#"{"username":"admin","password":"s3cure-pwd!"}"#,
+            ))
+            .await
+            .expect("login");
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .expect("body");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        json["challenge_token"].as_str().expect("token").to_owned()
+    }
+
+    let challenge_token = challenge(&router).await;
+    let code = totp_generate_code(&secret_bytes);
+    let response = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/login/2fa",
+            &format!(r#"{{"challenge_token":"{challenge_token}","code":"{code:06}"}}"#),
+        ))
+        .await
+        .expect("first 2fa login");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Replay the SAME code with a fresh challenge — must be rejected.
+    let challenge_token = challenge(&router).await;
+    let response = router
+        .clone()
+        .oneshot(post_json(
+            "/api/v1/auth/login/2fa",
+            &format!(r#"{{"challenge_token":"{challenge_token}","code":"{code:06}"}}"#),
+        ))
+        .await
+        .expect("replayed 2fa login");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "replayed TOTP code must be rejected within its validity window"
+    );
+}
+
 /// AUTH-005: 2FA login with invalid challenge token returns 401.
 #[tokio::test]
 async fn twofa_login_invalid_challenge_token() {

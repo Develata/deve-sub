@@ -158,6 +158,14 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
         .await
         .expect("reverse 0021 index");
 
+    // Reverse migration 0022: drop the TOTP replay-protection column so
+    // forward-migrating through 0022 (ALTER TABLE ... ADD COLUMN
+    // last_used_timestep) succeeds.
+    sqlx::query("ALTER TABLE totp_secrets DROP COLUMN last_used_timestep")
+        .execute(&pool)
+        .await
+        .expect("reverse 0022 totp column");
+
     sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
         .execute(&pool)
         .await

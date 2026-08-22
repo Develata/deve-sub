@@ -60,6 +60,41 @@ pub fn open(master_key: &[u8], context: &[u8], envelope: &str) -> Result<Vec<u8>
     decrypt_aad(&subkey, &ct, &nonce, context)
 }
 
+/// Encrypt plaintext with the v2 envelope construction, returning the raw
+/// (ciphertext, nonce) parts instead of a versioned string.
+///
+/// WHY: `totp_secrets` stores ciphertext and nonce in two BLOB columns
+/// (migration 0003); this variant gives that legacy layout the same ADR-0007
+/// guarantees as [`seal`] — HKDF-SHA256 subkey separation per context and
+/// column-bound AAD — instead of encrypting directly under the master key.
+///
+/// # Errors
+/// Returns [`SecurityError::Crypto`] if subkey derivation or encryption fails.
+pub fn seal_parts(
+    master_key: &[u8],
+    context: &[u8],
+    plaintext: &[u8],
+) -> Result<(Vec<u8>, [u8; 24]), SecurityError> {
+    let subkey = derive_envelope_subkey(master_key, context)?;
+    encrypt_aad(&subkey, plaintext, context)
+}
+
+/// Decrypt parts produced by [`seal_parts`] with the same `context`.
+///
+/// # Errors
+/// Returns [`SecurityError::Crypto`] if subkey derivation or decryption
+/// fails — including when the parts were encrypted under a different context
+/// or directly under the master key.
+pub fn open_parts(
+    master_key: &[u8],
+    context: &[u8],
+    ciphertext: &[u8],
+    nonce: &[u8; 24],
+) -> Result<Vec<u8>, SecurityError> {
+    let subkey = derive_envelope_subkey(master_key, context)?;
+    decrypt_aad(&subkey, ciphertext, nonce, context)
+}
+
 /// Check whether a string is a versioned envelope (starts with `v2:`).
 #[must_use]
 pub fn is_envelope(s: &str) -> bool {
@@ -93,6 +128,27 @@ mod tests {
 
     const KEY: [u8; 32] = [0x42u8; 32];
     const CTX: &[u8] = b"sources.url";
+
+    #[test]
+    fn seal_parts_open_parts_roundtrip() {
+        let plaintext = b"totp-secret-material";
+        let (ct, nonce) = seal_parts(&KEY, CTX, plaintext).expect("seal");
+        let opened = open_parts(&KEY, CTX, &ct, &nonce).expect("open");
+        assert_eq!(opened, plaintext);
+    }
+
+    /// ADR-0007: parts sealed under one context must not open under another
+    /// (column relocation), and parts encrypted directly under the master
+    /// key (pre-v2 TOTP layout) must not open via open_parts.
+    #[test]
+    fn seal_parts_rejects_wrong_context_and_raw_master_key_parts() {
+        let plaintext = b"totp-secret-material";
+        let (ct, nonce) = seal_parts(&KEY, CTX, plaintext).expect("seal");
+        assert!(open_parts(&KEY, b"identity.totp_secret", &ct, &nonce).is_err());
+
+        let (raw_ct, raw_nonce) = crate::encrypt_aad(&KEY, plaintext, CTX).expect("raw");
+        assert!(open_parts(&KEY, CTX, &raw_ct, &raw_nonce).is_err());
+    }
 
     #[test]
     fn seal_open_roundtrip() {

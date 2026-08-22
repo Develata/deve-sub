@@ -60,7 +60,8 @@ impl TotpSecretRepository for SqliteTotpSecretRepository {
              ON CONFLICT(user_id) DO UPDATE SET \
                secret_ciphertext = excluded.secret_ciphertext, \
                nonce = excluded.nonce, \
-               created_at = excluded.created_at",
+               created_at = excluded.created_at, \
+               last_used_timestep = NULL",
         )
         .bind(secret.user_id.to_string())
         .bind(&secret.secret_ciphertext)
@@ -80,6 +81,33 @@ impl TotpSecretRepository for SqliteTotpSecretRepository {
                 .await
                 .map_err(|e| IdentityError::Storage(e.to_string()))?;
         row.map(|r| r.to_domain()).transpose()
+    }
+
+    async fn record_used_timestep(
+        &self,
+        user_id: UserId,
+        timestep: u64,
+    ) -> Result<bool, IdentityError> {
+        // WHY: the guard makes the check-and-set atomic — a replayed
+        // timestep matches zero rows, so concurrent attempts cannot both
+        // succeed (RFC 6238 §5.2).
+        let result = sqlx::query(
+            "UPDATE totp_secrets SET last_used_timestep = ? WHERE user_id = ? \
+             AND (last_used_timestep IS NULL OR last_used_timestep < ?)",
+        )
+        .bind(
+            i64::try_from(timestep)
+                .map_err(|_| IdentityError::Storage("TOTP timestep out of i64 range".to_owned()))?,
+        )
+        .bind(user_id.to_string())
+        .bind(
+            i64::try_from(timestep)
+                .map_err(|_| IdentityError::Storage("TOTP timestep out of i64 range".to_owned()))?,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| IdentityError::Storage(e.to_string()))?;
+        Ok(result.rows_affected() > 0)
     }
 
     async fn delete(&self, user_id: UserId) -> Result<(), IdentityError> {

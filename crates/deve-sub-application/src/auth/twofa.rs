@@ -11,9 +11,9 @@ use deve_sub_domain::{
 };
 use deve_sub_kernel::{RecoveryCodeId, Timestamp, UserId};
 use deve_sub_security::{
-    MasterKey, PURPOSE_RECOVERY, PURPOSE_SESSION, decrypt_aad, encrypt_aad,
-    generate_recovery_codes, generate_session_token, hmac_digest, normalize_recovery_code,
-    totp_generate_secret, totp_otpauth_uri, totp_verify_code, verify_password_async,
+    MasterKey, PURPOSE_RECOVERY, PURPOSE_SESSION, envelope, generate_recovery_codes,
+    generate_session_token, hmac_digest, normalize_recovery_code, totp_generate_secret,
+    totp_otpauth_uri, totp_verify_code, verify_password_async,
 };
 
 use super::challenge::verify_challenge_token;
@@ -55,7 +55,10 @@ pub async fn setup_2fa(
     }
 
     let secret = totp_generate_secret()?;
-    let (ciphertext, nonce) = encrypt_aad(master_key.as_bytes(), &secret, TOTP_AAD_CONTEXT)?;
+    // WHY: v2 envelope parts (HKDF subkey per TOTP_AAD_CONTEXT + AAD) per
+    // ADR-0007 — the two-BLOB column layout predates the string envelope.
+    let (ciphertext, nonce) =
+        envelope::seal_parts(master_key.as_bytes(), TOTP_AAD_CONTEXT, &secret)?;
     let totp_secret = TotpSecret::new(user_id, ciphertext, nonce);
     totp_secret_repo.upsert(&totp_secret).await?;
 
@@ -115,11 +118,11 @@ pub async fn verify_2fa(
         .await?
         .ok_or(AuthError::TotpSecretNotFound)?;
 
-    let plaintext = decrypt_aad(
+    let plaintext = envelope::open_parts(
         master_key.as_bytes(),
+        TOTP_AAD_CONTEXT,
         &stored_secret.secret_ciphertext,
         &stored_secret.nonce,
-        TOTP_AAD_CONTEXT,
     )?;
 
     if !totp_verify_code(&plaintext, code) {
@@ -317,14 +320,27 @@ pub async fn login_2fa(
             .await?
             .ok_or(AuthError::TotpSecretNotFound)?;
 
-        let plaintext = decrypt_aad(
+        let plaintext = envelope::open_parts(
             master_key.as_bytes(),
+            TOTP_AAD_CONTEXT,
             &stored_secret.secret_ciphertext,
             &stored_secret.nonce,
-            TOTP_AAD_CONTEXT,
         )?;
 
-        totp_verify_code(&plaintext, code_u32)
+        // WHY: replay protection (RFC 6238 §5.2). The matched timestep is
+        // recorded atomically BEFORE the session is created; a replayed code
+        // (same timestep already accepted) makes record_used_timestep
+        // return false and is rejected as invalid. Burning the timestep
+        // before session persistence is deliberate: a concurrent replay
+        // racing this login must lose even if session creation later fails.
+        match deve_sub_security::totp_verify_code_timestep(&plaintext, code_u32) {
+            Some(timestep) => {
+                totp_secret_repo
+                    .record_used_timestep(user_id, timestep)
+                    .await?
+            }
+            None => false,
+        }
     } else {
         // Recovery code path
         let normalized = normalize_recovery_code(code);

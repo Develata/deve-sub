@@ -650,8 +650,16 @@ async fn create_probe_run(
         {
             tracing::error!(error = %e, %run_id, "probe run failed");
         }
-        if let Ok(mut flags) = flags_map.lock() {
-            flags.remove(&run_id);
+        // WHY: recover from a poisoned mutex so the flag map does not leak
+        // the entry for this run. A poisoned lock means a prior task
+        // panicked while holding it; the map itself is structurally valid.
+        match flags_map.lock() {
+            Ok(mut flags) => {
+                flags.remove(&run_id);
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().remove(&run_id);
+            }
         }
     });
 

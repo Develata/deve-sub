@@ -137,6 +137,9 @@ fn map_traffic_error(
         SubscriptionAppError::InvalidInput(msg) => {
             err(StatusCode::BAD_REQUEST, "invalid_input", &msg)
         }
+        SubscriptionAppError::SubscriptionNotFound => {
+            err(StatusCode::NOT_FOUND, "not_found", "subscription not found")
+        }
         other => {
             tracing::warn!(error = %other, "{ctx} failed");
             err(

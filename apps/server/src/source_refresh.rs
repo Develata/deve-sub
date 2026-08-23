@@ -98,8 +98,25 @@ pub async fn refresh_source(
     }
 
     let cancelled = Arc::new(AtomicBool::new(false));
-    if let Ok(mut flags) = state.refresh_cancel_flags.lock() {
-        flags.insert(job_id, Arc::clone(&cancelled));
+    // WHY: a poisoned `Mutex` means a prior task panicked while holding the
+    // lock. Using `if let Ok` here would silently skip registration, leaving
+    // this in-flight job uncancellable — cancel would fall back to a DB
+    // status write the runner never observes. Surface the failure so the
+    // operator can restart the process to restore cancellation (SV-004).
+    match state.refresh_cancel_flags.lock() {
+        Ok(mut flags) => {
+            flags.insert(job_id, Arc::clone(&cancelled));
+        }
+        Err(poisoned) => {
+            tracing::error!(
+                "refresh_cancel_flags mutex poisoned; job {job_id} is uncancellable until restart"
+            );
+            // WHY: recover the inner guard from the poisoned error so the job
+            // is still registered despite the prior panic — the map itself is
+            // structurally valid, only the mutex flag is poisoned.
+            let mut flags = poisoned.into_inner();
+            flags.insert(job_id, Arc::clone(&cancelled));
+        }
     }
 
     let state2 = state.clone();

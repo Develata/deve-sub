@@ -21,9 +21,12 @@ pub struct ListAuditLogsResponse {
     pub next_cursor: Option<String>,
 }
 
+// WHY: these constants must match the action/target_type strings the
+// server actually writes (see `deve-sub-application/src/audit/commands.rs`).
+// A drift here makes the audit filter silently return zero rows for the
+// mismatched actions and hide real audited events from the UI (SV-001).
 pub const ACTIONS: &[&str] = &[
     "auth.login",
-    "auth.login_2fa",
     "auth.logout",
     "auth.2fa.enable",
     "auth.2fa.disable",
@@ -37,14 +40,17 @@ pub const ACTIONS: &[&str] = &[
     "subscription.create",
     "subscription.update",
     "subscription.delete",
-    "subscription.rotate_token",
-    "subscription.regen_short_code",
+    "subscription.token.rotate",
     "template.create",
     "template.update",
     "template.delete",
     "template.rollback",
-    "template.generate",
-    "template.preview",
+    "probe.source.create",
+    "probe.source.update",
+    "probe.source.delete",
+    "probe.source.sync",
+    "probe.run.start",
+    "probe.run.cancel",
 ];
 
 pub const TARGET_TYPES: &[&str] = &[
@@ -52,6 +58,6 @@ pub const TARGET_TYPES: &[&str] = &[
     "source",
     "subscription",
     "template",
-    "node",
-    "probe",
+    "probe_source",
+    "probe_run",
 ];

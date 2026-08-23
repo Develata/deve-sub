@@ -90,10 +90,17 @@ pub async fn start_refresh_job(
         not_modified: false,
     };
     deps.job_repo.create(&job).await.map_err(map_lease_error)?;
-    deps.job_repo
-        .mark_running(job.id)
-        .await
-        .map_err(map_lease_error)?;
+    if let Err(e) = deps.job_repo.mark_running(job.id).await {
+        // WHY: on a lost lease race the just-created `Pending` row would
+        // persist indefinitely — `recover_stale_jobs` only targets
+        // `Running` rows, so the orphan is only swept at the next process
+        // restart. Best-effort delete; ignore the error if it fails
+        // because the row is already gone (SRC-015).
+        if matches!(e, SourceError::RefreshInProgress(_)) {
+            let _ = deps.job_repo.delete(job.id).await;
+        }
+        return Err(map_lease_error(e));
+    }
     Ok(job.id)
 }
 
@@ -193,6 +200,15 @@ async fn execute_refresh_inner(
         let snapshot = active.ok_or(SourceAppError::Source(SourceError::Storage(
             "server returned 304 but no active snapshot exists".to_owned(),
         )))?;
+        // WHY: without advancing `fetched_at`, the scheduler's due check
+        // (`now - snapshot.fetched_at >= update_interval_secs`) stays true
+        // forever and the source is re-fetched every tick. Bump the active
+        // snapshot's `fetched_at` so the configured interval is honored
+        // (SRC-014).
+        let _ = deps
+            .snapshot_repo
+            .touch_fetched_at(source_id, Timestamp::now())
+            .await;
         return Ok(RefreshResult {
             snapshot,
             reconcile: ReconcileResult::default(),

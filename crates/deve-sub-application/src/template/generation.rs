@@ -107,7 +107,24 @@ pub async fn generate(
         is_active: false,
     };
 
-    cache_repo.store(&entry).await?;
+    // WHY: concurrent admin generate calls with the same cache_key (double-
+    // click, two admins) race to store. The UNIQUE constraint on cache_key
+    // rejects the duplicate; on that specific failure, re-read the cache to
+    // retrieve the winning entry and activate it, mirroring the delivery
+    // path in `generate_for_delivery` (OUT-014). Any non-UNIQUE store error
+    // propagates.
+    if let Err(store_err) = cache_repo.store(&entry).await {
+        if let Some(cached) = cache_repo.find_by_key(&entry.cache_key).await? {
+            if !cached.is_active {
+                cache_repo
+                    .activate(cached.template_id, &cached.profile, cached.id)
+                    .await?;
+            }
+            return Ok(cached_result(&cached));
+        }
+        return Err(store_err.into());
+    }
+
     cache_repo
         .activate(entry.template_id, &entry.profile, entry.id)
         .await?;

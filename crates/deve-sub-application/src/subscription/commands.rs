@@ -88,6 +88,18 @@ fn parse_node_selection(value: serde_json::Value) -> Result<NodeSelector, Subscr
         .map_err(|e| SubscriptionAppError::InvalidInput(format!("invalid node_selection: {e}")))
 }
 
+/// Validate a traffic limit. `None` = unlimited; `Some(0)` is rejected.
+fn validate_traffic_limit(limit: Option<u64>) -> Result<(), SubscriptionAppError> {
+    // WHY: `is_traffic_exceeded` treats `Some(0)` as unlimited, so accepting it
+    // would persist state that contradicts delivered behavior (F-003).
+    if limit == Some(0) {
+        return Err(SubscriptionAppError::InvalidInput(
+            "traffic_limit must be > 0; use null for unlimited".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// Parameters for [`create_subscription`].
 pub struct CreateSubscriptionParams {
     /// Human-readable name.
@@ -138,6 +150,7 @@ pub async fn create_subscription(
     validate_name(&params.name)?;
     validate_slug(&params.slug)?;
     validate_profile(&params.profile)?;
+    validate_traffic_limit(params.traffic_limit)?;
     let node_selection = parse_node_selection(params.node_selection)?;
     let expires_at = params
         .expires_at
@@ -228,6 +241,7 @@ pub async fn update_subscription(
     validate_name(&params.name)?;
     validate_slug(&params.slug)?;
     validate_profile(&params.profile)?;
+    validate_traffic_limit(params.traffic_limit)?;
     let node_selection = parse_node_selection(params.node_selection)?;
     let expires_at = params
         .expires_at

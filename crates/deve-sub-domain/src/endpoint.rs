@@ -47,11 +47,15 @@ impl Host {
     /// domain matches the M3 parser's deferred-validation policy.
     #[must_use]
     pub fn parse_uri_host(s: &str) -> Self {
-        if let Some(inner) = s.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        if let Some(inner) = s.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
             if let Ok(addr) = inner.parse::<Ipv6Addr>() {
                 return Self::Ipv6(addr);
             }
-            return Self::Domain(DomainName::new(s.to_owned()));
+            // WHY: strip brackets even when the content is not a valid IPv6.
+            // Keeping the brackets would produce a malformed URI on output —
+            // RFC 3986 reserves `[...]` in the host for IP-literal addresses
+            // only (F-004).
+            return Self::Domain(DomainName::new(inner.to_owned()));
         }
         if let Ok(addr) = s.parse::<Ipv4Addr>() {
             return Self::Ipv4(addr);
@@ -155,9 +159,6 @@ mod tests {
     #[test]
     fn parse_uri_host_bracketed_non_ipv6_falls_back_to_domain() {
         let host = Host::parse_uri_host("[not-an-ip]");
-        assert_eq!(
-            host,
-            Host::Domain(DomainName::new("[not-an-ip]".to_owned()))
-        );
+        assert_eq!(host, Host::Domain(DomainName::new("not-an-ip".to_owned())));
     }
 }

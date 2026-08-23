@@ -70,6 +70,22 @@ pub trait SourceSnapshotRepository: Send + Sync {
     /// Find a snapshot by ID.
     async fn find_by_id(&self, id: SourceSnapshotId)
     -> Result<Option<SourceSnapshot>, SourceError>;
+
+    /// Bump the active snapshot's `fetched_at` to `now` without creating a
+    /// new snapshot row.
+    ///
+    /// WHY: the scheduler computes "due" as
+    /// `now - snapshot.fetched_at >= update_interval_secs`. On a 304 Not
+    /// Modified the refresh returns early without inserting a new snapshot,
+    /// so `fetched_at` never advances and a source that consistently returns
+    /// 304 is re-fetched every tick (60s) instead of every
+    /// `update_interval_secs`. This method resets the due timer on 304 so
+    /// the interval is honored (SRC-014).
+    async fn touch_fetched_at(
+        &self,
+        source_id: SourceId,
+        now: Timestamp,
+    ) -> Result<(), SourceError>;
 }
 
 /// One entry from a parsed source refresh, ready for reconciliation.
@@ -137,8 +153,11 @@ pub struct NodePoolEntry {
     pub created_at: Timestamp,
 
     /// Manual override applied to this node, if any. `None` when no
-    /// `node_overrides` row exists. The effective node is
-    /// `parsed_node.apply_override(override)`. See NODE-010.
+    /// `node_overrides` row exists. The effective node is computed at read
+    /// time by the storage adapter: `display_name`, `region`, `enabled`, and
+    /// the TLS-bearing fields (`sni`, `skip_cert_verify`, `fingerprint`) are
+    /// grafted onto the parsed node when present in the override. See NODE-010
+    /// and `deve-sub-storage-sqlite/src/node_row.rs::to_pool_entry`.
     pub override_info: Option<NodeOverride>,
 
     /// Tags assigned to this node, resolved from the `node_tags` junction.
@@ -390,6 +409,13 @@ pub trait SourceRefreshJobRepository: Send + Sync {
         &self,
         id: deve_sub_kernel::SourceRefreshJobId,
     ) -> Result<(), SourceError>;
+
+    /// Delete a job row. Used to reclaim an orphaned `Pending` row when the
+    /// subsequent `mark_running` fails the lease (another caller won the
+    /// lease). Without this, the loser's `Pending` row persists until the
+    /// next process restart because `recover_stale_jobs` only targets
+    /// `Running` rows (SRC-015).
+    async fn delete(&self, id: deve_sub_kernel::SourceRefreshJobId) -> Result<(), SourceError>;
 
     /// List recent refresh jobs for a source, newest first.
     async fn list_for_source(

@@ -33,10 +33,6 @@ pub enum IdentityError {
     #[error("2FA not enabled")]
     TwoFactorNotEnabled,
 
-    /// No TOTP secret found for the user (setup not completed).
-    #[error("TOTP secret not found")]
-    TotpSecretNotFound,
-
     /// A recovery code was not found or has already been used.
     #[error("recovery code not found or already used")]
     RecoveryCodeNotFound,

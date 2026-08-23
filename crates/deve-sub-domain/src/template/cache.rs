@@ -48,27 +48,33 @@ pub struct CacheKeyParams<'a> {
 
 impl CacheKeyParams<'_> {
     /// Compute the deterministic cache key from the parameters. SHA-256 of
-    /// the canonical pipe-delimited concatenation. WHY: the cache must
-    /// invalidate when any input changes (template version, profile, mode,
-    /// selection, or pool revision), and a hash gives a stable, collision-
-    /// resistant key without leaking the full parameters into the index.
+    /// a length-prefixed canonical encoding. WHY: the cache must invalidate
+    /// when any input changes (template version, profile, mode, selection,
+    /// or pool revision), and a hash gives a stable, collision-resistant key
+    /// without leaking the full parameters into the index. Length-prefixing
+    /// each field — rather than pipe-delimiting — prevents delimiter-injection
+    /// collisions when `selection_payload` (free-form JSON) contains the
+    /// delimiter byte (F-002).
     #[must_use]
     pub fn compute_key(&self) -> String {
         use sha2::{Digest, Sha256};
+
+        fn feed(hasher: &mut Sha256, field: &[u8]) {
+            hasher.update((field.len() as u64).to_le_bytes());
+            hasher.update(field);
+        }
+
         let mut hasher = Sha256::new();
-        hasher.update(self.template_id.to_string().as_bytes());
-        hasher.update(b"|");
-        hasher.update(self.template_version.to_string().as_bytes());
-        hasher.update(b"|");
-        hasher.update(self.profile.as_bytes());
-        hasher.update(b"|");
-        hasher.update(self.mode.as_str().as_bytes());
-        hasher.update(b"|");
-        hasher.update(self.selection_mode.as_bytes());
-        hasher.update(b"|");
-        hasher.update(self.selection_payload.as_bytes());
-        hasher.update(b"|");
-        hasher.update(self.pool_revision.value().to_string().as_bytes());
+        feed(&mut hasher, self.template_id.to_string().as_bytes());
+        feed(&mut hasher, self.template_version.to_string().as_bytes());
+        feed(&mut hasher, self.profile.as_bytes());
+        feed(&mut hasher, self.mode.as_str().as_bytes());
+        feed(&mut hasher, self.selection_mode.as_bytes());
+        feed(&mut hasher, self.selection_payload.as_bytes());
+        feed(
+            &mut hasher,
+            self.pool_revision.value().to_string().as_bytes(),
+        );
         let digest = hasher.finalize();
         const HEX_LOWER: &[u8; 16] = b"0123456789abcdef";
         let mut out = String::with_capacity(64);

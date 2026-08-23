@@ -120,7 +120,7 @@ impl KomariProbeAdapter {
         }
 
         let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
-        if body.len() >= SUCCESS_BODY_CAP {
+        if body.len() > SUCCESS_BODY_CAP {
             return Err(ProbeError::ProbeFailed(format!(
                 "Komari API response body exceeds {SUCCESS_BODY_CAP} bytes"
             )));
@@ -153,7 +153,7 @@ impl KomariProbeAdapter {
         }
 
         let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
-        if body.len() >= SUCCESS_BODY_CAP {
+        if body.len() > SUCCESS_BODY_CAP {
             return Err(ProbeError::ProbeFailed(format!(
                 "Komari API response body exceeds {SUCCESS_BODY_CAP} bytes"
             )));

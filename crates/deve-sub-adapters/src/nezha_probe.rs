@@ -114,7 +114,7 @@ impl NezhaProbeAdapter {
         }
 
         let body = probe_common::read_body_capped(resp, SUCCESS_BODY_CAP).await;
-        if body.len() >= SUCCESS_BODY_CAP {
+        if body.len() > SUCCESS_BODY_CAP {
             return Err(ProbeError::ProbeFailed(format!(
                 "Nezha API response body exceeds {SUCCESS_BODY_CAP} bytes"
             )));

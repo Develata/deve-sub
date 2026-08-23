@@ -10,8 +10,7 @@
 //! §"Latency probe model".
 
 use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -29,15 +28,22 @@ use tokio::time::Instant;
 /// because the probe measures reachability/latency, not authentication.
 pub struct QuicHandshakeProbe {
     endpoint: OnceLock<Endpoint>,
+    // WHY: serializes endpoint construction so concurrent first-use probes
+    // build exactly one `Endpoint` instead of N. The `OnceLock` alone cannot
+    // prevent N racing `set()` calls from each building (and leaking) a UDP
+    // socket; this mutex ensures the construction block runs once. The lock
+    // is held only during construction, never during I/O (SRC-022).
+    build_lock: Mutex<()>,
 }
 
 impl QuicHandshakeProbe {
     /// Create a new QUIC handshake probe adapter. The underlying QUIC
     /// endpoint is created lazily on the first `probe` call.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             endpoint: OnceLock::new(),
+            build_lock: Mutex::new(()),
         }
     }
 }
@@ -111,6 +117,17 @@ impl QuicHandshakeProbe {
         if let Some(ep) = self.endpoint.get() {
             return Ok(ep);
         }
+        // WHY: hold the build mutex during construction so concurrent
+        // first-use probes serialize. The `OnceLock` alone cannot prevent N
+        // racing `set()` calls from each building (and leaking) a `0.0.0.0:0`
+        // UDP socket; the mutex guarantees exactly one construction. The lock
+        // is released before I/O (SRC-022).
+        let _guard = self.build_lock.lock();
+        // Re-check after acquiring the lock: another task may have built the
+        // endpoint while we waited.
+        if let Some(ep) = self.endpoint.get() {
+            return Ok(ep);
+        }
         let verifier = Arc::new(SkipVerification(Arc::new(
             rustls::crypto::ring::default_provider(),
         )));
@@ -127,9 +144,8 @@ impl QuicHandshakeProbe {
         let mut ep = Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
             .map_err(|_| ErrorClass::QuicFailed)?;
         ep.set_default_client_config(client_config);
-        // Another task may have won the OnceLock race; either way the lock
-        // is now populated, so get() is guaranteed Some. ok_or is a
-        // fallback that never triggers under the OnceLock invariant.
+        // WHY: `set` returns Err if another caller won an earlier race; the
+        // `get()` fallback below returns the winner's endpoint either way.
         let _ = self.endpoint.set(ep);
         self.endpoint.get().ok_or(ErrorClass::QuicFailed)
     }

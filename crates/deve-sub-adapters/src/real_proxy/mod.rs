@@ -158,12 +158,45 @@ impl RealProxyProbe {
             Err(_) => return Err(ErrorClass::Timeout),
         }
 
+        // WHY: a single `read` may return a partial TLS application-data
+        // record or fragmented TCP segment (e.g. only `"HTT"`), which would
+        // fail the `starts_with(b"HTTP/")` check and misclassify a healthy
+        // proxy as `Refused`. Loop reading into the front of the buffer
+        // until either the `HTTP/` status-line prefix is visible or the
+        // buffer is full; a bounded number of short reads is tolerated so
+        // a slow/segmented delivery is not penalized (SRC-021).
         let mut buf = [0u8; 64];
-        match tokio::time::timeout(timeout, stream.read(&mut buf)).await {
-            Ok(Ok(n)) if n > 0 && buf.starts_with(b"HTTP/") => Ok(()),
-            Ok(Ok(_)) => Err(ErrorClass::Refused),
-            Ok(Err(_)) => Err(ErrorClass::Refused),
-            Err(_) => Err(ErrorClass::Timeout),
+        let mut filled = 0usize;
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            if filled >= buf.len() {
+                break;
+            }
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return Err(ErrorClass::Timeout);
+            }
+            match tokio::time::timeout(remaining, stream.read(&mut buf[filled..])).await {
+                Ok(Ok(0)) => break,
+                Ok(Ok(n)) => {
+                    filled += n;
+                    if buf[..filled].starts_with(b"HTTP/") {
+                        return Ok(());
+                    }
+                    if filled >= 5 {
+                        // WHY: 5 bytes is enough to disqualify a non-`HTTP/`
+                        // prefix without waiting for the buffer to fill.
+                        return Err(ErrorClass::Refused);
+                    }
+                }
+                Ok(Err(_)) => return Err(ErrorClass::Refused),
+                Err(_) => return Err(ErrorClass::Timeout),
+            }
+        }
+        if buf[..filled].starts_with(b"HTTP/") {
+            Ok(())
+        } else {
+            Err(ErrorClass::Refused)
         }
     }
 }

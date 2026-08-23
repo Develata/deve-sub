@@ -7,7 +7,7 @@
 //! domain crate; the application layer parses it into a typed `NodeSelector`.
 
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 /// Request body for `POST /api/v1/subscriptions`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -183,12 +183,13 @@ pub struct GetSubscriptionResponse {
 }
 
 /// Query parameters for `GET /api/v1/subscriptions`.
-#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
 pub struct ListSubscriptionsQuery {
     /// Pagination cursor — the ULID of the last subscription from the
     /// previous page.
     pub cursor: Option<String>,
     /// Maximum number of subscriptions to return (default 50, max 100).
     #[serde(default)]
+    #[param(default = 50, minimum = 1, maximum = 100)]
     pub limit: Option<u32>,
 }

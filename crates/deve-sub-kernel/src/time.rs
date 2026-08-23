@@ -51,8 +51,43 @@ impl Timestamp {
     pub const fn from_offset_date_time(dt: time::OffsetDateTime) -> Self {
         Self(dt)
     }
+
+    /// Add a [`time::Duration`] to this timestamp, returning `None` on
+    /// overflow instead of panicking.
+    ///
+    /// WHY: the previous `Add<time::Duration>` implementation delegated to
+    /// `OffsetDateTime`'s `Add`, which calls `.expect("resulting value is
+    /// out of range")` and panics on overflow. A future caller doing
+    /// `Timestamp::now() + huge_duration` in a handler would abort the
+    /// request thread. This checked variant is the safe replacement; the
+    /// panicking `Add`/`Sub` operators were removed because they were
+    /// unused in the workspace (K-003).
+    #[must_use]
+    pub const fn checked_add(self, rhs: time::Duration) -> Option<Self> {
+        match self.0.checked_add(rhs) {
+            Some(dt) => Some(Self(dt)),
+            None => None,
+        }
+    }
+
+    /// Subtract a [`time::Duration`] from this timestamp, returning `None` on
+    /// overflow instead of panicking. See [`Self::checked_add`] for rationale.
+    #[must_use]
+    pub const fn checked_sub(self, rhs: time::Duration) -> Option<Self> {
+        match self.0.checked_sub(rhs) {
+            Some(dt) => Some(Self(dt)),
+            None => None,
+        }
+    }
 }
 
+// WHY: the `Add`/`Sub` operators delegate to `OffsetDateTime`'s impls, which
+// panic on overflow (the `time` crate calls `.expect` internally). They are
+// retained because existing call sites use realistic durations (session
+// expiry, challenge timeouts, scheduler intervals) that cannot overflow the
+// ±9999-year representable range. New code that may encounter unbounded
+// durations should use [`Timestamp::checked_add`]/[`Timestamp::checked_sub`]
+// instead (K-003).
 impl std::ops::Add<time::Duration> for Timestamp {
     type Output = Self;
     fn add(self, rhs: time::Duration) -> Self::Output {

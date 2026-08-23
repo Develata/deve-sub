@@ -5,7 +5,7 @@
 //! derives live here, not in the API crate.
 
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 /// Request body for `POST /api/v1/templates`.
 ///
@@ -111,13 +111,14 @@ pub struct RollbackTemplateResponse {
 }
 
 /// Query parameters for `GET /api/v1/templates`.
-#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
 pub struct ListTemplatesQuery {
     /// Pagination cursor — the ULID of the last template from the previous
     /// page.
     pub cursor: Option<String>,
     /// Maximum number of templates to return (default 50, max 100).
     #[serde(default)]
+    #[param(default = 50, minimum = 1, maximum = 100)]
     pub limit: Option<u32>,
 }
 
@@ -225,7 +226,7 @@ pub struct GenerationResultDto {
 }
 
 /// Query parameters for `POST /api/v1/templates/{id}/generate`.
-#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
 pub struct GenerateQuery {
     /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,
     /// `shadowrocket`, or `uri_list`.
@@ -237,7 +238,7 @@ pub struct GenerateQuery {
 }
 
 /// Query parameters for `GET /api/v1/templates/{id}/generations/active`.
-#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
 pub struct ActiveGenerationQuery {
     /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,
     /// `shadowrocket`, or `uri_list`.
@@ -272,7 +273,7 @@ pub struct RollbackRequest {
 }
 
 /// Query parameters for `GET /api/v1/templates/{id}/compatibility`.
-#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
 pub struct CompatibilityQuery {
     /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`, `shadowrocket`,
     /// or `uri_list`.

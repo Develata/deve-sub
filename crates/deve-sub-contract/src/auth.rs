@@ -64,6 +64,7 @@ pub struct LoginResponse {
     pub requires_2fa: bool,
     /// Challenge token for the 2FA login endpoint. Present only when
     /// `requires_2fa` is `true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub challenge_token: Option<String>,
 }
 

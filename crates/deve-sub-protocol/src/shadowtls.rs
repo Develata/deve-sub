@@ -25,7 +25,9 @@ use deve_sub_domain::{
 };
 
 use crate::error::ParseError;
-use crate::uri::{collect_query, decode_fragment, decode_userinfo, node_shell, parse_host};
+use crate::uri::{
+    collect_query, decode_fragment, decode_userinfo, node_shell, parse_host, query_insecure,
+};
 
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
     let password = decode_userinfo(url.username());
@@ -62,10 +64,11 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
     // always has a TLS layer (the handshake is the whole point), so
     // `node.tls` is unconditionally `Some` with `enabled: true`.
     let sni = query.get("sni").cloned();
-    let insecure = query
-        .get("insecure")
-        .map(|v| v == "1" || v == "true")
-        .unwrap_or(false);
+    // WHY: route through the shared `query_insecure` helper so invalid
+    // values (e.g. `insecure=maybe`) surface as `InvalidField` instead of
+    // being silently mapped to `false`, matching every other boolean-query
+    // parser (SRC-018).
+    let insecure = query_insecure(&query, &["insecure"])?.unwrap_or(false);
     let tls = TlsConfig {
         enabled: true,
         server_name: sni,

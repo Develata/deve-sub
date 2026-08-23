@@ -430,9 +430,20 @@ fn parse_hysteria2(entry: &Value) -> Result<Node, ParseError> {
     };
 
     // WHY: mihomo stores `hop-interval` as a string of seconds (min 5,
-    // default 30 in mihomo). The canonical model stores a Duration. See P3.
-    let hop_interval =
-        get_str(entry, "hop-interval").and_then(|s| crate::uri::parse_duration_secs(&s).ok());
+    // default 30 in mihomo). The canonical model stores a Duration. The
+    // field may appear as either a YAML string (`hop-interval: "30"`) or a
+    // YAML number (`hop-interval: 30`); our own emitter writes the numeric
+    // form, so the parser must accept both to preserve round-trip fidelity
+    // (SRC-017). See P3.
+    let hop_interval = entry.get("hop-interval").and_then(|v| match v {
+        serde_json::Value::String(s) => crate::uri::parse_duration_secs(s).ok(),
+        serde_json::Value::Number(n) => {
+            let secs = n.as_u64()?;
+            let secs_i64 = i64::try_from(secs).ok()?;
+            Some(time::Duration::seconds(secs_i64))
+        }
+        _ => None,
+    });
 
     let config = ProtocolConfig::Hysteria2(Hysteria2Config {
         ports: get_str(entry, "ports"),

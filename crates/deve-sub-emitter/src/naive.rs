@@ -70,11 +70,19 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
 
     let user_enc = encode_userinfo(username);
     let pwd_enc = encode_userinfo(password);
-    let mut result = format!(
-        "{scheme}://{user_enc}:{pwd_enc}@{host}:{port}?{query}",
-        host = node.endpoint.host.uri_host(),
-        port = node.endpoint.port,
-    );
+    let mut result = if query.is_empty() {
+        format!(
+            "{scheme}://{user_enc}:{pwd_enc}@{host}:{port}",
+            host = node.endpoint.host.uri_host(),
+            port = node.endpoint.port,
+        )
+    } else {
+        format!(
+            "{scheme}://{user_enc}:{pwd_enc}@{host}:{port}?{query}",
+            host = node.endpoint.host.uri_host(),
+            port = node.endpoint.port,
+        )
+    };
     if !node.display_name.is_empty() {
         result.push('#');
         result.push_str(&format_fragment(&node.display_name));

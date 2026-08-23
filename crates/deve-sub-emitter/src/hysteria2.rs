@@ -107,11 +107,19 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
     let query = format_query(&params);
 
     let pwd = encode_userinfo(password);
-    let mut result = format!(
-        "hysteria2://{pwd}@{host}:{port}?{query}",
-        host = node.endpoint.host.uri_host(),
-        port = node.endpoint.port,
-    );
+    let mut result = if query.is_empty() {
+        format!(
+            "hysteria2://{pwd}@{host}:{port}",
+            host = node.endpoint.host.uri_host(),
+            port = node.endpoint.port,
+        )
+    } else {
+        format!(
+            "hysteria2://{pwd}@{host}:{port}?{query}",
+            host = node.endpoint.host.uri_host(),
+            port = node.endpoint.port,
+        )
+    };
     if !node.display_name.is_empty() {
         result.push('#');
         result.push_str(&format_fragment(&node.display_name));

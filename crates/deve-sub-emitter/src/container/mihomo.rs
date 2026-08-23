@@ -244,12 +244,23 @@ fn emit_ss(
         if let Some(ref opts) = cfg.plugin_opts {
             entry.push_str("\n    plugin-opts:");
             for pair in opts.split(';') {
-                if let Some((k, v)) = pair.split_once('=') {
-                    let yaml_val = match v {
-                        "true" | "false" => v.to_owned(),
-                        _ => yaml_dq(v),
-                    };
-                    entry.push_str(&format!("\n      {k}: {yaml_val}"));
+                if pair.is_empty() {
+                    continue;
+                }
+                match pair.split_once('=') {
+                    Some((k, v)) => {
+                        let yaml_val = match v {
+                            "true" | "false" => v.to_owned(),
+                            _ => yaml_dq(v),
+                        };
+                        entry.push_str(&format!("\n      {k}: {yaml_val}"));
+                    }
+                    // WHY: SIP003 allows bare flags (no `=`). Emit them as
+                    // YAML `key: true` so mihomo's struct decoder accepts the
+                    // option instead of silently dropping it (SRC-019).
+                    None => {
+                        entry.push_str(&format!("\n      {pair}: true"));
+                    }
                 }
             }
         }

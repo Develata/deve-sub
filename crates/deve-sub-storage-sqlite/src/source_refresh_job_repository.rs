@@ -13,6 +13,7 @@ use deve_sub_domain::{SourceError, SourceRefreshJobRepository};
 use deve_sub_kernel::{SourceId, SourceRefreshJobId, Timestamp};
 use sqlx::sqlite::SqlitePool;
 
+use crate::error_classify::is_unique_violation;
 use crate::timestamp::{format_ts, parse_ts};
 
 pub struct SqliteSourceRefreshJobRepository {
@@ -73,11 +74,6 @@ impl JobRow {
             not_modified: self.not_modified != 0,
         })
     }
-}
-
-fn is_unique_violation(e: &sqlx::Error) -> bool {
-    e.as_database_error()
-        .is_some_and(|db| db.code().is_some_and(|c| c == "1555" || c == "2067"))
 }
 
 #[async_trait]
@@ -248,6 +244,15 @@ impl SourceRefreshJobRepository for SqliteSourceRefreshJobRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| SourceError::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn delete(&self, id: SourceRefreshJobId) -> Result<(), SourceError> {
+        sqlx::query("DELETE FROM source_refresh_jobs WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
     }
 

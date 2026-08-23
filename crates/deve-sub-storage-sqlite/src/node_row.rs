@@ -181,7 +181,7 @@ impl NodeRow {
             open_field_opt(key, CTX_OBFUSCATION, &self.obfuscation_json_encrypted)?;
         let extras_json = open_field(key, CTX_EXTRAS, &self.extras_json_encrypted)?;
 
-        let node = Node {
+        let mut node = Node {
             id: node_id,
             display_name: effective_display_name,
             protocol: from_json(&self.protocol_kind)?,
@@ -213,6 +213,32 @@ impl NodeRow {
             region,
             extras: from_json(&extras_json)?,
         };
+
+        // WHY: NodeOverride carries TLS-bearing fields (sni, skip_cert_verify,
+        // fingerprint) that the domain contract promises to graft onto the
+        // effective node at read time (see `node_override.rs` and
+        // `source/ports.rs`: "the effective node is
+        // `parsed_node.apply_override(override)`"). Without this graft, a
+        // `skip_cert_verify=Some(false)` hardening override is silently dropped
+        // and the emitter inherits the upstream source's insecure setting,
+        // which is a security-relevant regression (AGENTS.md §"Data and
+        // security"; ADR-0005 three-state cert verify). Only fields present in
+        // the override replace the parsed value; absent fields fall back to the
+        // parsed node's value, matching the documented override semantics.
+        // Overrides are applied only when the node already has a TLS config,
+        // because creating a TLS config from scratch would change the node's
+        // security posture (enabling TLS where the parser found none).
+        if let Some(tls) = node.tls.as_mut() {
+            if let Some(sni) = &self.override_sni {
+                tls.server_name = Some(sni.clone());
+            }
+            if let Some(skip) = self.override_skip_cert_verify {
+                tls.skip_cert_verify = Some(skip != 0);
+            }
+            if let Some(fp) = &self.override_fingerprint {
+                tls.client_fingerprint = Some(fp.clone());
+            }
+        }
 
         // WHY: override_enabled=Some forces active/inactive; None keeps the
         // node's natural status (NODE-004).
@@ -254,7 +280,7 @@ pub(crate) const NODE_COLUMNS: &str = "n.id, n.display_name, n.protocol_kind, n.
      COALESCE(NULLIF(n.source_label, ''), \
       (SELECT s.name FROM node_source_bindings b \
        JOIN sources s ON s.id = b.source_id \
-       WHERE b.node_id = n.id LIMIT 1)) AS source_label, \
+       WHERE b.node_id = n.id ORDER BY b.source_id LIMIT 1)) AS source_label, \
      o.id AS override_id, o.display_name AS override_display_name, o.region AS override_region, \
      o.enabled AS override_enabled, o.sni AS override_sni, o.skip_cert_verify AS override_skip_cert_verify, \
      o.fingerprint AS override_fingerprint, o.sort_order AS override_sort_order, \

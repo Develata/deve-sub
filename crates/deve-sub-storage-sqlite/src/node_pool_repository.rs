@@ -246,7 +246,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                         node_id_opt = Some(missing_id);
                         result.reactivated_nodes += 1;
                     } else {
-                        let new_id = insert_node(
+                        match insert_node(
                             &mut tx,
                             node,
                             &proto_str,
@@ -254,9 +254,36 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                             &fingerprint,
                             self.master_key.as_deref(),
                         )
-                        .await?;
-                        node_id_opt = Some(new_id);
-                        result.new_nodes += 1;
+                        .await?
+                        {
+                            Some(new_id) => {
+                                node_id_opt = Some(new_id);
+                                result.new_nodes += 1;
+                            }
+                            // WHY: `ON CONFLICT DO NOTHING` fired — another
+                            // concurrent refresh won the dedup race. Re-query
+                            // the winning active node and count it as a
+                            // duplicate so the transaction stays alive (SRC-016).
+                            None => {
+                                let winner: Option<(String,)> = sqlx::query_as(
+                                    "SELECT id FROM nodes \
+                                     WHERE identity_fingerprint = ? \
+                                     AND missing_from_source = 0 \
+                                     LIMIT 1",
+                                )
+                                .bind(&fingerprint)
+                                .fetch_optional(&mut *tx)
+                                .await
+                                .map_err(|e| SourceError::Storage(e.to_string()))?;
+                                if let Some((winner_id,)) = winner {
+                                    if final_status == ItemParseStatus::Parsed {
+                                        final_status = ItemParseStatus::Duplicate;
+                                    }
+                                    node_id_opt = Some(winner_id);
+                                    result.duplicate_nodes += 1;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -378,7 +405,12 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         cursor: Option<NodeId>,
         limit: u32,
     ) -> Result<Vec<NodePoolEntry>, SourceError> {
-        let limit_i: i64 = limit.into();
+        // WHY: self-cap at 10_000 (matching the API layer's documented max in
+        // `apps/server/src/nodes.rs`) so a non-API caller cannot load+decrypt
+        // the entire pool in one call. Sibling list methods cap at 100 because
+        // their API layers also cap at 100; nodes has a higher API ceiling, so
+        // the storage cap matches it (SRC-020).
+        let limit_i: i64 = i64::from(limit.min(10_000));
 
         let proto_json = match &filter.protocol {
             Some(p) => Some(to_json(p)?),
@@ -551,10 +583,35 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                         self.master_key.as_deref(),
                     )
                     .await?;
-                    let nid =
-                        NodeId::parse(&new_id).map_err(|e| SourceError::Storage(e.to_string()))?;
-                    result.new_nodes += 1;
-                    result.outcomes.push(ImportOutcome::Inserted(nid));
+                    match new_id {
+                        Some(id) => {
+                            let nid = NodeId::parse(&id)
+                                .map_err(|e| SourceError::Storage(e.to_string()))?;
+                            result.new_nodes += 1;
+                            result.outcomes.push(ImportOutcome::Inserted(nid));
+                        }
+                        // WHY: `ON CONFLICT DO NOTHING` fired — a concurrent
+                        // import or refresh inserted the same node. Re-query
+                        // and count as a duplicate (SRC-016).
+                        None => {
+                            let winner: Option<(String,)> = sqlx::query_as(
+                                "SELECT id FROM nodes \
+                                 WHERE identity_fingerprint = ? \
+                                 AND missing_from_source = 0 \
+                                 LIMIT 1",
+                            )
+                            .bind(&fingerprint)
+                            .fetch_optional(&mut *tx)
+                            .await
+                            .map_err(|e| SourceError::Storage(e.to_string()))?;
+                            if let Some((winner_id,)) = winner {
+                                let nid = NodeId::parse(&winner_id)
+                                    .map_err(|e| SourceError::Storage(e.to_string()))?;
+                                result.duplicate_nodes += 1;
+                                result.outcomes.push(ImportOutcome::Duplicate(nid));
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -668,7 +725,7 @@ async fn insert_node(
     host_str: &str,
     fingerprint: &str,
     key: Option<&MasterKey>,
-) -> Result<String, SourceError> {
+) -> Result<Option<String>, SourceError> {
     let node_id = node.id.to_string();
     let imported_at = format_ts(node.source.imported_at).map_err(SourceError::Storage)?;
     let config_json = to_json(&node.config)?;
@@ -688,7 +745,15 @@ async fn insert_node(
     let obfuscation_json_encrypted = seal_json_opt(key, CTX_OBFUSCATION, &obfuscation_json)?;
     let extras_json_encrypted = seal_json(key, CTX_EXTRAS, &extras_json)?;
 
-    sqlx::query(
+    // WHY: two concurrent refreshes for different sources that both yield the
+    // same node (e.g. an airport listed in two sources) each run their own
+    // write transaction. Both pass the fingerprint existence check in their
+    // own snapshot, then race to INSERT. The loser would hit the
+    // `idx_nodes_dedup` partial UNIQUE index and abort the entire reconcile
+    // transaction. `ON CONFLICT DO NOTHING` makes the loser's INSERT a no-op
+    // (rows_affected == 0), and the caller re-queries the winning node and
+    // counts it as a duplicate — keeping the transaction alive (SRC-016).
+    let result = sqlx::query(
         "INSERT INTO nodes \
          (id, display_name, protocol_kind, host, port, \
          protocol_config_json_encrypted, authentication_json_encrypted, \
@@ -697,7 +762,8 @@ async fn insert_node(
          congestion_json, region, extras_json_encrypted, \
          imported_at, revision, status, missing_from_source, source_label, \
          identity_fingerprint) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?, ?) \
+         ON CONFLICT DO NOTHING",
     )
     .bind(&node_id)
     .bind(&node.display_name)
@@ -721,5 +787,8 @@ async fn insert_node(
     .await
     .map_err(|e| SourceError::Storage(e.to_string()))?;
 
-    Ok(node_id)
+    if result.rows_affected() == 0 {
+        return Ok(None);
+    }
+    Ok(Some(node_id))
 }

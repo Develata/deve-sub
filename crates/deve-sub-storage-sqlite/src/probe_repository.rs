@@ -260,6 +260,8 @@ impl ProbeSourceRepository for SqliteProbeSourceRepository {
         limit: u32,
         kind: Option<ProbeSourceKind>,
     ) -> Result<Vec<ProbeSource>, ProbeError> {
+        // WHY: self-cap at 100 like all sibling list methods (SRC-020).
+        let limit = limit.min(100);
         let kind_char = kind.map(|k| k.as_db_char().to_owned());
         let rows: Vec<ProbeSourceRow> = if let Some(c) = cursor {
             if let Some(k) = kind_char {

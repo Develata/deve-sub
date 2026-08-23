@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use deve_sub_domain::{SourceError, SourceSnapshot, SourceSnapshotRepository};
-use deve_sub_kernel::{SourceId, SourceSnapshotId};
+use deve_sub_kernel::{SourceId, SourceSnapshotId, Timestamp};
 use sqlx::sqlite::SqlitePool;
 
 use crate::timestamp::{format_ts, parse_ts};
@@ -179,5 +179,23 @@ impl SourceSnapshotRepository for SqliteSourceSnapshotRepository {
         .await
         .map_err(|e| SourceError::Storage(e.to_string()))?;
         row.map(|r| r.to_domain()).transpose()
+    }
+
+    async fn touch_fetched_at(
+        &self,
+        source_id: SourceId,
+        now: Timestamp,
+    ) -> Result<(), SourceError> {
+        let ts = format_ts(now).map_err(SourceError::Storage)?;
+        sqlx::query(
+            "UPDATE source_snapshots SET fetched_at = ? \
+             WHERE source_id = ? AND is_active = 1",
+        )
+        .bind(ts)
+        .bind(source_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SourceError::Storage(e.to_string()))?;
+        Ok(())
     }
 }

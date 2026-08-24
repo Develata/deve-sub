@@ -6,9 +6,10 @@ use dioxus::prelude::*;
 
 use crate::i18n::{Language, t};
 use crate::pages::source_types::{
-    CreateSourceRequest, ListSourcesResponse, RefreshSourceResponse, SourceDto, SourceResponse,
-    SourceTypeDto, UpdateSourceRequest,
+    CreateSourceRequest, ListSourcesResponse, RefreshJobAcceptedResponse, SourceDto,
+    SourceRefreshJobDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
 };
+use crate::pages::util::sleep_ms;
 
 #[derive(Clone, PartialEq)]
 enum Modal {
@@ -101,33 +102,68 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         refresh_msg.set(String::new());
         spawn(async move {
             let path = format!("/sources/{id}/refresh");
-            match crate::api::send::<RefreshSourceResponse, serde_json::Value>("POST", &path, None)
-                .await
+            let accepted = match crate::api::send::<RefreshJobAcceptedResponse, serde_json::Value>(
+                "POST",
+                &path,
+                None,
+            )
+            .await
             {
-                Ok(resp) => {
-                    let msg = if resp.not_modified {
+                Ok(a) => a,
+                Err(e) => {
+                    error.set(e.message);
+                    refreshing_id.set(String::new());
+                    return;
+                }
+            };
+
+            let job_path = format!("/sources/refresh-jobs/{}", accepted.job_id);
+            let mut polls = 0u32;
+            let job = loop {
+                polls += 1;
+                if polls > 30 {
+                    let msg = t(l, "sources.refresh_timeout");
+                    refresh_msg.set(msg);
+                    refreshing_id.set(String::new());
+                    return;
+                }
+                match crate::api::get::<SourceRefreshJobDto>(&job_path).await {
+                    Ok(j) if matches!(j.status.as_str(), "completed" | "failed" | "cancelled") => {
+                        break j
+                    }
+                    Ok(_) => sleep_ms(1000).await,
+                    Err(e) => {
+                        error.set(e.message);
+                        refreshing_id.set(String::new());
+                        return;
+                    }
+                }
+            };
+
+            let msg = match job.status.as_str() {
+                "completed" => {
+                    if job.not_modified {
                         format!(
-                            "v{} (304) — {} {}",
-                            resp.version,
-                            resp.node_count,
+                            "{} {}",
                             t(l, "sources.node_count"),
+                            t(l, "common.success"),
                         )
                     } else {
                         format!(
-                            "v{} — {} {}, +{} ~{} -{}",
-                            resp.version,
-                            resp.node_count,
+                            "{} {}, +{} ~{} -{}",
                             t(l, "sources.node_count"),
-                            resp.reconcile.new_nodes,
-                            resp.reconcile.reactivated_nodes,
-                            resp.reconcile.missing_nodes,
+                            t(l, "common.success"),
+                            job.new_nodes,
+                            job.reactivated_nodes,
+                            job.missing_nodes,
                         )
-                    };
-                    refresh_msg.set(msg);
-                    fetch_sources();
+                    }
                 }
-                Err(e) => error.set(e.message),
-            }
+                "cancelled" => t(l, "common.cancelled"),
+                _ => job.error_message.unwrap_or_else(|| t(l, "common.error")),
+            };
+            refresh_msg.set(msg);
+            fetch_sources();
             refreshing_id.set(String::new());
         });
     };

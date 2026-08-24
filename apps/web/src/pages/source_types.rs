@@ -137,18 +137,26 @@ pub struct SourceResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReconcileCountsDto {
+pub struct RefreshJobAcceptedResponse {
+    pub job_id: String,
+    pub source_id: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceRefreshJobDto {
+    pub id: String,
+    pub source_id: String,
+    pub status: String,
+    pub phase: String,
+    pub started_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
     pub new_nodes: u64,
     pub duplicate_nodes: u64,
     pub reactivated_nodes: u64,
     pub missing_nodes: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RefreshSourceResponse {
-    pub snapshot_id: String,
-    pub version: u64,
     pub not_modified: bool,
-    pub node_count: u64,
-    pub reconcile: ReconcileCountsDto,
 }

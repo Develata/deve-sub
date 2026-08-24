@@ -4,7 +4,6 @@
 
 use wasm_bindgen_futures::JsFuture;
 
-/// Copy text to the system clipboard via the async Clipboard API.
 pub async fn copy_to_clipboard(text: &str) -> Result<(), String> {
     let window = web_sys::window().ok_or("no window")?;
     let navigator = window.navigator();
@@ -14,4 +13,17 @@ pub async fn copy_to_clipboard(text: &str) -> Result<(), String> {
         .await
         .map(|_| ())
         .map_err(|e| format!("clipboard error: {e:?}"))
+}
+
+pub async fn sleep_ms(ms: u32) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let promise = js_sys::Promise::new(move |resolve, _| {
+        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+            resolve.unchecked_ref(),
+            ms,
+        );
+    });
+    let _ = JsFuture::from(promise).await;
 }

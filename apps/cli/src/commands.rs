@@ -80,6 +80,11 @@ pub struct DoctorArgs {
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH")]
     db_path: Option<String>,
+
+    /// Exit nonzero on critical check failures (DB open, bind unavailable).
+    /// See R3-31.
+    #[arg(long)]
+    strict: bool,
 }
 
 /// Config validate command arguments.
@@ -264,6 +269,8 @@ pub async fn doctor(args: DoctorArgs) -> Result<()> {
     println!("Deve Sub — System Diagnostics");
     println!("==============================");
 
+    let mut critical_failures: Vec<String> = Vec::new();
+
     // Version check
     println!("\n[1/4] Version");
     println!("  deve-sub {}", env!("CARGO_PKG_VERSION"));
@@ -278,10 +285,12 @@ pub async fn doctor(args: DoctorArgs) -> Result<()> {
             }
             Err(e) => {
                 println!("  WARNING: failed to open database: {e}");
+                critical_failures.push(format!("database open: {e}"));
             }
         }
     } else {
         println!("  database file: {db_path} (not found — run `deve-sub migrate` first)");
+        critical_failures.push(format!("database file not found: {db_path}"));
     }
 
     // Directories check
@@ -301,10 +310,24 @@ pub async fn doctor(args: DoctorArgs) -> Result<()> {
     let bind = &config.server.bind;
     match check_bind_available(bind).await {
         Ok(()) => println!("  bind {bind}: available"),
-        Err(e) => println!("  bind {bind}: WARNING — {e}"),
+        Err(e) => {
+            println!("  bind {bind}: WARNING — {e}");
+            critical_failures.push(format!("bind {bind} unavailable: {e}"));
+        }
     }
 
     println!("\nDiagnostics complete.");
+    if args.strict && !critical_failures.is_empty() {
+        // WHY: --strict makes doctor usable as a health gate in CI/init
+        // scripts. Without it, a broken DB or unavailable bind port would
+        // still exit 0 and a supervisor would consider the service healthy.
+        // See R3-31.
+        bail!(
+            "doctor failed with {} critical check(s): {}",
+            critical_failures.len(),
+            critical_failures.join("; ")
+        );
+    }
     Ok(())
 }
 

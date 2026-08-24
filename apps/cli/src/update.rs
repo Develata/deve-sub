@@ -220,17 +220,21 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
     let restarted = if !args.no_restart {
         match try_systemd_restart().await {
             Ok(true) => true,
-            // DS-AUD-B09: if systemd restart fails, the old process is still
-            // running — a health check would pass on the OLD binary (false
-            // positive). Roll back immediately instead.
+            // WHY: Ok(false) means no systemd unit is present (not a restart
+            // failure). On a non-systemd host the binary was swapped
+            // successfully; rolling back would undo a valid update. Fall
+            // through to the no-restart path so the operator can restart
+            // manually. See R3-30.
             Ok(false) => {
-                println!("systemd restart did not succeed — rolling back...");
-                rollback(&binary_path, &backup_path)?;
-                bail!(
-                    "update failed: systemd restart did not succeed. \
-                     Rolled back to {current_version}."
+                println!(
+                    "no systemd unit found at /etc/systemd/system/deve-sub.service — \
+                     binary updated; restart manually to activate the new version."
                 );
+                false
             }
+            // DS-AUD-B09: if systemd restart fails (unit exists but systemctl
+            // returned nonzero), the old process is still running — a health
+            // check would pass on the OLD binary (false positive). Roll back.
             Err(e) => {
                 println!("systemd restart error: {e} — rolling back...");
                 rollback(&binary_path, &backup_path)?;

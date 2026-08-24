@@ -1113,6 +1113,7 @@ dependencies = [
  "deve-sub-kernel",
  "deve-sub-security",
  "flate2",
+ "futures-util",
  "h3",
  "h3-quinn",
  "http",

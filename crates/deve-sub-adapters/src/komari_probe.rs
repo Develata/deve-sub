@@ -18,6 +18,7 @@ use deve_sub_domain::{
     ProbeError, ProbeSource, ProbeSourceAdapter, ProbeSyncResult, ProbeTrafficSample,
 };
 use deve_sub_kernel::Timestamp;
+use futures_util::stream::StreamExt;
 use serde::Deserialize;
 
 use crate::SsrfChecker;
@@ -185,19 +186,38 @@ impl ProbeSourceAdapter for KomariProbeAdapter {
         let nodes = self.fetch_nodes(&client, &source.endpoint_url).await?;
 
         let now = Timestamp::now();
-        let mut samples = Vec::new();
         let mut new_snapshot = CounterSnapshot::default();
 
-        for node in &nodes {
-            let uuid = &node.uuid;
+        // WHY: fetch per-node counters concurrently with bounded parallelism.
+        // The previous sequential loop issued one request at a time, each
+        // with its own timeout — a panel with hundreds of nodes took minutes.
+        // `buffer_unordered(8)` keeps up to 8 requests in flight (reusing the
+        // shared client's connection pool) while preserving per-node error
+        // isolation: a failing node logs a warning and is skipped, not unlike
+        // the sequential version. See R3-27.
+        let fetches = nodes.into_iter().map(|node| {
+            let uuid = node.uuid;
+            let client = &client;
+            let endpoint = &source.endpoint_url;
+            async move {
+                let result = self.fetch_latest_counters(client, endpoint, &uuid).await;
+                (uuid, result)
+            }
+        });
+
+        let results: Vec<(String, Result<Option<(u64, u64)>, ProbeError>)> =
+            futures_util::stream::iter(fetches)
+                .buffer_unordered(8)
+                .collect()
+                .await;
+
+        let mut samples = Vec::new();
+        for (uuid, result) in results {
             // WHY: a single failing node must not abort the whole sync —
             // skip it and keep the remaining nodes' samples. Its counters
             // are absent from the new snapshot, so the next sync treats it
             // as a first sighting (baseline-only) instead of double-counting.
-            let latest = match self
-                .fetch_latest_counters(&client, &source.endpoint_url, uuid)
-                .await
-            {
+            let latest = match result {
                 Ok(v) => v,
                 Err(e) => {
                     tracing::warn!(uuid = %uuid, error = %e, "Komari per-node fetch failed; skipping");
@@ -210,7 +230,7 @@ impl ProbeSourceAdapter for KomariProbeAdapter {
                 None => continue,
             };
 
-            let (delta_in, delta_out) = match last_snapshot.servers.get(uuid) {
+            let (delta_in, delta_out) = match last_snapshot.servers.get(&uuid) {
                 Some(prev) => {
                     let din = if net_in >= prev.net_in {
                         net_in - prev.net_in
@@ -238,7 +258,7 @@ impl ProbeSourceAdapter for KomariProbeAdapter {
 
             if delta_in > 0 || delta_out > 0 {
                 samples.push(ProbeTrafficSample {
-                    external_server_id: uuid.clone(),
+                    external_server_id: uuid,
                     upload: delta_in,
                     download: delta_out,
                     recorded_at: now,

@@ -98,6 +98,19 @@ async fn setup_db_schema_13(db_path: &std::path::Path) {
         .await
         .expect("reverse 0016");
 
+    // Reverse migration 0023: drop the covering indexes added by 0023
+    // before reversing 0017, since idx_nodes_missing_fingerprint depends
+    // on the identity_fingerprint column that 0017 added. SQLite refuses
+    // to drop a column while an index references it.
+    sqlx::query("DROP INDEX IF EXISTS idx_nodes_missing_fingerprint")
+        .execute(&pool)
+        .await
+        .expect("reverse 0023 node fingerprint index");
+    sqlx::query("DROP INDEX IF EXISTS idx_subscription_traffic_source_kind_recorded_at")
+        .execute(&pool)
+        .await
+        .expect("reverse 0023 traffic index");
+
     // Reverse migration 0017: drop identity_fingerprint column and restore
     // the old (protocol_kind, host, port) dedup unique index.
     sqlx::query("DROP INDEX IF EXISTS idx_nodes_dedup")

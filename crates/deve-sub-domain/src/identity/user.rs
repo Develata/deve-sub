@@ -83,22 +83,24 @@ impl User {
         }
     }
 
-    /// Whether the user can authenticate.
+    /// Whether the user can authenticate at the given instant.
     ///
-    /// A user is active when enabled and not expired.
+    /// A user is active when enabled and not expired. The caller supplies `now`
+    /// for deterministic tests and visible clock-skew at the call site (matches
+    /// `Session::is_valid_at` and `Subscription::is_expired`).
     #[must_use]
-    pub fn is_active(&self) -> bool {
-        self.enabled && self.expires_at.is_none_or(|e| e > Timestamp::now())
+    pub fn is_active_at(&self, now: Timestamp) -> bool {
+        self.enabled && self.expires_at.is_none_or(|e| e > now)
     }
 
-    /// Whether the user's account has expired.
+    /// Whether the user's account has expired at the given instant.
     ///
-    /// Distinct from `!is_active()`: a disabled-but-unexpired user returns
-    /// `false` here. Delivery uses this to distinguish 404 (disabled, no
-    /// existence leak) from 403 (expired, clear error per OUT-010).
+    /// Distinct from `!is_active_at(now)`: a disabled-but-unexpired user
+    /// returns `false` here. Delivery uses this to distinguish 404 (disabled,
+    /// no existence leak) from 403 (expired, clear error per OUT-010).
     #[must_use]
-    pub fn is_expired(&self) -> bool {
-        self.expires_at.is_some_and(|e| e <= Timestamp::now())
+    pub fn is_expired_at(&self, now: Timestamp) -> bool {
+        self.expires_at.is_some_and(|e| e <= now)
     }
 
     /// Whether the user's traffic quota is exceeded.

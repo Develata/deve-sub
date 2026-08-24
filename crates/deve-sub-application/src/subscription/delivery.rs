@@ -233,7 +233,7 @@ pub async fn deliver_by_temp_link(
 /// Enforcement order (blueprint §278-283):
 /// 1. `!subscription.enabled` → 404 (no leak)
 /// 2. `!user.enabled` → 404 (no leak)
-/// 3. `user.is_expired()` → 403 (OUT-010, clear error)
+/// 3. `user.is_expired_at(now)` → 403 (OUT-010, clear error)
 /// 4. `subscription.is_expired(now)` → 403 (OUT-010)
 /// 5. `user.is_traffic_exceeded(user_consumed)` → 429 (OUT-011)
 /// 6. `subscription.is_traffic_exceeded(sub_consumed)` → 429 (OUT-011)
@@ -260,7 +260,7 @@ async fn deliver_for_subscription(
 
     let now = deve_sub_kernel::Timestamp::now();
 
-    if user.is_expired() {
+    if user.is_expired_at(now) {
         return Err(SubscriptionAppError::UserExpired);
     }
 

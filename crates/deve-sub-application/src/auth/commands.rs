@@ -204,7 +204,7 @@ pub async fn login(params: LoginParams<'_>) -> Result<LoginOutcome, AuthError> {
     // the user does not exist, so both branches take similar time.
     let user = match user {
         Some(u) => {
-            if !u.is_active() {
+            if !u.is_active_at(deve_sub_kernel::Timestamp::now()) {
                 // WHY: still verify against the real hash to keep timing
                 // uniform across disabled vs wrong-password vs unknown-user.
                 let _ = verify_password_async(password.to_owned(), u.password_hash.clone()).await;
@@ -308,7 +308,7 @@ pub async fn disable_user(
     // statements with no shared transaction. If `revoke_all_for_user` fails
     // after `set_enabled` succeeds, the user is disabled but stale session
     // rows may remain `revoked = 0`. This is safe because
-    // `authenticate_session` re-checks `user.is_active()` on every request,
+    // `authenticate_session` re-checks `user.is_active_at(now)` on every request,
     // so disabled-user sessions cannot authenticate regardless of the
     // `revoked` flag. The stale rows are a storage-level cosmetic issue, not
     // a security gap.
@@ -333,7 +333,8 @@ pub async fn verify_session(
 ) -> Result<Option<Session>, AuthError> {
     let token_hash = hmac_digest(PURPOSE_SESSION, token, master_key.as_bytes())?;
     let session = session_repo.find_by_token_hash(&token_hash).await?;
-    Ok(session.filter(Session::is_valid))
+    let now = deve_sub_kernel::Timestamp::now();
+    Ok(session.filter(|s| s.is_valid_at(now)))
 }
 
 /// The authenticated principal returned by [`authenticate_session`].
@@ -370,7 +371,7 @@ pub async fn authenticate_session(
         .find_by_id(session.user_id)
         .await?
         .ok_or(AuthError::InvalidCredentials)?;
-    if !user.is_active() {
+    if !user.is_active_at(deve_sub_kernel::Timestamp::now()) {
         return Ok(None);
     }
     Ok(Some(AuthPrincipal { user, session }))

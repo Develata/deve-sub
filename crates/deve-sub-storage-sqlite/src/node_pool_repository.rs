@@ -640,10 +640,10 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                 NodeId::parse(&id_str).map_err(|e| SourceError::Storage(e.to_string()))?;
             let chain: NodeChain = serde_json::from_str(chain_json.as_deref().unwrap_or("[]"))
                 .map_err(|e| SourceError::Storage(e.to_string()))?;
-            if !chain.nodes.is_empty() {
+            if !chain.nodes().is_empty() {
                 out.push(NodeChainEntry {
                     node_id,
-                    chain: chain.nodes,
+                    chain: chain.nodes().to_vec(),
                 });
             }
         }
@@ -683,12 +683,11 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         chain: Option<&[NodeId]>,
     ) -> Result<(), SourceError> {
         let chain_json = match chain {
-            Some(nodes) => {
-                let chain = NodeChain {
-                    nodes: nodes.to_vec(),
-                };
-                Some(to_json(&chain)?)
-            }
+            // WHY: NodeChain is #[serde(transparent)], so serializing the
+            // raw node IDs produces the same JSON as to_json(&NodeChain).
+            // Avoids constructing the domain entity (whose `nodes` field is
+            // pub(crate)) in the storage adapter.
+            Some(nodes) => Some(to_json(&nodes.to_vec())?),
             None => None,
         };
         let mut tx = self

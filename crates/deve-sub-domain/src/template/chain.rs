@@ -170,11 +170,17 @@ impl ChainGraph {
                         }
                     }
                     Color::Gray => {
-                        let cycle_start = path.iter().position(|x| **x == *neighbor).unwrap_or(0);
-                        let mut vertices: Vec<ChainVertex> =
-                            path[cycle_start..].iter().map(|x| (**x).clone()).collect();
-                        vertices.push(neighbor.clone());
-                        return Some(CyclePath { vertices });
+                        // WHY: Gray means `neighbor` is on the current DFS
+                        // path, so it must be present in `path`. Using
+                        // `unwrap_or(0)` here would silently produce a wrong
+                        // cycle start if that invariant ever broke; `if let`
+                        // is safer (skips rather than falsifies).
+                        if let Some(cycle_start) = path.iter().position(|x| **x == *neighbor) {
+                            let mut vertices: Vec<ChainVertex> =
+                                path[cycle_start..].iter().map(|x| (**x).clone()).collect();
+                            vertices.push(neighbor.clone());
+                            return Some(CyclePath { vertices });
+                        }
                     }
                     Color::Black => {}
                 }

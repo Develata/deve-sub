@@ -167,11 +167,17 @@ impl NodeChainGraph {
                         }
                     }
                     Color::Gray => {
-                        let cycle_start = path.iter().position(|x| **x == *neighbor).unwrap_or(0);
-                        let mut nodes: Vec<NodeId> =
-                            path[cycle_start..].iter().map(|x| **x).collect();
-                        nodes.push(*neighbor);
-                        return Some(NodeCyclePath { nodes });
+                        // WHY: Gray means `neighbor` is on the current DFS
+                        // path, so it must be present in `path`. Using
+                        // `unwrap_or(0)` here would silently produce a wrong
+                        // cycle start if that invariant ever broke; `if let`
+                        // is safer (skips rather than falsifies).
+                        if let Some(cycle_start) = path.iter().position(|x| **x == *neighbor) {
+                            let mut nodes: Vec<NodeId> =
+                                path[cycle_start..].iter().map(|x| **x).collect();
+                            nodes.push(*neighbor);
+                            return Some(NodeCyclePath { nodes });
+                        }
                     }
                     Color::Black => {}
                 }

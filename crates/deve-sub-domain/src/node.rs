@@ -98,7 +98,11 @@ pub enum Authentication {
 #[serde(transparent)]
 pub struct NodeChain {
     /// Ordered node IDs forming the chain. Must be non-empty.
-    pub nodes: Vec<NodeId>,
+    ///
+    /// `pub(crate)` so same-crate tests can construct edge cases (e.g. empty
+    /// chains to test `validate_structure` rejection) while cross-crate code
+    /// must use [`NodeChain::new`], enforcing the non-empty invariant.
+    pub(crate) nodes: Vec<NodeId>,
 }
 
 impl NodeChain {
@@ -113,6 +117,12 @@ impl NodeChain {
             return Err(NodeChainError::Empty);
         }
         Ok(Self { nodes })
+    }
+
+    /// Read-only access to the ordered chain node IDs.
+    #[must_use]
+    pub fn nodes(&self) -> &[NodeId] {
+        &self.nodes
     }
 
     /// Validate the chain's structural invariants (non-empty, no

@@ -39,12 +39,15 @@ impl Session {
         }
     }
 
-    /// Whether the session is still valid.
+    /// Whether the session is still valid at the given instant.
     ///
-    /// A session is valid when not revoked and not expired.
+    /// A session is valid when not revoked and not expired. The caller supplies
+    /// `now` so tests are deterministic and clock-skew errors are visible at
+    /// the call site (sibling predicates like `Subscription::is_expired` follow
+    /// the same convention).
     #[must_use]
-    pub fn is_valid(&self) -> bool {
-        !self.revoked && self.expires_at > Timestamp::now()
+    pub fn is_valid_at(&self, now: Timestamp) -> bool {
+        !self.revoked && self.expires_at > now
     }
 }
 
@@ -65,29 +68,33 @@ mod tests {
 
     #[test]
     fn valid_session_is_valid() {
-        let future = Timestamp::now() + time::Duration::seconds(3600);
+        let now = Timestamp::now();
+        let future = now + time::Duration::seconds(3600);
         let session = make_session(future, false);
-        assert!(session.is_valid());
+        assert!(session.is_valid_at(now));
     }
 
     #[test]
     fn expired_session_is_invalid() {
-        let past = Timestamp::now() - time::Duration::seconds(1);
+        let now = Timestamp::now();
+        let past = now - time::Duration::seconds(1);
         let session = make_session(past, false);
-        assert!(!session.is_valid());
+        assert!(!session.is_valid_at(now));
     }
 
     #[test]
     fn revoked_session_is_invalid() {
-        let future = Timestamp::now() + time::Duration::seconds(3600);
+        let now = Timestamp::now();
+        let future = now + time::Duration::seconds(3600);
         let session = make_session(future, true);
-        assert!(!session.is_valid());
+        assert!(!session.is_valid_at(now));
     }
 
     #[test]
     fn revoked_and_expired_session_is_invalid() {
-        let past = Timestamp::now() - time::Duration::seconds(1);
+        let now = Timestamp::now();
+        let past = now - time::Duration::seconds(1);
         let session = make_session(past, true);
-        assert!(!session.is_valid());
+        assert!(!session.is_valid_at(now));
     }
 }

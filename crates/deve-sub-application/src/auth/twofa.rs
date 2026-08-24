@@ -294,7 +294,7 @@ pub async fn login_2fa(
         .await?
         .ok_or(AuthError::ChallengeTokenInvalid)?;
 
-    if !user.is_active() {
+    if !user.is_active_at(deve_sub_kernel::Timestamp::now()) {
         return Err(AuthError::ChallengeTokenInvalid);
     }
 

@@ -67,7 +67,7 @@ fn node_to_dto(entry: &NodePoolEntry) -> NodeDto {
             .node
             .chain
             .as_ref()
-            .map(|c| c.nodes.iter().map(|n| n.to_string()).collect())
+            .map(|c| c.nodes().iter().map(|n| n.to_string()).collect())
             .unwrap_or_default(),
     }
 }

@@ -169,13 +169,13 @@ pub async fn set_node_chain(
     };
 
     let existing: HashSet<NodeId> = pool_repo
-        .existing_node_ids(&chain.nodes)
+        .existing_node_ids(chain.nodes())
         .await
         .map_err(map_source_error)?
         .into_iter()
         .collect();
     let missing: Vec<NodeId> = chain
-        .nodes
+        .nodes()
         .iter()
         .copied()
         .filter(|id| !existing.contains(id))
@@ -188,16 +188,16 @@ pub async fn set_node_chain(
         .list_node_chains()
         .await
         .map_err(map_source_error)?;
-    if let Some(cycle) = NodeChainGraph::validate_update(&all_chains, node_id, &chain.nodes) {
+    if let Some(cycle) = NodeChainGraph::validate_update(&all_chains, node_id, chain.nodes()) {
         return Err(NodeChainError::Cycle(cycle).into());
     }
 
     pool_repo
-        .set_node_chain(node_id, Some(&chain.nodes))
+        .set_node_chain(node_id, Some(chain.nodes()))
         .await
         .map_err(map_source_error)?;
 
-    Ok(Some(chain.nodes))
+    Ok(Some(chain.nodes().to_vec()))
 }
 
 /// Batch set the `enabled` flag for multiple nodes (NODE-004).

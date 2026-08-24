@@ -10,7 +10,9 @@
 //! §116-121). Only explicit records (airport header parse, manual correction)
 //! feed quota enforcement.
 
-use deve_sub_domain::{TrafficRecord, TrafficRepository, TrafficSourceKind, TrafficSummary};
+use deve_sub_domain::{
+    SubscriptionRepository, TrafficRecord, TrafficRepository, TrafficSourceKind, TrafficSummary,
+};
 use deve_sub_kernel::SubscriptionId;
 
 use super::error::{SubscriptionAppError, map_subscription_error};
@@ -74,11 +76,22 @@ pub async fn record_traffic(
 /// header at delivery time.
 ///
 /// # Errors
+/// - [`SubscriptionAppError::SubscriptionNotFound`] — no subscription with
+///   this id exists.
 /// - [`SubscriptionAppError::Subscription`] — storage error.
 pub async fn get_traffic_summary(
+    subscription_repo: &dyn SubscriptionRepository,
     traffic_repo: &dyn TrafficRepository,
     subscription_id: SubscriptionId,
 ) -> Result<TrafficSummary, SubscriptionAppError> {
+    if subscription_repo
+        .find_by_id(subscription_id)
+        .await
+        .map_err(map_subscription_error)?
+        .is_none()
+    {
+        return Err(SubscriptionAppError::SubscriptionNotFound);
+    }
     traffic_repo
         .get_summary(subscription_id)
         .await
@@ -106,8 +119,11 @@ pub struct ManualCorrectionParams {
 ///
 /// # Errors
 /// - [`SubscriptionAppError::InvalidInput`] — `note` too long.
+/// - [`SubscriptionAppError::SubscriptionNotFound`] — no subscription with
+///   this id exists; prevents orphan traffic records.
 /// - [`SubscriptionAppError::Subscription`] — storage error.
 pub async fn apply_manual_correction(
+    subscription_repo: &dyn SubscriptionRepository,
     traffic_repo: &dyn TrafficRepository,
     params: ManualCorrectionParams,
 ) -> Result<TrafficRecord, SubscriptionAppError> {
@@ -115,6 +131,15 @@ pub async fn apply_manual_correction(
         return Err(SubscriptionAppError::InvalidInput(format!(
             "note must not exceed {MAX_SOURCE_REF_LEN} characters"
         )));
+    }
+
+    if subscription_repo
+        .find_by_id(params.subscription_id)
+        .await
+        .map_err(map_subscription_error)?
+        .is_none()
+    {
+        return Err(SubscriptionAppError::SubscriptionNotFound);
     }
 
     let record = TrafficRecord::new(

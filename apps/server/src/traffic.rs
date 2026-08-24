@@ -49,9 +49,13 @@ async fn get_traffic(
         )
     })?;
 
-    let summary = subscription::get_traffic_summary(state.traffic_repo.as_ref(), subscription_id)
-        .await
-        .map_err(|e| map_traffic_error(e, "get_traffic"))?;
+    let summary = subscription::get_traffic_summary(
+        state.subscription_repo.as_ref(),
+        state.traffic_repo.as_ref(),
+        subscription_id,
+    )
+    .await
+    .map_err(|e| map_traffic_error(e, "get_traffic"))?;
 
     Ok(Json(TrafficSummaryResponse {
         subscription_id: subscription_id.to_string(),
@@ -102,6 +106,7 @@ async fn apply_traffic_correction(
     })?;
 
     let record = subscription::apply_manual_correction(
+        state.subscription_repo.as_ref(),
         state.traffic_repo.as_ref(),
         subscription::ManualCorrectionParams {
             subscription_id,

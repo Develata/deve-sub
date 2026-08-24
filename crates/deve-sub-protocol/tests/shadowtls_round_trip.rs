@@ -368,6 +368,82 @@ proxies:
     assert_eq!(c1.inner_protocol, c2.inner_protocol);
 }
 
+/// R3-03 regression: ShadowTLS wrapping a Snell inner whose SnellConfig carries
+/// an `obfs` must emit exactly one `obfs-opts` block. Before the fix,
+/// `emit_snell` emitted the inner `obfs-opts:` and `emit_shadowtls` appended a
+/// second `obfs-opts: mode: shadow-tls`, producing a duplicate YAML key.
+#[test]
+fn mihomo_shadowtls_snell_inner_obfs_no_duplicate_key() {
+    use deve_sub_domain::{
+        DomainName, Endpoint, Host, NodeSource, RegionAssignment, RegionMethod, SnellConfig,
+        SnellObfs, SnellObfsMode, SnellVersion, TlsConfig, UdpCapability,
+    };
+    use deve_sub_kernel::{NodeId, Timestamp};
+
+    let node = Node {
+        id: NodeId::parse("01KZAAAAAAAAAAAAAAAAAAAAAA").expect("ulid"),
+        display_name: "STLS-Snell".to_owned(),
+        protocol: ProtocolKind::ShadowTls,
+        config: ProtocolConfig::ShadowTls(ShadowTlsConfig {
+            version: ShadowTlsVersion::V3,
+            password: Some(PASSWORD.to_owned()),
+            inner_protocol: ProtocolKind::Snell,
+            inner_config: Box::new(ProtocolConfig::Snell(SnellConfig {
+                version: SnellVersion::V4,
+                reuse: None,
+                obfs: Some(SnellObfs {
+                    mode: SnellObfsMode::Tls,
+                    host: Some("inner.example.com".to_owned()),
+                    password: None,
+                    version: None,
+                    alpn: vec![],
+                }),
+                v6_mode: None,
+            })),
+        }),
+        endpoint: Endpoint {
+            host: Host::Domain(DomainName::new("stls.example.com".to_owned())),
+            port: 443,
+        },
+        authentication: Authentication::Password {
+            password: INNER_PASSWORD.to_owned(),
+        },
+        transport: None,
+        tls: Some(TlsConfig {
+            enabled: true,
+            server_name: Some("cover.com".to_owned()),
+            skip_cert_verify: None,
+            alpn: vec![],
+            client_fingerprint: None,
+            certificate_pins: vec![],
+            reality: None,
+        }),
+        udp: UdpCapability::default(),
+        multiplex: None,
+        obfuscation: None,
+        congestion: None,
+        chain: None,
+        source: NodeSource {
+            source_label: "test".to_owned(),
+            raw_uri: None,
+            imported_at: Timestamp::from_unix_ms(0).expect("ts"),
+        },
+        tags: vec![],
+        region: RegionAssignment {
+            method: RegionMethod::Auto,
+            value: None,
+        },
+        extras: std::collections::BTreeMap::new(),
+    };
+
+    let emitted = deve_sub_emitter::emit_mihomo(&[node]).expect("emit");
+    let obfs_opts_count = emitted.matches("obfs-opts:").count();
+    assert_eq!(
+        obfs_opts_count, 1,
+        "expected exactly one `obfs-opts:` block, got {obfs_opts_count}\n--- emitted ---\n{emitted}"
+    );
+}
+
 // --- PARSE-026: URI round-trip (wrapper only — no inner protocol) ---
 
 /// PARSE-026: shadow-tls:// URI parse — basic field verification.

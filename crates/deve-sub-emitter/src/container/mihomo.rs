@@ -648,6 +648,14 @@ fn emit_shadowtls(
     inner_node.config = (*cfg.inner_config).clone();
     // Inner TLS is vestigial; shadowtls camouflage TLS lives on node.tls.
     inner_node.tls = None;
+    // WHY: when the inner protocol is Snell, the inner SnellConfig may carry
+    // its own `obfs`. If left in place, `emit_snell` emits an `obfs-opts:`
+    // block and the ShadowTLS branch below appends a second `obfs-opts:
+    // mode: shadow-tls` — a duplicate YAML key. ShadowTLS replaces the obfs
+    // layer, so strip the inner obfs before delegating.
+    if let ProtocolConfig::Snell(ref mut sc) = inner_node.config {
+        sc.obfs = None;
+    }
 
     // Capture the inner emitter's output into a temp buffer, then append
     // the ShadowTLS obfs fields before pushing to `out`.

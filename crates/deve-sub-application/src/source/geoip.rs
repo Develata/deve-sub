@@ -62,26 +62,41 @@ pub async fn enrich_regions(entries: &mut [ReconcileEntry], geoip: &dyn GeoIpPor
         })
         .collect();
 
-    let lookups = hosts.into_iter().map(|host_opt| async move {
-        match host_opt {
-            Some(host) => Some(geoip.detect_region(&host).await),
-            None => None,
-        }
+    // WHY: dedupe hosts before lookup so nodes sharing a host (common in
+    // subscription lists: same server, multiple ports/protocols) share one
+    // DNS/GeoIP resolution instead of re-resolving per entry. See R3-21.
+    let unique_hosts: Vec<String> = {
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        hosts
+            .iter()
+            .filter_map(|h| h.clone())
+            .filter(|h| seen.insert(h.clone()))
+            .collect()
+    };
+
+    let host_lookups = unique_hosts.into_iter().map(|host| async move {
+        let detection = geoip.detect_region(&host).await;
+        (host, detection)
     });
 
     // WHY: `buffered` polls up to N futures concurrently without spawning,
     // so borrowed (non-'static) futures that capture `geoip` by reference
     // work here. Results come back in input order, matching entry order.
-    let results: Vec<Option<RegionDetection>> = stream::iter(lookups)
+    let host_results: Vec<(String, RegionDetection)> = stream::iter(host_lookups)
         .buffered(MAX_CONCURRENT_LOOKUPS)
         .collect()
         .await;
 
-    for (entry, detection) in entries.iter_mut().zip(results) {
-        if let (Some(node), Some(detection)) = (&mut entry.node, detection) {
+    let detection_by_host: std::collections::HashMap<&str, &RegionDetection> =
+        host_results.iter().map(|(h, d)| (h.as_str(), d)).collect();
+
+    for (entry, host_opt) in entries.iter_mut().zip(hosts) {
+        if let (Some(node), Some(host)) = (&mut entry.node, host_opt)
+            && let Some(detection) = detection_by_host.get(host.as_str())
+        {
             node.region = RegionAssignment {
                 method: RegionMethod::Auto,
-                value: detection.region,
+                value: detection.region.clone(),
             };
             let ip_strings: Vec<String> = detection
                 .candidate_ips

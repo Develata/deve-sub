@@ -268,12 +268,15 @@ async fn deliver_for_subscription(
         return Err(SubscriptionAppError::SubscriptionExpired);
     }
 
-    let sub_traffic = deps.traffic_repo.get_summary(subscription.id).await?;
-
-    let user_traffic = deps
-        .traffic_repo
-        .get_summary_for_user(subscription.owner_id)
-        .await?;
+    // WHY: sub_traffic and user_traffic are independent fetches on the same
+    // repo; running them concurrently halves latency. See R3-18.
+    let (sub_traffic, user_traffic) = tokio::join!(
+        deps.traffic_repo.get_summary(subscription.id),
+        deps.traffic_repo
+            .get_summary_for_user(subscription.owner_id),
+    );
+    let sub_traffic = sub_traffic?;
+    let user_traffic = user_traffic?;
 
     if user.is_traffic_exceeded(user_traffic.total()) {
         return Err(SubscriptionAppError::TrafficExceeded);

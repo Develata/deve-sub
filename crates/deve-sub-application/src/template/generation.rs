@@ -585,6 +585,10 @@ fn cached_result(cached: &GenerationCacheEntry) -> GenerationResult {
 }
 
 fn sort_and_dedup(nodes: &mut Vec<(Node, i64)>) {
+    // WHY: `as_filter_key` returns a borrowed `&str`, so the comparator
+    // allocates zero strings. The previous comparator called
+    // `protocol.to_string()` on both sides per comparison (~2 heap strings
+    // × n log n). See R3-19.
     nodes.sort_by(|(a, sa), (b, sb)| {
         sa.cmp(sb).then_with(|| {
             a.endpoint
@@ -592,7 +596,7 @@ fn sort_and_dedup(nodes: &mut Vec<(Node, i64)>) {
                 .uri_host()
                 .cmp(&b.endpoint.host.uri_host())
                 .then(a.endpoint.port.cmp(&b.endpoint.port))
-                .then(a.protocol.to_string().cmp(&b.protocol.to_string()))
+                .then(a.protocol.as_filter_key().cmp(b.protocol.as_filter_key()))
         })
     });
     let mut seen: HashSet<NodeId> = HashSet::new();

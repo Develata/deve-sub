@@ -131,15 +131,29 @@ async fn execute_probe_run_inner(
     let mut seen = HashSet::new();
     let node_ids: Vec<NodeId> = node_ids.into_iter().filter(|id| seen.insert(*id)).collect();
 
+    // WHY: batch-fetch all nodes in one query (chunked internally by the
+    // adapter to respect SQLITE_MAX_VARIABLE_NUMBER) instead of one
+    // `get_node` per node inside the probe stream — up to 10k repo
+    // round-trips became 1 batch. See R3-20.
+    let pool_entries = deps
+        .pool_repo
+        .get_nodes(&node_ids)
+        .await
+        .map_err(|e| ProbeError::Storage(e.to_string()))?;
+    let node_by_id: std::collections::HashMap<NodeId, deve_sub_domain::Node> = pool_entries
+        .into_iter()
+        .map(|e| (e.node.id, e.node))
+        .collect();
+
     // Probe each node with bounded concurrency. `buffer_unordered` runs at
     // most `concurrency` futures at a time — unlike the previous JoinSet
     // approach which spawned a Tokio task per node (10k tasks for 10k nodes).
     let results: Vec<LatencyResult> = stream::iter(node_ids.iter().copied())
         .map(|node_id| {
             let probe = Arc::clone(&deps.probe);
-            let pool = Arc::clone(&deps.pool_repo);
             let cancelled = Arc::clone(&cancelled);
             let timeout = config.timeout;
+            let node_by_id = &node_by_id;
             async move {
                 if cancelled.load(Ordering::Relaxed) {
                     return LatencyResult {
@@ -148,16 +162,9 @@ async fn execute_probe_run_inner(
                         error_class: ErrorClass::Ok,
                     };
                 }
-                let node = match pool.get_node(node_id).await {
-                    Ok(Some(entry)) => entry.node,
-                    Ok(None) => {
-                        return LatencyResult {
-                            node_id,
-                            rtt_ms: None,
-                            error_class: ErrorClass::DnsFailed,
-                        };
-                    }
-                    Err(_) => {
+                let node = match node_by_id.get(&node_id) {
+                    Some(n) => n.clone(),
+                    None => {
                         return LatencyResult {
                             node_id,
                             rtt_ms: None,

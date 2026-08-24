@@ -20,6 +20,11 @@ pub enum HealthStatusDto {
 }
 
 /// Response body for `GET /health/live`.
+///
+/// Deliberately a distinct type from [`HealthReadyResponse`] even though the
+/// fields are identical today: liveness and readiness probes may diverge
+/// (e.g. readiness could add per-check details). Keeping them separate
+/// preserves independent evolution without a wire-format break.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct HealthLiveResponse {
     /// Overall health status.
@@ -30,7 +35,8 @@ pub struct HealthLiveResponse {
     pub version: String,
 }
 
-/// Response body for `GET /health/ready`.
+/// Response body for `GET /health/ready`. See [`HealthLiveResponse`] for why
+/// this is a separate type.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct HealthReadyResponse {
     /// Overall health status.

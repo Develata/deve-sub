@@ -71,6 +71,7 @@ pub struct NodeResponse {
 /// dedup. `source_type` controls format detection; `auto` lets the server
 /// detect from the content.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ImportNodesRequest {
     /// Raw subscription content to parse and import.
     pub content: String,
@@ -155,6 +156,7 @@ pub struct NodeOverrideDto {
 /// (the node falls back to its parsed/auto value). Clients must send the
 /// complete desired override state on every call.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateOverrideRequest {
     /// Override display name; `None` clears the override.
     pub display_name: Option<String>,
@@ -183,6 +185,7 @@ pub struct NodeOverrideResponse {
 
 /// Request body for `POST /api/v1/nodes/batch-enabled` (NODE-004).
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct BatchEnabledRequest {
     /// Node ULIDs to update.
     pub node_ids: Vec<String>,
@@ -206,12 +209,14 @@ pub struct NodeTagAssignmentDto {
 
 /// Request body for `POST /api/v1/nodes/batch-tags` (NODE-005).
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct BatchTagsRequest {
     pub assignments: Vec<NodeTagAssignmentDto>,
 }
 
 /// Request body for `PATCH /api/v1/nodes/{id}/region` (NODE-006).
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SetRegionRequest {
     /// `Some("US")` sets a manual region; `None` clears it.
     pub region: Option<String>,
@@ -226,6 +231,7 @@ pub struct RegionResponse {
 
 /// Request body for `POST /api/v1/tags`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateTagRequest {
     pub name: String,
     pub color: Option<String>,
@@ -245,6 +251,7 @@ pub struct ListTagsResponse {
 
 /// Request body for `PUT /api/v1/nodes/{id}/tags`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SetNodeTagsRequest {
     /// Tag IDs to assign to this node (replaces existing assignments).
     pub tag_ids: Vec<String>,
@@ -258,6 +265,7 @@ pub struct SetNodeTagsRequest {
 /// not contain the node itself, duplicates, non-existent nodes, or form a
 /// cycle.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SetNodeChainRequest {
     /// Ordered node IDs forming the chain. Empty clears the chain.
     pub nodes: Vec<String>,

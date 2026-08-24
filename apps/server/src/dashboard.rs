@@ -20,6 +20,7 @@ use deve_sub_kernel::SubscriptionId;
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
 use crate::probes::{error_class_to_dto, kind_to_dto, probe_type_to_dto, sync_status_to_dto};
+use crate::traffic::map_source_kind;
 
 /// `GET /api/v1/dashboard/latency` — recent latency records across all nodes
 /// (admin). Returns the most recent records, newest first.
@@ -103,7 +104,7 @@ async fn get_dashboard_traffic(
         .by_source
         .into_iter()
         .map(|(kind, u, d)| DashboardSourceKindBreakdownDto {
-            source_kind: kind.as_kebab().to_owned(),
+            source_kind: map_source_kind(kind),
             upload: u,
             download: d,
         })
@@ -216,7 +217,7 @@ async fn get_traffic_history(
                 .source_breakdown
                 .into_iter()
                 .map(|(kind, u, d)| TrafficHistorySourceBreakdownDto {
-                    source_kind: kind.as_kebab().to_owned(),
+                    source_kind: map_source_kind(kind),
                     upload: u,
                     download: d,
                 })

@@ -13,12 +13,21 @@ use axum::response::Json;
 use deve_sub_application::subscription;
 use deve_sub_contract::{
     ErrorResponse, ManualCorrectionRequest, ManualCorrectionResponse, TrafficSourceBreakdownDto,
-    TrafficSummaryResponse,
+    TrafficSourceKindDto, TrafficSummaryResponse,
 };
+use deve_sub_domain::TrafficSourceKind;
 use deve_sub_kernel::SubscriptionId;
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
+
+pub(crate) fn map_source_kind(k: TrafficSourceKind) -> TrafficSourceKindDto {
+    match k {
+        TrafficSourceKind::AirportHeader => TrafficSourceKindDto::AirportHeader,
+        TrafficSourceKind::ManualCorrection => TrafficSourceKindDto::ManualCorrection,
+        TrafficSourceKind::Probe => TrafficSourceKindDto::Probe,
+    }
+}
 
 /// `GET /api/v1/subscriptions/{id}/traffic` — get aggregated traffic summary
 /// for a subscription (admin). Returns consumed upload/download totals and a
@@ -66,7 +75,7 @@ async fn get_traffic(
             .by_source
             .into_iter()
             .map(|(kind, u, d)| TrafficSourceBreakdownDto {
-                source_kind: kind.as_kebab().to_owned(),
+                source_kind: map_source_kind(kind),
                 upload: u,
                 download: d,
             })
@@ -123,7 +132,7 @@ async fn apply_traffic_correction(
         Json(ManualCorrectionResponse {
             record_id: record.id.to_string(),
             subscription_id: record.subscription_id.to_string(),
-            source_kind: record.source_kind.as_kebab().to_owned(),
+            source_kind: map_source_kind(record.source_kind),
             upload: record.upload,
             download: record.download,
             recorded_at: ts_to_iso8601(record.recorded_at),

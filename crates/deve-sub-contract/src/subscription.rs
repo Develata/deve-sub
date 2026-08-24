@@ -11,6 +11,7 @@ use utoipa::{IntoParams, ToSchema};
 
 /// Request body for `POST /api/v1/subscriptions`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateSubscriptionRequest {
     /// Human-readable subscription name.
     pub name: String,
@@ -34,6 +35,7 @@ pub struct CreateSubscriptionRequest {
 
 /// Request body for `PUT /api/v1/subscriptions/{id}`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateSubscriptionRequest {
     /// Human-readable subscription name.
     pub name: String,
@@ -116,6 +118,7 @@ pub struct SubscriptionResponse {
 /// old token stays valid indefinitely). `0` means no grace (the old token is
 /// immediately invalid).
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RotateTokenRequest {
     /// Grace period in seconds. `null` or `-1` = permanent grace.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -150,6 +153,7 @@ pub struct ShortCodeResponse {
 /// revocation. The plaintext is returned once at creation; only the
 /// HMAC-SHA256 digest is persisted.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateTempLinkRequest {
     /// When the temp link expires (ISO 8601 UTC). Required.
     pub expires_at: String,

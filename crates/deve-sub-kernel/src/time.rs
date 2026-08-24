@@ -30,6 +30,11 @@ impl Timestamp {
     }
 
     /// Return the Unix timestamp in milliseconds.
+    ///
+    /// Lossy: sub-millisecond precision (the nanosecond remainder) is
+    /// truncated by the integer division. Round-tripping through
+    /// `from_unix_ms` recovers the same millisecond but not the original
+    /// nanosecond offset.
     #[must_use]
     #[allow(clippy::expect_used)]
     pub fn unix_ms(&self) -> i64 {

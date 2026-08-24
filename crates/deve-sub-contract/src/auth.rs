@@ -44,6 +44,7 @@ pub struct UserDto {
 
 /// Request body for `POST /api/v1/auth/login`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct LoginRequest {
     /// Username.
     pub username: String,
@@ -70,6 +71,7 @@ pub struct LoginResponse {
 
 /// Request body for `POST /api/v1/auth/setup` (initial admin creation).
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SetupAdminRequest {
     /// Admin username.
     pub username: String,
@@ -116,6 +118,7 @@ pub struct ErrorResponse {
 
 /// Request body for `POST /api/v1/users` (admin-only user creation).
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateUserRequest {
     /// Username.
     pub username: String,
@@ -155,6 +158,7 @@ pub struct TwoFactorSetupResponse {
 
 /// Request body for `POST /api/v1/auth/2fa/verify`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct TwoFactorVerifyRequest {
     /// 6-digit TOTP code from the user's authenticator app.
     pub code: String,
@@ -174,6 +178,7 @@ pub struct TwoFactorVerifyResponse {
 /// Requires the current password to prevent unauthorized disabling from a
 /// hijacked session.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct TwoFactorDisableRequest {
     /// Current password for re-authentication.
     pub password: String,
@@ -183,6 +188,7 @@ pub struct TwoFactorDisableRequest {
 ///
 /// Requires the current password to prevent unauthorized regeneration.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RegenerateRecoveryCodesRequest {
     /// Current password for re-authentication.
     pub password: String,
@@ -197,6 +203,7 @@ pub struct RegenerateRecoveryCodesResponse {
 
 /// Request body for `POST /api/v1/auth/login/2fa`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct LoginTwoFactorRequest {
     /// Challenge token from the login response.
     pub challenge_token: String,

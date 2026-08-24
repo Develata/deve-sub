@@ -66,5 +66,5 @@ pub use template::{
 };
 pub use traffic::{
     ManualCorrectionRequest, ManualCorrectionResponse, TrafficSourceBreakdownDto,
-    TrafficSummaryResponse,
+    TrafficSourceKindDto, TrafficSummaryResponse,
 };

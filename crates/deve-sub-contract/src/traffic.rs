@@ -6,11 +6,27 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+/// The origin of a traffic observation (kebab-case wire form).
+///
+/// Mirrors `deve_sub_domain::TrafficSourceKind::as_kebab()` without a
+/// cross-layer dependency (contract is a leaf DTO layer). The variants and
+/// their serialization MUST stay in lockstep with the domain enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TrafficSourceKindDto {
+    /// Parsed from an upstream `subscription-userinfo` response header.
+    AirportHeader,
+    /// Admin-entered correction or initial import.
+    ManualCorrection,
+    /// Probe-based measurement (M7).
+    Probe,
+}
+
 /// Per-source-kind breakdown entry in a [`TrafficSummaryResponse`].
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TrafficSourceBreakdownDto {
-    /// Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`.
-    pub source_kind: String,
+    /// Source kind.
+    pub source_kind: TrafficSourceKindDto,
     /// Upload bytes from this source kind.
     pub upload: u64,
     /// Download bytes from this source kind.
@@ -41,6 +57,7 @@ pub struct TrafficSummaryResponse {
 /// Records a manual traffic correction (admin escape hatch for drifted totals).
 /// The correction is appended like any other record; aggregation is sum-based.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ManualCorrectionRequest {
     /// Upload bytes to record.
     pub upload: u64,
@@ -57,8 +74,8 @@ pub struct ManualCorrectionResponse {
     pub record_id: String,
     /// The subscription ULID.
     pub subscription_id: String,
-    /// Source kind (`manual-correction`).
-    pub source_kind: String,
+    /// Source kind (always `manual-correction` for this endpoint).
+    pub source_kind: TrafficSourceKindDto,
     /// Upload bytes recorded.
     pub upload: u64,
     /// Download bytes recorded.

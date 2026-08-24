@@ -77,6 +77,7 @@ pub struct SourceDto {
 
 /// Request body for `POST /api/v1/sources`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateSourceRequest {
     /// Human-readable name.
     pub name: String,
@@ -100,6 +101,7 @@ pub struct CreateSourceRequest {
 
 /// Request body for `PUT /api/v1/sources/{id}`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateSourceRequest {
     /// Human-readable name.
     pub name: String,

@@ -121,6 +121,7 @@ pub struct ProbeSourceDto {
 
 /// Request body for `POST /api/v1/probe-sources`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateProbeSourceRequest {
     /// Panel kind.
     pub kind: ProbeSourceKindDto,
@@ -140,6 +141,7 @@ pub struct CreateProbeSourceRequest {
 /// Request body for `PUT /api/v1/probe-sources/{id}`. Only provided fields are
 /// mutated.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateProbeSourceRequest {
     /// Human-readable name.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -178,10 +180,13 @@ pub struct ListProbeSourcesResponse {
 
 /// Request body for `POST /api/v1/probe-runs`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateProbeRunRequest {
     /// The probe type to run.
     pub probe_type: ProbeTypeDto,
-    /// Node ULIDs to probe.
+    /// Node ULIDs to probe. Bounded to 10 000 entries by the application
+    /// layer (`MAX_PROBE_NODE_IDS`); empty lists and duplicates are rejected
+    /// with 400 `invalid_input`.
     pub node_ids: Vec<String>,
 }
 

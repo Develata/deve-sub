@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::probe::{ErrorClassDto, ProbeSourceKindDto, ProbeTypeDto, SyncStatusDto};
+use crate::traffic::TrafficSourceKindDto;
 
 /// A single latency record in the dashboard latency view.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -67,8 +68,8 @@ pub struct DashboardProbeSourceBreakdownDto {
 /// Per source-kind traffic breakdown in the dashboard traffic view.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct DashboardSourceKindBreakdownDto {
-    /// Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`.
-    pub source_kind: String,
+    /// Source kind.
+    pub source_kind: TrafficSourceKindDto,
     /// Total upload bytes from this source kind.
     pub upload: u64,
     /// Total download bytes from this source kind.
@@ -96,6 +97,7 @@ pub struct DashboardTrafficResponse {
 pub struct DashboardLatencyQuery {
     /// Maximum number of records to return (1-200, default 50).
     #[serde(default)]
+    #[param(default = 50, minimum = 1, maximum = 200)]
     pub limit: Option<u32>,
 }
 
@@ -111,8 +113,8 @@ pub struct DashboardTrafficQuery {
 /// Per source-kind breakdown entry in a [`TrafficHistoryPointDto`].
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TrafficHistorySourceBreakdownDto {
-    /// Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`.
-    pub source_kind: String,
+    /// Source kind.
+    pub source_kind: TrafficSourceKindDto,
     /// Upload bytes from this source kind on this day.
     pub upload: u64,
     /// Download bytes from this source kind on this day.
@@ -155,5 +157,6 @@ pub struct TrafficHistoryQuery {
     /// Number of days of history to return (1-365, default 30). The range
     /// ends at the current UTC date.
     #[serde(default)]
+    #[param(default = 30, minimum = 1, maximum = 365)]
     pub days: Option<u32>,
 }

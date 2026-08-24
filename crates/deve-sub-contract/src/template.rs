@@ -13,6 +13,7 @@ use utoipa::{IntoParams, ToSchema};
 /// kind, metadata, spec) as a YAML string. The server validates it against
 /// the M5 schema constraints before persistence (GEN-002).
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateTemplateRequest {
     /// Human-readable template name.
     pub name: String,
@@ -25,6 +26,7 @@ pub struct CreateTemplateRequest {
 
 /// Request body for `PUT /api/v1/templates/{id}`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateTemplateRequest {
     /// Human-readable template name.
     pub name: String,
@@ -267,6 +269,7 @@ pub struct ActiveGenerationResponse {
 
 /// Request body for `POST /api/v1/templates/{id}/rollback`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RollbackRequest {
     /// The version ULID to activate.
     pub version_id: String,

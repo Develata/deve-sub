@@ -210,26 +210,23 @@ async fn get_subscription(
         )
     })?;
 
-    let sub = subscription::get_subscription(state.subscription_repo.as_ref(), subscription_id)
-        .await
-        .map_err(|e| map_subscription_app_error(e, "get_subscription"))?
-        .ok_or_else(|| {
-            err(
-                StatusCode::NOT_FOUND,
-                "subscription_not_found",
-                "subscription does not exist",
-            )
-        })?;
-
-    let short_code = state
-        .short_code_repo
-        .find_by_subscription(sub.id)
-        .await
-        .map_err(|e| map_subscription_app_error(e.into(), "get_subscription"))?
-        .map(|sc| sc.code);
+    let sub = subscription::get_subscription_with_short_code(
+        state.subscription_repo.as_ref(),
+        state.short_code_repo.as_ref(),
+        subscription_id,
+    )
+    .await
+    .map_err(|e| map_subscription_app_error(e, "get_subscription"))?
+    .ok_or_else(|| {
+        err(
+            StatusCode::NOT_FOUND,
+            "subscription_not_found",
+            "subscription does not exist",
+        )
+    })?;
 
     Ok(Json(GetSubscriptionResponse {
-        subscription: subscription_to_dto(&sub, short_code),
+        subscription: subscription_to_dto(&sub.subscription, sub.short_code),
     }))
 }
 
@@ -281,17 +278,15 @@ async fn update_subscription(
     .await
     .map_err(|e| map_subscription_app_error(e, "update_subscription"))?;
 
-    let short_code = state
-        .short_code_repo
-        .find_by_subscription(sub.id)
-        .await
-        .map_err(|e| map_subscription_app_error(e.into(), "update_subscription"))?
-        .map(|sc| sc.code);
-
     let entry = audit::audit_subscription_update(admin.user.id, &sub.id.to_string());
     if let Err(e) = audit::record_audit_log(state.audit_log_repo.as_ref(), &entry).await {
         tracing::warn!(error = %e, "audit log write failed for subscription.update");
     }
+
+    let short_code =
+        subscription::get_short_code_for_subscription(state.short_code_repo.as_ref(), sub.id)
+            .await
+            .map_err(|e| map_subscription_app_error(e, "update_subscription"))?;
 
     Ok(Json(GetSubscriptionResponse {
         subscription: subscription_to_dto(&sub, short_code),

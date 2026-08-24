@@ -302,6 +302,68 @@ pub async fn get_subscription(
         .map_err(map_subscription_error)
 }
 
+/// Result of [`get_subscription_with_short_code`]: the subscription and its
+/// current short-code string (if any).
+#[derive(Debug, Clone)]
+pub struct SubscriptionWithShortCode {
+    pub subscription: Subscription,
+    pub short_code: Option<String>,
+}
+
+/// Get a subscription by ID along with its current short-code string.
+///
+/// WHY: the `GET /api/v1/subscriptions/{id}` and `PUT` handlers previously
+/// called `subscription::get_subscription` then directly invoked
+/// `short_code_repo.find_by_subscription` — a second repository from the
+/// delivery layer, crossing the "one UI operation maps to one application
+/// command/query" boundary (constraint #6). This query folds both fetches
+/// into a single application-layer call so the handler touches only one
+/// application function. See R3-29.
+///
+/// Returns `Ok(None)` when the subscription does not exist (mirrors
+/// [`get_subscription`]); the handler maps that to 404.
+///
+/// # Errors
+/// - [`SubscriptionAppError::Subscription`] — storage error on either repo.
+pub async fn get_subscription_with_short_code(
+    sub_repo: &dyn SubscriptionRepository,
+    short_code_repo: &dyn ShortCodeRepository,
+    id: SubscriptionId,
+) -> Result<Option<SubscriptionWithShortCode>, SubscriptionAppError> {
+    let Some(subscription) = get_subscription(sub_repo, id).await? else {
+        return Ok(None);
+    };
+    let short_code = short_code_repo
+        .find_by_subscription(subscription.id)
+        .await
+        .map_err(map_subscription_error)?
+        .map(|sc| sc.code);
+    Ok(Some(SubscriptionWithShortCode {
+        subscription,
+        short_code,
+    }))
+}
+
+/// Fetch only the short-code string for a subscription, if one exists.
+///
+/// WHY: the `PUT /api/v1/subscriptions/{id}` handler already has the updated
+/// subscription from `update_subscription`; calling
+/// [`get_subscription_with_short_code`] would re-fetch it just to get the
+/// short code. This query fetches only the short code. See R3-29.
+///
+/// # Errors
+/// - [`SubscriptionAppError::Subscription`] — storage error.
+pub async fn get_short_code_for_subscription(
+    short_code_repo: &dyn ShortCodeRepository,
+    id: SubscriptionId,
+) -> Result<Option<String>, SubscriptionAppError> {
+    Ok(short_code_repo
+        .find_by_subscription(id)
+        .await
+        .map_err(map_subscription_error)?
+        .map(|sc| sc.code))
+}
+
 /// List subscriptions for an owner with cursor pagination.
 ///
 /// # Errors

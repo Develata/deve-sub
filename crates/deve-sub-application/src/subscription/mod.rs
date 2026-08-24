@@ -16,9 +16,10 @@ pub mod traffic_history_scheduler;
 
 pub use commands::{
     CreateSubscriptionParams, CreateSubscriptionResult, CreateTempLinkParams, CreateTempLinkResult,
-    RotateTokenResult, ShortCodeResult, UpdateSubscriptionParams, create_subscription,
-    create_temp_link, delete_subscription, get_subscription, list_subscriptions,
-    regenerate_short_code, revoke_temp_link, rotate_token, update_subscription,
+    RotateTokenResult, ShortCodeResult, SubscriptionWithShortCode, UpdateSubscriptionParams,
+    create_subscription, create_temp_link, delete_subscription, get_short_code_for_subscription,
+    get_subscription, get_subscription_with_short_code, list_subscriptions, regenerate_short_code,
+    revoke_temp_link, rotate_token, update_subscription,
 };
 pub use delivery::{
     DeliveryDeps, DeliveryOutcome, DeliveryResult, deliver_by_short_code, deliver_by_temp_link,

@@ -130,8 +130,17 @@ pub async fn refresh_source(
             geoip: state2.geoip.as_ref(),
         };
         let _ = execute_refresh_job(&deps, job_id, source_id, &cancelled).await;
-        if let Ok(mut flags) = state2.refresh_cancel_flags.lock() {
-            flags.remove(&job_id);
+        // WHY: recover from a poisoned mutex so the flag map does not leak
+        // the entry for this job. A poisoned lock means a prior task panicked
+        // while holding it; the map itself is structurally valid. Matches the
+        // probe-runner cleanup pattern in probes.rs. See R3-28.
+        match state2.refresh_cancel_flags.lock() {
+            Ok(mut flags) => {
+                flags.remove(&job_id);
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().remove(&job_id);
+            }
         }
     });
 

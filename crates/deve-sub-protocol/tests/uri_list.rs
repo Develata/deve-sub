@@ -98,6 +98,36 @@ fn shadowrocket_parses_share_list() {
     assert_eq!(nodes[1].endpoint.host.uri_host(), "[2001:db8::1]");
 }
 
+/// R3-16 regression: the Shadowrocket emitter (`container/mod.rs:57-62`)
+/// base64-encodes its URI-list output, but the parser only accepted plain
+/// URI lists — so emitter output could not be re-parsed. The parser now
+/// tries base64 decode first (falling back to plain text), making
+/// parse→emit→parse an identity for base64-encoded input.
+#[test]
+fn shadowrocket_base64_round_trip() {
+    let text = format!(
+        "trojan://{RESERVED_PASSWORD}@example.com:443?type=tcp#SR-RT1\n\
+         vless://{RESERVED_UUID}@[2001:db8::1]:443?security=reality&type=tcp&pbk=TEST_PUBLIC_KEY&sid=01020304&sni=example.com#SR-RT2"
+    );
+
+    let parsed1 = deve_sub_protocol::container::parse_shadowrocket(&text).expect("parse 1");
+    assert_eq!(parsed1.len(), 2);
+
+    let emitted = deve_sub_emitter::emit_shadowrocket(&parsed1).expect("emit");
+    // WHY: emitter always base64-encodes; the decoded body must not equal
+    // the plain input (it is base64), and re-parsing must recover the same
+    // nodes.
+    assert_ne!(emitted, text, "emitter must base64-encode the output");
+
+    let parsed2 = deve_sub_protocol::container::parse_shadowrocket(&emitted).expect("parse 2");
+    assert_eq!(parsed2.len(), 2);
+    assert_eq!(parsed2[0].protocol, parsed1[0].protocol);
+    assert_eq!(parsed2[0].endpoint, parsed1[0].endpoint);
+    assert_eq!(parsed2[0].authentication, parsed1[0].authentication);
+    assert_eq!(parsed2[1].protocol, parsed1[1].protocol);
+    assert_eq!(parsed2[1].endpoint, parsed1[1].endpoint);
+}
+
 // --- URI list emission (PARSE-016) ---
 
 /// PARSE-016: emit_uri_list produces one URI per line with LF endings.

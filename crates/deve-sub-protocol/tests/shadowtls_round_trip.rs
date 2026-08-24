@@ -486,6 +486,51 @@ fn shadowtls_uri_round_trip() {
     assert_eq!(parsed1.config, parsed2.config);
 }
 
+/// R3-15 regression: ShadowTLS V1 has no wrapper password, so the emitter
+/// emits empty userinfo (`shadow-tls://@host:port?version=1`). Before the
+/// fix the parser required a non-empty password for all versions, making
+/// V1 emitter output unparseable.
+#[test]
+fn shadowtls_v1_empty_password_round_trip() {
+    let uri = "shadow-tls://@stls.example.com:443?version=1&sni=cover.com#V1-RT";
+    let parsed1 = deve_sub_protocol::parse_uri(uri).expect("parse 1");
+    assert_eq!(parsed1.protocol, ProtocolKind::ShadowTls);
+    let ProtocolConfig::ShadowTls(cfg1) = &parsed1.config else {
+        panic!("expected ShadowTls");
+    };
+    assert_eq!(cfg1.version, ShadowTlsVersion::V1);
+    assert_eq!(cfg1.password, None);
+
+    let emitted = deve_sub_emitter::emit_uri(&parsed1).expect("emit");
+    // WHY: V1 emits empty userinfo; the URI must still parse back.
+    assert!(
+        emitted.starts_with("shadow-tls://@stls.example.com:443"),
+        "V1 emitted URI must have empty userinfo, got: {emitted}"
+    );
+
+    let parsed2 = deve_sub_protocol::parse_uri(&emitted).expect("parse 2");
+    assert_eq!(parsed2.protocol, ProtocolKind::ShadowTls);
+    let ProtocolConfig::ShadowTls(cfg2) = &parsed2.config else {
+        panic!("expected ShadowTls");
+    };
+    assert_eq!(cfg1.version, cfg2.version);
+    assert_eq!(cfg1.password, cfg2.password);
+    assert_eq!(parsed1.endpoint, parsed2.endpoint);
+    assert_eq!(parsed1.tls, parsed2.tls);
+}
+
+/// R3-15 regression: V2/V3 still require a non-empty password. The parser
+/// must reject empty userinfo for V2/V3 (only V1 is passwordless).
+#[test]
+fn shadowtls_v2_empty_password_rejected() {
+    let uri = "shadow-tls://@stls.example.com:443?version=2&sni=cover.com#V2-NoPW";
+    let err = deve_sub_protocol::parse_uri(uri).expect_err("V2 must require password");
+    assert!(matches!(
+        err,
+        deve_sub_protocol::ParseError::MissingField("password")
+    ));
+}
+
 // --- PARSE-026: Compatibility layer ---
 
 /// PARSE-026: Xray compatibility check excludes ShadowTLS.

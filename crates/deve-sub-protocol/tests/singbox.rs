@@ -311,3 +311,97 @@ fn singbox_parses_vmess_packet_encoding() {
         "packet_encoding must be preserved"
     );
 }
+
+/// R3-14 regression: sing-box emitter must preserve `fast_open`/`lazy` so
+/// parse→emit→parse is identity. Before the fix the emitter dropped both
+/// fields even though the parser read them (singbox.rs:433-434).
+#[test]
+fn singbox_hysteria2_fast_open_lazy_round_trip() {
+    let json = format!(
+        r#"{{
+  "outbounds": [
+    {{
+      "type": "hysteria2",
+      "tag": "Hy2-FO",
+      "server": "hy2.example.com",
+      "server_port": 443,
+      "password": "{RESERVED_PASSWORD}",
+      "tls": {{
+        "enabled": true,
+        "server_name": "hy2.example.com"
+      }},
+      "fast_open": true,
+      "lazy": true
+    }}
+  ]
+}}"#
+    );
+
+    let parsed1 = deve_sub_protocol::container::parse_singbox_json(&json).expect("parse 1");
+    assert_eq!(parsed1.len(), 1);
+    let ProtocolConfig::Hysteria2(cfg1) = &parsed1[0].config else {
+        panic!("expected Hysteria2");
+    };
+    assert_eq!(cfg1.fast_open, Some(true));
+    assert_eq!(cfg1.lazy, Some(true));
+
+    let emitted = deve_sub_emitter::emit_singbox(&parsed1).expect("emit");
+    assert!(
+        emitted.contains("\"fast_open\": true"),
+        "emitted JSON must contain fast_open: true, got: {emitted}"
+    );
+    assert!(
+        emitted.contains("\"lazy\": true"),
+        "emitted JSON must contain lazy: true, got: {emitted}"
+    );
+
+    let parsed2 = deve_sub_protocol::container::parse_singbox_json(&emitted).expect("parse 2");
+    assert_eq!(parsed2.len(), 1);
+    let ProtocolConfig::Hysteria2(cfg2) = &parsed2[0].config else {
+        panic!("expected Hysteria2");
+    };
+    assert_eq!(cfg1.fast_open, cfg2.fast_open);
+    assert_eq!(cfg1.lazy, cfg2.lazy);
+}
+
+/// R3-17 regression: sing-box VMess emitter must preserve `security` so
+/// parse→emit→parse is identity. Before the fix the emitter dropped
+/// `security` even though the parser read it (singbox.rs:380) and
+/// mihomo/xray emitters emit it.
+#[test]
+fn singbox_vmess_security_round_trip() {
+    let json = format!(
+        r#"{{
+  "outbounds": [
+    {{
+      "type": "vmess",
+      "tag": "VMess-Sec",
+      "server": "vmess.example.com",
+      "server_port": 443,
+      "uuid": "{RESERVED_UUID}",
+      "security": "aes-128-gcm"
+    }}
+  ]
+}}"#
+    );
+
+    let parsed1 = deve_sub_protocol::container::parse_singbox_json(&json).expect("parse 1");
+    assert_eq!(parsed1.len(), 1);
+    let ProtocolConfig::VMess(cfg1) = &parsed1[0].config else {
+        panic!("expected VMess");
+    };
+    assert_eq!(cfg1.security.as_deref(), Some("aes-128-gcm"));
+
+    let emitted = deve_sub_emitter::emit_singbox(&parsed1).expect("emit");
+    assert!(
+        emitted.contains("\"security\": \"aes-128-gcm\""),
+        "emitted JSON must contain security: aes-128-gcm, got: {emitted}"
+    );
+
+    let parsed2 = deve_sub_protocol::container::parse_singbox_json(&emitted).expect("parse 2");
+    assert_eq!(parsed2.len(), 1);
+    let ProtocolConfig::VMess(cfg2) = &parsed2[0].config else {
+        panic!("expected VMess");
+    };
+    assert_eq!(cfg1.security, cfg2.security);
+}

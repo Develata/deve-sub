@@ -31,9 +31,6 @@ use crate::uri::{
 
 pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
     let password = decode_userinfo(url.username());
-    if password.is_empty() {
-        return Err(ParseError::MissingField("password"));
-    }
 
     let host_str = url
         .host_str()
@@ -59,6 +56,20 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
         value: version_n.to_string(),
     })?;
 
+    // WHY: V1 has no wrapper password (the protocol does not authenticate
+    // the handshake), so the emitter emits empty userinfo for V1. Requiring
+    // a non-empty password here made V1 output unparseable. V2/V3 require
+    // the wrapper password. See R3-15.
+    let password = if password.is_empty() {
+        if matches!(version, ShadowTlsVersion::V1) {
+            None
+        } else {
+            return Err(ParseError::MissingField("password"));
+        }
+    } else {
+        Some(password)
+    };
+
     // WHY: ShadowTLS camouflage TLS — the `sni` query param is the
     // camouflage server name for the TLS handshake target. ShadowTLS
     // always has a TLS layer (the handshake is the whole point), so
@@ -81,7 +92,7 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
 
     let config = ProtocolConfig::ShadowTls(ShadowTlsConfig {
         version,
-        password: Some(password.to_owned()),
+        password,
         // WHY: URI format cannot represent the inner protocol; defaults are
         // placeholders. Container parsers populate these when available.
         inner_protocol: ProtocolKind::Unknown(String::new()),

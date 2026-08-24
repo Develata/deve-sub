@@ -364,3 +364,49 @@ proxies:
         "parser must read host from string form"
     );
 }
+
+/// R3-14 regression: mihomo emitter must preserve `fast-open`/`lazy` so
+/// parse→emit→parse is identity. Before the fix the emitter dropped both
+/// fields even though the parser read them (mihomo.rs:451-452).
+#[test]
+fn mihomo_hysteria2_fast_open_lazy_round_trip() {
+    let yaml = format!(
+        r#"
+proxies:
+  - name: "Hy2-FO-Lazy"
+    type: hysteria2
+    server: hy2.example.com
+    port: 443
+    password: "{RESERVED_PASSWORD}"
+    sni: hy2.example.com
+    fast-open: true
+    lazy: true
+"#
+    );
+
+    let parsed1 = deve_sub_protocol::container::parse_mihomo_yaml(&yaml).expect("parse 1");
+    assert_eq!(parsed1.len(), 1);
+    let ProtocolConfig::Hysteria2(cfg1) = &parsed1[0].config else {
+        panic!("expected Hysteria2");
+    };
+    assert_eq!(cfg1.fast_open, Some(true));
+    assert_eq!(cfg1.lazy, Some(true));
+
+    let emitted = deve_sub_emitter::emit_mihomo(&parsed1).expect("emit");
+    assert!(
+        emitted.contains("fast-open: true"),
+        "emitted YAML must contain fast-open: true, got: {emitted}"
+    );
+    assert!(
+        emitted.contains("lazy: true"),
+        "emitted YAML must contain lazy: true, got: {emitted}"
+    );
+
+    let parsed2 = deve_sub_protocol::container::parse_mihomo_yaml(&emitted).expect("parse 2");
+    assert_eq!(parsed2.len(), 1);
+    let ProtocolConfig::Hysteria2(cfg2) = &parsed2[0].config else {
+        panic!("expected Hysteria2");
+    };
+    assert_eq!(cfg1.fast_open, cfg2.fast_open);
+    assert_eq!(cfg1.lazy, cfg2.lazy);
+}

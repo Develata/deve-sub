@@ -387,6 +387,16 @@ fn emit_hysteria2(
         }
     }
 
+    // WHY: mihomo parser reads `fast-open`/`lazy` (mihomo.rs:451-452) but
+    // the emitter dropped them, breaking round-trip parity. Emit both
+    // when present. See R3-14.
+    if let Some(fast_open) = cfg.fast_open {
+        entry.push_str(&format!("\n    fast-open: {fast_open}"));
+    }
+    if let Some(lazy) = cfg.lazy {
+        entry.push_str(&format!("\n    lazy: {lazy}"));
+    }
+
     push_tls(node, &mut entry);
     out.push('\n');
     out.push_str(&entry);

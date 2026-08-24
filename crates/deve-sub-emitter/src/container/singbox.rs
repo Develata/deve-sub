@@ -171,6 +171,12 @@ fn vmess(node: &Node) -> EmitResult {
         if let Some(aid) = cfg.alter_id {
             fields.push(("alter_id".to_owned(), json!(aid)));
         }
+        // WHY: sing-box parser reads `security` (singbox.rs:380) and
+        // mihomo/xray emitters emit it; dropping it here broke round-trip
+        // parity. Emit when present. See R3-17.
+        if let Some(ref sec) = cfg.security {
+            fields.push(("security".to_owned(), Value::String(sec.clone())));
+        }
         if let Some(ref pe) = cfg.packet_encoding {
             // WHY: sing-box rejects "packet" (a v2rayN/URI convention);
             // it accepts only "xudp" and "none". Map "packet" → "xudp"
@@ -255,6 +261,15 @@ fn hysteria2(node: &Node) -> EmitResult {
             obfs_obj.insert("password".to_owned(), Value::String(pw.clone()));
         }
         fields.push(("obfs".to_owned(), Value::Object(obfs_obj)));
+    }
+    // WHY: sing-box parser reads `fast_open`/`lazy` (singbox.rs:433-434) but
+    // the emitter dropped them, breaking round-trip parity. Emit both when
+    // present. See R3-14.
+    if let Some(fast_open) = cfg.fast_open {
+        fields.push(("fast_open".to_owned(), json!(fast_open)));
+    }
+    if let Some(lazy) = cfg.lazy {
+        fields.push(("lazy".to_owned(), json!(lazy)));
     }
     Ok(("hysteria2", fields))
 }

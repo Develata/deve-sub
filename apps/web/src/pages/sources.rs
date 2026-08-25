@@ -123,7 +123,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                 polls += 1;
                 if polls > 30 {
                     let msg = t(l, "sources.refresh_timeout");
-                    refresh_msg.set(msg);
+                    refresh_msg.set(msg.to_string());
                     refreshing_id.set(String::new());
                     return;
                 }
@@ -159,8 +159,8 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                         )
                     }
                 }
-                "cancelled" => t(l, "common.cancelled"),
-                _ => job.error_message.unwrap_or_else(|| t(l, "common.error")),
+                "cancelled" => t(l, "common.cancelled").to_string(),
+                _ => job.error_message.unwrap_or_else(|| t(l, "common.error").to_string()),
             };
             refresh_msg.set(msg);
             fetch_sources();

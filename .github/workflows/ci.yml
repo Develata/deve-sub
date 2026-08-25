@@ -13,27 +13,108 @@ permissions:
   contents: read
 
 jobs:
-  rust:
-    name: rust
+  # WHY: Phase 1 CI parallelization — the former monolithic `rust` job ran
+  # fmt→clippy→test→doc→openapi serially (~6m wall). Splitting into
+  # independent jobs lets GitHub Actions run them concurrently, cutting the
+  # critical path from ~6m to the slowest shard (~2m). Test coverage is
+  # identical: every shard runs `cargo test --all-targets --all-features` on
+  # the same crate set, just partitioned by `-p`. See feasibility report.
+  fmt-check:
+    name: fmt-check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
-          components: rustfmt, clippy
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Format
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - name: Test
-        run: cargo test --locked --all-targets --all-features
-      - name: Doc tests
-        run: cargo test --locked --all-features --doc
-      - name: OpenAPI spec up to date
-        run: |
+        with:
+          key: clippy
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+  # WHY: per-crate test shards. `fail-fast: false` so all shards run to
+  # completion even if one fails — gives complete feedback in one cycle
+  # instead of cancelling remaining shards on first failure. Shards are
+  # grouped by compile boundary + weight: lightweight leaf crates (kernel,
+  # contract, domain, security, observability, inmemory) are merged into
+  # `core` and `infra` to stay within the 20-concurrent-job GHA limit.
+  test:
+    name: test:${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: core
+            crates: "-p deve-sub-kernel -p deve-sub-contract -p deve-sub-domain"
+          - shard: protocol
+            crates: "-p deve-sub-protocol"
+          - shard: emitter
+            crates: "-p deve-sub-emitter -p deve-sub-compatibility"
+          - shard: storage
+            crates: "-p deve-sub-storage-sqlite"
+          - shard: application
+            crates: "-p deve-sub-application"
+          - shard: adapters
+            crates: "-p deve-sub-adapters"
+          - shard: infra
+            crates: "-p deve-sub-security -p deve-sub-observability -p deve-sub-inmemory"
+          - shard: server
+            crates: "-p deve-sub-server"
+          - shard: cli
+            crates: "-p deve-sub-cli"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-${{ matrix.shard }}
+      - run: cargo test --locked --all-targets --all-features ${{ matrix.crates }}
+
+  test-doc:
+    name: test-doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-doc
+      - run: cargo test --locked --all-features --doc
+
+  openapi-diff:
+    name: openapi-diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: openapi
+      - run: |
           cargo run --locked --all-features --bin deve-sub -- openapi > /tmp/openapi.json
           diff -u /tmp/openapi.json docs/openapi/openapi.json
+
+  # WHY: fan-in gate — downstream jobs (browser-e2e, docker, multiarch)
+  # depend on this single job instead of enumerating every shard. If any
+  # upstream shard fails, GitHub Actions skips this job, which propagates
+  # the failure to all downstream consumers (fail-closed).
+  rust-gate:
+    name: rust-gate
+    runs-on: ubuntu-latest
+    needs: [fmt-check, clippy, test, test-doc, openapi-diff]
+    steps:
+      - run: echo "All Rust gates passed"
 
   # WHY (B-19): external validator tests are #[ignore] by default so dev
   # `cargo test` reports them honestly as ignored, not false-positive pass.
@@ -98,7 +179,7 @@ jobs:
   browser-e2e:
     name: browser-e2e
     runs-on: ubuntu-latest
-    needs: [rust, web-wasm]
+    needs: [rust-gate, web-wasm]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -133,7 +214,7 @@ jobs:
   docker:
     name: docker
     runs-on: ubuntu-latest
-    needs: rust
+    needs: rust-gate
     steps:
       - uses: actions/checkout@v7
       - name: Build Docker image
@@ -195,7 +276,7 @@ jobs:
   multiarch:
     name: multiarch (amd64 + arm64)
     runs-on: ubuntu-latest
-    needs: rust
+    needs: rust-gate
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v7

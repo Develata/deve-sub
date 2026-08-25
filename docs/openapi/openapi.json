@@ -667,7 +667,9 @@
                 "null"
               ],
               "format": "int32",
-              "minimum": 0
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1
             }
           }
         ],
@@ -826,7 +828,9 @@
                 "null"
               ],
               "format": "int32",
-              "minimum": 0
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1
             }
           }
         ],
@@ -6080,7 +6084,8 @@
             },
             "description": "Node ULIDs to update."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "BatchResultDto": {
         "type": "object",
@@ -6110,7 +6115,8 @@
               "$ref": "#/components/schemas/NodeTagAssignmentDto"
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CancelRefreshJobResponse": {
         "type": "object",
@@ -6190,13 +6196,14 @@
             "items": {
               "type": "string"
             },
-            "description": "Node ULIDs to probe."
+            "description": "Node ULIDs to probe. Bounded to 10 000 entries by the application\nlayer (`MAX_PROBE_NODE_IDS`); empty lists and duplicates are rejected\nwith 400 `invalid_input`."
           },
           "probe_type": {
             "$ref": "#/components/schemas/ProbeTypeDto",
             "description": "The probe type to run."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateProbeSourceRequest": {
         "type": "object",
@@ -6230,7 +6237,8 @@
             ],
             "description": "Bound subscription ULID, if any."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateSourceRequest": {
         "type": "object",
@@ -6278,7 +6286,8 @@
             "type": "string",
             "description": "Subscription URL."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateSubscriptionRequest": {
         "type": "object",
@@ -6326,7 +6335,8 @@
             "description": "Traffic limit in bytes. `null` = unlimited. Enforced at delivery.",
             "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateTagRequest": {
         "type": "object",
@@ -6344,7 +6354,8 @@
           "name": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateTempLinkRequest": {
         "type": "object",
@@ -6357,7 +6368,8 @@
             "type": "string",
             "description": "When the temp link expires (ISO 8601 UTC). Required."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateTempLinkResponse": {
         "type": "object",
@@ -6402,7 +6414,8 @@
             "type": "string",
             "description": "The full V3 template YAML document."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateUserRequest": {
         "type": "object",
@@ -6425,7 +6438,8 @@
             "type": "string",
             "description": "Username."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateUserResponse": {
         "type": "object",
@@ -6582,8 +6596,8 @@
             "minimum": 0
           },
           "source_kind": {
-            "type": "string",
-            "description": "Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`."
+            "$ref": "#/components/schemas/TrafficSourceKindDto",
+            "description": "Source kind."
           },
           "upload": {
             "type": "integer",
@@ -6791,7 +6805,7 @@
       },
       "HealthLiveResponse": {
         "type": "object",
-        "description": "Response body for `GET /health/live`.",
+        "description": "Response body for `GET /health/live`.\n\nDeliberately a distinct type from [`HealthReadyResponse`] even though the\nfields are identical today: liveness and readiness probes may diverge\n(e.g. readiness could add per-check details). Keeping them separate\npreserves independent evolution without a wire-format break.",
         "required": [
           "status",
           "product_name",
@@ -6814,7 +6828,7 @@
       },
       "HealthReadyResponse": {
         "type": "object",
-        "description": "Response body for `GET /health/ready`.",
+        "description": "Response body for `GET /health/ready`. See [`HealthLiveResponse`] for why\nthis is a separate type.",
         "required": [
           "status",
           "product_name",
@@ -6859,7 +6873,8 @@
             "$ref": "#/components/schemas/SourceTypeDto",
             "description": "Input format. `auto` lets the server detect."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ImportNodesResponse": {
         "type": "object",
@@ -7234,7 +7249,8 @@
             "type": "string",
             "description": "Username."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "LoginResponse": {
         "type": "object",
@@ -7277,7 +7293,8 @@
             "type": "string",
             "description": "6-digit TOTP code or a recovery code."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ManualCorrectionRequest": {
         "type": "object",
@@ -7304,7 +7321,8 @@
             "description": "Upload bytes to record.",
             "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ManualCorrectionResponse": {
         "type": "object",
@@ -7334,8 +7352,8 @@
             "description": "When the record was created (ISO 8601 UTC)."
           },
           "source_kind": {
-            "type": "string",
-            "description": "Source kind (`manual-correction`)."
+            "$ref": "#/components/schemas/TrafficSourceKindDto",
+            "description": "Source kind (always `manual-correction` for this endpoint)."
           },
           "source_ref": {
             "type": "string",
@@ -7826,7 +7844,8 @@
             "type": "string",
             "description": "Current password for re-authentication."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "RegenerateRecoveryCodesResponse": {
         "type": "object",
@@ -7929,7 +7948,8 @@
             "type": "string",
             "description": "The version ULID to activate."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "RollbackTemplateResponse": {
         "type": "object",
@@ -7956,7 +7976,8 @@
             "format": "int64",
             "description": "Grace period in seconds. `null` or `-1` = permanent grace."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SetNodeChainRequest": {
         "type": "object",
@@ -7972,7 +7993,8 @@
             },
             "description": "Ordered node IDs forming the chain. Empty clears the chain."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SetNodeTagsRequest": {
         "type": "object",
@@ -7988,7 +8010,8 @@
             },
             "description": "Tag IDs to assign to this node (replaces existing assignments)."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SetRegionRequest": {
         "type": "object",
@@ -8001,7 +8024,8 @@
             ],
             "description": "`Some(\"US\")` sets a manual region; `None` clears it."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SetupAdminRequest": {
         "type": "object",
@@ -8019,7 +8043,8 @@
             "type": "string",
             "description": "Admin username."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SetupAdminResponse": {
         "type": "object",
@@ -8677,8 +8702,8 @@
             "minimum": 0
           },
           "source_kind": {
-            "type": "string",
-            "description": "Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`."
+            "$ref": "#/components/schemas/TrafficSourceKindDto",
+            "description": "Source kind."
           },
           "upload": {
             "type": "integer",
@@ -8704,8 +8729,8 @@
             "minimum": 0
           },
           "source_kind": {
-            "type": "string",
-            "description": "Source kind (kebab-case): `airport-header`, `manual-correction`, `probe`."
+            "$ref": "#/components/schemas/TrafficSourceKindDto",
+            "description": "Source kind."
           },
           "upload": {
             "type": "integer",
@@ -8714,6 +8739,15 @@
             "minimum": 0
           }
         }
+      },
+      "TrafficSourceKindDto": {
+        "type": "string",
+        "description": "The origin of a traffic observation (kebab-case wire form).\n\nMirrors `deve_sub_domain::TrafficSourceKind::as_kebab()` without a\ncross-layer dependency (contract is a leaf DTO layer). The variants and\ntheir serialization MUST stay in lockstep with the domain enum.",
+        "enum": [
+          "airport-header",
+          "manual-correction",
+          "probe"
+        ]
       },
       "TrafficSummaryResponse": {
         "type": "object",
@@ -8768,7 +8802,8 @@
             "type": "string",
             "description": "Current password for re-authentication."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "TwoFactorSetupResponse": {
         "type": "object",
@@ -8799,7 +8834,8 @@
             "type": "string",
             "description": "6-digit TOTP code from the user's authenticator app."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "TwoFactorVerifyResponse": {
         "type": "object",
@@ -8868,7 +8904,8 @@
             "format": "int64",
             "description": "Sort order for generation. Always required (defaults to 0 when\nabsent); sent value replaces the stored one."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "UpdateProbeSourceRequest": {
         "type": "object",
@@ -8909,7 +8946,8 @@
             ],
             "description": "Bound subscription ULID. `None` clears the binding; omitting the field\nleaves it unchanged."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "UpdateSourceRequest": {
         "type": "object",
@@ -8965,7 +9003,8 @@
             "type": "string",
             "description": "Subscription URL."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "UpdateSubscriptionRequest": {
         "type": "object",
@@ -9024,7 +9063,8 @@
             "description": "Traffic limit in bytes. `null` = unlimited.",
             "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "UpdateTemplateRequest": {
         "type": "object",
@@ -9047,7 +9087,8 @@
             "type": "string",
             "description": "The full V3 template YAML document."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "UserDto": {
         "type": "object",

@@ -4,6 +4,13 @@ on:
   pull_request:
   push:
     branches: [main]
+  # WHY (ADR-0008): nightly full baseline. Keeps GHA caches warm (rust-cache
+  # and Docker GHA cache expire after 7 days without use, and the Phase 3
+  # job speedups depend on warm caches) and detects CI rot (runner image or
+  # action breakages) before a release tag hits the same suite via
+  # workflow_call, where a failure would surface at the worst moment.
+  schedule:
+    - cron: "0 19 * * *"
   # WHY (DS-AUD-B04): callable by release.yml so a tag push must pass the
   # full verification suite (fmt/clippy/test/docs/wasm/e2e/docker) before
   # any binary is built or released.
@@ -320,14 +327,17 @@ jobs:
           docker volume rm deve-sub-ci-data 2>/dev/null || true
 
   # Multi-arch build verification (DEPLOY-003/004).
-  # WHY: runs only on push to main (not PRs) because the arm64 runtime stage
-  # still needs QEMU for apt-get on debian:trixie-slim. The builder stage
-  # uses cross-compile (not QEMU) per Dockerfile line 9 --platform=$BUILDPLATFORM.
+  # WHY: runs on push to main and on the nightly schedule, not on PRs.
+  # The arm64 runtime stage still needs QEMU for apt-get on
+  # debian:trixie-slim; the builder stage uses cross-compile (not QEMU) per
+  # Dockerfile line 9 --platform=$BUILDPLATFORM. Schedule inclusion keeps
+  # the arm64 GHA Docker layers warm — the docker job reuses this cache and
+  # only multiarch writes arm64 layers.
   multiarch:
     name: multiarch (amd64 + arm64)
     runs-on: ubuntu-latest
     needs: rust-gate
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v3

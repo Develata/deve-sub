@@ -175,23 +175,59 @@ jobs:
         run: cargo install dioxus-cli --locked --version 0.7.10
       - name: Build and verify WASM frontend
         run: bash scripts/build-web-release.sh
+      - name: Upload WASM dist artifact
+        # WHY (Phase 3-A): browser-e2e downloads this instead of rebuilding
+        # the WASM frontend, saving ~2m of dioxus install + build time.
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-dist
+          path: apps/web/dist/
+          retention-days: 1
+
+  # WHY (Phase 3-B): build the release binary once here so browser-e2e can
+  # download it instead of compiling its own. docker/multiarch still build
+  # via Dockerfile to verify the Docker build pipeline itself (contract
+  # stability — performance must not weaken build verification).
+  build-release:
+    name: build-release
+    runs-on: ubuntu-latest
+    needs: rust-gate
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: build-release
+      - run: cargo build --locked --release --bin deve-sub
+      - name: Upload release binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-binary
+          path: target/release/deve-sub
+          retention-days: 1
 
   browser-e2e:
     name: browser-e2e
     runs-on: ubuntu-latest
-    needs: [rust-gate, web-wasm]
+    needs: [rust-gate, web-wasm, build-release]
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
+      # WHY (Phase 3-A/B): download pre-built WASM dist + release binary
+      # instead of compiling them here. Saves ~5m (dioxus install + WASM
+      # build + cargo build --release). E2E's global-setup.ts finds them
+      # at the default paths (target/release/deve-sub, apps/web/dist).
+      - name: Download WASM dist
+        uses: actions/download-artifact@v4
         with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - name: Build release binary
-        run: cargo build --locked --release --bin deve-sub
-      - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --locked --version 0.7.10
-      - name: Build and verify WASM frontend
-        run: bash scripts/build-web-release.sh
+          name: wasm-dist
+          path: apps/web/dist
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: release-binary
+          path: target/release
+      - name: Make binary executable
+        run: chmod +x target/release/deve-sub
       - uses: actions/setup-node@v7
         with:
           node-version: "20"
@@ -217,8 +253,20 @@ jobs:
     needs: rust-gate
     steps:
       - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
       - name: Build Docker image
-        run: docker build -t deve-sub:ci .
+        # WHY (Phase 3-F): use buildx with GHA cache to reuse Docker layers
+        # from multiarch (same Dockerfile). On cold cache this matches plain
+        # docker build speed; on warm cache the builder stage (cargo build +
+        # WASM build) is fully cached, cutting ~10m.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: deve-sub:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Run container and verify health
         run: |
           docker volume create deve-sub-ci-data
@@ -272,7 +320,9 @@ jobs:
           docker volume rm deve-sub-ci-data 2>/dev/null || true
 
   # Multi-arch build verification (DEPLOY-003/004).
-  # Runs only on push to main (not PRs) because arm64 via QEMU is slow.
+  # WHY: runs only on push to main (not PRs) because the arm64 runtime stage
+  # still needs QEMU for apt-get on debian:trixie-slim. The builder stage
+  # uses cross-compile (not QEMU) per Dockerfile line 9 --platform=$BUILDPLATFORM.
   multiarch:
     name: multiarch (amd64 + arm64)
     runs-on: ubuntu-latest
@@ -293,9 +343,20 @@ jobs:
           tags: deve-sub:multiarch
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Load amd64 image from cache
+        # WHY (Phase 3-C): step 1 already built amd64+arm64 and wrote to GHA
+        # cache. Loading from cache avoids a redundant full docker build
+        # (the old step did `docker build` from scratch — ~3-5m wasted).
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: deve-sub-amd64
+          cache-from: type=gha
       - name: Verify amd64 image boots and healthcheck passes
         run: |
-          docker build -t deve-sub-amd64 --platform linux/amd64 .
           docker volume create deve-sub-ma-amd64
           # The image entrypoint runs migrate then serve (DS-AUD-007).
           docker run -d --name deve-sub-ma-amd64 -p 8081:8080 \

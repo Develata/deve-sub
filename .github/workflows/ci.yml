@@ -18,7 +18,7 @@ jobs:
   # independent jobs lets GitHub Actions run them concurrently, cutting the
   # critical path from ~6m to the slowest shard (~2m). Test coverage is
   # identical: every shard runs `cargo test --all-targets --all-features` on
-  # the same crate set, just partitioned by `-p`. See feasibility report.
+#   the same crate set, just partitioned by `-p`. See ADR-0008.
   fmt-check:
     name: fmt-check
     runs-on: ubuntu-latest

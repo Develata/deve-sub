@@ -30,21 +30,24 @@ jobs:
     name: fmt-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
+          toolchain: 1.97.1
           components: rustfmt
       - run: cargo fmt --all -- --check
+      - run: python3 scripts/check_architecture.py
 
   clippy:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
+          toolchain: 1.97.1
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: clippy
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
@@ -81,9 +84,11 @@ jobs:
           - shard: cli
             crates: "-p deve-sub-cli"
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: test-${{ matrix.shard }}
       - run: cargo test --locked --all-targets --all-features ${{ matrix.crates }}
@@ -92,9 +97,11 @@ jobs:
     name: test-doc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: test-doc
       - run: cargo test --locked --all-features --doc
@@ -103,9 +110,11 @@ jobs:
     name: openapi-diff
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: openapi
       - run: |
@@ -131,28 +140,15 @@ jobs:
     name: compatibility-validators
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
-      - name: Install mihomo
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Install checksum-pinned validators
         run: |
-          curl -fsSL https://github.com/MetaCubeX/mihomo/releases/download/v1.19.0/mihomo-linux-amd64-v1.19.0.gz -o /tmp/mihomo.gz
-          gunzip -f /tmp/mihomo.gz
-          chmod +x /tmp/mihomo
-          sudo mv /tmp/mihomo /usr/local/bin/mihomo
-          mihomo -v
-      - name: Install sing-box
-        run: |
-          curl -fsSL https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz -o /tmp/sing-box.tar.gz
-          tar xzf /tmp/sing-box.tar.gz -C /tmp
-          sudo mv /tmp/sing-box-1.13.14-linux-amd64/sing-box /usr/local/bin/sing-box
-          sing-box version
-      - name: Install xray
-        run: |
-          curl -fsSL https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip -o /tmp/xray.zip
-          unzip -o /tmp/xray.zip -d /tmp/xray
-          sudo mv /tmp/xray/xray /usr/local/bin/xray
-          xray version
+          python3 scripts/install-validators.py "$RUNNER_TEMP/validators"
+          echo "$RUNNER_TEMP/validators" >> "$GITHUB_PATH"
       - name: Run validator tests
         run: cargo test --locked -p deve-sub-emitter --test out001_mihomo_check --test out003_singbox_check --test out004_xray_check -- --ignored --test-threads=1
 
@@ -160,12 +156,12 @@ jobs:
     name: docs-and-contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.x"
       - name: Install PyYAML
-        run: pip install pyyaml
+        run: pip install pyyaml==6.0.3
       - name: Docs and acceptance checks
         run: python3 scripts/check_docs.py
 
@@ -173,11 +169,12 @@ jobs:
     name: web-wasm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
+          toolchain: 1.97.1
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --locked --version 0.7.10
       - name: Build and verify WASM frontend
@@ -185,7 +182,7 @@ jobs:
       - name: Upload WASM dist artifact
         # WHY (Phase 3-A): browser-e2e downloads this instead of rebuilding
         # the WASM frontend, saving ~2m of dioxus install + build time.
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: wasm-dist
           path: apps/web/dist/
@@ -200,42 +197,77 @@ jobs:
     runs-on: ubuntu-latest
     needs: rust-gate
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: build-release
       - run: cargo build --locked --release --bin deve-sub
       - name: Upload release binary
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-binary
           path: target/release/deve-sub
           retention-days: 1
+
+  resource-soak:
+    name: real-application-resource-soak
+    runs-on: ubuntu-latest
+    needs: build-release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-binary
+          path: target/release
+      - run: chmod +x target/release/deve-sub
+      - run: python3 scripts/perf/soak.py --binary target/release/deve-sub --seconds 90 --require-telemetry --output /tmp/soak.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: resource-soak
+          path: /tmp/soak.*
+          retention-days: 7
+
+  supply-chain:
+    name: dependency-policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: cargo-deny
+      - run: cargo install cargo-deny --locked --version 0.20.2
+      - run: cargo deny --locked check
 
   browser-e2e:
     name: browser-e2e
     runs-on: ubuntu-latest
     needs: [rust-gate, web-wasm, build-release]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # WHY (Phase 3-A/B): download pre-built WASM dist + release binary
       # instead of compiling them here. Saves ~5m (dioxus install + WASM
       # build + cargo build --release). E2E's global-setup.ts finds them
       # at the default paths (target/release/deve-sub, apps/web/dist).
       - name: Download WASM dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: wasm-dist
           path: apps/web/dist
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-binary
           path: target/release
       - name: Make binary executable
         run: chmod +x target/release/deve-sub
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "20"
       - name: Install E2E dependencies
@@ -247,7 +279,7 @@ jobs:
       - name: Run E2E tests
         run: npx playwright test --reporter=list
         working-directory: tests/e2e
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: playwright-report
@@ -259,14 +291,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: rust-gate
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build Docker image
         # WHY (Phase 3-F): use buildx with GHA cache to reuse Docker layers
         # from multiarch (same Dockerfile). On cold cache this matches plain
         # docker build speed; on warm cache the builder stage (cargo build +
         # WASM build) is fully cached, cutting ~10m.
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           push: false
@@ -339,13 +371,13 @@ jobs:
     needs: rust-gate
     if: github.event_name == 'push' || github.event_name == 'schedule'
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-qemu-action@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           platforms: arm64
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build multi-arch images (no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -357,7 +389,7 @@ jobs:
         # WHY (Phase 3-C): step 1 already built amd64+arm64 and wrote to GHA
         # cache. Loading from cache avoids a redundant full docker build
         # (the old step did `docker build` from scratch — ~3-5m wasted).
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           platforms: linux/amd64

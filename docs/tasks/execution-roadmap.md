@@ -68,7 +68,7 @@ brotli/zstd decompression, ETag), node pool (dedup, override, manual region,
 GeoIP, batch ops), source filter rules (two-phase protocol + region filter),
 concurrent refresh scheduler (semaphore-bounded), zero-node guard, 369 tests.
 SRC-001–014, NODE-001/003–011, SEC-001–004, SEC-006–010 pass; SEC-005
-(YAML bomb) is not-run pending a dedicated test.
+(YAML bomb) is covered by bounded-entry, recursive-input and alias-expansion tests.
 
 M5 (Generator and V3 Template) is complete — V3 subscription template
 aggregate (versioned, declarative YAML with `apiVersion: deve-sub.io/v1`),
@@ -97,30 +97,11 @@ all pass; NODE-012 through NODE-018 all pass.
 
 ## Remaining acceptance gaps
 
-All milestones (M0–M11) are complete. The acceptance matrix currently has
-124 cases backed by executable tests (`evidence: pass`) and 29 cases without
-executable evidence (`evidence: not-run`). See
-[`docs/acceptance-matrix.md`](../acceptance-matrix.md) and
-[`tests/acceptance/matrix.yaml`](../../tests/acceptance/matrix.yaml) for the
-authoritative per-case status. The not-run clusters are:
-
-- **UI-001..010** (P0, frontend): Dioxus Web visual/UI cases — no automated
-  test backing; require manual or browser-automation evidence.
-- **CLI-001..005** (P0/P1, CLI): headless mode, stdin import, stdout export,
-  JSON output, doctor — no dedicated CLI integration tests.
-- **DEPLOY-001..005** (P1, infra): Docker Compose smoke, Linux install,
-  multi-arch images, Docker healthcheck — require Docker/VM infrastructure.
-- **PERF-001/002/006** (P1, perf): 10k node parsing, 10k node list, long-running
-  soak — require benchmark harness or soak environment.
-- **SRC-008, SRC-011** (P0): request timeout, IPv6 URL fetch — no dedicated
-  adapter tests.
-- **PARSE-011** (P0): URL encoding edge cases — no dedicated parser test.
-- **NODE-002** (P0): file import — no dedicated test.
-- **UPDATE-002** (P1): update failure rollback — no dedicated test.
-- **SEC-005** (P0): YAML bomb — no dedicated test.
-
-CLI-006 (Health live/ready subcommand) and all M9/M10/M11 acceptance cases now
-have executable test backing and are `pass`.
+Milestone implementation status and executed acceptance evidence are distinct.
+Use [`tests/acceptance/matrix.yaml`](../../tests/acceptance/matrix.yaml) as the
+per-case evidence authority and run `python3 scripts/check_docs.py` for its
+current summary. This roadmap deliberately does not duplicate pass/not-run
+counts or lists, which previously drifted from the executable evidence.
 
 ## M5 review follow-ups (M6 backlog)
 

@@ -52,7 +52,7 @@ applicable subset per slice and record the rest as `planned`.
 
 ```bash
 # Export OpenAPI spec from code
-cargo run -p deve-sub-server -- export-openapi --output docs/openapi/openapi.json
+cargo run --locked -p deve-sub-cli -- openapi > docs/openapi/openapi.json
 # Verify the spec is up to date
 git diff --exit-code docs/openapi/openapi.json
 ```
@@ -64,3 +64,19 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
 - Constitution: `docs/plan/00-engineering-constitution.md`
 - Work loop: `AGENTS.md`
 - Matrix: `tests/acceptance/matrix.yaml`, `docs/acceptance/matrix.tsv`
+
+## Engineering resource and architecture gates
+
+- `python3 scripts/check_architecture.py`: Cargo boundaries, scoped HTTP state,
+  optional OpenAPI dependency, source fuse and immutable Action references.
+  Reviewed legacy source-size exceptions live only in
+  `scripts/architecture-exceptions.json`; they cannot grow silently.
+- `cargo deny --locked check`: advisory, license and registry policy. Exact
+  advisory exceptions and their rationale live in `deny.toml`.
+- `python3 scripts/install-validators.py /tmp/deve-sub-validators`: checksum-
+  verified compatibility tools; run the existing ignored validator tests with
+  that directory on PATH.
+- `python3 scripts/perf/soak.py --binary target/release/deve-sub --seconds 1800
+  --require-telemetry --output /tmp/deve-sub-soak.json`: real application
+  workload and RSS/FD/WAL/task envelopes. CI uses 90 seconds; short runs are
+  accelerated regression evidence and do not establish years-long reliability.

@@ -394,6 +394,8 @@ cases:
     evidence:
       tests:
         - "crates/deve-sub-application/src/source/parse.rs::max_nodes_accepted"
+        - "crates/deve-sub-application/src/source/parse_bounds_tests.rs::yaml_alias_bomb_and_recursive_containers_fail_without_panicking"
+        - "crates/deve-sub-application/src/source/parse_bounds_tests.rs::invalid_lines_also_consume_the_entry_budget"
         - "crates/deve-sub-application/src/source/parse.rs::too_many_nodes_rejected"
       status: pass
   - id: SRC-008
@@ -1752,6 +1754,8 @@ cases:
       tests:
         - "crates/deve-sub-application/src/source/parse.rs::too_many_nodes_rejected"
         - "crates/deve-sub-application/src/source/parse.rs::max_nodes_accepted"
+        - "crates/deve-sub-application/src/source/parse_bounds_tests.rs::yaml_alias_bomb_and_recursive_containers_fail_without_panicking"
+        - "crates/deve-sub-application/src/source/parse_bounds_tests.rs::invalid_lines_also_consume_the_entry_budget"
       status: pass
   - id: SEC-006
     title: 路径穿越
@@ -1899,8 +1903,10 @@ cases:
     assertions: ["WAL、内存和任务数不持续增长"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "apps/cli/tests/perf006_soak.rs::soak"
+        - "crates/deve-sub-storage-sqlite/tests/wal_maintenance.rs::passive_checkpoint_recovers_after_pinned_reader"
+      status: pass
   - id: PARSE-019
     title: WireGuard URI
     priority: P1
@@ -2113,7 +2119,9 @@ cases:
     evidence:
       tests:
         - "apps/server/tests/traffic_history.rs::traffic001_daily_snapshot_aggregation"
-        - "apps/server/tests/traffic_history.rs::traffic001_aggregation_is_idempotent"
+        - "apps/server/tests/traffic_history.rs::traffic001_duplicate_observation_is_atomic"
+        - "crates/deve-sub-storage-sqlite/tests/traffic_projection.rs::upgrade_backfill_prune_and_backup_restore_preserve_totals"
+        - "crates/deve-sub-storage-sqlite/tests/probe_sync_atomicity.rs::counter_and_deltas_rollback_together_and_only_one_revision_wins"
       status: pass
   - id: TRAFFIC-002
     title: 流量历史查询
@@ -2184,4 +2192,6 @@ cases:
     evidence:
       tests:
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
+        - "apps/cli/tests/backup_restore.rs::backup004_old_traffic_and_pruned_totals_round_trip"
+        - "crates/deve-sub-storage-sqlite/tests/node_lookup_index.rs::forward_index_removes_scan_and_backup_can_reupgrade"
       status: pass

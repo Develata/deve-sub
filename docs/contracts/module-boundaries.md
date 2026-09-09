@@ -104,3 +104,26 @@ deve-sub-storage-sqlite, deve-sub-adapters → port traits in domain/application
 - Architecture: `docs/plan/03-architecture.md`
 - Workspace layout: `docs/plan/04-workspace-layout.md`
 - API boundary: ADR-0001, ADR-0004
+
+## HTTP state capabilities
+
+The root server state is a composition container. Route extractors use
+`FromRef<AppState>` projections for authentication, users, sources, nodes,
+templates, subscriptions, public delivery, probes, dashboards, audit and
+health. Each projection exposes only the Ports/services used by that route
+family; it cannot be converted back into root state. Authentication guards
+use the auth projection. Registration/wiring may mention root state; route
+handlers may not extract it. Multi-repository business transactions remain
+Application commands backed by atomic storage operations.
+
+Production `apps/server` must not depend on concrete SQLite or general adapter
+crates; integration tests may use dev-dependencies. CLI remains the sole
+production composition root. Contract DTOs are shared with Web using serde;
+OpenAPI derives are enabled by the `openapi` feature only in API delivery.
+
+### Probe traffic commit boundary
+
+`ProbeSourceRepository::commit_sync` owns one transaction: compare the source
+revision, persist its new counter/status, insert the traffic delta batch and
+its lifetime/daily projections. Delivery dispatches `sync_probe_traffic` and
+cannot assemble this transaction. Revision conflict maps to HTTP 409.

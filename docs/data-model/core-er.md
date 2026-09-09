@@ -275,3 +275,17 @@ erDiagram
   the master key comes from a file or secret mount, never from the database.
   See ADR-0007 and `migrations/0015_secret_envelope.sql`.
 - Token fields (`token_hash`) store HMAC-SHA256 digests, never plaintext tokens.
+
+## Traffic projections and probe synchronization
+
+`subscription_traffic` contains recent accepted deltas. `traffic_totals` stores
+lifetime totals per subscription/source kind; `probe_traffic_totals` stores the
+corresponding panel-kind attribution. Both belong to the subscription and are
+removed by its deletion. Daily snapshots are transactionally maintained views
+of these deltas with an independent retention window; pruning raw observations
+does not decrement cumulative accounting.
+
+`ProbeSource.revision` serializes edits and counter synchronization. Advancing
+its counter and recording the resulting traffic deltas is one commit boundary.
+Physical constraints and upgrade backfill are owned by migrations 0024–0026;
+retention policy is owned by `docs/plan/13-storage.md`.

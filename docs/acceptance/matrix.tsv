@@ -132,7 +132,7 @@ PERF-002	10k 节点列表	P1	Browser Perf	not-run
 PERF-003	缓存订阅	P1	Load	pass
 PERF-004	无缓存生成	P1	Load	pass
 PERF-005	并发订阅下载	P1	Load	pass
-PERF-006	长时间运行	P1	Soak	not-run
+PERF-006	长时间运行	P1	Soak	pass
 PARSE-019	WireGuard URI	P1	Golden	pass
 PARSE-020	WireGuard Mihomo YAML	P1	Golden	pass
 PARSE-021	WireGuard sing-box JSON	P1	Golden	pass

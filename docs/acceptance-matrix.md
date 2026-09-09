@@ -12,18 +12,10 @@ items). `planned` is not `pass`.
 
 ## Summary
 
-| Metric | Count |
-|---|---|
-| Total cases | 153 |
-| P0 (core) | 115 |
-| P1 (infrastructure/performance) | 34 |
-| Evidence: pass | 144 |
-| Evidence: not-run | 9 |
-
-The `pass` / `not-run` counts are derived from `matrix.yaml` `evidence.status`
-fields. A case is `pass` only when backed by at least one executable test
-listed in `evidence.tests`. Cases without executable evidence are honestly
-marked `not-run`.
+Current counts and evidence statuses are read from `matrix.yaml` by
+`python3 scripts/check_docs.py`. This page and the roadmap do not maintain a
+second status counter. `pass` requires executable evidence and a recorded run;
+a passing registry check alone does not execute the acceptance tests.
 
 ## Parameterized dimensions
 
@@ -42,9 +34,8 @@ values where applicable:
 ### UI — Base and UI (10 cases)
 
 UI-001 through UI-010. Covers first-run init, i18n, theme, 10k node
-performance, mobile, and keyboard navigation. Visual/UI cases have no
-automated test backing and are `not-run` pending manual or browser-automation
-evidence.
+performance, mobile, and keyboard navigation. Browser evidence is maintained in
+`tests/e2e/specs/`; current per-case status lives in the machine-readable matrix.
 
 ### AUTH — Authentication and Users (10 cases)
 

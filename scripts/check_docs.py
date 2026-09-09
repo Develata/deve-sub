@@ -14,6 +14,8 @@ This script depends on PyYAML (`pip install pyyaml`).
 
 from __future__ import annotations
 
+import argparse
+from collections import Counter
 import json
 import re
 import sys
@@ -135,7 +137,7 @@ def check_matrix_yaml() -> tuple[int, set[str]]:
     return 0, ids
 
 
-def check_matrix_tsv(yaml_ids: set[str]) -> int:
+def check_matrix_tsv(yaml_ids: set[str], yaml_data: dict) -> int:
     if not MATRIX_TSV.is_file():
         print(f"FAIL: matrix.tsv not found: {MATRIX_TSV}", file=sys.stderr)
         return 1
@@ -156,6 +158,7 @@ def check_matrix_tsv(yaml_ids: set[str]) -> int:
             file=sys.stderr,
         )
         return 1
+    expected_rows = {case['id']: case for case in yaml_data['cases']}
     tsv_ids: list[str] = []
     for lineno, line in enumerate(lines[1:], start=2):
         cols = line.split("\t")
@@ -166,6 +169,13 @@ def check_matrix_tsv(yaml_ids: set[str]) -> int:
             )
             return 1
         cid, _title, priority, _layer, status = cols
+        case = expected_rows.get(cid)
+        if case is not None:
+            evidence = case['evidence']
+            expected_status = evidence['status'] if isinstance(evidence, dict) else evidence
+            if cols != [cid, case['title'], case['priority'], case['layer'], expected_status]:
+                print(f"FAIL: matrix.tsv row {cid} differs from YAML; run --write-matrix.", file=sys.stderr)
+                return 1
         if not VALID_PRIORITY_RE.match(priority):
             print(
                 f"FAIL: matrix.tsv line {lineno} has invalid priority {priority!r}; expected P<n>",
@@ -322,6 +332,9 @@ def check_openapi() -> int:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--write-matrix', action='store_true', help='regenerate TSV projection from YAML')
+    args = parser.parse_args()
     exit_code = 0
     print("=== Acceptance matrix (YAML) ===")
     rc, yaml_ids = check_matrix_yaml()
@@ -330,12 +343,23 @@ def main() -> int:
         print("=== Test symbol references ===")
         data = _load_yaml(MATRIX_YAML)
         if data is not None:
+            counts = Counter(case['evidence']['status'] if isinstance(case['evidence'], dict)
+                             else case['evidence'] for case in data['cases'])
+            print('Evidence counts:', ', '.join(f'{status}={count}' for status, count in sorted(counts.items())))
+            if args.write_matrix:
+                rows = ['id\ttitle\tpriority\tlayer\tstatus']
+                for case in data['cases']:
+                    evidence = case['evidence']
+                    status = evidence['status'] if isinstance(evidence, dict) else evidence
+                    rows.append('\t'.join([case['id'], case['title'], case['priority'], case['layer'], status]))
+                MATRIX_TSV.write_text('\n'.join(rows) + '\n', encoding='utf-8')
             exit_code |= check_test_symbols(data)
         else:
             print("SKIP: YAML reload failed.", file=sys.stderr)
             exit_code |= 1
         print("=== Acceptance matrix (TSV) ===")
-        exit_code |= check_matrix_tsv(yaml_ids)
+        if data is not None:
+            exit_code |= check_matrix_tsv(yaml_ids, data)
         print("=== Coverage matrix ===")
         exit_code |= check_coverage(yaml_ids)
     else:

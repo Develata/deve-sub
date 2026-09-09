@@ -75,8 +75,8 @@ cargo bench --bench generate     # PERF-003/004 (cached/uncached)
 - Release pipeline (Constraint #15): on tag, CI builds release binaries for
   linux/amd64 and linux/arm64, generates SHA-256 checksums, and produces an SBOM
   via `cargo cyclonedx`. Binary signing requires a signing key (deferred to first
-  actual release; the update CLI verifies checksums as the baseline integrity
-  check, with signature verification as a future enhancement).
+  actual release). The update CLI already verifies signed manifests; the
+  development verification key must be replaced before production release.
 
 ## Slicing
 
@@ -158,18 +158,22 @@ update:
 The update command does NOT restart if the server is not managed by systemd —
 it prints a message telling the operator to restart manually.
 
-Signature verification (Constraint #15): the initial implementation verifies
-SHA-256 checksums. Full Ed25519 signature verification is deferred to the first
-actual tagged release where a signing key is provisioned. The update CLI's
-verification interface is designed to accept signature verification as a
-drop-in extension.
+Signature verification (Constraint #15): the updater verifies Ed25519 signed
+manifests and rejects invalid or incomplete signature assets. For compatibility,
+when both signed assets are absent it currently warns and accepts unsigned
+SHA-256 checksums. This fallback authenticates no publisher. Before the first
+production release, provision the release signing key, replace the embedded
+development verification key, and decide the supported unsigned-upgrade policy.
+These are release gates, not evidence of completed production key provisioning.
 
 ### Performance benchmarks
 
-Benchmarks use `criterion` with the `html_reports` feature. Each benchmark
-operates on a fixture of 10,000 generated nodes spanning all supported protocols.
+Benchmarks use Criterion with synthetic inputs at 100, 1,000 and 10,000 nodes.
+The URI microbenchmark uses Trojan; round-trip/compatibility tests separately
+cover protocol breadth. SQLite generation/reconcile benchmarks include the
+real encrypted persistence pipeline.
 
-- PERF-001: parse 10k URIs (mixed protocols) → measure throughput.
+- PERF-001: parse 10k Trojan URIs → measure throughput.
 - PERF-002: list 10k nodes through the application query → measure latency.
 - PERF-003: deliver a cached subscription → measure latency (cache hit path).
 - PERF-004: generate a subscription with no cache → measure latency (full
@@ -178,7 +182,8 @@ operates on a fixture of 10,000 generated nodes spanning all supported protocols
   measure throughput.
 - PERF-006: soak test (30-minute run with periodic refresh + delivery) →
   measure memory stability and error rate. This is a long-running test, not a
-  criterion bench; it lives in `tests/soak.rs` with a `#[ignore]` attribute.
+  Criterion bench. `scripts/perf/soak.py` defaults to 30 minutes; the ignored
+  `apps/cli/tests/perf006_soak.rs` wrapper and CI use 90 seconds.
 
 ## Failure/recovery
 
@@ -230,7 +235,45 @@ operates on a fixture of 10,000 generated nodes spanning all supported protocols
 - UPDATE-002: run `deve-sub update` with a mock release whose binary fails
   the health check; verify the old binary is restored. Acceptance: UPDATE-002.
 - PERF-001..006: `cargo bench` runs all benchmarks and produces baseline
-  numbers. The soak test (`cargo test -- --ignored soak`) runs for 30 minutes.
+  numbers. Run `DEVE_SUB_SOAK_SECONDS=1800 cargo test -- --ignored soak`
+  for the 30-minute mode.
   Acceptance: PERF-001..006.
 - `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` all pass.
 - `python3 scripts/check_docs.py` passes.
+
+## Long-running task ownership (PERF-006, NODE-016)
+
+The request-job supervisor admits at most 64 tracked jobs, reaps completed
+jobs before admission and on periodic resource sampling, and reports panic
+and cancellation counters without job-specific metric labels. Saturation or
+shutdown returns 503; rejected durable jobs are moved to a terminal state.
+Cancellation registration is owned by a drop guard captured before spawn,
+so normal completion, panic, abort and admission rejection remove it. Shutdown
+closes admission under the task-set mutex before draining; after the grace
+period it aborts, then gives cancellation destructors a bounded drain. A
+non-yielding future still requires process exit; no Rust task abort can
+preempt arbitrary synchronous code. The CLI cancels both probe and refresh
+registries and stops periodic workers before closing the SQLite pool.
+
+## Supply-chain and executable I/O closure
+
+CI uses reviewed full Action commit SHAs with an explicit Rust toolchain.
+Compatibility validators are fixed-version, SHA-256 checked before extraction
+and execution. `deny.toml` is the dependency policy owner; duplicate upstream
+major versions are reported, while known vulnerabilities and incompatible
+licenses block CI. The current paste exception is build-time-only and named
+explicitly rather than disabling advisory checks.
+
+Updater version probes are asynchronous, limited to 4 KiB output and five
+seconds. systemctl has a 30-second client deadline; killing that client does
+not cancel a systemd job. A restart failure restores the previous binary but
+reports live service state as unverified. Restore accepts each authority file
+once and only as a regular tar entry. Symlink/hardlink/duplicate entries fail.
+
+## Frontend delivery verification
+
+Dioxus registers the local stylesheet as a build asset; production dist must
+contain HTML, JS, WASM and CSS. Browser acceptance verifies computed styles,
+not only DOM class names. The 10k-node test asserts bounded rendered rows and
+DOM count over repeated scrolling and filtering; observation timings are not
+CI latency budgets.

@@ -2,8 +2,7 @@
 
 ## Scope
 
-Traffic history charts (daily traffic snapshots with a background aggregation
-job, a history query API, and dashboard chart data), and the audit log query
+Traffic history charts (transactional daily traffic snapshots, a history query API, and dashboard chart data), and the audit log query
 API (the `audit_log` table exists since migration 0002 but has no application
 infrastructure — M10 builds the domain model, repository, write-side wiring
 into key mutating commands, and the read-side query API).
@@ -11,15 +10,13 @@ into key mutating commands, and the read-side query API).
 M10 delivers: the `deve-sub-domain` `audit` module, the `deve-sub-application`
 `audit` module and `traffic_history` extension, storage adapters, the
 `/api/v1/audit-logs` and `/api/v1/dashboard/traffic/history` REST API surfaces,
-and a daily traffic snapshot background job (observable, cancellable, safe
-shutdown — constraint #20).
+and a transactional traffic projection with observable, cancellable retention.
 
 ## Dependency
 
 M6 (Subscription Distribution) must be complete. The `subscription_traffic`
 table (migration 0011) and `TrafficRepository` port are prerequisites: M10
-adds a daily snapshot table and aggregation job on top of the existing
-append-only traffic records.
+adds a daily snapshot table and projections on top of traffic delta records.
 
 M7 (Probes and Detection) must be complete. Probe traffic records
 (`source_kind = Probe`) feed the daily aggregation. The dashboard traffic API
@@ -42,11 +39,9 @@ GET /api/v1/audit-logs?action=login&limit=50&cursor=...
 GET /api/v1/dashboard/traffic/history?subscription_id=...&days=30
     → returns daily traffic snapshots [{date, upload, download, breakdown}]
 
-# Background job (daily):
-aggregate_traffic_snapshots()
-    → for each subscription, sum traffic records for the previous day
-    → upsert traffic_daily_snapshots row
-    → observable via job status, cancellable, safe shutdown (constraint #20)
+INSERT traffic delta
+    → atomically update lifetime totals and daily snapshot
+    → bounded maintenance prunes raw history after 30 days
 ```
 
 ## Deliverables
@@ -56,14 +51,13 @@ aggregate_traffic_snapshots()
   trait (insert, list with filters and cursor pagination).
 - Domain traffic history extension: `TrafficDailySnapshot` value object
   (subscription_id, date, total_upload, total_download, source_breakdown),
-  `TrafficDailySnapshotRepository` port trait (upsert, list by subscription
+  `TrafficDailySnapshotRepository` read port trait (list by subscription
   and date range).
 - Application audit module: `record_audit_log` command (called by other
   commands at mutation points), `list_audit_logs` query (filters: actor_id,
   action, target_type, target_id, date range; cursor pagination by created_at).
-- Application traffic history extension: `aggregate_daily_traffic` background
-  job (daily, observable, cancellable, safe shutdown — constraint #20),
-  `list_traffic_history` query.
+- Application traffic history extension: `list_traffic_history` query; transactional
+  projection belongs to storage.
 - Audit log wiring: `record_audit_log` calls injected into auth commands
   (login, logout, 2FA enable/disable, password change), user CRUD, source CRUD,
   subscription CRUD, probe source CRUD. Each call records actor_id (from
@@ -98,8 +92,7 @@ M10 is delivered in three slices:
    audited across modules).
 3. **Traffic history snapshots + history API**: migration 0014
    (`traffic_daily_snapshots`), `TrafficDailySnapshot` domain model,
-   `TrafficDailySnapshotRepository` port + SQLite adapter, daily aggregation
-   background job (observable, cancellable, safe shutdown — constraint #20),
+   `TrafficDailySnapshotRepository` port + SQLite adapter, transactional daily projection and bounded retention,
    `list_traffic_history` query, `GET /api/v1/dashboard/traffic/history` API
    (admin-only). Acceptance: TRAFFIC-001 (daily snapshot aggregation),
    TRAFFIC-002 (history query, 30-day chart data).
@@ -177,28 +170,27 @@ TrafficDailySnapshot {
 }
 ```
 
-### Traffic daily aggregation job
+### Transactional traffic projections and retention
 
-```text
-aggregate_daily_traffic():
-  → runs daily (configurable schedule, default 00:30 UTC)
-  → for each subscription with traffic records:
-      → query subscription_traffic WHERE recorded_at >= start_of_yesterday
-        AND recorded_at < start_of_today
-      → group by source_kind, sum upload/download
-      → upsert traffic_daily_snapshots (subscription_id, date=yesterday)
-  → observable via job status (last_run_at, records_processed, errors)
-  → cancellable via CancellationToken
-  → safe shutdown (joins with timeout, constraint #20)
-```
+Every traffic record represents a non-negative delta, including AirportHeader
+records. This preserves the existing API and stored-data semantics; upstream
+cumulative counters must be differenced before creating a record.
+Migration 0024 backfills lifetime totals and daily snapshots in SQL, then an
+SQLite INSERT trigger maintains raw records, lifetime totals, probe attribution
+and daily snapshots in the same transaction. A duplicate record ID or integer
+overflow rolls back the whole write. No daily recomputation scheduler remains:
+recomputing from pruned raw data would destroy historical totals.
 
-The aggregation reads the raw `subscription_traffic` records and sums per
-source kind. For cumulative-counter sources (Nezha, Komari), each record
-already stores a delta (computed by the adapter at sync time), so summing
-deltas gives the day's total. For AirportHeader records (cumulative totals
-from `subscription-userinfo`), the aggregation computes the delta between the
-last record of the day and the last record of the previous day. Manual
-correction records are summed directly.
+Lifetime summaries read at most three source-kind rows per subscription.
+Recent raw observations are retained for 30 days and daily charts for 400 days.
+Pruning never decrements lifetime totals. Retention runs in bounded adapter
+batches; audit logs and user-authored template versions intentionally remain
+until operator action or entity deletion. See storage plan for the full policy.
+
+The forward migration is transactional and uses SQL aggregation (no Rust
+history materialization). Existing installations require free disk for new
+indexes and projections and a pre-upgrade backup; downgrade requires restoring
+that backup with the previous binary. Existing applied migrations are unchanged.
 
 ### Traffic history query
 
@@ -210,7 +202,7 @@ GET /api/v1/dashboard/traffic/history?subscription_id=...&days=30
 ```
 
 The query reads from `traffic_daily_snapshots`. For days with no snapshot
-(zero traffic or job not yet run), the API fills gaps with zero-value entries
+(zero traffic), the API fills gaps with zero-value entries
 so the chart is continuous.
 
 ## Failure/recovery
@@ -220,20 +212,11 @@ so the chart is continuous.
   parent command succeeds. Audit is observability infrastructure, not a
   transactional side-effect. Losing an audit entry is preferable to failing a
   user-facing operation.
-- Daily aggregation job failure: the job records its failure status
-  (last_run_at, error message). The next run retries the previous day's
-  aggregation. Missing snapshots appear as zero-value gaps in the history
-  query. The job is idempotent (upsert on `(subscription_id, date)`).
-- Daily aggregation job crash: on restart, the job checks for missing days
-  since the last successful run and backfills. If the gap exceeds a
-  configurable threshold (default 7 days), it logs a warning and only
-  backfills the most recent 7 days (older data is accepted as lost).
-- Migration 0014 has a recovery test (constraint #13): apply migration, verify
-  schema, restore from pre-migration backup, verify rollback.
-- Server shutdown during aggregation: the job joins with a configurable
-  timeout (default 5s). In-progress aggregation is abandoned; the next run
-  retries. No partial snapshots are committed (upsert is atomic per
-  subscription-day).
+- Projection failure rolls back the traffic record and all its aggregates.
+- Migration 0024 must pass upgrade, rollback-on-error and backup restoration
+  tests. No downgrade SQL is provided; restore a pre-upgrade backup.
+- Retention failure preserves data and retries on the next tick. Each batch
+  commits independently, so cancellation cannot corrupt aggregates.
 
 ## Authority
 
@@ -260,8 +243,7 @@ so the chart is continuous.
   target. Acceptance: AUDIT-002.
 - CRUD actions audited: create/update/delete for source, subscription,
   template, probe source; verify audit entries. Acceptance: AUDIT-003.
-- Daily traffic snapshot: insert traffic records for a subscription, run the
-  aggregation job, verify `traffic_daily_snapshots` row with correct sums and
+- Daily traffic snapshot: insert traffic records for a subscription, verify `traffic_daily_snapshots` row with correct sums and
   source breakdown. Acceptance: TRAFFIC-001.
 - Traffic history query: populate multiple days of snapshots, query
   `GET /api/v1/dashboard/traffic/history?days=30`, verify continuous daily

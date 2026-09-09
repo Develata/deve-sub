@@ -207,3 +207,16 @@ override reverts to the parsed value.
 - `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` all pass.
 - `python3 scripts/check_docs.py` passes.
 - OpenAPI spec regenerated and up to date.
+
+## Reconcile batching (0026)
+
+Reconcile obtains the SQLite write transaction before reading identity state.
+It computes fingerprints once, prefetches matching active/missing identities in
+500-key chunks, and retains an operation-local map. Active identity wins over
+missing candidates; missing ties use stable node ID order. The map is updated
+as nodes are inserted/reactivated, preserving in-input duplicate behavior.
+Source-item and binding inserts use 250-row batches. Node encryption and node
+inserts remain simple per-new-node operations. Missing detection, snapshot
+activation, revision bump and pruning stay in the same transaction.
+Migration 0026 adds a complete fingerprint lookup index: the earlier partial
+active dedup index cannot serve queries over both active and missing nodes.

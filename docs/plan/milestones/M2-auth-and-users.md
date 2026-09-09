@@ -160,6 +160,20 @@ later-milestone action:
 
 - **No sliding failure-count window (R2)**: Failed login counts do not decay
   over time in the non-locked state. Three failures spread over days
-  eventually trigger lockout, since only lockout expiry, `record_success`,
-  or eviction resets the counter. A sliding time window would harden against
+  eventually trigger lockout, since only `record_success` or pressure eviction resets the counter. A sliding time window would harden against
   slow brute-force; deferred to a future security hardening pass.
+
+## Resident rate-limit capacity (AUTH-004)
+
+The in-memory adapter keeps at most 10,000 combined username/IP records.
+Keys are domain-separated SHA-256 digests, so both key count and key size are
+bounded. At capacity, unknown keys fail closed; active lockouts are never
+evicted to admit new identities. Pressure eviction removes expired lockouts
+or unlocked records idle for twice the lockout duration, at most once per
+second. Below capacity, failure counts remain sticky until successful login;
+expiry permits one retry without clearing that count. Successful login clears
+only the username. Saturation may temporarily reject legitimate new users;
+this explicit availability tradeoff prevents cardinality-based brute-force
+bypass and memory exhaustion. Resident count is available as unlabeled
+operational telemetry. Tests cover 100,000 distinct identities and namespace
+separation, expiry and the existing retry policy.

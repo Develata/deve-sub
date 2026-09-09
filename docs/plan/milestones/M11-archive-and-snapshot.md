@@ -40,10 +40,9 @@ deve-sub backup --output /path/to/backup.tar
 deve-sub restore --input /path/to/backup.tar
     → reads backup manifest, verifies version compatibility
     → stops the server (or refuses if server is running)
-    → restores the SQLite database
-    → runs migration check (forward-only; if backup is older than current
-      schema, migrations run forward)
-    → verifies restore (row counts, schema integrity)
+    → stages the snapshot and verifies archived row counts
+    → runs forward migrations on the staging database
+    → checks integrity, checkpoints and atomically replaces the target
 ```
 
 ## Deliverables
@@ -55,15 +54,15 @@ deve-sub restore --input /path/to/backup.tar
   - `metadata.json` — backup metadata (Deve Sub version, git commit, host)
 - CLI: `deve-sub backup --output <path>` (creates backup), `deve-sub restore
   --input <path>` (restores from backup).
-- Restore verification: after restore, the CLI runs a verification pass
-  (schema integrity check, row count comparison against manifest, migration
-  version check) and reports discrepancies.
+- Restore verification: compare archived row counts before forward migrations;
+  migrations may add derived rows. Check staged schema integrity afterwards,
+  then checkpoint and atomically swap only a verified database.
 - Migration handling: if the backup's schema version is older than the
   current binary's schema version, `restore` runs forward migrations after
   restoring the database. If the backup's schema is newer, `restore` refuses
   with an error (forward-only migration policy — constraint #13).
-- Server lock: `restore` refuses to run while the server is running (checks
-  for a PID file or SQLite lock). `backup` can run while the server is
+- Server lock: `restore` refuses while `serve` holds the sidecar flock, with
+  a SQLite write-lock probe as an additional check. `backup` can run while the server is
   running (SQLite snapshot is consistent via `VACUUM INTO`).
 - Documentation: backup/restore guide in `docs/guides/`.
 
@@ -106,15 +105,13 @@ indexes, and triggers.
 
 ```text
 restore(backup_path):
-  1. read manifest.json → get backup schema version
-  2. check server is not running (PID file / SQLite lock)
-  3. copy backup database.sqlite to the configured database path
-  4. if backup schema < current schema:
-       run forward migrations (constraint #13: forward-only)
-  5. if backup schema > current schema:
-       refuse with error ("backup is from a newer version")
-  6. verify: row counts vs manifest, schema integrity (PRAGMA integrity_check)
-  7. report result
+  1. require unique regular archive entries; check format/schema compatibility
+  2. verify master-key fingerprint continuity; refuse a missing/wrong required key
+  3. acquire the server sidecar lock; copy snapshot to a sibling staging file
+  4. compare staged row counts with the archived manifest before migration
+  5. run forward migrations on staging; verify PRAGMA integrity_check
+  6. checkpoint, close, fsync and atomically replace the target with rollback protection
+  7. report result; keep the existing target intact on pre-swap failure
 ```
 
 ## Failure/recovery
@@ -124,13 +121,14 @@ restore(backup_path):
 - Restore failure (corrupt backup, wrong format): the existing database is
   not touched. The error is reported. The user must resolve the backup issue
   and retry.
-- Restore with server running: `restore` refuses and reports the PID. The
-  user must stop the server first.
+- Restore with server running: `restore` refuses on lock conflict. Stop the
+  server before retrying.
 - Schema version mismatch (backup newer than binary): `restore` refuses. The
   user must upgrade the binary to match or exceed the backup's schema version.
-- Migration failure during restore: the database is left in the
-  pre-migration state (the restored backup). The error is reported. The user
-  can retry with a newer binary or inspect the migration error.
+- Migration failure during restore: the production target is unchanged;
+  failure affects only staging. Restore a pre-upgrade backup with the older
+  binary to downgrade. Lifelong traffic totals are included even after raw
+  history pruning; the master key must be backed up separately.
 
 ## Authority
 

@@ -326,3 +326,11 @@ vless://00000000-0000-4000-8000-000000000001@[2001:db8::1]:443?security=reality&
 - Fuzz tests for illegal input. Acceptance: `PARSE-018`.
 - M9 golden tests for WireGuard, AnyTLS, Snell, ShadowTLS, and xhttp
   transport. Acceptance: `PARSE-019` through `PARSE-027`.
+
+## Input work limits
+
+Source/manual-import parsing rejects inputs over 10 MiB before decoding and
+caps all entries at 10,000, including failed URI lines. Container parsers check
+the array length before canonical-node construction. YAML/JSON library depth
+and alias-repetition guards remain enabled and are exercised by adversarial
+tests. These are resource limits, not claims of zero-allocation parsing.

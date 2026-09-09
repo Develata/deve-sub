@@ -372,3 +372,29 @@ dashboard shows the staleness.
 - `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` all pass.
 - `python3 scripts/check_docs.py` passes.
 - OpenAPI spec regenerated and up to date.
+
+## Atomic traffic sync (0025)
+
+Probe source updates carry an optimistic revision. The application computes
+traffic deltas from the observed counter revision; `commit_sync` atomically
+compares that revision, advances the counter/status and inserts all traffic
+records. A competing sync or edit fails with a conflict and must refetch.
+Storage failure never advances the counter alone. Migration 0025 initializes
+existing sources at revision zero. The REST representation remains unchanged.
+
+## Authenticated probe transport safety
+
+A real-proxy probe transmits credentials and therefore honors the node's TLS
+verification policy. Default/false uses WebPKI trust roots; only explicit
+`skip_cert_verify = true` opts out. Certificate pins or Reality settings not
+implemented by the probe fail closed before proxy authentication; never silently
+weaken them to ordinary unverified TLS. QUIC reachability-only probes do not
+transmit proxy credentials. VMess relay tasks are owned by the returned stream
+and aborted on drop, including timeout/cancellation. Dial and HTTP exchange
+share one overall deadline.
+
+The production panel registry applies a 120-second deadline to the whole sync,
+including multi-node requests; individual HTTP requests retain their own shorter
+deadlines. Timeout drops the batch futures and records failure without advancing
+the prior counter. This bounds interactive sync duration independently of panel
+node count.

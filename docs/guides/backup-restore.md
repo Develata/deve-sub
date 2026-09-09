@@ -21,7 +21,7 @@ Optional flags:
 - `--db-path <path>` — database path (overrides config).
 
 The backup runs while the server is online. SQLite `VACUUM INTO` produces a
-consistent snapshot without holding locks.
+consistent snapshot without holding a write lock.
 
 ### Archive contents
 
@@ -57,18 +57,11 @@ Optional flags:
 
 ### Restore behavior
 
-1. **Format check** — refuses if the backup format version is unsupported.
-2. **Schema check** — refuses if the backup schema is newer than the binary
-   (forward-only migration policy, constraint #13). If the backup schema is
-   older, forward migrations run after restore.
-3. **Server lock** — refuses if WAL/shm files exist (server may be running).
-   This guard assumes `journal_mode=WAL`. If the server uses a different
-   journal mode, the guard may not detect it — always stop the server
-   process before restoring.
-4. **Database restore** — copies the snapshot to the database path.
-5. **Forward migration** — runs pending migrations if backup schema < current.
-6. **Verification** — compares row counts against the manifest and runs
-   `PRAGMA integrity_check`.
+The authoritative sequence is in [M11: Restore and migration](../plan/milestones/M11-archive-and-snapshot.md#restore-and-migration).
+The CLI verifies key continuity and the archived row counts before applying
+forward migrations to a staging database. It checks integrity before the atomic
+replacement. A failed check leaves the existing database intact. Stop `serve`
+first; the guard uses a sidecar flock, not the mere existence of WAL/SHM files.
 
 ### Restoring from an older schema
 
@@ -93,5 +86,8 @@ For automated backups, use cron or systemd timers:
 0 3 * * * /usr/local/bin/deve-sub backup --output /backups/deve-sub-$(date +\%Y\%m\%d).tar
 ```
 
-Retain old backups according to your recovery point objective. Backups are
-self-contained — no external dependencies are needed to restore.
+Retain old backups according to your recovery point objective. Back up the
+master key separately and provide the matching key when restoring encrypted
+data; the archive contains its reference/fingerprint, not the secret key.
+A downgrade needs the pre-upgrade archive and the corresponding older binary.
+Lifetime traffic projections remain in a backup after recent raw rows expire.

@@ -181,8 +181,8 @@ calculations must be traceable; the dashboard must show data source.
 ### Traffic daily snapshot (M10)
 
 A per-subscription, per-day aggregate of traffic records, stored in
-`traffic_daily_snapshots`. Computed by a daily background job that sums
-`subscription_traffic` records for the previous day, grouped by source kind.
+`traffic_daily_snapshots`. Maintained in the same transaction as accepted
+traffic deltas, grouped by source kind. Raw retention cannot change the totals.
 Used for traffic history charts (30/60/90-day views). The snapshot is
 idempotent (upsert on `(subscription_id, date)`); missing days appear as
 zero-value gaps in the history query.

@@ -57,11 +57,11 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
 
     let connector = connector(node, vec![]).map_err(|_| ErrorClass::TlsFailed)?;
     let server_name =
-        rustls::pki_types::ServerName::try_from(sni).map_err(|_| ErrorClass::Refused)?;
+        rustls::pki_types::ServerName::try_from(sni).map_err(|_| ErrorClass::TlsFailed)?;
     let mut tls = connector
         .connect(server_name, tcp)
         .await
-        .map_err(|_| ErrorClass::Refused)?;
+        .map_err(|_| ErrorClass::TlsFailed)?;
 
     let mut handshake = Vec::with_capacity(64 + 4 + 255 + 2);
     handshake.extend_from_slice(hash_hex.as_bytes());
@@ -185,7 +185,10 @@ mod tests {
             let mut node = build_trojan_node(address);
             node.tls.as_mut().expect("tls").skip_cert_verify = setting;
             let target = TestTarget::new("example.com", 80, "/");
-            assert!(dial(&node, &target, Duration::from_secs(2)).await.is_err());
+            assert_eq!(
+                dial(&node, &target, Duration::from_secs(2)).await.err(),
+                Some(ErrorClass::TlsFailed)
+            );
             tokio::time::timeout(Duration::from_secs(2), server)
                 .await
                 .expect("server closed")

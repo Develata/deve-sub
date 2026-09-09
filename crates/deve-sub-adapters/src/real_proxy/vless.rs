@@ -55,11 +55,11 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
 
     let connector = connector(node, vec![]).map_err(|_| ErrorClass::TlsFailed)?;
     let server_name =
-        rustls::pki_types::ServerName::try_from(sni).map_err(|_| ErrorClass::Refused)?;
+        rustls::pki_types::ServerName::try_from(sni).map_err(|_| ErrorClass::TlsFailed)?;
     let mut tls = connector
         .connect(server_name, tcp)
         .await
-        .map_err(|_| ErrorClass::Refused)?;
+        .map_err(|_| ErrorClass::TlsFailed)?;
 
     let mut header = Vec::with_capacity(1 + 16 + 1 + 1 + 2 + 1 + 255);
     header.push(0x00); // version

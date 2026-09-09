@@ -225,7 +225,9 @@ ProbeType: TcpConnect | QuicHandshake | RealProxy
   NODE-014). Error class: timeout, handshake failure.
 - **RealProxyProbe**: connects through the node as a proxy (using its protocol
   config), sends a minimal HTTP request to a test target, measures RTT. This
-  is the most accurate latency metric (spec §94).
+  is the most accurate latency metric (spec §94). TCP refusal is `Refused`;
+  invalid TLS server names and TLS handshake/certificate failures are
+  `TlsFailed`. The overall operation deadline still reports `Timeout`.
 
 UDP no-response (NODE-014): if a UDP/QUIC probe gets no response, the record
 stores `rtt_ms = None` and `error_class = Timeout`. The node is not

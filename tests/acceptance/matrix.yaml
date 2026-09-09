@@ -1003,6 +1003,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-adapters/src/real_proxy/trojan.rs::certificate_verification_precedes_proxy_authentication"
         - "apps/server/tests/probes.rs::real_proxy_probe_run_via_api_produces_results"
       status: pass
   - id: NODE-016

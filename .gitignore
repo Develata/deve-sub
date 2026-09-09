@@ -22,6 +22,7 @@ logs/
 dist/
 coverage/
 node_modules/
+__pycache__/
 
 # SQLite runtime data (migrations are tracked)
 *.db

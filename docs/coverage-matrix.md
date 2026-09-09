@@ -20,6 +20,7 @@ This matrix keeps the live documentation layers aligned:
 | `05-protocol-engine` | — | `contracts/data-models.md` | `PARSE-*`, `NODE-*` |
 | `06-output-profiles` | — | — | `OUT-*` |
 | `13-storage` | — | — | `DEPLOY-*`, `PERF-*` |
+| `14-ci-verification` | — | `contracts/ci-evidence.md` | `acceptance/gates.md`, CI tooling regression tests |
 
 ## Milestone blueprints
 

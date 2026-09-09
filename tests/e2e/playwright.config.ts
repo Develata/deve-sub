@@ -1,7 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-
-const FRESH_PORT = 18080;
-const SEEDED_PORT = 18081;
+import { FRESH_PORT, SEEDED_PORT, RUN_ID } from './runtime-config';
 
 export default defineConfig({
   testDir: './specs',
@@ -9,13 +7,13 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [['list'], ['html', { open: 'never', outputFolder: `playwright-report/${RUN_ID}` }]],
+  outputDir: `test-results/${RUN_ID}`,
   timeout: 60_000,
   expect: { timeout: 15_000 },
   globalSetup: './global-setup.ts',
-  globalTeardown: './global-teardown.ts',
   use: {
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     headless: true,
     screenshot: 'only-on-failure',
     permissions: ['clipboard-read', 'clipboard-write'],

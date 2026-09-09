@@ -93,6 +93,17 @@ saving was eliminating the redundant amd64 rebuild in its verification step.
   partitioned by `-p`. `fail-fast: false` trades a few runner-minutes for
   complete per-shard feedback in one cycle.
 
+## 2026-09-09 implementation amendment
+
+The current authority is `docs/plan/14-ci-verification.md`. Full verification
+remains mandatory; a shadow planner records impact without skipping jobs.
+Candidate CI binary builds may run alongside checks, while distribution
+builds/signing/publication still wait for full release verification. A final
+gate explicitly checks all jobs, and artifact consumers verify content and
+source identity. Docker retains source builds with separate cache writers and
+a shared frontend stage. Selective PR execution remains deferred pending
+shadow evidence and per-shard receipts.
+
 ## References
 
 - `.github/workflows/ci.yml` — WHY comments carry the change-set labels

@@ -1,13 +1,31 @@
 # syntax=docker/dockerfile:1
 
-# ── Stage 1: Rust + WASM builder ─────────────────────────────────────
+# ── Stable native build tools ───────────────────────────────────────
 # WHY: Builder always runs on $BUILDPLATFORM (amd64 in CI) for fast native
 # compilation. Arm64 binaries are produced via cross-compilation with
 # aarch64-unknown-linux-gnu, avoiding QEMU emulation which is 10-50x slower
 # for Rust + C deps (ring, libsqlite3-sys). See ADR-0006.
 # Constraint #11: no "latest" tag as a production release dependency.
-FROM --platform=$BUILDPLATFORM rust:1.97.1-trixie AS builder
+FROM --platform=$BUILDPLATFORM rust:1.97.1-trixie AS tools
 
+# WHY: installing tools before copying source lets source edits retain this
+# expensive layer. Neither this stage nor the WASM branch varies by TARGETARCH.
+RUN rustup target add wasm32-unknown-unknown
+RUN cargo install dioxus-cli --locked --version 0.7.10
+
+FROM tools AS source
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY apps/ apps/
+COPY migrations/ migrations/
+COPY scripts/ scripts/
+
+# Both runtime platforms consume the same source-built frontend stage.
+FROM source AS frontend
+RUN bash scripts/build-web-release.sh
+
+FROM source AS builder
 ARG TARGETARCH
 
 # Install cross-compilation toolchain for arm64 targets.
@@ -20,18 +38,6 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
       rm -rf /var/lib/apt/lists/* && \
       rustup target add aarch64-unknown-linux-gnu; \
     fi
-
-WORKDIR /build
-
-# Copy all workspace files needed for the build.
-# NOTE: No separate dependency-prebuild layer; the workspace is small enough
-# that a full rebuild on each source change is acceptable for M1. Use
-# cargo-chem or dummy-src technique if compile time becomes a bottleneck.
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ crates/
-COPY apps/ apps/
-COPY migrations/ migrations/
-COPY scripts/ scripts/
 
 # Build the host release binary.
 # For arm64 targets, cross-compile with aarch64-unknown-linux-gnu to avoid
@@ -48,15 +54,6 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     else \
       cargo build --locked --release --bin deve-sub; \
     fi
-
-# Build the WASM frontend (DS-AUD-004): architecture-independent, always
-# built natively on $BUILDPLATFORM. The build script normalizes Dioxus
-# output to apps/web/dist/ and verifies the index.html + WASM + JS contract
-# so the runtime image always has the real admin UI, not the placeholder
-# (DS-AUD-007/053).
-RUN rustup target add wasm32-unknown-unknown
-RUN cargo install dioxus-cli --locked --version 0.7.10
-RUN bash scripts/build-web-release.sh
 
 # ── Stage 2: Minimal runtime ─────────────────────────────────────────
 # WHY: trixie-slim is the current Debian stable (per ADR-0006), not "latest".
@@ -76,7 +73,7 @@ WORKDIR /app
 COPY --from=builder --chown=deve:deve /build/target/release/deve-sub /app/deve-sub
 
 # Copy the compiled web frontend dist (DS-AUD-004).
-COPY --from=builder --chown=deve:deve /build/apps/web/dist /app/web/dist
+COPY --from=frontend --chown=deve:deve /build/apps/web/dist /app/web/dist
 
 # Copy the entrypoint script (DS-AUD-007: migrate before serve).
 COPY --chmod=0755 --chown=deve:deve docker-entrypoint.sh /app/entrypoint.sh

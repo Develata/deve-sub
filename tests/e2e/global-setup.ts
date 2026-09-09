@@ -1,91 +1,13 @@
-import { spawn, spawnSync, ChildProcess } from 'child_process';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { join, resolve } from 'path';
-import { tmpdir } from 'os';
+import { FRESH_PORT, SEEDED_PORT, RUN_ID } from './runtime-config';
+import { Servers } from './server-lifecycle';
 
-// WHY: derive paths from this file's location so E2E works from any checkout
-// path (DS-AUD-050). The E2E dir is <repo>/tests/e2e/, so repo root is ../..
-// Allow env overrides for CI layouts that place the binary or dist elsewhere.
-declare const __dirname: string;
-const E2E_DIR = __dirname;
-const REPO_ROOT = resolve(E2E_DIR, '..', '..');
-
+const REPO_ROOT = resolve(__dirname, '..', '..');
 const BINARY = process.env.DEVE_SUB_BINARY ?? join(REPO_ROOT, 'target', 'release', 'deve-sub');
 const WEB_DIST = process.env.DEVE_SUB_WEB_DIST ?? join(REPO_ROOT, 'apps', 'web', 'dist');
-const FRESH_PORT = parseInt(process.env.DEVE_SUB_E2E_FRESH_PORT ?? '18080', 10);
-const SEEDED_PORT = parseInt(process.env.DEVE_SUB_E2E_SEEDED_PORT ?? '18081', 10);
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'TestPassword12345';
-
-interface ServerHandle {
-  proc: ChildProcess;
-  dbDir: string;
-  port: number;
-}
-
-const servers: ServerHandle[] = [];
-
-function makeConfig(port: number, dbPath: string, dbDir: string): string {
-  return JSON.stringify({
-    product_name: 'Deve Sub',
-    server: {
-      bind: `127.0.0.1:${port}`,
-      serve_web: true,
-      web_dist_dir: WEB_DIST,
-    },
-    database: { path: dbPath },
-    security: {
-      master_key_path: join(dbDir, 'master.key'),
-      allow_master_key_generation: true,
-      session_ttl_secs: 86400,
-      cookie_secure: false,
-      max_login_attempts: 100,
-      lockout_duration_secs: 1,
-      trust_proxy_headers: false,
-    },
-    geoip: { mmdb_path: null },
-  }, null, 2);
-}
-
-async function waitForHealth(port: number, timeoutMs = 30000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/health/live`);
-      if (res.ok) return;
-    } catch {
-      // server not ready yet
-    }
-    await new Promise(r => setTimeout(r, 500));
-  }
-  throw new Error(`server on port ${port} did not become healthy within ${timeoutMs}ms`);
-}
-
-function startServer(port: number): ServerHandle {
-  const dbDir = join(tmpdir(), `deve-sub-e2e-${port}-${Date.now()}`);
-  mkdirSync(dbDir, { recursive: true });
-  const dbPath = join(dbDir, 'deve-sub.db');
-  const configPath = join(dbDir, 'config.json');
-  writeFileSync(configPath, makeConfig(port, dbPath, dbDir));
-
-  // Run migrations first (synchronous, must complete before serve).
-  const { status } = spawnSync(BINARY, ['migrate', '--db-path', dbPath], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    timeout: 30000,
-  });
-  if (status !== 0) throw new Error(`migrate failed for port ${port}`);
-
-  const proc = spawn(BINARY, ['serve', '--config', configPath], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, RUST_LOG: 'warn' },
-  });
-
-  proc.stdout?.on('data', (d) => { /* swallow */ });
-  proc.stderr?.on('data', (d) => { /* swallow */ });
-
-  servers.push({ proc, dbDir, port });
-  return { proc, dbDir, port };
-}
 
 async function apiCall(port: number, method: string, path: string, body?: unknown, cookie?: string): Promise<{ status: number; data: any; cookie?: string }> {
   const headers: Record<string, string> = {
@@ -188,28 +110,19 @@ async function seedServer(port: number): Promise<void> {
   console.log(`[seed] port ${port}: admin created, template + subscription + source + 10k nodes seeded`);
 }
 
-export default async function globalSetup(): Promise<void> {
-  // Verify binary and web dist exist.
+export default async function globalSetup(): Promise<() => Promise<void>> {
   if (!existsSync(BINARY)) throw new Error(`binary not found: ${BINARY}`);
-  if (!existsSync(WEB_DIST)) throw new Error(`web dist not found: ${WEB_DIST}`);
-  if (!existsSync(join(WEB_DIST, 'index.html'))) throw new Error(`index.html not found in web dist`);
-
-  // Start fresh server (no admin) for UI-001.
-  console.log('[setup] starting fresh server on port', FRESH_PORT);
-  startServer(FRESH_PORT);
-  await waitForHealth(FRESH_PORT);
-
-  // Start seeded server for UI-002..010.
-  console.log('[setup] starting seeded server on port', SEEDED_PORT);
-  startServer(SEEDED_PORT);
-  await waitForHealth(SEEDED_PORT);
-
-  // Seed the second server.
-  console.log('[setup] seeding server on port', SEEDED_PORT);
-  await seedServer(SEEDED_PORT);
-
-  console.log('[setup] both servers ready');
-
-  const pidFile = join(tmpdir(), 'deve-sub-e2e-pids.json');
-  writeFileSync(pidFile, JSON.stringify(servers.map(s => s.proc.pid)));
+  if (!existsSync(join(WEB_DIST, 'index.html'))) throw new Error(`index.html not found in ${WEB_DIST}`);
+  const servers = new Servers(BINARY, WEB_DIST, join(__dirname, 'test-results', RUN_ID, 'server-logs'));
+  try {
+    await servers.start(FRESH_PORT);
+    await servers.start(SEEDED_PORT);
+    await seedServer(SEEDED_PORT);
+    console.log(`[setup] run ${RUN_ID}: fresh=${FRESH_PORT}, seeded=${SEEDED_PORT}`);
+    // Keeping handles in this closure avoids PID reuse and shared PID files.
+    return () => servers.stop();
+  } catch (error) {
+    await servers.stop();
+    throw error;
+  }
 }

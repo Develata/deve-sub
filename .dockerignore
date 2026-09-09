@@ -41,3 +41,8 @@ Thumbs.db
 .codegraph/
 .opencode/
 node_modules/
+**/node_modules/
+**/__pycache__/
+**/dist/
+**/test-results/
+**/playwright-report/

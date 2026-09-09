@@ -67,6 +67,12 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
 
 ## Engineering resource and architecture gates
 
+- CI topology and shadow selection: `plan/14-ci-verification.md`; evidence
+  format: `contracts/ci-evidence.md`. Run
+  `python3 -m unittest discover -s scripts/ci/tests` and
+  `python3 scripts/ci/plan.py`. A shadow proposal never skips the full baseline
+  or promotes registered matrix evidence into current execution results.
+
 - `python3 scripts/check_architecture.py`: Cargo boundaries, scoped HTTP state,
   optional OpenAPI dependency, source fuse and immutable Action references.
   Reviewed legacy source-size exceptions live only in

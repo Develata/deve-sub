@@ -101,6 +101,12 @@ without holding write locks on the main database. This allows `backup` to run
 while the server is serving requests. The snapshot includes all tables,
 indexes, and triggers.
 
+The manifest's schema version and row counts must be read from this completed
+snapshot through a read-only connection, never from the concurrently changing
+live database. Check the snapshot's integrity before publishing the archive.
+Concurrent writes or retention therefore cannot make a successful backup's
+manifest disagree with its archived database.
+
 ### Restore and migration
 
 ```text

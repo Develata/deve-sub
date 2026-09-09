@@ -2163,6 +2163,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/backup_concurrency.rs::backup002_concurrent_writes_preserve_manifest_and_restore"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
         - "crates/deve-sub-storage-sqlite/tests/schema_verify.rs::verify_ok_on_fully_migrated_db"
       status: pass
@@ -2177,6 +2178,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/backup_concurrency.rs::backup002_concurrent_writes_preserve_manifest_and_restore"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
       status: pass

@@ -103,6 +103,9 @@ handoffs and aggregate every mandatory job. Selective PR execution remains
 deferred until shadow/full comparisons justify it; source-bound Rust shard
 receipts supplement job aggregation without changing the execution set.
 Local configuration changes alone do not establish remote timing improvements.
+First-release preparation follows `contracts/release-artifacts.md`: production
+signing key correspondence, signed-default updates, matching native Web assets,
+and complete manual build preflight precede the first tag and publication.
 
 Milestone implementation status and executed acceptance evidence are distinct.
 Use [`tests/acceptance/matrix.yaml`](../../tests/acceptance/matrix.yaml) as the

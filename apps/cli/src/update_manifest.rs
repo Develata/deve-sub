@@ -33,25 +33,20 @@ use serde::{Deserialize, Serialize};
 /// trust root is the binary the operator initially installed. A compromise of
 /// the release key does not retroactively affect already-installed binaries.
 ///
-/// The key below is the development release key (P0-04). It MUST be rotated
-/// to a production key before the first public release. The corresponding
-/// private key seed is stored as a GitHub Actions secret
-/// (`DEVE_SUB_RELEASE_KEY_SEED`).
+/// Production release verification key. The dedicated private seed is kept
+/// outside the repository and provisioned as `DEVE_SUB_RELEASE_KEY_SEED` in
+/// GitHub Actions. Tests retain only a signed, non-installable fixture.
 ///
-/// WHY the seed must differ from any value that has ever appeared in the
-/// repository: Ed25519 derives the public key deterministically from the
-/// seed, so anyone with the seed can forge signatures. The development seed
-/// was used to generate this public key and the fixture in
-/// `tests/fixtures/`; it is NOT the production secret. Before the first
-/// public release, rotate to a fresh seed generated on an air-gapped host,
-/// update this constant to the new public key, regenerate the fixture, and
-/// store the new seed as `DEVE_SUB_RELEASE_KEY_SEED`.
+/// WHY a fresh seed: anyone who knows a development or published seed can
+/// forge release signatures. This key replaces the pre-release development
+/// key before the first tagged distribution. Rotation requires an explicit
+/// operator migration because previously installed binaries trust this key.
 ///
 /// See `scripts/sign-release-manifest.sh` for the signing procedure and
 /// `scripts/verify-release-key.sh` for the CI seed↔public-key check.
 const RELEASE_PUBLIC_KEY: [u8; 32] = [
-    0x0f, 0x38, 0xc5, 0x97, 0x58, 0xf1, 0x98, 0x54, 0x70, 0x22, 0x31, 0xf1, 0xb8, 0x8d, 0xe1, 0xaa,
-    0x69, 0x37, 0xcf, 0xc7, 0x20, 0x57, 0x44, 0xc2, 0xee, 0x44, 0xeb, 0x6d, 0x7b, 0x35, 0x5c, 0x76,
+    0x3a, 0x93, 0x89, 0x20, 0x30, 0x4a, 0xb2, 0x96, 0x75, 0x4b, 0x11, 0xdb, 0x15, 0x4f, 0x1f, 0x7a,
+    0x43, 0x47, 0xf1, 0xfd, 0x9a, 0x1c, 0xd8, 0x01, 0x40, 0xa5, 0x57, 0x14, 0x4d, 0x62, 0xc1, 0x2e,
 ];
 
 /// An asset listed in the signed manifest.
@@ -143,8 +138,8 @@ mod tests {
 
     /// Generate a signing keypair, create a manifest, sign it, and verify.
     /// This is the happy-path round-trip. Uses a freshly generated key (not
-    /// the embedded RELEASE_PUBLIC_KEY) because the embedded key is a
-    /// placeholder with no known private counterpart.
+    /// the embedded RELEASE_PUBLIC_KEY) because tests must not
+    /// have access to the production private key.
     fn make_signed_manifest(
         signing_key: &SigningKey,
         version: &str,

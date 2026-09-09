@@ -15,7 +15,12 @@ const BIN: &str = env!("CARGO_BIN_EXE_deve-sub");
 
 /// Start a mock HTTP server that serves a manifest, binary, checksums, and
 /// a health endpoint. Returns (base_url, health_status).
-async fn start_mock_server(new_binary: Vec<u8>, health_ok: bool, version: &str) -> String {
+async fn start_mock_server(
+    new_binary: Vec<u8>,
+    health_ok: bool,
+    version: &str,
+    signature_assets: usize,
+) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = listener.local_addr().expect("addr");
 
@@ -36,7 +41,7 @@ async fn start_mock_server(new_binary: Vec<u8>, health_ok: bool, version: &str) 
         "deve-sub-linux-arm64"
     };
 
-    let manifest = serde_json::json!({
+    let mut manifest = serde_json::json!({
         "tag_name": format!("v{version}"),
         "assets": [
             {
@@ -49,6 +54,18 @@ async fn start_mock_server(new_binary: Vec<u8>, health_ok: bool, version: &str) 
             }
         ]
     });
+    for name in ["deve-sub-manifest.json", "deve-sub-manifest.json.sig"]
+        .into_iter()
+        .take(signature_assets)
+    {
+        manifest["assets"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name": name,
+                "browser_download_url": format!("http://{addr}/{name}")
+            }));
+    }
     let manifest_bytes = serde_json::to_vec(&manifest).expect("manifest");
     let checksums = format!("{binary_hash}  {asset_name}\n");
     let checksums_bytes = checksums.into_bytes();
@@ -64,6 +81,10 @@ async fn start_mock_server(new_binary: Vec<u8>, health_ok: bool, version: &str) 
 
             let (status, body, content_type) = if req.starts_with("GET /manifest") {
                 (200, manifest_bytes.clone(), "application/json")
+            } else if req.starts_with("GET /deve-sub-manifest.json.sig") {
+                (200, vec![0; 64], "application/octet-stream")
+            } else if req.starts_with("GET /deve-sub-manifest.json") {
+                (200, b"untrusted manifest".to_vec(), "application/json")
             } else if req.starts_with(&format!("GET /{asset_name}")) {
                 (200, new_binary.clone(), "application/octet-stream")
             } else if req.starts_with("GET /checksums.txt") {
@@ -119,7 +140,7 @@ async fn update001_successful_update_no_restart() {
 
     let current_version = env!("CARGO_PKG_VERSION");
     let new_binary = format!("#!/bin/sh\necho deve-sub {current_version}\n").into_bytes();
-    let base_url = start_mock_server(new_binary.clone(), true, current_version).await;
+    let base_url = start_mock_server(new_binary.clone(), true, current_version, 0).await;
 
     let output = Command::new(BIN)
         .args([
@@ -132,6 +153,7 @@ async fn update001_successful_update_no_restart() {
             &format!("{base_url}/health"),
             "--no-restart",
             "--force",
+            "--allow-unsigned",
             "--timeout",
             "5",
         ])
@@ -167,7 +189,7 @@ async fn update002_bad_binary_rejected_before_swap() {
 
     let new_binary = b"#!/bin/sh\necho fake-new-binary\n".to_vec();
     let current_version = env!("CARGO_PKG_VERSION");
-    let base_url = start_mock_server(new_binary.clone(), false, current_version).await;
+    let base_url = start_mock_server(new_binary.clone(), false, current_version, 0).await;
 
     let status = Command::new(BIN)
         .args([
@@ -180,6 +202,7 @@ async fn update002_bad_binary_rejected_before_swap() {
             &format!("{base_url}/health"),
             "--no-restart",
             "--force",
+            "--allow-unsigned",
             "--timeout",
             "5",
         ])
@@ -202,4 +225,59 @@ async fn update002_bad_binary_rejected_before_swap() {
         !dir.path().join("deve-sub.bak").exists(),
         "no backup should exist — swap never happened"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn update001_unsigned_release_rejected_by_default() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let binary_path = copy_current_binary(dir.path());
+    let original_bytes = read_file(&binary_path);
+    let base_url = start_mock_server(b"untrusted binary".to_vec(), true, "0.1.0", 0).await;
+    let output = Command::new(BIN)
+        .args([
+            "update",
+            "--manifest-url",
+            &format!("{base_url}/manifest"),
+            "--binary-path",
+            binary_path.to_str().unwrap(),
+            "--force",
+            "--no-restart",
+        ])
+        .output()
+        .expect("spawn");
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("release is unsigned"), "{error}");
+    assert_eq!(read_file(&binary_path), original_bytes);
+    assert!(!dir.path().join("deve-sub.bak").exists());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn update001_unsigned_opt_in_never_bypasses_invalid_signature() {
+    for (assets, expected) in [
+        (1, "partial signed manifest"),
+        (2, "signature verification failed"),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let binary_path = copy_current_binary(dir.path());
+        let original_bytes = read_file(&binary_path);
+        let base_url = start_mock_server(b"untrusted binary".to_vec(), true, "0.1.0", assets).await;
+        let output = Command::new(BIN)
+            .args([
+                "update",
+                "--manifest-url",
+                &format!("{base_url}/manifest"),
+                "--binary-path",
+                binary_path.to_str().unwrap(),
+                "--force",
+                "--no-restart",
+                "--allow-unsigned",
+            ])
+            .output()
+            .expect("spawn");
+        assert!(!output.status.success());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains(expected), "{error}");
+        assert_eq!(read_file(&binary_path), original_bytes);
+    }
 }

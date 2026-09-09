@@ -1674,6 +1674,9 @@ cases:
         - "apps/cli/src/update.rs::is_newer_rejects_invalid_semver"
         - "apps/cli/src/update.rs::parse_checksum_finds_entry"
         - "apps/cli/src/update.rs::backup_and_lock_path_are_siblings"
+        - "apps/cli/src/update_manifest.rs::embedded_key_verifies_fixture_signature"
+        - "apps/cli/tests/update.rs::update001_unsigned_release_rejected_by_default"
+        - "apps/cli/tests/update.rs::update001_unsigned_opt_in_never_bypasses_invalid_signature"
       status: pass
   - id: UPDATE-002
     title: 更新失败

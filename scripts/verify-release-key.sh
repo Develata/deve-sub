@@ -34,15 +34,17 @@ if [ -z "$EMBEDDED_KEY_HEX" ]; then
     exit 1
 fi
 
-python3 - "$DEVE_SUB_RELEASE_KEY_SEED" "$EMBEDDED_KEY_HEX" <<'PYEOF'
+# Keep the seed out of process arguments and diagnostic command listings.
+python3 - "$EMBEDDED_KEY_HEX" <<'PYEOF'
 import binascii
+import os
 import sys
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
-seed_hex = sys.argv[1]
-embedded_hex = sys.argv[2]
+seed_hex = os.environ["DEVE_SUB_RELEASE_KEY_SEED"]
+embedded_hex = sys.argv[1]
 
 seed = binascii.unhexlify(seed_hex)
 key = Ed25519PrivateKey.from_private_bytes(seed)

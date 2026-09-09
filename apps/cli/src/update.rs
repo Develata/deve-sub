@@ -5,21 +5,9 @@
 //! health-check the running version. On failure, roll back to the previous
 //! binary (UPDATE-002).
 //!
-//! DS-AUD-B09: the previous implementation had nine defects:
-//! 1. Binary + checksum from the same unsigned release — transport integrity
-//!    only, no publisher authentication. FIXED: releases now include a signed
-//!    manifest (`deve-sub-manifest.json` + `.sig`) verified via Ed25519
-//!    against an embedded public key (see `update_manifest.rs`). Unsigned
-//!    releases fall back to `checksums.txt` with a warning.
-//! 2. `--config` flag existed but `load_bind_from_config` was never called.
-//! 3. systemd restart failure still proceeded to the health URL.
-//! 4. Old process on the port could return 200 → false positive → backup
-//!    deleted.
-//! 5. Health check only checked status, not the running version.
-//! 6. `is_newer` was hand-written split/filter, not SemVer.
-//! 7. manifest/checksum/binary all read into memory at once, no size limit.
-//! 8. Fixed `.tmp.new/.bak/.failed`, no update lock.
-//! 9. No fsync after write, no `--version` on the downloaded binary.
+//! Signed manifests authenticate the publisher before binary download. Unsigned
+//! development sources require an explicit `--allow-unsigned`; bad or partial
+//! signatures always fail. Native Web assets are updated by the installer.
 
 use std::path::{Path, PathBuf};
 
@@ -63,6 +51,10 @@ pub struct UpdateArgs {
     /// Skip version comparison; always download and swap.
     #[arg(long)]
     force: bool,
+
+    /// Allow checksum-only updates from a manually trusted development source.
+    #[arg(long)]
+    allow_unsigned: bool,
 
     /// Health-check timeout in seconds.
     #[arg(long, default_value = "30")]
@@ -139,9 +131,8 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
     // never touches the new same-dir temp files.
     cleanup_legacy_tmp_files();
 
-    // DS-AUD-B09: verify the release via a signed manifest (Ed25519) when
-    // available. This authenticates the publisher, not just transport
-    // integrity. Unsigned releases fall back to checksums.txt with a warning.
+    // First-party releases require publisher authentication. The development
+    // opt-in below cannot turn a partial or invalid signature into a fallback.
     let (expected_hash, expected_size) = match try_fetch_signed_manifest(&manifest, latest_version)
         .await?
     {
@@ -153,6 +144,11 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
             (asset_entry.sha256.clone(), Some(asset_entry.size))
         }
         SignedManifestResult::UnsignedChecksums(checksum_asset) => {
+            if !args.allow_unsigned {
+                bail!(
+                    "release is unsigned — refusing update; --allow-unsigned is only for manually trusted development sources"
+                );
+            }
             println!(
                 "  WARNING: no signed manifest in release — falling back to unsigned checksums.txt"
             );

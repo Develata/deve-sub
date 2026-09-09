@@ -98,7 +98,7 @@ class PolicyTests(unittest.TestCase):
         report = evaluate(needs, "pull_request")
         self.assertEqual(report["status"], "pass")
         self.assertEqual(report["jobs"]["multiarch"]["status"], "not-run")
-        for event in ("push", "schedule", "workflow_call"):
+        for event in ("push", "schedule", "workflow_call", "workflow_dispatch"):
             self.assertEqual(evaluate(needs, event)["status"], "fail")
 
     def test_diff_includes_rename_old_path_and_untracked(self):

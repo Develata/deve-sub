@@ -74,9 +74,12 @@ cargo bench --bench generate     # PERF-003/004 (cached/uncached)
   they are not pass/fail gates but observability tools.
 - Release pipeline (Constraint #15): on tag, CI builds release binaries for
   linux/amd64 and linux/arm64, generates SHA-256 checksums, and produces an SBOM
-  via `cargo cyclonedx`. Binary signing requires a signing key (deferred to first
-  actual release). The update CLI already verifies signed manifests; the
-  development verification key must be replaced before production release.
+  via `cargo cyclonedx`. The release also contains `deve-sub-web.tar.gz`, made
+  from the verified frontend artifact of the same CI invocation. Checksums and
+  the signed manifest cover both binaries and the frontend archive. The release
+  signing secret must match the production verification key embedded in the CLI.
+  Manual release preflight runs full CI, native/QEMU build smoke and artifact
+  assembly without publication; tag pushes repeat these gates before publishing.
 
 ## Slicing
 
@@ -128,16 +131,22 @@ handles it). For zero-config startup, the entrypoint runs `migrate` then `serve`
 install.sh:
   1. detect OS (linux) and arch (amd64/arm64)
   2. download the latest release binary from GitHub Releases
-  3. download checksums.txt and verify SHA-256
+  3. download the matching frontend archive and verify both SHA-256 checksums
   4. install binary to /usr/local/bin/deve-sub
   5. create /var/lib/deve-sub data directory
   6. generate /etc/systemd/system/deve-sub.service
-  7. systemctl daemon-reload && systemctl enable --now deve-sub
-  8. poll health endpoint until healthy (60s timeout)
+  7. systemctl daemon-reload && systemctl restart deve-sub
+  8. poll readiness and verify the running version, then enable the service
+     (60s timeout)
 ```
 
-The systemd unit runs `deve-sub serve --db-path /var/lib/deve-sub/deve-sub.db`
-with `Restart=on-failure` and `After=network.target`.
+The installer resolves `latest` to one release tag before downloading assets.
+It installs the frontend under `/usr/local/share/deve-sub/web`; the systemd
+unit passes that path explicitly to `serve --web-dist-dir`. Binary and frontend
+backups are restored on installation failure, together with the prior unit
+and running service state. Failed rollback retains backups for repair. The unit uses `Restart=on-failure`
+and `After=network.target`. The installer still authenticates its initial
+download through HTTPS; its checksum file alone is not a publisher signature.
 
 ### Self-update
 
@@ -158,13 +167,19 @@ update:
 The update command does NOT restart if the server is not managed by systemd —
 it prints a message telling the operator to restart manually.
 
-Signature verification (Constraint #15): the updater verifies Ed25519 signed
-manifests and rejects invalid or incomplete signature assets. For compatibility,
-when both signed assets are absent it currently warns and accepts unsigned
-SHA-256 checksums. This fallback authenticates no publisher. Before the first
-production release, provision the release signing key, replace the embedded
-development verification key, and decide the supported unsigned-upgrade policy.
-These are release gates, not evidence of completed production key provisioning.
+Signature verification (Constraint #15): the updater requires Ed25519 signed
+manifests by default and rejects invalid or incomplete signatures. The explicit
+`--allow-unsigned` option permits checksum-only updates from manually trusted
+development sources when both signed assets are absent; it never bypasses a
+bad or partial signature. Official releases are always signed. Before the first
+production release, provision a dedicated signing key and replace the embedded
+development verification key. Key provisioning is verified separately from
+ordinary tests and never inferred from a successful build.
+
+`deve-sub update` updates the native binary only. Native installations that need
+the version-matched Web UI must rerun the installer, which updates both assets;
+Docker deployments update the complete image. This release does not claim a
+transactional binary-plus-frontend self-update command.
 
 ### Performance benchmarks
 

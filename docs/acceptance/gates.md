@@ -80,6 +80,10 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
   optional OpenAPI dependency, source fuse and immutable Action references.
   Reviewed legacy source-size exceptions live only in
   `scripts/architecture-exceptions.json`; they cannot grow silently.
+- Native installer regression: `python3 scripts/tests/test_install.py --binary
+  target/debug/deve-sub --web-dir apps/web/dist` requires bubblewrap and built
+  assets. It isolates filesystem/PID state, uses real CLI/database/Web paths
+  and simulates systemd/account management; it is not DEPLOY-002 VM evidence.
 - `cargo deny --locked check`: advisory, license and registry policy. Exact
   advisory exceptions and their rationale live in `deny.toml`.
 - `python3 scripts/install-validators.py /tmp/deve-sub-validators`: checksum-

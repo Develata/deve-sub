@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deve Sub — Linux install script (DEPLOY-002).
 #
-# Downloads a release binary, installs it to /usr/local/bin, creates a
+# Downloads a release binary and its Web assets, installs them, creates a
 # dedicated system user, runs migrations, and starts a hardened systemd
 # service. The script is idempotent: re-running it upgrades the binary,
 # re-migrates, and repairs the service unit.
@@ -15,7 +15,7 @@
 #   DEVE_SUB_DATA_DIR — data directory (default: /var/lib/deve-sub)
 #
 # WARNING (DS-AUD-036): the checksum verified by this script is downloaded
-# from the same unsigned GitHub Release as the binary. It detects transport
+# alongside the binary, without verifying the release signature. It detects
 # corruption but does NOT authenticate the publisher. Until Sigstore/cosign
 # signature verification is added (Phase F), treat this install path as
 # convenience-only, not supply-chain secure.
@@ -23,6 +23,8 @@
 set -eu
 
 BIN_PATH="/usr/local/bin/deve-sub"
+WEB_DIR="/usr/local/share/deve-sub/web"
+WEB_ASSET="deve-sub-web.tar.gz"
 DATA_DIR="${DEVE_SUB_DATA_DIR:-/var/lib/deve-sub}"
 BIND_ADDR="${DEVE_SUB_BIND:-0.0.0.0:8080}"
 SERVICE_FILE="/etc/systemd/system/deve-sub.service"
@@ -39,6 +41,7 @@ need curl
 need sha256sum
 need uname
 need systemctl
+need tar
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -72,68 +75,141 @@ if [ "${BIND_ADDR%%:*}" != "127.0.0.1" ] && [ "${BIND_ADDR%%:*}" != "localhost" 
 fi
 
 if [ "$VERSION" = "latest" ]; then
-    info "WARNING: installing 'latest' — pin DEVE_SUB_VERSION for reproducible installs"
-    DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/$ASSET"
-    CHECKSUM_URL="https://github.com/$REPO/releases/latest/download/checksums.txt"
-else
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/$ASSET"
-    CHECKSUM_URL="https://github.com/$REPO/releases/download/$VERSION/checksums.txt"
+    # Resolve once: independent /latest/download requests can cross a release.
+    VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')
 fi
+printf '%s\n' "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$' \
+    || err "invalid release version: $VERSION"
+DOWNLOAD_BASE="https://github.com/$REPO/releases/download/$VERSION"
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
 info "downloading $ASSET..."
-curl -fsSL -o "$TMPDIR/$ASSET" "$DOWNLOAD_URL"
+curl -fsSL -o "$TMPDIR/$ASSET" "$DOWNLOAD_BASE/$ASSET"
+info "downloading matching frontend..."
+curl -fsSL -o "$TMPDIR/$WEB_ASSET" "$DOWNLOAD_BASE/$WEB_ASSET"
 
 info "downloading checksums..."
-curl -fsSL -o "$TMPDIR/checksums.txt" "$CHECKSUM_URL"
+curl -fsSL -o "$TMPDIR/checksums.txt" "$DOWNLOAD_BASE/checksums.txt"
 
 info "verifying checksum..."
-EXPECTED=$(grep "$ASSET" "$TMPDIR/checksums.txt" | awk '{print $1}')
-[ -n "$EXPECTED" ] || err "checksum for $ASSET not found in checksums.txt"
-ACTUAL=$(sha256sum "$TMPDIR/$ASSET" | awk '{print $1}')
-[ "$ACTUAL" = "$EXPECTED" ] || err "checksum mismatch: expected $EXPECTED, got $ACTUAL"
+for asset in "$ASSET" "$WEB_ASSET"; do
+    EXPECTED=$(awk -v name="$asset" '$2 == name {print $1}' "$TMPDIR/checksums.txt")
+    [ -n "$EXPECTED" ] || err "checksum for $asset not found in checksums.txt"
+    ACTUAL=$(sha256sum "$TMPDIR/$asset" | awk '{print $1}')
+    [ "$ACTUAL" = "$EXPECTED" ] || err "checksum mismatch for $asset"
+done
+
+chmod 0755 "$TMPDIR/$ASSET"
+INSTALLED_VERSION=$("$TMPDIR/$ASSET" --version | awk '{print $NF}')
+[ "$INSTALLED_VERSION" = "${VERSION#v}" ] || err "binary version does not match release $VERSION"
+
+# Extract only regular files/directories into fresh staging. Links and parent
+# traversal could redirect a privileged install outside its owned directory.
+tar -tzf "$TMPDIR/$WEB_ASSET" > "$TMPDIR/web-entries"
+while IFS= read -r entry; do
+    case "$entry" in
+        /*|..|../*|*/../*|*/..) err "unsafe frontend archive path" ;;
+    esac
+done < "$TMPDIR/web-entries"
+tar -tvzf "$TMPDIR/$WEB_ASSET" > "$TMPDIR/web-types"
+awk 'substr($1,1,1) != "-" && substr($1,1,1) != "d" {exit 1}' "$TMPDIR/web-types" \
+    || err "frontend archive contains a link or special file"
+mkdir "$TMPDIR/web"
+tar --no-same-owner --no-same-permissions -xzf "$TMPDIR/$WEB_ASSET" -C "$TMPDIR/web"
+[ -s "$TMPDIR/web/index.html" ] || err "frontend archive is missing index.html"
+for extension in wasm js css; do
+    find "$TMPDIR/web/assets" -type f -name "*.$extension" -size +0c -print -quit \
+        | grep -q . || err "frontend archive is missing $extension assets"
+done
 
 if [ "$(id -u)" -ne 0 ]; then
     err "root privileges required (run with sudo or pipe to sudo sh)"
 fi
 
-# WHY (P0-03): stop the running service BEFORE overwriting the binary so
-# the old process is not left with a swapped-out executable (ETXTBSY on
-# Linux prevents overwriting a running binary's file, but `install` may
-# succeed by unlinking+creating — leaving the old process with a deleted
-# inode and the new file orphaned until restart). Stopping first is the
-# safe upgrade ordering. `|| true` because the service may not exist yet
-# (first install).
-systemctl stop deve-sub 2>/dev/null || true
-
-# WHY (P0-03): back up the existing binary so we can roll back if a later
-# step (key init, migrate, service start) fails. First install has no
-# prior binary to back up.
+# Backups and the recovery trap precede stopping the existing service.
 BINARY_BACKUP=""
+WEB_BACKUP=""
+SERVICE_BACKUP=""
+BINARY_INSTALLED=0
+WEB_INSTALLED=0
+UNIT_INSTALLED=0
+SERVICE_STARTED=0
+WAS_ACTIVE=0
+if systemctl is-active --quiet deve-sub; then WAS_ACTIVE=1; fi
 if [ -f "$BIN_PATH" ]; then
     BINARY_BACKUP="$TMPDIR/deve-sub.bak"
     cp -a "$BIN_PATH" "$BINARY_BACKUP"
 fi
+[ ! -L "$WEB_DIR" ] || err "frontend destination must not be a symlink"
+if [ -d "$WEB_DIR" ]; then
+    WEB_BACKUP="$TMPDIR/web.bak"
+    cp -a "$WEB_DIR" "$WEB_BACKUP"
+fi
+if [ -f "$SERVICE_FILE" ]; then
+    SERVICE_BACKUP="$TMPDIR/service.bak"
+    cp -a "$SERVICE_FILE" "$SERVICE_BACKUP"
+fi
 
-# WHY (P0-03): trap fires on ANY exit. If the exit code is non-zero (set -e
-# failure, signal, or explicit err), roll back the binary before cleaning
-# up the temp dir. On exit 0 (success), only clean up. This ensures a
-# failed key init / migrate / service start restores the previous binary.
-rollback_binary() {
-    if [ -n "$BINARY_BACKUP" ] && [ -f "$BINARY_BACKUP" ]; then
-        info "rolling back to previous binary..."
-        install -m 0755 "$BINARY_BACKUP" "$BIN_PATH"
+# Stop the new process before restoring its assets, then restore the previous
+# unit and running state. Failed recovery keeps backups for operator repair.
+rollback_install() {
+    if [ "$SERVICE_STARTED" -eq 1 ]; then
+        systemctl stop deve-sub || return 1
     fi
+    if [ "$BINARY_INSTALLED" -eq 1 ]; then
+        if [ -n "$BINARY_BACKUP" ]; then
+            info "rolling back to previous binary..."
+            install -m 0755 "$BINARY_BACKUP" "$BIN_PATH" || return 1
+        else
+            rm -f "$BIN_PATH" || return 1
+        fi
+    fi
+    if [ "$WEB_INSTALLED" -eq 1 ]; then
+        rm -rf "$WEB_DIR" || return 1
+        if [ -n "$WEB_BACKUP" ]; then
+            cp -a "$WEB_BACKUP" "$WEB_DIR" || return 1
+        fi
+    fi
+    if [ "$UNIT_INSTALLED" -eq 1 ]; then
+        if [ -n "$SERVICE_BACKUP" ]; then
+            cp -a "$SERVICE_BACKUP" "$SERVICE_FILE" || return 1
+        else
+            rm -f "$SERVICE_FILE" || return 1
+        fi
+        systemctl daemon-reload || return 1
+    fi
+    if [ "$WAS_ACTIVE" -eq 1 ]; then systemctl start deve-sub || return 1; fi
 }
-trap 'rc=$?; if [ "$rc" -ne 0 ]; then rollback_binary; fi; rm -rf "$TMPDIR"' EXIT
+finish() {
+    rc=$?
+    trap - EXIT
+    if [ "$rc" -ne 0 ] && ! rollback_install; then
+        echo "ERROR: rollback incomplete; recovery backups retained at $TMPDIR" >&2
+        exit "$rc"
+    fi
+    rm -rf "$TMPDIR"
+    exit "$rc"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [ "$WAS_ACTIVE" -eq 1 ]; then systemctl stop deve-sub; fi
 
 info "installing binary to $BIN_PATH..."
+BINARY_INSTALLED=1
 install -m 0755 "$TMPDIR/$ASSET" "$BIN_PATH"
+info "installing frontend to $WEB_DIR..."
+install -d -m 0755 "$(dirname "$WEB_DIR")"
+WEB_INSTALLED=1
+rm -rf "$WEB_DIR"
+cp -a "$TMPDIR/web" "$WEB_DIR"
+chmod -R u=rwX,go=rX "$WEB_DIR"
 
-# Record the installed version for post-restart verification (DS-AUD-006).
-INSTALLED_VERSION=$("$BIN_PATH" --version 2>/dev/null | awk '{print $NF}' || echo "unknown")
+# The staged binary version was checked before any installation mutation.
 info "  installed version: $INSTALLED_VERSION"
 
 info "creating dedicated system user/group..."
@@ -184,6 +260,7 @@ info "running database migrations..."
 sudo -u "$DEVE_USER" "$BIN_PATH" migrate --db-path "$DATA_DIR/deve-sub.db"
 
 info "writing systemd service unit..."
+UNIT_INSTALLED=1
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Deve Sub — Proxy Subscription Manager
@@ -193,7 +270,7 @@ After=network.target
 Type=simple
 User=$DEVE_USER
 Group=$DEVE_GROUP
-ExecStart=$BIN_PATH serve --db-path $DATA_DIR/deve-sub.db --key-path $DATA_DIR/master.key --bind $BIND_ADDR
+ExecStart=$BIN_PATH serve --db-path $DATA_DIR/deve-sub.db --key-path $DATA_DIR/master.key --bind $BIND_ADDR --web-dist-dir $WEB_DIR
 WorkingDirectory=$DATA_DIR
 Restart=on-failure
 RestartSec=5
@@ -219,21 +296,23 @@ info "enabling and starting service..."
 systemctl daemon-reload
 # WHY: `restart` ensures an already-running instance is replaced by the new
 # binary; `enable --now` alone does not guarantee a restart on upgrade.
+SERVICE_STARTED=1
 systemctl restart deve-sub
-systemctl enable deve-sub
 
 info "waiting for healthy state..."
 for i in $(seq 1 60); do
-    if curl -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/live" >/dev/null 2>&1; then
+    if curl -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/ready" >/dev/null 2>&1; then
         info "service is healthy"
         # Verify the running binary matches the installed version (DS-AUD-006).
         RUNNING_VERSION=$(curl -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/live" 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
-        if [ -n "$RUNNING_VERSION" ] && [ "$RUNNING_VERSION" != "$INSTALLED_VERSION" ]; then
+        if [ "$RUNNING_VERSION" != "$INSTALLED_VERSION" ]; then
             err "version mismatch: installed $INSTALLED_VERSION but service reports $RUNNING_VERSION — restart may have failed"
         fi
+        systemctl enable deve-sub
         echo
         echo "Deve Sub installed successfully."
         echo "  binary:  $BIN_PATH"
+        echo "  web:     $WEB_DIR"
         echo "  data:    $DATA_DIR"
         echo "  service: systemctl status deve-sub"
         echo "  logs:    journalctl -u deve-sub -f"

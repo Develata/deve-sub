@@ -30,6 +30,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
           toolchain: 1.97.1
+          # Match rust-toolchain.toml before Python invokes cargo metadata.
+          components: rustfmt, clippy
       - run: pip install pyyaml==6.0.3
       - run: python3 -m unittest discover -s scripts/ci/tests
       - name: Validate full inventory and record shadow selection

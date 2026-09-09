@@ -15,7 +15,7 @@ use deve_sub_domain::{Authentication, ErrorClass, Node};
 
 use super::stream::BoxedStream;
 use super::target::TestTarget;
-use super::tls::skip_verify_connector;
+use super::tls::connector;
 
 /// Dial through a Trojan proxy node to `target`, returning a tunneled
 /// stream. The caller sends the HTTP probe request over this stream.
@@ -55,7 +55,7 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
         .and_then(|t| t.server_name.clone())
         .unwrap_or_else(|| node.endpoint.host.uri_host());
 
-    let connector = skip_verify_connector(vec![]).map_err(|_| ErrorClass::Refused)?;
+    let connector = connector(node, vec![]).map_err(|_| ErrorClass::TlsFailed)?;
     let server_name =
         rustls::pki_types::ServerName::try_from(sni).map_err(|_| ErrorClass::Refused)?;
     let mut tls = connector
@@ -164,6 +164,49 @@ mod tests {
 
         http_target.abort();
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn certificate_verification_precedes_proxy_authentication() {
+        for setting in [None, Some(false)] {
+            let cert = TestCert::generate();
+            let acceptor = cert.acceptor();
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind");
+            let address = listener.local_addr().expect("address");
+            let server = tokio::spawn(async move {
+                let (tcp, _) = listener.accept().await.expect("accept");
+                assert!(
+                    acceptor.accept(tcp).await.is_err(),
+                    "untrusted TLS must fail before proxy credentials"
+                );
+            });
+            let mut node = build_trojan_node(address);
+            node.tls.as_mut().expect("tls").skip_cert_verify = setting;
+            let target = TestTarget::new("example.com", 80, "/");
+            assert!(dial(&node, &target, Duration::from_secs(2)).await.is_err());
+            tokio::time::timeout(Duration::from_secs(2), server)
+                .await
+                .expect("server closed")
+                .expect("server task");
+        }
+    }
+
+    #[test]
+    fn unsupported_tls_security_policy_is_not_downgraded() {
+        let mut node = build_trojan_node("127.0.0.1:443".parse().expect("address"));
+        node.tls.as_mut().expect("tls").certificate_pins =
+            vec![deve_sub_domain::CertificatePin::new("TEST_PIN".into())];
+        assert!(super::super::tls::client_config(&node, vec![]).is_err());
+        let tls = node.tls.as_mut().expect("tls");
+        tls.certificate_pins.clear();
+        tls.reality = Some(deve_sub_domain::RealityConfig {
+            public_key: "TEST_PUBLIC_KEY".into(),
+            short_id: "00".into(),
+            spider_x: None,
+        });
+        assert!(super::super::tls::client_config(&node, vec![]).is_err());
     }
 
     fn build_trojan_node(addr: std::net::SocketAddr) -> Node {

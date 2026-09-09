@@ -120,12 +120,7 @@ impl KomariProbeAdapter {
             )));
         }
 
-        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
-        if body.len() > SUCCESS_BODY_CAP {
-            return Err(ProbeError::ProbeFailed(format!(
-                "Komari API response body exceeds {SUCCESS_BODY_CAP} bytes"
-            )));
-        }
+        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await?;
         serde_json::from_str::<KomariNodesResponse>(&body)
             .map(|r| r.data)
             .map_err(|e| ProbeError::ProbeFailed(format!("Komari nodes parse failed: {e}")))
@@ -153,12 +148,7 @@ impl KomariProbeAdapter {
             )));
         }
 
-        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
-        if body.len() > SUCCESS_BODY_CAP {
-            return Err(ProbeError::ProbeFailed(format!(
-                "Komari API response body exceeds {SUCCESS_BODY_CAP} bytes"
-            )));
-        }
+        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await?;
         let parsed: KomariRecordsResponse = serde_json::from_str(&body)
             .map_err(|e| ProbeError::ProbeFailed(format!("Komari records parse failed: {e}")))?;
 
@@ -285,6 +275,7 @@ mod tests {
     fn mk_source(snapshot: Option<String>) -> ProbeSource {
         let now = Timestamp::now();
         ProbeSource {
+            revision: 0,
             id: ProbeSourceId::new(),
             kind: ProbeSourceKind::Komari,
             name: "test-komari".to_owned(),

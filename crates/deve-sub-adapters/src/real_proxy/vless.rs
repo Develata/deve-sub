@@ -16,7 +16,7 @@ use deve_sub_domain::{Authentication, ErrorClass, Node};
 
 use super::stream::BoxedStream;
 use super::target::TestTarget;
-use super::tls::skip_verify_connector;
+use super::tls::connector;
 
 pub async fn dial(
     node: &Node,
@@ -53,7 +53,7 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
         .and_then(|t| t.server_name.clone())
         .unwrap_or_else(|| node.endpoint.host.uri_host());
 
-    let connector = skip_verify_connector(vec![]).map_err(|_| ErrorClass::Refused)?;
+    let connector = connector(node, vec![]).map_err(|_| ErrorClass::TlsFailed)?;
     let server_name =
         rustls::pki_types::ServerName::try_from(sni).map_err(|_| ErrorClass::Refused)?;
     let mut tls = connector

@@ -50,10 +50,14 @@ impl MaxMindGeoIp {
     /// record wins the region lookup — without sorting, the same dual-CDN
     /// domain could flip its detected region between refreshes.
     async fn resolve_host(host: &str) -> Result<Vec<IpAddr>, std::io::Error> {
-        let mut addrs: Vec<IpAddr> = tokio::net::lookup_host((host, 0u16))
-            .await?
-            .map(|sa| sa.ip())
-            .collect();
+        let mut addrs: Vec<IpAddr> = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tokio::net::lookup_host((host, 0u16)),
+        )
+        .await
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "GeoIP DNS timed out"))??
+        .map(|sa| sa.ip())
+        .collect();
         addrs.sort_unstable();
         addrs.dedup();
         Ok(addrs)

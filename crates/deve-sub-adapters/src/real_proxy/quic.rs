@@ -1,6 +1,6 @@
 //! Shared QUIC client helpers for the real-proxy probe.
 //!
-//! Hysteria2 and TUIC both dial a QUIC endpoint with skip-verify TLS and
+//! Hysteria2 and TUIC both dial a QUIC endpoint under the node TLS policy and
 //! `h3` ALPN, then wrap a bidi stream that owns the endpoint + connection
 //! so they outlive the stream halves. This module centralizes that logic.
 
@@ -12,9 +12,9 @@ use quinn::{ClientConfig, Connection, Endpoint, TransportConfig};
 
 use deve_sub_domain::{ErrorClass, Node};
 
-use super::tls::skip_verify_client_config;
+use super::tls::client_config;
 
-/// Establish a QUIC connection to `node`'s endpoint using skip-verify TLS
+/// Establish a QUIC connection to `node`'s endpoint using the node TLS policy
 /// with the `h3` ALPN. Returns the endpoint (which owns the bound UDP
 /// socket) and the established connection. The caller must keep both alive
 /// for the lifetime of any streams opened on the connection.
@@ -27,8 +27,7 @@ pub async fn quic_connect(node: &Node) -> Result<(Endpoint, Connection), ErrorCl
         .next()
         .ok_or(ErrorClass::DnsFailed)?;
 
-    let tls =
-        skip_verify_client_config(vec![b"h3".to_vec()]).map_err(|_| ErrorClass::QuicFailed)?;
+    let tls = client_config(node, vec![b"h3".to_vec()]).map_err(|_| ErrorClass::QuicFailed)?;
     let quic_cfg = QuicClientConfig::try_from(tls).map_err(|_| ErrorClass::QuicFailed)?;
     let mut transport = TransportConfig::default();
     transport.keep_alive_interval(Some(Duration::from_secs(10)));

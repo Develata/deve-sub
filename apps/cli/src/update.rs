@@ -202,7 +202,7 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
     // checksum (e.g. a correct checksum of the wrong artifact) or a binary
     // for the wrong architecture.
     println!("verifying downloaded binary reports version {latest_version}...");
-    if let Err(e) = verify_binary_version(&binary_tmp, latest_version) {
+    if let Err(e) = verify_binary_version(&binary_tmp, latest_version).await {
         let _ = std::fs::remove_file(&binary_tmp);
         return Err(e);
     }
@@ -238,7 +238,9 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
             Err(e) => {
                 println!("systemd restart error: {e} — rolling back...");
                 rollback(&binary_path, &backup_path)?;
-                bail!("update failed: systemd restart error ({e}). Rolled back.");
+                bail!(
+                    "update failed: systemd restart error ({e}). Previous binary restored; service state is unverified. A systemd job may still be running; inspect it and restart the previous binary."
+                );
             }
         }
     } else {
@@ -263,7 +265,9 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
         println!("health check failed (version {latest_version} not live) — rolling back...");
         rollback(&binary_path, &backup_path)?;
         if !args.no_restart {
-            let _ = try_systemd_restart().await;
+            try_systemd_restart().await.context(
+                "binary rollback succeeded but service restart failed; manual restart required",
+            )?;
         }
         bail!(
             "update failed: new binary did not report version {latest_version}. \
@@ -586,23 +590,36 @@ fn set_executable(path: &Path) -> Result<()> {
 
 /// DS-AUD-B09: run `<binary> --version` and assert it reports the target
 /// version. Catches a wrong-arch or corrupted binary before the swap.
-fn verify_binary_version(binary: &Path, expected: &str) -> Result<()> {
-    let output = std::process::Command::new(binary)
+async fn verify_binary_version(binary: &Path, expected: &str) -> Result<()> {
+    use tokio::io::AsyncReadExt;
+    let mut child = tokio::process::Command::new(binary)
         .arg("--version")
-        .output()
+        .kill_on_drop(true)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
         .with_context(|| format!("failed to execute {}", binary.display()))?;
-    if !output.status.success() {
-        bail!(
-            "downloaded binary --version exited with {:?}",
-            output.status
-        );
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // WHY: `--version` prints "deve-sub <version>" (clap default). Match the
-    // version token, not the whole line, so extra build metadata doesn't
-    // cause a false mismatch.
+    // WHY: timeout covers pipe reads and process exit, while kill_on_drop
+    // terminates the child on error/cancellation. An untrusted version output
+    // cannot consume unbounded memory or block the async executor.
+    let output = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let stdout = child.stdout.take().context("missing version stdout")?;
+        let mut output = Vec::new();
+        stdout.take(4097).read_to_end(&mut output).await?;
+        if output.len() > 4096 {
+            bail!("binary version output exceeds 4096 bytes");
+        }
+        let status = child.wait().await?;
+        if !status.success() {
+            bail!("downloaded binary --version exited with {status}");
+        }
+        Ok::<_, anyhow::Error>(output)
+    })
+    .await
+    .context("binary --version timed out")??;
+    let stdout = String::from_utf8_lossy(&output);
     if !stdout.split_whitespace().any(|t| t == expected) {
-        bail!("downloaded binary reports version {stdout:?}, expected {expected:?}");
+        bail!("downloaded binary version does not match {expected:?}");
     }
     Ok(())
 }
@@ -625,21 +642,23 @@ async fn try_systemd_restart() -> Result<bool> {
     if !Path::new(service).exists() {
         return Ok(false);
     }
-    let result = tokio::process::Command::new("systemctl")
-        .args(["restart", "deve-sub"])
-        .output()
-        .await;
-    match result {
-        Ok(out) if out.status.success() => {
-            println!("systemd service restarted.");
-            Ok(true)
-        }
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            bail!("systemctl restart failed: {stderr}");
-        }
-        Err(e) => bail!("failed to run systemctl restart: {e}"),
+    let status = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        tokio::process::Command::new("systemctl")
+            .args(["restart", "deve-sub"])
+            .kill_on_drop(true)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status(),
+    )
+    .await
+    .context("systemctl restart timed out")?
+    .context("failed to run systemctl restart")?;
+    if !status.success() {
+        bail!("systemctl restart failed: {status}");
     }
+    println!("systemd service restarted.");
+    Ok(true)
 }
 
 /// DS-AUD-B09: poll the health endpoint until it returns 200 AND the reported
@@ -740,3 +759,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "update_process_tests.rs"]
+mod process_tests;

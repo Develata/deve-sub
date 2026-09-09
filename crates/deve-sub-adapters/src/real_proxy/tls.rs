@@ -1,16 +1,12 @@
-//! Shared TLS connector for TCP-based proxy protocols (Trojan, VLESS,
-//! NaiveProxy). Reuses the skip-cert-verify pattern from `quic_probe.rs`
-//! because the probe measures reachability, not authenticity.
+//! TLS policy for authenticated proxy probes; explicit opt-out only.
 
 use std::sync::Arc;
 
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use tokio_rustls::TlsConnector;
 
-/// A certificate verifier that accepts any server certificate. Proxy nodes
-/// frequently use self-signed certificates; the real-proxy probe measures
-/// reachability through the proxy, not server authenticity. This must not
-/// be used outside probe contexts.
+/// Explicit node-policy opt-out. Handshake signatures still verify possession
+/// of the presented key; this mode does not authenticate its identity.
 struct SkipVerification(Arc<rustls::crypto::CryptoProvider>);
 
 impl std::fmt::Debug for SkipVerification {
@@ -64,34 +60,46 @@ impl rustls::client::danger::ServerCertVerifier for SkipVerification {
     }
 }
 
-/// Build a `TlsConnector` that skips certificate verification. The probe
-/// connects to proxy nodes that may use self-signed certs.
-///
-/// # Errors
-/// Returns `Err` if the rustls client config cannot be built (should not
-/// happen with the ring provider).
-pub fn skip_verify_connector(alpn: Vec<Vec<u8>>) -> Result<TlsConnector, rustls::Error> {
-    let config = skip_verify_client_config(alpn)?;
-    Ok(TlsConnector::from(Arc::new(config)))
+/// Build the connector under the canonical node TLS security policy.
+pub fn connector(
+    node: &deve_sub_domain::Node,
+    alpn: Vec<Vec<u8>>,
+) -> Result<TlsConnector, rustls::Error> {
+    Ok(TlsConnector::from(Arc::new(client_config(node, alpn)?)))
 }
 
-/// Build a raw `rustls::ClientConfig` that skips certificate verification.
-/// Used by QUIC-based clients (Hysteria2, TUIC) that need the config for
-/// `quinn` rather than a `tokio-rustls` connector.
-///
-/// # Errors
-/// Returns `Err` if the rustls client config cannot be built (should not
-/// happen with the ring provider).
-pub fn skip_verify_client_config(
+/// Fail closed for unsupported security settings before sending credentials.
+/// This probe does not implement pin interpretation or Reality authentication.
+pub fn client_config(
+    node: &deve_sub_domain::Node,
     alpn: Vec<Vec<u8>>,
 ) -> Result<rustls::ClientConfig, rustls::Error> {
-    let verifier = Arc::new(SkipVerification(Arc::new(
-        rustls::crypto::ring::default_provider(),
-    )));
-    let mut builder = rustls::ClientConfig::builder()
-        .dangerous()
-        .with_custom_certificate_verifier(verifier)
-        .with_no_client_auth();
-    builder.alpn_protocols = alpn;
-    Ok(builder)
+    if node
+        .tls
+        .as_ref()
+        .is_some_and(|tls| !tls.certificate_pins.is_empty() || tls.reality.is_some())
+    {
+        return Err(rustls::Error::General(
+            "probe TLS security settings unsupported".into(),
+        ));
+    }
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let builder = rustls::ClientConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()?;
+    let mut config = if node
+        .tls
+        .as_ref()
+        .is_some_and(|tls| tls.skip_cert_verify == Some(true))
+    {
+        builder
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(SkipVerification(provider)))
+            .with_no_client_auth()
+    } else {
+        let roots =
+            rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        builder.with_root_certificates(roots).with_no_client_auth()
+    };
+    config.alpn_protocols = alpn;
+    Ok(config)
 }

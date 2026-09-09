@@ -10,6 +10,7 @@
 //! adapter Port".
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use deve_sub_domain::{
@@ -68,6 +69,20 @@ impl ProbeSourceAdapterRegistry {
             }),
         }
     }
+
+    async fn sync_with_timeout(
+        &self,
+        source: &ProbeSource,
+        timeout: Duration,
+    ) -> Result<ProbeSyncResult, ProbeError> {
+        let adapter = self.resolve(source.kind)?;
+        // WHY: per-request deadlines do not bound a panel sync that fetches
+        // counters for many nodes. Dropping the batch cancels its HTTP futures;
+        // Application persists failure without advancing the old counter.
+        tokio::time::timeout(timeout, adapter.sync_traffic(source))
+            .await
+            .map_err(|_| ProbeError::ProbeFailed("probe source sync timed out".into()))?
+    }
 }
 
 impl Default for ProbeSourceAdapterRegistry {
@@ -79,7 +94,11 @@ impl Default for ProbeSourceAdapterRegistry {
 #[async_trait]
 impl ProbeSourceAdapter for ProbeSourceAdapterRegistry {
     async fn sync_traffic(&self, source: &ProbeSource) -> Result<ProbeSyncResult, ProbeError> {
-        let adapter = self.resolve(source.kind)?;
-        adapter.sync_traffic(source).await
+        self.sync_with_timeout(source, Duration::from_secs(120))
+            .await
     }
 }
+
+#[cfg(test)]
+#[path = "probe_registry_tests.rs"]
+mod tests;

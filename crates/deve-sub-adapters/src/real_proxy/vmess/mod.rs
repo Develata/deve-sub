@@ -20,7 +20,7 @@ use deve_sub_domain::{Authentication, ErrorClass, Node};
 
 use super::stream::BoxedStream;
 use super::target::TestTarget;
-use super::tls::skip_verify_connector;
+use super::tls::connector;
 
 pub async fn dial(
     node: &Node,
@@ -53,7 +53,7 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
         .and_then(|t| t.server_name.clone())
         .unwrap_or_else(|| node.endpoint.host.uri_host());
 
-    let connector = skip_verify_connector(vec![]).map_err(|_| ErrorClass::Refused)?;
+    let connector = connector(node, vec![]).map_err(|_| ErrorClass::TlsFailed)?;
     let server_name =
         rustls::pki_types::ServerName::try_from(sni).map_err(|_| ErrorClass::Refused)?;
     let mut tls = connector
@@ -110,20 +110,26 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
         let _ = tls_wr.shutdown().await;
     });
 
-    let relay = tokio::spawn(async move {
-        let _ = read_task.await;
-        write_task.abort();
-    });
-
     Ok(Box::new(WrappedDuplex {
         inner: client,
-        _relay: relay,
+        read_task,
+        write_task,
     }))
 }
 
 struct WrappedDuplex {
     inner: tokio::io::DuplexStream,
-    _relay: tokio::task::JoinHandle<()>,
+    read_task: tokio::task::JoinHandle<()>,
+    write_task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for WrappedDuplex {
+    fn drop(&mut self) {
+        // WHY: a silent peer can hold read_aead_response_header forever.
+        // Dropping a JoinHandle detaches it, so explicitly cancel both owners.
+        self.read_task.abort();
+        self.write_task.abort();
+    }
 }
 
 impl tokio::io::AsyncRead for WrappedDuplex {
@@ -174,6 +180,36 @@ mod tests {
     use deve_sub_kernel::{NodeId, Timestamp};
     use std::collections::BTreeMap;
     use std::time::Duration;
+
+    #[tokio::test]
+    async fn dropped_stream_releases_both_pending_relays() {
+        let owners = std::sync::Arc::new(());
+        for _ in 0..1000 {
+            let read_owner = owners.clone();
+            let write_owner = owners.clone();
+            let read_task = tokio::spawn(async move {
+                let _owner = read_owner;
+                std::future::pending::<()>().await;
+            });
+            let write_task = tokio::spawn(async move {
+                let _owner = write_owner;
+                std::future::pending::<()>().await;
+            });
+            let (inner, _peer) = tokio::io::duplex(64);
+            drop(WrappedDuplex {
+                inner,
+                read_task,
+                write_task,
+            });
+        }
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while std::sync::Arc::strong_count(&owners) != 1 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("no detached relay owns state after stream drop");
+    }
 
     #[tokio::test]
     async fn vmess_round_trip() {

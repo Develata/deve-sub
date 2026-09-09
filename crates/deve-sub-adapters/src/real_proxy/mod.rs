@@ -150,6 +150,7 @@ impl RealProxyProbe {
         mut stream: BoxedStream,
         timeout: Duration,
     ) -> Result<(), ErrorClass> {
+        let deadline = tokio::time::Instant::now() + timeout;
         let request = self.test_target.http_request_bytes();
 
         match tokio::time::timeout(timeout, stream.write_all(&request)).await {
@@ -167,7 +168,6 @@ impl RealProxyProbe {
         // a slow/segmented delivery is not penalized (SRC-021).
         let mut buf = [0u8; 64];
         let mut filled = 0usize;
-        let deadline = tokio::time::Instant::now() + timeout;
         loop {
             if filled >= buf.len() {
                 break;

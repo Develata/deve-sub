@@ -113,12 +113,7 @@ impl NezhaProbeAdapter {
             )));
         }
 
-        let body = probe_common::read_body_capped(resp, SUCCESS_BODY_CAP).await;
-        if body.len() > SUCCESS_BODY_CAP {
-            return Err(ProbeError::ProbeFailed(format!(
-                "Nezha API response body exceeds {SUCCESS_BODY_CAP} bytes"
-            )));
-        }
+        let body = probe_common::read_body_capped(resp, SUCCESS_BODY_CAP).await?;
         serde_json::from_str::<Vec<NezhaServer>>(&body)
             .map_err(|e| ProbeError::ProbeFailed(format!("Nezha API response parse failed: {e}")))
     }
@@ -218,6 +213,7 @@ mod tests {
     fn mk_source(auth_config: String, snapshot: Option<String>) -> ProbeSource {
         let now = Timestamp::now();
         ProbeSource {
+            revision: 0,
             id: ProbeSourceId::new(),
             kind: ProbeSourceKind::Nezha,
             name: "test-nezha".to_owned(),

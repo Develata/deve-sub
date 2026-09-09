@@ -108,12 +108,7 @@ impl DStatusProbeAdapter {
             )));
         }
 
-        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await;
-        if body.len() > SUCCESS_BODY_CAP {
-            return Err(ProbeError::ProbeFailed(format!(
-                "DStatus API response body exceeds {SUCCESS_BODY_CAP} bytes"
-            )));
-        }
+        let body = read_body_capped(resp, SUCCESS_BODY_CAP).await?;
         serde_json::from_str::<DStatusResponse>(&body)
             .map_err(|e| ProbeError::ProbeFailed(format!("DStatus API response parse failed: {e}")))
     }
@@ -177,6 +172,7 @@ mod tests {
     fn mk_source(snapshot: Option<String>) -> ProbeSource {
         let now = Timestamp::now();
         ProbeSource {
+            revision: 0,
             id: ProbeSourceId::new(),
             kind: ProbeSourceKind::DStatus,
             name: "test-dstatus".to_owned(),

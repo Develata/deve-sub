@@ -50,3 +50,7 @@ zstd = "0.13"
 
 [lints]
 workspace = true
+
+# RustCrypto's package name is md-5; its import name is md5 (VMess protocol).
+[package.metadata.cargo-machete]
+ignored = ["md-5"]

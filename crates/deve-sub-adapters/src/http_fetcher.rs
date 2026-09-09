@@ -327,6 +327,16 @@ impl<C: SsrfChecker> HttpFetcher<C> {
 #[async_trait]
 impl<C: SsrfChecker> SubscriptionFetcher for HttpFetcher<C> {
     async fn fetch(&self, url: &str, etag: Option<&str>) -> Result<FetchResult, FetchError> {
+        // WHY: reqwest's timeout starts after the custom SSRF/DNS check and
+        // resets per redirect. One outer deadline covers the whole fetch.
+        tokio::time::timeout(self.timeout, self.fetch_inner(url, etag))
+            .await
+            .map_err(|_| FetchError::Timeout(self.timeout.as_secs()))?
+    }
+}
+
+impl<C: SsrfChecker> HttpFetcher<C> {
+    async fn fetch_inner(&self, url: &str, etag: Option<&str>) -> Result<FetchResult, FetchError> {
         let mut current_url = url.to_owned();
         let mut current_etag = etag.map(str::to_owned);
 
@@ -389,5 +399,35 @@ impl<C: SsrfChecker> SubscriptionFetcher for HttpFetcher<C> {
         }
 
         Err(FetchError::TooManyRedirects)
+    }
+}
+
+#[cfg(test)]
+mod deadline_tests {
+    use super::*;
+
+    struct PendingDns;
+    impl SsrfChecker for PendingDns {
+        fn check(
+            &self,
+            _: &str,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<Vec<IpAddr>, SsrfError>> + Send>,
+        > {
+            Box::pin(std::future::pending())
+        }
+    }
+
+    #[tokio::test]
+    async fn timeout_includes_custom_dns_check() {
+        let mut fetcher = HttpFetcher::with_checker(PendingDns);
+        fetcher.timeout = Duration::from_millis(20);
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            fetcher.fetch("https://example.com", None),
+        )
+        .await
+        .expect("custom DNS cannot hold fetch forever");
+        assert!(matches!(result, Err(FetchError::Timeout(_))));
     }
 }

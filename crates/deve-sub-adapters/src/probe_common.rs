@@ -33,22 +33,39 @@ pub const SUCCESS_BODY_CAP: usize = 1024 * 1024;
 /// Default request timeout: 30 seconds.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// Read up to [`ERROR_BODY_CAP`] bytes of an error response body.
-pub async fn read_error_body(response: reqwest::Response) -> String {
-    read_body_capped(response, ERROR_BODY_CAP).await
-}
-
-/// Read up to `cap` bytes of a response body, truncating at the cap.
-pub async fn read_body_capped(mut response: reqwest::Response, cap: usize) -> String {
+/// Read a bounded diagnostic prefix. Partial error bodies are diagnostic only.
+pub async fn read_error_body(mut response: reqwest::Response) -> String {
     let mut body = Vec::new();
     while let Ok(Some(chunk)) = response.chunk().await {
-        body.extend_from_slice(&chunk);
-        if body.len() >= cap {
-            body.truncate(cap);
+        let count = chunk.len().min(ERROR_BODY_CAP - body.len());
+        body.extend_from_slice(&chunk[..count]);
+        if body.len() == ERROR_BODY_CAP {
             break;
         }
     }
     String::from_utf8_lossy(&body).into_owned()
+}
+
+/// Read a complete bounded success body; never parse a truncated response.
+pub async fn read_body_capped(
+    mut response: reqwest::Response,
+    cap: usize,
+) -> Result<String, ProbeError> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| ProbeError::ProbeFailed("response body read failed".into()))?
+    {
+        if chunk.len() > cap.saturating_sub(body.len()) {
+            return Err(ProbeError::ProbeFailed(format!(
+                "response body exceeds {cap} bytes"
+            )));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    String::from_utf8(body)
+        .map_err(|_| ProbeError::ProbeFailed("response body is not UTF-8".into()))
 }
 
 /// Build a `reqwest::Client` with SSRF protection, redirect disabled, and DNS
@@ -68,9 +85,9 @@ pub async fn build_ssrf_client(
         .host_str()
         .ok_or_else(|| ProbeError::ProbeFailed("URL has no hostname".to_owned()))?;
 
-    let safe_ips = ssrf
-        .check(url)
+    let safe_ips = tokio::time::timeout(std::time::Duration::from_secs(5), ssrf.check(url))
         .await
+        .map_err(|_| ProbeError::ProbeFailed("SSRF DNS lookup timed out".into()))?
         .map_err(|e| ProbeError::ProbeFailed(format!("SSRF check failed: {e}")))?;
 
     let mut builder = reqwest::Client::builder()
@@ -92,3 +109,7 @@ pub async fn build_ssrf_client(
         .build()
         .map_err(|e| ProbeError::ProbeFailed(format!("HTTP client build failed: {e}")))
 }
+
+#[cfg(test)]
+#[path = "probe_common_tests.rs"]
+mod tests;

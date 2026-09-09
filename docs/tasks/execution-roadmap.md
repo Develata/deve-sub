@@ -100,8 +100,9 @@ all pass; NODE-012 through NODE-018 all pass.
 M8 CI optimization follows `plan/14-ci-verification.md`: retain full execution,
 validate the package inventory, record shadow impact proposals, verify artifact
 handoffs and aggregate every mandatory job. Selective PR execution remains
-deferred until shadow/full comparisons and per-shard receipts justify it;
-local configuration changes alone do not establish remote timing improvements.
+deferred until shadow/full comparisons justify it; source-bound Rust shard
+receipts supplement job aggregation without changing the execution set.
+Local configuration changes alone do not establish remote timing improvements.
 
 Milestone implementation status and executed acceptance evidence are distinct.
 Use [`tests/acceptance/matrix.yaml`](../../tests/acceptance/matrix.yaml) as the

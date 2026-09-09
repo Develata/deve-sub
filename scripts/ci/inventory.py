@@ -1,6 +1,7 @@
 """Validate the full execution inventory independently of shadow selection."""
 from pathlib import Path
 import shlex
+import re
 
 from common import ROOT
 
@@ -48,9 +49,21 @@ def shards(workflow, packages):
         raise ValueError("all Rust shards must finish for complete feedback")
     if test["strategy"]["matrix"].keys() != {"include"}:
         raise ValueError("only the complete static include matrix is supported")
+    mapped = matrix_shards(workflow)
+    seen = {package for members in mapped.values() for package in members}
+    if seen != set(packages):
+        raise ValueError(f"shard coverage mismatch: missing={set(packages)-seen}, extra={seen-set(packages)}")
+    return mapped
+
+
+def matrix_shards(workflow):
+    """Read the single static partition authority without needing a compiler."""
+    test = workflow["jobs"]["test"]
     mapped, seen = {}, set()
     for entry in test["strategy"]["matrix"]["include"]:
         shard = entry["shard"]
+        if not isinstance(shard, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", shard):
+            raise ValueError("invalid shard name")
         tokens = shlex.split(entry["crates"])
         if not tokens or len(tokens) % 2 or any(t != "-p" for t in tokens[::2]):
             raise ValueError(f"invalid package list for {shard}")
@@ -59,8 +72,8 @@ def shards(workflow, packages):
             raise ValueError(f"duplicate shard/package owner: {shard}")
         mapped[shard] = members
         seen.update(members)
-    if seen != set(packages):
-        raise ValueError(f"shard coverage mismatch: missing={set(packages)-seen}, extra={seen-set(packages)}")
+    if not mapped:
+        raise ValueError("empty shard matrix")
     return mapped
 
 

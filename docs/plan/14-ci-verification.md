@@ -48,6 +48,23 @@ not-run, never pass. A missing job, unexpected skip, cancellation, timeout or
 failure blocks the gate. Job success does not promote historical matrix
 statuses or claim all registered acceptance cases passed.
 
+Each Rust matrix invocation writes a source-bound execution receipt before
+starting Cargo and finalizes it after the process exits. The wrapper constructs
+the existing locked/all-targets/all-features command from the package list; it
+does not accept an arbitrary shell command or a test filter. The static matrix
+remains the package-partition authority. Receipts record the command, compiler,
+packages, elapsed time and terminal outcome, including failure or cancellation.
+Process children belong to the invocation and are stopped on cancellation.
+
+The final gate requires exactly one successful receipt for every static Rust
+shard, in addition to successful GitHub job results. It rejects missing, extra,
+incomplete, stale or mismatched receipts and source changes during execution.
+Source identity covers repository fixtures as well as code. Receipt collection
+uses artifacts from the current workflow run/attempt, outside the checkout.
+This is command-execution evidence, not a signature or a claim that ignored
+tests and associated acceptance cases passed. Doctests and runtime capabilities
+remain separate mandatory jobs; selective PR execution is still deferred.
+
 ## Artifacts and caches
 
 Binary and WASM consumers verify the producer manifest before execution. The
@@ -91,6 +108,8 @@ members, reverse test consumers, unknown changes, invalid evidence, unexpected
 skips and artifact corruption. `python3 scripts/ci/plan.py` exercises real
 metadata/workflow/case inventory. Browser smoke exercises isolated lifecycle.
 Existing Rust, docs, compatibility, browser, soak and Docker gates remain.
+Receipt tests additionally cover process failure/cancellation, source drift,
+invalid command scope, incomplete collections and replay across attempts.
 
 Enable selective PR execution only after shadow/full comparisons demonstrate
 complete mappings and per-shard execution receipts exist. The current phase

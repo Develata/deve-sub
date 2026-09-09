@@ -33,11 +33,43 @@ Verification requires `--manifest-sha256` from the producer's separate job
 output. A manifest shipped inside a replaced artifact cannot certify its own
 replacement contents; empty, stale or mismatched expected digests fail closed.
 
+## Rust shard execution receipts
+
+`python3 scripts/ci/run_shard.py --shard NAME --packages="-p PACKAGE ..."
+--output PATH` runs exactly `cargo test --locked --all-targets --all-features`
+with the listed packages. It uses argv execution, never a shell. A receipt is
+written before spawning and finalized when Cargo terminates. Missing compiler,
+spawn errors, nonzero exit, cancellation and changed source identity cannot
+produce a passing receipt. Cancellation stops the invocation's process group.
+
+Schema version 1 binds `kind: rust-shard-execution`, source identity (including
+all repository fixtures), workflow run/attempt, shard, ordered packages and
+argv, `profile: test`, Cargo-default target selection, actual rustc version/host,
+UTC start/finish timestamps, monotonic elapsed milliseconds, exit code, status
+and a bounded diagnostic. The initial `running` state and terminal `fail` or
+`cancelled` states are non-pass. Only a completed command with exit code zero
+and unchanged source may report `pass`. No ambient environment or credentials
+are collected. This is command evidence; it does not enumerate passing cases
+or turn Cargo's ignored tests into passes.
+
+Each job uploads `rust-execution-NAME/receipt.json`. The final gate downloads
+these artifacts without merging their directories and requires exactly the
+static matrix's shard set. Unknown fields, malformed values, files/symlinks,
+source/run/command/compiler mismatches, missing receipts and non-pass results
+are errors. The current runner/verifier supports Linux amd64 Rust shards;
+cross-platform container validation remains in the separate multiarch job.
+GitHub job results are checked independently; a receipt cannot
+override a failed job. Receipts are diagnostic evidence from the workflow,
+not a publisher signature or a cryptographic attestation of execution.
+
 ## Final result
 
-`python3 scripts/ci/gate.py` consumes GitHub's `needs` job results and the
-current event, writes a schema-versioned report, and exits nonzero unless
-every mandatory job succeeded. The only event-specific exclusion is multiarch
+`python3 scripts/ci/gate.py --receipts ROOT --output PATH` consumes GitHub's
+`needs` job results, the current event and the complete Rust receipt set.
+It writes schema version 2 with job and shard outcomes, and exits nonzero unless
+every mandatory job and Rust receipt succeeded. Historical version 1 reports
+remain historical evidence; they cannot substitute for current receipts.
+The only event-specific exclusion is multiarch
 on PR, reported as `not-run`. Unknown/missing jobs and unexpected skips fail.
 The report is job evidence; it never asserts that all matrix cases executed.
 Publication still requires the release workflow and its existing approvals.

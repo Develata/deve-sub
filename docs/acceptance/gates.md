@@ -72,6 +72,9 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
   `python3 -m unittest discover -s scripts/ci/tests` and
   `python3 scripts/ci/plan.py`. A shadow proposal never skips the full baseline
   or promotes registered matrix evidence into current execution results.
+  Rust matrix jobs use `scripts/ci/run_shard.py`; the final gate also checks
+  the complete current-source/current-attempt receipt set. Missing or cancelled
+  execution evidence fails the gate even if other jobs succeeded.
 
 - `python3 scripts/check_architecture.py`: Cargo boundaries, scoped HTTP state,
   optional OpenAPI dependency, source fuse and immutable Action references.

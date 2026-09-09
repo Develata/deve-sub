@@ -7,8 +7,10 @@ from pathlib import Path
 import sys
 
 sys.dont_write_bytecode = True
-from common import write_json
-from inventory import REQUIRED_JOBS
+import yaml
+from common import ROOT, identity, write_json
+from execution import run_context, verify_collection
+from inventory import REQUIRED_JOBS, matrix_shards
 
 
 def evaluate(needs, event):
@@ -31,10 +33,20 @@ def evaluate(needs, event):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--receipts", type=Path, required=True)
     args = parser.parse_args()
     report = evaluate(json.loads(os.environ["CI_NEEDS"]), os.environ["GITHUB_EVENT_NAME"])
-    report.update({"commit": os.environ["GITHUB_SHA"], "run_id": os.environ["GITHUB_RUN_ID"],
-                   "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"]})
+    report["schema_version"] = 2
+    try:
+        source = identity()
+        run = run_context(source)
+        partitions = matrix_shards(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
+        receipts, errors = verify_collection(args.receipts, partitions, source, run)
+        report.update({**source, **run, "rust_shards": receipts})
+        report["errors"].extend(errors)
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        report["errors"].append(f"Rust receipt verification failed: {error}")
+    report["status"] = "fail" if report["errors"] else "pass"
     write_json(args.output, report)
     print(json.dumps(report, indent=2))
     if report["errors"]:

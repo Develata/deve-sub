@@ -45,12 +45,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # WHY: Phase 1 CI parallelization — the former monolithic `rust` job ran
-  # fmt→clippy→test→doc→openapi serially (~6m wall). Splitting into
-  # independent jobs lets GitHub Actions run them concurrently, cutting the
-  # critical path from ~6m to the slowest shard (~2m). Test coverage is
-  # identical: every shard runs `cargo test --all-targets --all-features` on
-#   the same crate set, just partitioned by `-p`. See ADR-0008.
+  # WHY (ADR-0008): independent checks and complete package shards run in
+  # parallel, retaining the locked/all-targets/all-features test baseline.
   fmt-check:
     name: fmt-check
     runs-on: ubuntu-latest
@@ -77,12 +73,8 @@ jobs:
           key: clippy
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
-  # WHY: per-crate test shards. `fail-fast: false` so all shards run to
-  # completion even if one fails — gives complete feedback in one cycle
-  # instead of cancelling remaining shards on first failure. Shards are
-  # grouped by compile boundary + weight: lightweight leaf crates (kernel,
-  # contract, domain, security, observability, inmemory) are merged into
-  # `core` and `infra` to stay within the 20-concurrent-job GHA limit.
+  # WHY: finish every shard even on failure, and retain each command receipt.
+  # Grouping small crates keeps the static matrix within runner capacity.
   test:
     name: test:${{ matrix.shard }}
     runs-on: ubuntu-latest
@@ -116,7 +108,18 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: test-${{ matrix.shard }}
-      - run: cargo test --locked --all-targets --all-features ${{ matrix.crates }}
+      - name: Run Rust shard with execution receipt
+        env:
+          CI_SHARD: ${{ matrix.shard }}
+          CI_PACKAGES: ${{ matrix.crates }}
+        run: python3 scripts/ci/run_shard.py --shard "$CI_SHARD" --packages="$CI_PACKAGES" --output "$RUNNER_TEMP/rust-execution/receipt.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: rust-execution-${{ matrix.shard }}
+          path: ${{ runner.temp }}/rust-execution/receipt.json
+          if-no-files-found: error
+          retention-days: 7
 
   test-doc:
     name: test-doc
@@ -146,10 +149,8 @@ jobs:
           cargo run --locked --all-features --bin deve-sub -- openapi > /tmp/openapi.json
           diff -u /tmp/openapi.json docs/openapi/openapi.json
 
-  # WHY: fan-in gate — downstream jobs (browser-e2e, docker, multiarch)
-  # depend on this single job instead of enumerating every shard. If any
-  # upstream shard fails, GitHub Actions skips this job, which propagates
-  # the failure to all downstream consumers (fail-closed).
+  # WHY: one Rust fan-in blocks downstream consumers on any failed shard.
+  # The final acceptance gate independently validates every shard receipt.
   rust-gate:
     name: rust-gate
     runs-on: ubuntu-latest
@@ -211,8 +212,7 @@ jobs:
           python3 scripts/ci/artifact.py create --kind wasm --root apps/web/dist
           echo "manifest-sha256=$(sha256sum apps/web/dist/.ci-artifact.json | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Upload WASM dist artifact
-        # WHY (Phase 3-A): browser-e2e downloads this instead of rebuilding
-        # the WASM frontend, saving ~2m of dioxus install + build time.
+        # WHY (ADR-0008, Phase 3-A): browser-e2e reuses this verified build.
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: wasm-dist
@@ -221,10 +221,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # WHY (Phase 3-B): build the release binary once here so browser-e2e can
-  # download it instead of compiling its own. docker/multiarch still build
-  # via Dockerfile to verify the Docker build pipeline itself (contract
-  # stability — performance must not weaken build verification).
+  # WHY (ADR-0008, Phase 3-B): runtime tests share this candidate binary;
+  # Docker retains its source build to verify the container build pipeline.
   build-release:
     name: build-release
     runs-on: ubuntu-latest
@@ -298,10 +296,7 @@ jobs:
     needs: [rust-gate, web-wasm, build-release]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # WHY (Phase 3-A/B): download pre-built WASM dist + release binary
-      # instead of compiling them here. Saves ~5m (dioxus install + WASM
-      # build + cargo build --release). E2E's global-setup.ts finds them
-      # at the default paths (target/release/deve-sub, apps/web/dist).
+      # WHY (ADR-0008, Phase 3-A/B): consume the exact producer artifacts.
       - name: Download WASM dist
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -351,10 +346,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build Docker image
-        # WHY (Phase 3-F): use buildx with GHA cache to reuse Docker layers
-        # from multiarch (same Dockerfile). On cold cache this matches plain
-        # docker build speed; on warm cache the builder stage (cargo build +
-        # WASM build) is fully cached, cutting ~10m.
+        # WHY (ADR-0008, Phase 3-F): share cache reads, isolate cache writers.
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
@@ -486,10 +478,18 @@ jobs:
     needs: [plan, fmt-check, clippy, test, test-doc, openapi-diff, rust-gate, compatibility, docs, web-wasm, build-release, resource-soak, supply-chain, browser-e2e, docker, multiarch]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: pip install pyyaml==6.0.3
+      - name: Download Rust shard receipts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: rust-execution-*
+          path: ${{ runner.temp }}/rust-receipts
+          merge-multiple: false
       - name: Require complete full-baseline job results
+        if: always()
         env:
           CI_NEEDS: ${{ toJSON(needs) }}
-        run: python3 scripts/ci/gate.py --output "$RUNNER_TEMP/ci-result.json"
+        run: python3 scripts/ci/gate.py --receipts "$RUNNER_TEMP/rust-receipts" --output "$RUNNER_TEMP/ci-result.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:

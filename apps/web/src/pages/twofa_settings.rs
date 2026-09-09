@@ -7,51 +7,15 @@
 #![cfg(target_family = "wasm")]
 
 use dioxus::prelude::*;
-use serde::{Deserialize, Serialize};
 
 use crate::i18n::{Language, t};
 use crate::pages::util::copy_to_clipboard;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TwoFactorSetupResponse {
-    secret: String,
-    otpauth_uri: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct TwoFactorVerifyRequest {
-    code: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TwoFactorVerifyResponse {
-    recovery_codes: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct TwoFactorDisableRequest {
-    password: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct RegenerateRecoveryCodesRequest {
-    password: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RegenerateRecoveryCodesResponse {
-    recovery_codes: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CurrentUserResponse {
-    user: CurrentUserDto,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CurrentUserDto {
-    two_factor_enabled: bool,
-}
+use deve_sub_contract::{
+    CurrentUserResponse, RegenerateRecoveryCodesRequest, RegenerateRecoveryCodesResponse,
+    TwoFactorDisableRequest, TwoFactorSetupResponse, TwoFactorVerifyRequest,
+    TwoFactorVerifyResponse,
+};
 
 #[derive(Clone, PartialEq)]
 enum Phase {
@@ -93,7 +57,9 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
         loading.set(true);
         spawn(async move {
             match crate::api::send::<TwoFactorSetupResponse, serde_json::Value>(
-                "POST", "/auth/2fa/setup", None,
+                "POST",
+                "/auth/2fa/setup",
+                None,
             )
             .await
             {
@@ -120,7 +86,9 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
         let req = TwoFactorVerifyRequest { code };
         spawn(async move {
             match crate::api::send::<TwoFactorVerifyResponse, TwoFactorVerifyRequest>(
-                "POST", "/auth/2fa/verify", Some(&req),
+                "POST",
+                "/auth/2fa/verify",
+                Some(&req),
             )
             .await
             {
@@ -150,7 +118,9 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
         let req = TwoFactorDisableRequest { password: pwd };
         spawn(async move {
             match crate::api::send::<serde_json::Value, TwoFactorDisableRequest>(
-                "POST", "/auth/2fa/disable", Some(&req),
+                "POST",
+                "/auth/2fa/disable",
+                Some(&req),
             )
             .await
             {
@@ -190,7 +160,10 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
     };
 
     let (secret, otpauth_uri) = match &*phase.read() {
-        Phase::AwaitingVerify { secret, otpauth_uri } => (secret.clone(), otpauth_uri.clone()),
+        Phase::AwaitingVerify {
+            secret,
+            otpauth_uri,
+        } => (secret.clone(), otpauth_uri.clone()),
         _ => (String::new(), String::new()),
     };
 

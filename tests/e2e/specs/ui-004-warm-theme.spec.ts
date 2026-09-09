@@ -8,6 +8,8 @@ test('UI-004: Minimal Warm theme — layout and design tokens correct', async ({
 
   const html = page.locator('html');
   await expect(html).toHaveClass(/theme-warm/);
+  await expect(page.locator('aside')).toHaveCSS('display', 'flex');
+  await expect(page.locator('aside')).toHaveCSS('width', '224px');
 
   await page.locator('aside button').filter({ hasText: /仪表盘|Dashboard/ }).click();
   await page.waitForLoadState('networkidle');

@@ -37,6 +37,7 @@ if [ "${DEVE_SUB_DX_SKIP_VERIFY:-0}" != "1" ]; then
   test -f "$DST/index.html" || { echo "FAIL: $DST/index.html missing" >&2; exit 1; }
   ls "$DST/assets/"*.wasm >/dev/null 2>&1 || { echo "FAIL: no .wasm in $DST/assets/" >&2; exit 1; }
   ls "$DST/assets/"*.js >/dev/null 2>&1 || { echo "FAIL: no .js in $DST/assets/" >&2; exit 1; }
+  ls "$DST/assets/"*.css >/dev/null 2>&1 || { echo "FAIL: no .css in $DST/assets/" >&2; exit 1; }
   echo "Web frontend built and verified at $DST"
 else
   echo "Web frontend built at $DST (verification skipped)"

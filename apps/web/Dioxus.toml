@@ -1,7 +1,3 @@
 [application]
 name = "deve-sub-web"
 asset_dir = "assets"
-
-[web.resource]
-dev = []
-style = ["src/styles/tailwind.css"]

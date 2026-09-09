@@ -3,36 +3,12 @@
 #![cfg(target_family = "wasm")]
 
 use dioxus::prelude::*;
-use serde::{Deserialize, Serialize};
 
-use crate::i18n::{Language, t};
+use crate::i18n::Language;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DashboardTrafficResponse {
-    pub total_upload: u64,
-    pub total_download: u64,
-    pub by_source_kind: Vec<SourceKindBreakdown>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceKindBreakdown {
-    pub source_kind: String,
-    pub upload: u64,
-    pub download: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrafficHistoryResponse {
-    pub scoped_to_subscription: bool,
-    pub points: Vec<TrafficHistoryPoint>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrafficHistoryPoint {
-    pub date: String,
-    pub total_upload: u64,
-    pub total_download: u64,
-}
+use deve_sub_contract::{
+    DashboardTrafficResponse, TrafficHistoryPointDto as TrafficHistoryPoint, TrafficHistoryResponse,
+};
 
 #[derive(Props, Clone, PartialEq)]
 pub struct DashboardProps {

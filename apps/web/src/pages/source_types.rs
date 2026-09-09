@@ -1,26 +1,24 @@
-//! DTO types for the sources page, matching `deve-sub-contract::source`.
+//! Shared API wire types and local presentation state.
 
 #![cfg(target_family = "wasm")]
 
-use serde::{Deserialize, Serialize};
+pub use deve_sub_contract::{
+    CreateSourceRequest, ListSourcesResponse, RefreshJobAcceptedResponse, SourceDto,
+    SourceRefreshJobDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
+};
 
 use crate::i18n::Language;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SourceTypeDto {
-    Auto,
-    Base64,
-    UriList,
-    MihomoYaml,
-    SingboxJson,
-    XrayJson,
-    V2rayJson,
-    Shadowrocket,
+/// Presentation labels and selection options for the shared source type.
+pub trait SourceTypePresentation: Sized {
+    fn label(self, language: Language) -> &'static str;
+    fn as_str(self) -> &'static str;
+    fn from_str(value: &str) -> Self;
+    const ALL: [Self; 8];
 }
 
-impl SourceTypeDto {
-    pub fn label(self, l: Language) -> &'static str {
+impl SourceTypePresentation for SourceTypeDto {
+    fn label(self, l: Language) -> &'static str {
         match (l, self) {
             (Language::Zh, Self::Auto) => "自动检测",
             (Language::En, Self::Auto) => "Auto",
@@ -35,7 +33,7 @@ impl SourceTypeDto {
         }
     }
 
-    pub fn as_str(self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Self::Auto => "auto",
             Self::Base64 => "base64",
@@ -48,7 +46,7 @@ impl SourceTypeDto {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    fn from_str(s: &str) -> Self {
         match s {
             "base64" => Self::Base64,
             "uri_list" => Self::UriList,
@@ -61,7 +59,7 @@ impl SourceTypeDto {
         }
     }
 
-    pub const ALL: [Self; 8] = [
+    const ALL: [Self; 8] = [
         Self::Auto,
         Self::Base64,
         Self::UriList,
@@ -71,92 +69,4 @@ impl SourceTypeDto {
         Self::V2rayJson,
         Self::Shadowrocket,
     ];
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct SourceFilterRulesDto {
-    #[serde(default)]
-    pub include_protocols: Vec<String>,
-    #[serde(default)]
-    pub exclude_protocols: Vec<String>,
-    #[serde(default)]
-    pub include_regions: Vec<String>,
-    #[serde(default)]
-    pub exclude_regions: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SourceDto {
-    pub id: String,
-    pub name: String,
-    pub source_type: SourceTypeDto,
-    pub url: String,
-    pub auto_update: bool,
-    pub update_interval_secs: u64,
-    pub enabled: bool,
-    pub keep_on_fail: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub filter_rules: Option<SourceFilterRulesDto>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ListSourcesResponse {
-    pub sources: Vec<SourceDto>,
-    pub next_cursor: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct CreateSourceRequest {
-    pub name: String,
-    pub source_type: SourceTypeDto,
-    pub url: String,
-    pub auto_update: bool,
-    pub update_interval_secs: u64,
-    pub keep_on_fail: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub filter_rules: Option<SourceFilterRulesDto>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct UpdateSourceRequest {
-    pub name: String,
-    pub source_type: SourceTypeDto,
-    pub url: String,
-    pub auto_update: bool,
-    pub update_interval_secs: u64,
-    pub enabled: bool,
-    pub keep_on_fail: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub filter_rules: Option<SourceFilterRulesDto>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceResponse {
-    pub source: SourceDto,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RefreshJobAcceptedResponse {
-    pub job_id: String,
-    pub source_id: String,
-    pub status: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceRefreshJobDto {
-    pub id: String,
-    pub source_id: String,
-    pub status: String,
-    pub phase: String,
-    pub started_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub finished_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_message: Option<String>,
-    pub new_nodes: u64,
-    pub duplicate_nodes: u64,
-    pub reactivated_nodes: u64,
-    pub missing_nodes: u64,
-    pub not_modified: bool,
 }

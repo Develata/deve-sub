@@ -20,8 +20,8 @@ use theme::Theme;
 
 use pages::{
     audit::AuditPage, dashboard::DashboardPage, login::LoginPage, nodes::NodesPage,
-    settings::SettingsPage, setup::SetupPage, sources::SourcesPage, subscriptions::SubscriptionsPage,
-    templates::TemplatesPage, users::UsersPage,
+    settings::SettingsPage, setup::SetupPage, sources::SourcesPage,
+    subscriptions::SubscriptionsPage, templates::TemplatesPage, users::UsersPage,
 };
 
 /// Top-level view state driven by auth status.
@@ -120,7 +120,7 @@ fn app() -> Element {
 
     let l = *lang.read();
 
-    match *auth_state.read() {
+    let view = match *auth_state.read() {
         AuthState::Checking => rsx! {
             div { class: "flex min-h-screen items-center justify-center bg-stone-50 dark:bg-stone-950",
                 div { class: "flex flex-col items-center gap-3",
@@ -259,6 +259,12 @@ fn app() -> Element {
                 }
             }
         }
+    };
+    rsx! {
+        // WHY: asset! registers the stylesheet with dx so production dist
+        // includes the file; legacy resource links alone did not copy it.
+        document::Stylesheet { href: asset!("/src/styles/tailwind.css") }
+        {view}
     }
 }
 

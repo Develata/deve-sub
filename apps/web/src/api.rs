@@ -107,63 +107,10 @@ pub async fn delete(path: &str) -> Result<(), ApiError> {
 
 pub mod auth {
     use super::*;
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct SetupAdminRequest {
-        pub username: String,
-        pub password: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct UserDto {
-        pub id: String,
-        pub username: String,
-        pub role: String,
-        pub enabled: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub expires_at: Option<String>,
-        pub traffic_quota: u64,
-        pub two_factor_enabled: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub last_login_at: Option<String>,
-        pub created_at: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct SetupAdminResponse {
-        pub user: UserDto,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct LoginRequest {
-        pub username: String,
-        pub password: String,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct LoginResponse {
-        pub user: UserDto,
-        pub requires_2fa: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub challenge_token: Option<String>,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct CurrentUserResponse {
-        pub user: UserDto,
-    }
-
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-    pub struct AuthStatusResponse {
-        pub initialized: bool,
-    }
-
-    #[derive(Debug, Clone, Serialize)]
-    pub struct LoginTwoFactorRequest {
-        pub challenge_token: String,
-        pub code: String,
-    }
+    pub use deve_sub_contract::{
+        AuthStatusResponse, CurrentUserResponse, LoginRequest, LoginResponse,
+        LoginTwoFactorRequest, SetupAdminRequest, SetupAdminResponse,
+    };
 
     pub async fn setup(username: &str, password: &str) -> Result<SetupAdminResponse, ApiError> {
         send(
@@ -201,10 +148,7 @@ pub mod auth {
         get("/auth/status").await
     }
 
-    pub async fn login_2fa(
-        challenge_token: &str,
-        code: &str,
-    ) -> Result<LoginResponse, ApiError> {
+    pub async fn login_2fa(challenge_token: &str, code: &str) -> Result<LoginResponse, ApiError> {
         send(
             "POST",
             "/auth/login/2fa",

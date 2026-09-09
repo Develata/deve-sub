@@ -7,6 +7,7 @@ use dioxus::prelude::*;
 use crate::api::send;
 use crate::i18n::{Language, format_t, t};
 use crate::pages::node_types::{ImportNodesRequest, ImportNodesResponse, SourceTypeDto};
+use crate::pages::source_types::SourceTypePresentation;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct ImportModalProps {
@@ -100,14 +101,14 @@ pub fn ImportModal(props: ImportModalProps) -> Element {
                                 value: "{source_type.read().as_str()}",
                                 onchange: move |e| {
                                     let v = e.value();
-                                    for st in SourceTypeDto::all() {
+                                    for st in &SourceTypeDto::ALL {
                                         if st.as_str() == v {
                                             source_type.set(*st);
                                             break;
                                         }
                                     }
                                 },
-                                for st in SourceTypeDto::all() {
+                                for st in &SourceTypeDto::ALL {
                                     option { value: "{st.as_str()}", "{st.as_str()}" }
                                 }
                             }

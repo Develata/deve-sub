@@ -25,6 +25,7 @@ frontend = []
 workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
+deve-sub-contract = { workspace = true }
 dioxus = { workspace = true }
 web-sys = { workspace = true }
 wasm-bindgen = { workspace = true }

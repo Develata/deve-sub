@@ -7,7 +7,8 @@ use dioxus::prelude::*;
 use crate::i18n::{Language, t};
 use crate::pages::source_types::{
     CreateSourceRequest, ListSourcesResponse, RefreshJobAcceptedResponse, SourceDto,
-    SourceRefreshJobDto, SourceResponse, SourceTypeDto, UpdateSourceRequest,
+    SourceRefreshJobDto, SourceResponse, SourceTypeDto, SourceTypePresentation,
+    UpdateSourceRequest,
 };
 use crate::pages::util::sleep_ms;
 
@@ -103,9 +104,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         spawn(async move {
             let path = format!("/sources/{id}/refresh");
             let accepted = match crate::api::send::<RefreshJobAcceptedResponse, serde_json::Value>(
-                "POST",
-                &path,
-                None,
+                "POST", &path, None,
             )
             .await
             {
@@ -129,7 +128,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                 }
                 match crate::api::get::<SourceRefreshJobDto>(&job_path).await {
                     Ok(j) if matches!(j.status.as_str(), "completed" | "failed" | "cancelled") => {
-                        break j
+                        break j;
                     }
                     Ok(_) => sleep_ms(1000).await,
                     Err(e) => {
@@ -143,11 +142,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
             let msg = match job.status.as_str() {
                 "completed" => {
                     if job.not_modified {
-                        format!(
-                            "{} {}",
-                            t(l, "sources.node_count"),
-                            t(l, "common.success"),
-                        )
+                        format!("{} {}", t(l, "sources.node_count"), t(l, "common.success"),)
                     } else {
                         format!(
                             "{} {}, +{} ~{} -{}",
@@ -160,7 +155,9 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                     }
                 }
                 "cancelled" => t(l, "common.cancelled").to_string(),
-                _ => job.error_message.unwrap_or_else(|| t(l, "common.error").to_string()),
+                _ => job
+                    .error_message
+                    .unwrap_or_else(|| t(l, "common.error").to_string()),
             };
             refresh_msg.set(msg);
             fetch_sources();

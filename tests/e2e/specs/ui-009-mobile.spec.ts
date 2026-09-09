@@ -4,8 +4,13 @@ test('UI-009 (mobile): can view subscriptions, refresh sources, and copy links',
   await expect(page.locator('main')).toBeVisible({ timeout: 10000 });
 
   const hamburger = page.locator('button[aria-label="Menu"]');
-  await expect(hamburger).toBeVisible();
-  await hamburger.click();
+  const mobile = (page.viewportSize()?.width ?? 1280) < 768;
+  if (mobile) {
+    await expect(hamburger).toBeVisible();
+    await hamburger.click();
+  } else {
+    await expect(hamburger).toBeHidden();
+  }
 
   await page.locator('aside button').filter({ hasText: /长期订阅|Subscriptions/ }).click();
   await page.waitForLoadState('networkidle');
@@ -19,7 +24,7 @@ test('UI-009 (mobile): can view subscriptions, refresh sources, and copy links',
 
   await page.screenshot({ path: 'screenshots/ui-009-mobile-subscriptions.png' });
 
-  await hamburger.click();
+  if (mobile) await hamburger.click();
   await page.locator('aside button').filter({ hasText: /订阅源|Sources/ }).click();
   await page.waitForLoadState('networkidle');
 

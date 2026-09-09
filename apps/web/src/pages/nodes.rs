@@ -19,6 +19,9 @@ use crate::pages::node_types::{
 const ITEM_HEIGHT: f64 = 48.0;
 const VIEWPORT_HEIGHT: f64 = 600.0;
 const BUFFER: usize = 5;
+// WHY: virtual rows lay out independently; share explicit tracks with the header
+// so content width and generated utility availability cannot shift columns.
+const ROW_LAYOUT: &str = "display: grid; grid-template-columns: 40px minmax(240px, 1fr) 112px 80px 80px 176px; min-width: 728px;";
 
 #[derive(Props, Clone, PartialEq)]
 pub struct NodesProps {
@@ -80,9 +83,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
             let path = format!("/nodes?limit=100&cursor={c}");
             match get::<ListNodesResponse>(&path).await {
                 Ok(resp) => {
-                    let mut current = nodes.read().clone();
-                    current.extend(resp.nodes);
-                    nodes.set(current);
+                    nodes.write().extend(resp.nodes);
                     cursor.set(resp.next_cursor);
                     loading_more.set(false);
                 }
@@ -109,7 +110,11 @@ pub fn NodesPage(props: NodesProps) -> Element {
                 Ok(r) => {
                     batch_msg.set(format_t(
                         l,
-                        if enabled { "nodes.batch_enabled_ok" } else { "nodes.batch_disabled_ok" },
+                        if enabled {
+                            "nodes.batch_enabled_ok"
+                        } else {
+                            "nodes.batch_disabled_ok"
+                        },
                         r.updated as usize,
                     ));
                     fetch_nodes();
@@ -122,14 +127,13 @@ pub fn NodesPage(props: NodesProps) -> Element {
         });
     };
 
-    let filtered: Vec<NodeDto> = {
-        let all = nodes.read();
+    let all = nodes.read();
+    let filtered: Vec<&NodeDto> = {
         let s = search.read().to_lowercase();
         let p = protocol_filter.read().clone();
         all.iter()
             .filter(|n| s.is_empty() || n.display_name.to_lowercase().contains(&s))
             .filter(|n| p.is_empty() || n.protocol == p)
-            .cloned()
             .collect()
     };
 
@@ -144,13 +148,18 @@ pub fn NodesPage(props: NodesProps) -> Element {
     let total = filtered.len();
     let total_height = total as f64 * ITEM_HEIGHT;
     let current_scroll = *scroll_top.read();
-    let start_idx = ((current_scroll / ITEM_HEIGHT) as usize).saturating_sub(BUFFER);
     let visible_count = ((VIEWPORT_HEIGHT / ITEM_HEIGHT) as usize) + 2 * BUFFER;
+    // WHY: a filter or refresh may shorten the list before the DOM scroll
+    // event arrives; the window must remain valid even during that render.
+    let start_idx = ((current_scroll / ITEM_HEIGHT) as usize)
+        .saturating_sub(BUFFER)
+        .min(total.saturating_sub(visible_count));
     let end_idx = (start_idx + visible_count).min(total);
     let visible_items: Vec<&NodeDto> = filtered
         .iter()
         .skip(start_idx)
         .take(end_idx - start_idx)
+        .copied()
         .collect();
     let offset_y = start_idx as f64 * ITEM_HEIGHT;
 
@@ -211,12 +220,20 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     r#type: "search",
                     placeholder: {t(l, "nodes.search")},
                     value: "{search}",
-                    oninput: move |e| search.set(e.value()),
+                    oninput: move |e| {
+                        search.set(e.value());
+                        scroll_top.set(0.0);
+                        reset_list_scroll();
+                    },
                 }
                 select {
                     class: "rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
                     value: "{protocol_filter}",
-                    onchange: move |e| protocol_filter.set(e.value()),
+                    onchange: move |e| {
+                        protocol_filter.set(e.value());
+                        scroll_top.set(0.0);
+                        reset_list_scroll();
+                    },
                     option { value: "", {t(l, "nodes.all_protocols")} }
                     for p in &protocols {
                         option { value: "{p}", "{p}" }
@@ -234,6 +251,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                 div {
                     class: "overflow-y-auto rounded-lg border border-stone-200 dark:border-stone-800",
                     id: "nodes-scroll",
+                    "data-total-rows": "{total}",
                     style: "height: {VIEWPORT_HEIGHT}px;",
                     onscroll: move |_| {
                         if let Some(el) = web_sys::window()
@@ -245,10 +263,13 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     },
                     div { style: "height: {total_height}px; position: relative;",
                         div { style: "position: absolute; top: {offset_y}px; left: 0; right: 0;",
-                            div { class: "flex items-center border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
+                            div { class: "items-center border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
+                                style: "{ROW_LAYOUT}",
+                                "data-node-header": "true",
                                 div { class: "w-10 px-3 py-3" }
-                                div { class: "flex-1 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.protocol")} }
-                                div { class: "w-28 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.region")} }
+                                div { class: "flex-1 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.override_name")} }
+                                div { class: "w-28 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.protocol")} }
+                                div { class: "w-20 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.region")} }
                                 div { class: "w-20 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.status")} }
                                 div { class: "w-44 px-3 py-2 text-xs font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.actions")} }
                             }
@@ -279,8 +300,9 @@ pub fn NodesPage(props: NodesProps) -> Element {
                                     rsx! {
                                         div {
                                             key: "{node_id}",
+                                            "data-node-row": "{node_id}",
                                             class: "{row_class}",
-                                            style: "height: {ITEM_HEIGHT}px;",
+                                            style: "{ROW_LAYOUT} height: {ITEM_HEIGHT}px;",
                                             onclick: move |_| {
                                                 let mut s = selected.write();
                                                 if s.contains(&onclick_id) {
@@ -304,7 +326,8 @@ pub fn NodesPage(props: NodesProps) -> Element {
                                                     },
                                                 }
                                             }
-                                            div { class: "flex-1 px-3 py-2 text-sm text-stone-900 dark:text-stone-100",
+                                            div { class: "px-3 py-2 text-sm text-stone-900 dark:text-stone-100",
+                                                style: "min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;",
                                                 span { class: "font-medium", "{node.display_name}" }
                                                 span { class: "ml-2 text-xs text-stone-400 dark:text-stone-500", "{node.host}:{node.port}" }
                                             }
@@ -424,5 +447,14 @@ pub fn NodesPage(props: NodesProps) -> Element {
                 }
             },
         }
+    }
+}
+
+fn reset_list_scroll() {
+    if let Some(element) = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.get_element_by_id("nodes-scroll"))
+    {
+        element.set_scroll_top(0);
     }
 }

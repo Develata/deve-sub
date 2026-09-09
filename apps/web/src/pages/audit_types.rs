@@ -1,25 +1,8 @@
-//! DTO types for the audit log page, matching `deve-sub-contract::audit`.
+//! Shared API wire types and local presentation state.
 
 #![cfg(target_family = "wasm")]
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuditLogDto {
-    pub id: String,
-    pub actor_id: Option<String>,
-    pub action: String,
-    pub target_type: Option<String>,
-    pub target_id: Option<String>,
-    pub details_json: Option<String>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ListAuditLogsResponse {
-    pub entries: Vec<AuditLogDto>,
-    pub next_cursor: Option<String>,
-}
+pub use deve_sub_contract::{AuditLogDto, ListAuditLogsResponse};
 
 // WHY: these constants must match the action/target_type strings the
 // server actually writes (see `deve-sub-application/src/audit/commands.rs`).

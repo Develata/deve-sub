@@ -37,7 +37,10 @@ async function login(page: Page, context: BrowserContext): Promise<void> {
 
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  await expect(page.locator('aside')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('aside')).toBeAttached({ timeout: 15000 });
+  await expect(page.locator('main')).toBeVisible();
+  // Class names alone passed when the production stylesheet was missing.
+  await expect(page.locator('main')).toHaveCSS('padding-top', '24px');
   await page.waitForLoadState('networkidle');
 }
 

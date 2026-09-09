@@ -82,12 +82,18 @@ pub fn UsersPage(props: UsersProps) -> Element {
                 let req = CreateUserRequest {
                     username,
                     password,
-                    role: f_role.read().clone(),
+                    role: if *f_role.read() == "admin" {
+                        deve_sub_contract::RoleDto::Admin
+                    } else {
+                        deve_sub_contract::RoleDto::User
+                    },
                 };
                 saving.set(true);
                 spawn(async move {
                     match crate::api::send::<CreateUserResponse, CreateUserRequest>(
-                        "POST", "/users", Some(&req),
+                        "POST",
+                        "/users",
+                        Some(&req),
                     )
                     .await
                     {
@@ -107,7 +113,11 @@ pub fn UsersPage(props: UsersProps) -> Element {
                     let path = format!("/users/{id}/disable");
                     match crate::api::send::<(), serde_json::Value>("POST", &path, None).await {
                         Ok(_) => {
-                            info_msg.set(format!("{}: {}", t(l, "users.disabled"), u.username.clone()));
+                            info_msg.set(format!(
+                                "{}: {}",
+                                t(l, "users.disabled"),
+                                u.username.clone()
+                            ));
                             modal.set(Modal::None);
                             fetch_users();
                         }
@@ -123,7 +133,11 @@ pub fn UsersPage(props: UsersProps) -> Element {
                     let path = format!("/users/{id}/force-logout");
                     match crate::api::send::<(), serde_json::Value>("POST", &path, None).await {
                         Ok(_) => {
-                            info_msg.set(format!("{}: {}", t(l, "users.force_logout_done"), u.username.clone()));
+                            info_msg.set(format!(
+                                "{}: {}",
+                                t(l, "users.force_logout_done"),
+                                u.username.clone()
+                            ));
                             modal.set(Modal::None);
                         }
                         Err(e) => form_error.set(e.message),
@@ -186,12 +200,12 @@ pub fn UsersPage(props: UsersProps) -> Element {
                                             td { class: "px-4 py-3 font-medium text-stone-900 dark:text-stone-100", "{u.username}" }
                                             td { class: "px-4 py-3",
                                                 span {
-                                                    class: if u.role == "admin" {
+                                                    class: if u.role == deve_sub_contract::RoleDto::Admin {
                                                         "inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
                                                     } else {
                                                         "inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-400"
                                                     },
-                                                    "{u.role}"
+                                                    if u.role == deve_sub_contract::RoleDto::Admin { "admin" } else { "user" }
                                                 }
                                             }
                                             td { class: "px-4 py-3",

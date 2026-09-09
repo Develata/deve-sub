@@ -12,7 +12,6 @@ pub mod error;
 pub mod scheduler;
 pub mod traffic;
 pub mod traffic_history;
-pub mod traffic_history_scheduler;
 
 pub use commands::{
     CreateSubscriptionParams, CreateSubscriptionResult, CreateTempLinkParams, CreateTempLinkResult,
@@ -32,7 +31,5 @@ pub use traffic::{
     record_traffic,
 };
 pub use traffic_history::{
-    TrafficHistoryPoint, aggregate_daily_traffic, list_traffic_history_for_subscription,
-    list_traffic_history_global,
+    TrafficHistoryPoint, list_traffic_history_for_subscription, list_traffic_history_global,
 };
-pub use traffic_history_scheduler::TrafficDailySnapshotScheduler;

@@ -24,6 +24,7 @@ use deve_sub_kernel::{SourceId, SourceRefreshJobId};
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
+use crate::state::SourceState;
 
 /// Shared map of cancel flags for in-flight refresh jobs, keyed by job ID.
 /// Stored in `AppState` alongside the probe `cancelled_flags`.
@@ -45,10 +46,11 @@ pub type RefreshCancelFlags = Arc<Mutex<HashMap<SourceRefreshJobId, Arc<AtomicBo
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 409, description = "Refresh already in progress", body = ErrorResponse),
         (status = 500, description = "Internal error", body = ErrorResponse),
+        (status = 503, description = "Background jobs unavailable", body = ErrorResponse),
     )
 )]
 pub async fn refresh_source(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<(StatusCode, Json<RefreshJobAcceptedResponse>), (StatusCode, Json<ErrorResponse>)> {
@@ -98,29 +100,15 @@ pub async fn refresh_source(
     }
 
     let cancelled = Arc::new(AtomicBool::new(false));
-    // WHY: a poisoned `Mutex` means a prior task panicked while holding the
-    // lock. Using `if let Ok` here would silently skip registration, leaving
-    // this in-flight job uncancellable — cancel would fall back to a DB
-    // status write the runner never observes. Surface the failure so the
-    // operator can restart the process to restore cancellation (SV-004).
-    match state.refresh_cancel_flags.lock() {
-        Ok(mut flags) => {
-            flags.insert(job_id, Arc::clone(&cancelled));
-        }
-        Err(poisoned) => {
-            tracing::error!(
-                "refresh_cancel_flags mutex poisoned; job {job_id} is uncancellable until restart"
-            );
-            // WHY: recover the inner guard from the poisoned error so the job
-            // is still registered despite the prior panic — the map itself is
-            // structurally valid, only the mutex flag is poisoned.
-            let mut flags = poisoned.into_inner();
-            flags.insert(job_id, Arc::clone(&cancelled));
-        }
-    }
+    let registration = deve_sub_application::CancellationRegistration::new(
+        Arc::clone(&state.refresh_cancel_flags),
+        job_id,
+        Arc::clone(&cancelled),
+    );
 
     let state2 = state.clone();
-    state.job_supervisor.spawn(async move {
+    let admitted = state.job_supervisor.spawn(async move {
+        let _registration = registration;
         let deps = RefreshDeps {
             source_repo: state2.source_repo.as_ref(),
             snapshot_repo: state2.snapshot_repo.as_ref(),
@@ -129,20 +117,24 @@ pub async fn refresh_source(
             fetcher: state2.fetcher.as_ref(),
             geoip: state2.geoip.as_ref(),
         };
-        let _ = execute_refresh_job(&deps, job_id, source_id, &cancelled).await;
-        // WHY: recover from a poisoned mutex so the flag map does not leak
-        // the entry for this job. A poisoned lock means a prior task panicked
-        // while holding it; the map itself is structurally valid. Matches the
-        // probe-runner cleanup pattern in probes.rs. See R3-28.
-        match state2.refresh_cancel_flags.lock() {
-            Ok(mut flags) => {
-                flags.remove(&job_id);
-            }
-            Err(poisoned) => {
-                poisoned.into_inner().remove(&job_id);
-            }
+        if let Err(error) = execute_refresh_job(&deps, job_id, source_id, &cancelled).await {
+            tracing::warn!(%error, "source refresh job failed");
         }
     });
+    if admitted.is_err() {
+        if let Err(error) = state
+            .refresh_job_repo
+            .mark_failed(job_id, "background job capacity or shutdown")
+            .await
+        {
+            tracing::error!(%error, "failed to release rejected refresh job lease");
+        }
+        return Err(err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "jobs_unavailable",
+            "background jobs unavailable",
+        ));
+    }
 
     Ok((
         StatusCode::ACCEPTED,
@@ -169,7 +161,7 @@ pub async fn refresh_source(
     )
 )]
 pub async fn get_refresh_job(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     _admin: AdminUser,
     Path(job_id): Path<String>,
 ) -> Result<Json<SourceRefreshJobDto>, (StatusCode, Json<ErrorResponse>)> {
@@ -220,7 +212,7 @@ pub async fn get_refresh_job(
     )
 )]
 pub async fn get_latest_refresh_job(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<SourceRefreshJobDto>, (StatusCode, Json<ErrorResponse>)> {
@@ -272,7 +264,7 @@ pub async fn get_latest_refresh_job(
     )
 )]
 pub async fn cancel_refresh_job(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     _admin: AdminUser,
     Path(job_id): Path<String>,
 ) -> Result<Json<CancelRefreshJobResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -334,7 +326,7 @@ fn job_to_dto(job: &deve_sub_domain::SourceRefreshJob) -> SourceRefreshJobDto {
         id: job.id.to_string(),
         source_id: job.source_id.to_string(),
         status: job.status.as_kebab().to_owned(),
-        phase: job.phase.as_db_str().to_owned(),
+        phase: job.phase.as_kebab().to_owned(),
         started_at: ts_to_iso8601(job.started_at),
         finished_at: job.finished_at.map(ts_to_iso8601),
         error_message: job.error_message.clone(),

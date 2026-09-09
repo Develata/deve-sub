@@ -5,10 +5,12 @@
 //! in the API crate.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// Overall health status reported by health probes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum HealthStatusDto {
     /// Service is alive and ready.
@@ -25,7 +27,8 @@ pub enum HealthStatusDto {
 /// fields are identical today: liveness and readiness probes may diverge
 /// (e.g. readiness could add per-check details). Keeping them separate
 /// preserves independent evolution without a wire-format break.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct HealthLiveResponse {
     /// Overall health status.
     pub status: HealthStatusDto,
@@ -37,7 +40,8 @@ pub struct HealthLiveResponse {
 
 /// Response body for `GET /health/ready`. See [`HealthLiveResponse`] for why
 /// this is a separate type.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct HealthReadyResponse {
     /// Overall health status.
     pub status: HealthStatusDto,

@@ -15,6 +15,7 @@ use utoipa::openapi::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::AppState;
+use crate::state::HealthState;
 
 /// Build the OpenAPI document with info from the application config.
 ///
@@ -111,7 +112,7 @@ pub fn build_api_router(state: AppState) -> (Router, OpenApi) {
         (status = 200, description = "Service is alive", body = HealthLiveResponse)
     )
 )]
-async fn health_live(State(state): State<AppState>) -> Json<HealthLiveResponse> {
+async fn health_live(State(state): State<HealthState>) -> Json<HealthLiveResponse> {
     let view = HealthView::live(&state.config.product_name, env!("CARGO_PKG_VERSION"));
     Json(HealthLiveResponse {
         status: view.status,
@@ -141,7 +142,7 @@ async fn health_live(State(state): State<AppState>) -> Json<HealthLiveResponse> 
         (status = 503, description = "Service is not ready", body = HealthReadyResponse)
     )
 )]
-async fn health_ready(State(state): State<AppState>) -> (StatusCode, Json<HealthReadyResponse>) {
+async fn health_ready(State(state): State<HealthState>) -> (StatusCode, Json<HealthReadyResponse>) {
     let db_ok = state.db_health.check().await.is_ok();
     let web_ok = if state.config.server.serve_web {
         std::path::Path::new(&state.config.server.web_dist_dir).exists()

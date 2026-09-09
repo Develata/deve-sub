@@ -19,6 +19,7 @@ use deve_sub_kernel::{NodeId, TagId};
 use crate::AppState;
 use crate::auth::{AdminUser, err};
 use crate::nodes::tag_to_dto;
+use crate::state::NodeState;
 
 const BAD_REQUEST: StatusCode = StatusCode::BAD_REQUEST;
 const CONFLICT: StatusCode = StatusCode::CONFLICT;
@@ -31,7 +32,7 @@ const NOT_FOUND: StatusCode = StatusCode::NOT_FOUND;
     params(("id" = String, Path, description = "Node ULID")), request_body = UpdateOverrideRequest,
     responses((status = 200, description = "Override applied", body = NodeOverrideResponse), (status = 400, description = "Invalid node id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Node not found", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn update_override(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateOverrideRequest>,
@@ -64,7 +65,7 @@ async fn update_override(
     params(("id" = String, Path, description = "Node ULID")),
     responses((status = 204, description = "Override deleted"), (status = 400, description = "Invalid node id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn delete_override(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -80,7 +81,7 @@ async fn delete_override(
     params(("id" = String, Path, description = "Node ULID")), request_body = SetRegionRequest,
     responses((status = 200, description = "Region updated", body = RegionResponse), (status = 400, description = "Invalid node id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Node not found", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn set_region(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<SetRegionRequest>,
@@ -103,7 +104,7 @@ async fn set_region(
     params(("id" = String, Path, description = "Node ULID")), request_body = SetNodeChainRequest,
     responses((status = 200, description = "Chain updated", body = NodeChainResponse), (status = 400, description = "Invalid node id or chain structure", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Node not found", body = ErrorResponse), (status = 409, description = "Chain would create a cycle", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn set_node_chain(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<SetNodeChainRequest>,
@@ -132,7 +133,7 @@ async fn set_node_chain(
     request_body = BatchEnabledRequest,
     responses((status = 200, description = "Batch applied", body = BatchResultDto), (status = 400, description = "Invalid node ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn batch_set_enabled(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Json(req): Json<BatchEnabledRequest>,
 ) -> Result<Json<BatchResultDto>, (StatusCode, Json<ErrorResponse>)> {
@@ -148,7 +149,7 @@ async fn batch_set_enabled(
     params(("id" = String, Path, description = "Node ULID")), request_body = SetNodeTagsRequest,
     responses((status = 204, description = "Tags updated"), (status = 400, description = "Invalid ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn set_node_tags(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<SetNodeTagsRequest>,
@@ -166,7 +167,7 @@ async fn set_node_tags(
     request_body = BatchTagsRequest,
     responses((status = 204, description = "Batch tags applied"), (status = 400, description = "Invalid ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn batch_set_tags(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Json(req): Json<BatchTagsRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -186,7 +187,7 @@ async fn batch_set_tags(
 #[utoipa::path(get, path = "/api/v1/tags", security(("cookie_auth" = [])),
     responses((status = 200, description = "Tag list", body = ListTagsResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn list_tags(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
 ) -> Result<Json<ListTagsResponse>, (StatusCode, Json<ErrorResponse>)> {
     let tags = source::list_tags(state.override_repo.as_ref())
@@ -202,7 +203,7 @@ async fn list_tags(
     request_body = CreateTagRequest,
     responses((status = 201, description = "Tag created", body = TagResponse), (status = 400, description = "Invalid input", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 409, description = "Tag name already exists", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn create_tag(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Json(req): Json<CreateTagRequest>,
 ) -> Result<(StatusCode, Json<TagResponse>), (StatusCode, Json<ErrorResponse>)> {
@@ -226,7 +227,7 @@ async fn create_tag(
     params(("id" = String, Path, description = "Tag ULID")),
     responses((status = 204, description = "Tag deleted"), (status = 400, description = "Invalid tag id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Tag not found", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn delete_tag(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {

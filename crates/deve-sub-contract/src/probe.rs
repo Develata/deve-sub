@@ -6,10 +6,12 @@
 //! `docs/plan/milestones/M7-probes-and-detection.md` §"Server".
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// The kind of external probe panel.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ProbeSourceKindDto {
     /// Nezha monitoring panel (Bearer PAT auth, cumulative counters).
@@ -21,7 +23,8 @@ pub enum ProbeSourceKindDto {
 }
 
 /// The type of latency probe.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ProbeTypeDto {
     /// TCP connect RTT.
@@ -33,7 +36,8 @@ pub enum ProbeTypeDto {
 }
 
 /// The status of a probe run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ProbeRunStatusDto {
     /// Created but not yet started.
@@ -49,7 +53,8 @@ pub enum ProbeRunStatusDto {
 }
 
 /// The error classification of a latency result.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorClassDto {
     /// Connection refused.
@@ -72,7 +77,8 @@ pub enum ErrorClassDto {
 /// `{"status":"stale"}`). WHY: an untagged representation serializes the
 /// `Ok` and `Stale` unit variants to `null`, collapsing them on
 /// deserialization — a stale source would round-trip as `Ok`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SyncStatusDto {
     /// The last sync succeeded.
@@ -89,7 +95,8 @@ pub enum SyncStatusDto {
 /// Probe source information returned by probe source endpoints.
 ///
 /// Never includes the raw `auth_config` ciphertext in responses.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ProbeSourceDto {
     /// ULID identifier.
     pub id: String,
@@ -120,7 +127,8 @@ pub struct ProbeSourceDto {
 }
 
 /// Request body for `POST /api/v1/probe-sources`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateProbeSourceRequest {
     /// Panel kind.
@@ -140,7 +148,8 @@ pub struct CreateProbeSourceRequest {
 
 /// Request body for `PUT /api/v1/probe-sources/{id}`. Only provided fields are
 /// mutated.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct UpdateProbeSourceRequest {
     /// Human-readable name.
@@ -163,14 +172,16 @@ pub struct UpdateProbeSourceRequest {
 
 /// Response body for `POST /api/v1/probe-sources` and
 /// `PUT /api/v1/probe-sources/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ProbeSourceResponse {
     /// The probe source.
     pub source: ProbeSourceDto,
 }
 
 /// Response body for `GET /api/v1/probe-sources` (cursor-paginated).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListProbeSourcesResponse {
     /// Sources in the current page.
     pub sources: Vec<ProbeSourceDto>,
@@ -179,7 +190,8 @@ pub struct ListProbeSourcesResponse {
 }
 
 /// Request body for `POST /api/v1/probe-runs`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateProbeRunRequest {
     /// The probe type to run.
@@ -191,7 +203,8 @@ pub struct CreateProbeRunRequest {
 }
 
 /// Per-node result within a probe run.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ProbeRunResultDto {
     /// Node ULID.
     pub node_id: String,
@@ -206,7 +219,8 @@ pub struct ProbeRunResultDto {
 }
 
 /// Probe run information returned by probe run endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ProbeRunDto {
     /// ULID identifier.
     pub id: String,
@@ -226,14 +240,16 @@ pub struct ProbeRunDto {
 }
 
 /// Response body for `POST /api/v1/probe-runs` and `GET /api/v1/probe-runs/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ProbeRunResponse {
     /// The probe run.
     pub run: ProbeRunDto,
 }
 
 /// A single latency measurement record.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct LatencyRecordDto {
     /// ULID identifier.
     pub id: String,
@@ -253,14 +269,16 @@ pub struct LatencyRecordDto {
 }
 
 /// Response body for `GET /api/v1/nodes/{id}/latency`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListLatencyRecordsResponse {
     /// Latency records, newest first.
     pub records: Vec<LatencyRecordDto>,
 }
 
 /// Response body for `POST /api/v1/probe-sources/{id}/sync`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SyncProbeTrafficResponse {
     /// The probe source after sync (with updated `last_sync_at`/status).
     pub source: ProbeSourceDto,

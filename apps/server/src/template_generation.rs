@@ -17,6 +17,7 @@ use deve_sub_kernel::TemplateId;
 
 use crate::AppState;
 use crate::auth::{AdminUser, err};
+use crate::state::TemplateState;
 
 /// `POST /api/v1/templates/{id}/generate?profile=&mode=` — generate a
 /// subscription for the given template and target profile (admin). In strict
@@ -42,7 +43,7 @@ use crate::auth::{AdminUser, err};
     )
 )]
 async fn generate_template(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Query(q): Query<GenerateQuery>,
@@ -216,7 +217,7 @@ fn map_generation_error(
     )
 )]
 async fn get_active_template_generation(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Query(q): Query<ActiveGenerationQuery>,
@@ -285,7 +286,7 @@ async fn get_active_template_generation(
     )
 )]
 async fn preview_template(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Query(q): Query<GenerateQuery>,

@@ -21,6 +21,7 @@ use deve_sub_security::mask_url;
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
+use crate::state::SourceState;
 
 /// Query parameters for `GET /api/v1/sources` (cursor pagination).
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -116,7 +117,7 @@ fn source_to_dto(source: &Source) -> SourceDto {
     )
 )]
 async fn create_source(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     admin: AdminUser,
     Json(req): Json<CreateSourceRequest>,
 ) -> Result<(StatusCode, Json<SourceResponse>), (StatusCode, Json<ErrorResponse>)> {
@@ -183,7 +184,7 @@ async fn create_source(
     )
 )]
 async fn list_sources(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     _admin: AdminUser,
     Query(q): Query<ListSourcesQuery>,
 ) -> Result<Json<ListSourcesResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -242,7 +243,7 @@ async fn list_sources(
     )
 )]
 async fn get_source(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<SourceResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -295,7 +296,7 @@ async fn get_source(
     )
 )]
 async fn update_source(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateSourceRequest>,
@@ -373,7 +374,7 @@ async fn update_source(
     )
 )]
 async fn delete_source(
-    State(state): State<AppState>,
+    State(state): State<SourceState>,
     admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {

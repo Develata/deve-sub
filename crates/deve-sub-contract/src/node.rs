@@ -5,6 +5,7 @@
 //! derives live here, not in the API crate.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// A node in the unified pool, as returned by list/get endpoints.
@@ -12,7 +13,8 @@ use utoipa::ToSchema;
 /// Pool metadata (`missing_from_source`, `is_active`, `revision`) is
 /// included alongside the canonical node fields. Sensitive fields
 /// (raw URI with embedded credentials) are never serialized.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NodeDto {
     /// ULID identifier.
     pub id: String,
@@ -48,7 +50,8 @@ pub struct NodeDto {
 }
 
 /// Response body for `GET /api/v1/nodes` (cursor-paginated node list).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListNodesResponse {
     /// Nodes in the current page.
     pub nodes: Vec<NodeDto>,
@@ -57,7 +60,8 @@ pub struct ListNodesResponse {
 }
 
 /// Response body for `GET /api/v1/nodes/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NodeResponse {
     /// The node.
     pub node: NodeDto,
@@ -70,7 +74,8 @@ pub struct NodeResponse {
 /// source refresh and imports the resulting nodes into the pool with
 /// dedup. `source_type` controls format detection; `auto` lets the server
 /// detect from the content.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct ImportNodesRequest {
     /// Raw subscription content to parse and import.
@@ -85,7 +90,8 @@ fn default_import_source_type() -> super::source::SourceTypeDto {
 }
 
 /// Response body for `POST /api/v1/nodes/import`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ImportNodesResponse {
     /// Nodes newly inserted into the pool.
     pub new_nodes: u64,
@@ -98,7 +104,8 @@ pub struct ImportNodesResponse {
 }
 
 /// Per-line outcome of a manual import.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(tag = "status", content = "data", rename_all = "snake_case")]
 pub enum ImportOutcomeDto {
     /// A new node was inserted; `data` is the node ULID.
@@ -110,7 +117,8 @@ pub enum ImportOutcomeDto {
 }
 
 /// How a node's region was assigned.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum RegionMethodDto {
     /// GeoIP-derived.
@@ -120,7 +128,8 @@ pub enum RegionMethodDto {
 }
 
 /// A user-defined tag.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TagDto {
     /// ULID identifier.
     pub id: String,
@@ -131,7 +140,8 @@ pub struct TagDto {
 }
 
 /// Manual override applied to a node, as seen in API responses.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NodeOverrideDto {
     /// Override display name; `None` keeps the parsed name.
     pub display_name: Option<String>,
@@ -155,7 +165,8 @@ pub struct NodeOverrideDto {
 /// from this request — a field that is absent/`null` CLEARS that override
 /// (the node falls back to its parsed/auto value). Clients must send the
 /// complete desired override state on every call.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct UpdateOverrideRequest {
     /// Override display name; `None` clears the override.
@@ -177,14 +188,16 @@ pub struct UpdateOverrideRequest {
 }
 
 /// Response body for override endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NodeOverrideResponse {
     #[serde(rename = "override")]
     pub override_: NodeOverrideDto,
 }
 
 /// Request body for `POST /api/v1/nodes/batch-enabled` (NODE-004).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct BatchEnabledRequest {
     /// Node ULIDs to update.
@@ -194,28 +207,32 @@ pub struct BatchEnabledRequest {
 }
 
 /// Response body for batch operations.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct BatchResultDto {
     /// Number of rows affected.
     pub updated: u64,
 }
 
 /// One node's tag assignment in a batch tags request.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NodeTagAssignmentDto {
     pub node_id: String,
     pub tag_ids: Vec<String>,
 }
 
 /// Request body for `POST /api/v1/nodes/batch-tags` (NODE-005).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct BatchTagsRequest {
     pub assignments: Vec<NodeTagAssignmentDto>,
 }
 
 /// Request body for `PATCH /api/v1/nodes/{id}/region` (NODE-006).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct SetRegionRequest {
     /// `Some("US")` sets a manual region; `None` clears it.
@@ -223,14 +240,16 @@ pub struct SetRegionRequest {
 }
 
 /// Response body for region endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct RegionResponse {
     pub region: Option<String>,
     pub method: RegionMethodDto,
 }
 
 /// Request body for `POST /api/v1/tags`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateTagRequest {
     pub name: String,
@@ -238,19 +257,22 @@ pub struct CreateTagRequest {
 }
 
 /// Response body for tag creation.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TagResponse {
     pub tag: TagDto,
 }
 
 /// Response body for `GET /api/v1/tags`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListTagsResponse {
     pub tags: Vec<TagDto>,
 }
 
 /// Request body for `PUT /api/v1/nodes/{id}/tags`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct SetNodeTagsRequest {
     /// Tag IDs to assign to this node (replaces existing assignments).
@@ -264,7 +286,8 @@ pub struct SetNodeTagsRequest {
 /// non-emptiness is not required when clearing, but a non-empty array must
 /// not contain the node itself, duplicates, non-existent nodes, or form a
 /// cycle.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct SetNodeChainRequest {
     /// Ordered node IDs forming the chain. Empty clears the chain.
@@ -272,7 +295,8 @@ pub struct SetNodeChainRequest {
 }
 
 /// Response body for chain endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NodeChainResponse {
     /// The node IDs forming the chain. Empty means direct connection.
     pub nodes: Vec<String>,

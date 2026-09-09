@@ -39,6 +39,7 @@ pub fn parse_mihomo_yaml(text: &str) -> Result<Vec<Node>, ParseError> {
         .ok_or(ParseError::MissingContainerKey("proxies"))?
         .as_array()
         .ok_or(ParseError::MissingContainerKey("proxies (not a list)"))?;
+    super::check_entry_count(proxies.len())?;
 
     Ok(proxies.iter().map(parse_proxy_entry).collect())
 }

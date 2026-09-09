@@ -5,6 +5,10 @@ use thiserror::Error;
 /// Errors produced by probe operations.
 #[derive(Debug, Error)]
 pub enum ProbeError {
+    /// The source changed after it was read; retry from fresh state.
+    #[error("probe source changed concurrently")]
+    Conflict,
+
     /// A probe source was not found.
     #[error("probe source not found")]
     SourceNotFound,

@@ -50,6 +50,7 @@ pub mod probes;
 pub mod routes;
 pub mod source_refresh;
 pub mod sources;
+pub mod state;
 pub mod subscriptions;
 pub mod template_generation;
 pub mod templates;
@@ -63,6 +64,9 @@ pub enum ServerError {
     /// The server failed to bind or start.
     #[error("server error: {0}")]
     Start(#[from] std::io::Error),
+    /// Active HTTP connections did not drain within the shutdown grace.
+    #[error("HTTP shutdown exceeded its grace period")]
+    ShutdownTimeout,
 }
 
 /// Application state shared across all route handlers.
@@ -196,12 +200,92 @@ pub async fn serve(
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!("HTTP server listening on {bind}");
 
-    axum::serve(
+    serve_listener(
+        router,
+        listener,
+        shutdown,
+        std::time::Duration::from_secs(30),
+    )
+    .await
+}
+
+async fn serve_listener(
+    router: Router,
+    listener: tokio::net::TcpListener,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+    grace: std::time::Duration,
+) -> Result<(), ServerError> {
+    use std::future::IntoFuture;
+    let (draining_tx, draining_rx) = tokio::sync::oneshot::channel();
+    let server = axum::serve(
         listener,
         router.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown)
-    .await?;
-
+    .with_graceful_shutdown(async move {
+        shutdown.await;
+        let _ = draining_tx.send(());
+    })
+    .into_future();
+    tokio::pin!(server);
+    tokio::select! {
+        biased;
+        result = &mut server => result?,
+        _ = draining_rx => {
+            // A client holding an incomplete request must not keep the process
+            // alive indefinitely. The composition root still drains workers
+            // and closes storage after this error before runtime/process exit.
+            tokio::time::timeout(grace, &mut server)
+                .await.map_err(|_| ServerError::ShutdownTimeout)??;
+        }
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod shutdown_tests {
+    use super::*;
+    use tokio::io::AsyncWriteExt;
+
+    #[tokio::test]
+    async fn stalled_http_handler_cannot_hold_shutdown_forever() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let notification = entered.clone();
+        let router = Router::new().route(
+            "/stall",
+            axum::routing::get(move || async move {
+                notification.notify_one();
+                std::future::pending::<()>().await;
+                StatusCode::OK
+            }),
+        );
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(serve_listener(
+            router,
+            listener,
+            async {
+                let _ = rx.await;
+            },
+            std::time::Duration::from_millis(20),
+        ));
+        let mut client = tokio::net::TcpStream::connect(address)
+            .await
+            .expect("connect");
+        client
+            .write_all(b"GET /stall HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .expect("request");
+        tokio::time::timeout(std::time::Duration::from_secs(2), entered.notified())
+            .await
+            .expect("handler entered");
+        tx.send(()).expect("signal");
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), server)
+            .await
+            .expect("bounded drain")
+            .expect("join");
+        assert!(matches!(result, Err(ServerError::ShutdownTimeout)));
+    }
 }

@@ -6,13 +6,15 @@
 //! `docs/plan/milestones/M7-probes-and-detection.md` §"Traffic aggregation".
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::{IntoParams, ToSchema};
 
 use crate::probe::{ErrorClassDto, ProbeSourceKindDto, ProbeTypeDto, SyncStatusDto};
 use crate::traffic::TrafficSourceKindDto;
 
 /// A single latency record in the dashboard latency view.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DashboardLatencyRecordDto {
     /// The node ULID.
     pub node_id: String,
@@ -31,7 +33,8 @@ pub struct DashboardLatencyRecordDto {
 ///
 /// Returns the most recent latency records across all nodes, newest first.
 /// Used by the admin dashboard to surface node health at a glance.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DashboardLatencyResponse {
     /// Recent latency records (up to `limit`, default 50).
     pub records: Vec<DashboardLatencyRecordDto>,
@@ -43,7 +46,8 @@ pub struct DashboardLatencyResponse {
 /// `download` are the sum of all `TrafficRecord` rows attributed to this
 /// source (via `source_ref` prefix matching). The `last_sync_status` surfaces
 /// staleness so the dashboard can mark stale data (PROBE-004).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DashboardProbeSourceBreakdownDto {
     /// The probe source ULID.
     pub source_id: String,
@@ -66,7 +70,8 @@ pub struct DashboardProbeSourceBreakdownDto {
 }
 
 /// Per source-kind traffic breakdown in the dashboard traffic view.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DashboardSourceKindBreakdownDto {
     /// Source kind.
     pub source_kind: TrafficSourceKindDto,
@@ -80,7 +85,8 @@ pub struct DashboardSourceKindBreakdownDto {
 ///
 /// Returns the global traffic aggregate across all subscriptions, broken down
 /// by source kind and by individual probe source (PROBE-005 traceability).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct DashboardTrafficResponse {
     /// Total upload bytes across all subscriptions.
     pub total_upload: u64,
@@ -93,16 +99,18 @@ pub struct DashboardTrafficResponse {
 }
 
 /// Query parameters for `GET /api/v1/dashboard/latency`.
-#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams))]
 pub struct DashboardLatencyQuery {
     /// Maximum number of records to return (1-200, default 50).
     #[serde(default)]
-    #[param(default = 50, minimum = 1, maximum = 200)]
+    #[cfg_attr(feature = "openapi", param(default = 50, minimum = 1, maximum = 200))]
     pub limit: Option<u32>,
 }
 
 /// Query parameters for `GET /api/v1/dashboard/traffic`.
-#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams))]
 pub struct DashboardTrafficQuery {
     /// If provided, restrict the aggregate to a single subscription ULID.
     /// `None` (default) aggregates across all subscriptions.
@@ -111,7 +119,8 @@ pub struct DashboardTrafficQuery {
 }
 
 /// Per source-kind breakdown entry in a [`TrafficHistoryPointDto`].
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TrafficHistorySourceBreakdownDto {
     /// Source kind.
     pub source_kind: TrafficSourceKindDto,
@@ -122,7 +131,8 @@ pub struct TrafficHistorySourceBreakdownDto {
 }
 
 /// A single day's traffic data point in the history chart (TRAFFIC-002).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TrafficHistoryPointDto {
     /// UTC date (`YYYY-MM-DD`).
     pub date: String,
@@ -139,7 +149,8 @@ pub struct TrafficHistoryPointDto {
 /// Returns daily traffic history points. When `subscription_id` is omitted,
 /// points aggregate across all subscriptions. Days with no traffic are filled
 /// with zero-value entries so the chart is continuous.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TrafficHistoryResponse {
     /// Whether the query was scoped to a single subscription.
     pub scoped_to_subscription: bool,
@@ -148,7 +159,8 @@ pub struct TrafficHistoryResponse {
 }
 
 /// Query parameters for `GET /api/v1/dashboard/traffic/history` (TRAFFIC-002).
-#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams))]
 pub struct TrafficHistoryQuery {
     /// Restrict history to a single subscription ULID. `None` (default)
     /// aggregates across all subscriptions.
@@ -157,6 +169,6 @@ pub struct TrafficHistoryQuery {
     /// Number of days of history to return (1-365, default 30). The range
     /// ends at the current UTC date.
     #[serde(default)]
-    #[param(default = 30, minimum = 1, maximum = 365)]
+    #[cfg_attr(feature = "openapi", param(default = 30, minimum = 1, maximum = 365))]
     pub days: Option<u32>,
 }

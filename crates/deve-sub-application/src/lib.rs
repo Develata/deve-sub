@@ -20,7 +20,9 @@ pub mod template;
 pub use auth::{AuthError, LoginRateLimiter};
 pub use config::{AppConfig, IssueSeverity, ValidationIssue};
 pub use health::{DbHealthPort, HealthError, HealthStatus, HealthView};
-pub use job_supervisor::JobSupervisor;
+pub use job_supervisor::{JobSupervisor, SpawnError};
+mod cancellation_registration;
+pub use cancellation_registration::{CancellationFlags, CancellationRegistration};
 pub use probe::{
     CreateProbeSourceParams, ProbeAppError, RunnerConfig, StartProbeRunParams,
     UpdateProbeSourceParams, cancel_probe_run, create_probe_source, delete_probe_source,
@@ -35,9 +37,8 @@ pub use source::{
 pub use subscription::{
     CreateSubscriptionParams, CreateSubscriptionResult, GraceTokenCleanupScheduler,
     ManualCorrectionParams, RecordTrafficParams, RotateTokenResult, SubscriptionAppError,
-    TrafficDailySnapshotScheduler, TrafficHistoryPoint, UpdateSubscriptionParams,
-    aggregate_daily_traffic, apply_manual_correction, create_subscription, delete_subscription,
-    get_subscription, get_traffic_summary, list_subscriptions,
+    TrafficHistoryPoint, UpdateSubscriptionParams, apply_manual_correction, create_subscription,
+    delete_subscription, get_subscription, get_traffic_summary, list_subscriptions,
     list_traffic_history_for_subscription, list_traffic_history_global, record_traffic,
     rotate_token, update_subscription,
 };

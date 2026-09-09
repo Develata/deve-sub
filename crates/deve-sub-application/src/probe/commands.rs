@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use deve_sub_domain::{
     ProbeRun, ProbeRunRepository, ProbeRunStatus, ProbeSource, ProbeSourceAdapter, ProbeSourceKind,
     ProbeSourceRepository, ProbeSyncResult, ProbeType, SyncStatus, TrafficRecord,
-    TrafficRepository, TrafficSourceKind,
+    TrafficSourceKind,
 };
 use deve_sub_kernel::{ProbeRunId, ProbeSourceId, Timestamp};
 
@@ -54,6 +54,7 @@ pub async fn create_probe_source(
 
     let now = Timestamp::now();
     let source = ProbeSource {
+        revision: 0,
         id: ProbeSourceId::new(),
         kind: params.kind,
         name: params.name,
@@ -294,11 +295,10 @@ pub struct SyncProbeTrafficResult {
 /// - [`ProbeAppError::SourceNotFound`] — source does not exist.
 /// - [`ProbeAppError::InvalidInput`] — source is disabled or has no
 ///   subscription binding.
-/// - [`ProbeAppError::Domain`] — adapter sync failed (network, auth, parse).
-/// - [`ProbeAppError::Traffic`] — traffic record persistence failed.
+/// - [`ProbeAppError::Domain`] — adapter failure, concurrent revision conflict,
+///   or atomic counter/traffic persistence failure.
 pub async fn sync_probe_traffic(
     source_repo: &dyn ProbeSourceRepository,
-    traffic_repo: &dyn TrafficRepository,
     adapter: &dyn ProbeSourceAdapter,
     source_id: ProbeSourceId,
 ) -> Result<SyncProbeTrafficResult, ProbeAppError> {
@@ -341,19 +341,13 @@ pub async fn sync_probe_traffic(
     let source_ref_prefix = source.kind.as_kebab();
     let snapshot_updated = sync_result.new_counter_snapshot.is_some();
 
-    // WHY: persist the new counter snapshot + sync status BEFORE writing
-    // traffic records. If the records loop fails partway, the snapshot is
-    // already advanced — the next sync under-counts (skips the delta) but
-    // never double-counts. Double-counting corrupts traffic totals; under-
-    // counting is a recoverable, safe failure mode. The two repos cannot
-    // share a transaction (different port traits), so ordering is the
-    // minimal safe boundary.
+    // WHY: the observed revision and all deltas commit together. Advancing
+    // the counter before recording deltas loses traffic permanently on error.
     source.last_counter_snapshot = sync_result.new_counter_snapshot;
     source.last_sync_at = Some(now);
     source.last_sync_status = Some(SyncStatus::Ok);
     source.updated_at = now;
-    source_repo.update(&source).await?;
-
+    let mut records = Vec::with_capacity(sync_result.samples.len());
     for sample in &sync_result.samples {
         let record = TrafficRecord::new(
             subscription_id,
@@ -362,8 +356,10 @@ pub async fn sync_probe_traffic(
             sample.download,
             format!("{source_ref_prefix}:{id}", id = sample.external_server_id),
         );
-        traffic_repo.create(&record).await?;
+        records.push(record);
     }
+
+    source_repo.commit_sync(&source, &records).await?;
 
     Ok(SyncProbeTrafficResult {
         samples_written: sync_result.samples.len(),

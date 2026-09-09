@@ -5,10 +5,12 @@
 //! derives live here, not in the API crate.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// User role for authorization.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum RoleDto {
     /// Full administrative access.
@@ -20,7 +22,8 @@ pub enum RoleDto {
 /// User information returned by auth and user management endpoints.
 ///
 /// Never includes `password_hash` or other secrets.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct UserDto {
     /// ULID identifier.
     pub id: String,
@@ -43,7 +46,8 @@ pub struct UserDto {
 }
 
 /// Request body for `POST /api/v1/auth/login`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct LoginRequest {
     /// Username.
@@ -57,7 +61,8 @@ pub struct LoginRequest {
 /// When `requires_2fa` is `true`, the client must complete the 2FA flow
 /// using the `challenge_token` via `POST /api/v1/auth/login/2fa`. The
 /// session cookie is NOT set in this case.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct LoginResponse {
     /// The authenticated user.
     pub user: UserDto,
@@ -70,7 +75,8 @@ pub struct LoginResponse {
 }
 
 /// Request body for `POST /api/v1/auth/setup` (initial admin creation).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct SetupAdminRequest {
     /// Admin username.
@@ -80,14 +86,16 @@ pub struct SetupAdminRequest {
 }
 
 /// Response body for `POST /api/v1/auth/setup`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SetupAdminResponse {
     /// The created admin user.
     pub user: UserDto,
 }
 
 /// Response body for `GET /api/v1/auth/me`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct CurrentUserResponse {
     /// The authenticated user.
     pub user: UserDto,
@@ -101,14 +109,16 @@ pub struct CurrentUserResponse {
 /// Unlike probing `POST /auth/setup` with dummy credentials, this endpoint
 /// never returns 400 for short passwords or 409 for existing admins — it
 /// returns 200 with a boolean (DS-AUD-002).
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct AuthStatusResponse {
     /// Whether at least one admin user exists.
     pub initialized: bool,
 }
 
 /// Standard error response for auth endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ErrorResponse {
     /// Machine-readable error code (e.g. `"unauthorized"`, `"forbidden"`).
     pub error: String,
@@ -117,7 +127,8 @@ pub struct ErrorResponse {
 }
 
 /// Request body for `POST /api/v1/users` (admin-only user creation).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateUserRequest {
     /// Username.
@@ -129,14 +140,16 @@ pub struct CreateUserRequest {
 }
 
 /// Response body for `POST /api/v1/users`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct CreateUserResponse {
     /// The created user.
     pub user: UserDto,
 }
 
 /// Response body for `GET /api/v1/users` (cursor-paginated user list).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListUsersResponse {
     /// Users in the current page.
     pub users: Vec<UserDto>,
@@ -148,7 +161,8 @@ pub struct ListUsersResponse {
 ///
 /// Returns the TOTP secret (Base32) for manual entry and an `otpauth://` URI
 /// for QR code generation. The secret is not yet active until verified.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TwoFactorSetupResponse {
     /// Base32-encoded TOTP secret (e.g. `JBSWY3DPEHPK3PXP`).
     pub secret: String,
@@ -157,7 +171,8 @@ pub struct TwoFactorSetupResponse {
 }
 
 /// Request body for `POST /api/v1/auth/2fa/verify`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct TwoFactorVerifyRequest {
     /// 6-digit TOTP code from the user's authenticator app.
@@ -167,7 +182,8 @@ pub struct TwoFactorVerifyRequest {
 /// Response body for `POST /api/v1/auth/2fa/verify`.
 ///
 /// Recovery codes are shown once. The user must store them securely.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TwoFactorVerifyResponse {
     /// Single-use recovery codes.
     pub recovery_codes: Vec<String>,
@@ -177,7 +193,8 @@ pub struct TwoFactorVerifyResponse {
 ///
 /// Requires the current password to prevent unauthorized disabling from a
 /// hijacked session.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct TwoFactorDisableRequest {
     /// Current password for re-authentication.
@@ -187,7 +204,8 @@ pub struct TwoFactorDisableRequest {
 /// Request body for `POST /api/v1/auth/2fa/recovery-codes`.
 ///
 /// Requires the current password to prevent unauthorized regeneration.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct RegenerateRecoveryCodesRequest {
     /// Current password for re-authentication.
@@ -195,14 +213,16 @@ pub struct RegenerateRecoveryCodesRequest {
 }
 
 /// Response body for `POST /api/v1/auth/2fa/recovery-codes`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct RegenerateRecoveryCodesResponse {
     /// New single-use recovery codes (old codes are invalidated).
     pub recovery_codes: Vec<String>,
 }
 
 /// Request body for `POST /api/v1/auth/login/2fa`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct LoginTwoFactorRequest {
     /// Challenge token from the login response.

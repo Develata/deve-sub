@@ -7,7 +7,11 @@
 #![cfg_attr(test, allow(clippy::expect_used))]
 
 pub mod audit_log_repository;
+mod discriminant;
 pub mod error_classify;
+pub mod maintenance;
+mod retention;
+pub use maintenance::{SqliteMaintenance, WalSample};
 pub mod generation_cache_repository;
 pub mod node_override_repository;
 pub mod node_pool_repository;
@@ -170,6 +174,9 @@ const PRAGMAS: &[(&str, &str)] = &[
     ("busy_timeout", "5000"),
     ("synchronous", "NORMAL"),
     ("temp_store", "MEMORY"),
+    // Bound idle WAL allocation after a successful reset, not live pinned WAL.
+    ("journal_size_limit", "16777216"),
+    ("wal_autocheckpoint", "1000"),
 ];
 
 /// Create a SQLite connection pool with WAL and PRAGMA configuration from

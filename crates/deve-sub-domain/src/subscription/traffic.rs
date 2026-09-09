@@ -15,7 +15,7 @@
 use deve_sub_kernel::{SubscriptionId, Timestamp};
 
 /// The origin of a traffic observation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TrafficSourceKind {
     /// Parsed from an upstream source's `subscription-userinfo` response
     /// header.
@@ -27,30 +27,6 @@ pub enum TrafficSourceKind {
 }
 
 impl TrafficSourceKind {
-    /// Convert to the single-character discriminator stored in the database.
-    #[must_use]
-    pub const fn as_db_char(&self) -> &'static str {
-        match self {
-            Self::AirportHeader => "A",
-            Self::ManualCorrection => "M",
-            Self::Probe => "P",
-        }
-    }
-
-    /// Parse from the single-character database discriminator.
-    ///
-    /// # Errors
-    /// Returns `None` if the character does not match a known source kind.
-    #[must_use]
-    pub fn from_db_char(c: &str) -> Option<Self> {
-        match c {
-            "A" => Some(Self::AirportHeader),
-            "M" => Some(Self::ManualCorrection),
-            "P" => Some(Self::Probe),
-            _ => None,
-        }
-    }
-
     /// Convert to the kebab-case string used in API responses.
     #[must_use]
     pub const fn as_kebab(&self) -> &'static str {
@@ -130,11 +106,8 @@ impl TrafficSummary {
 
 /// A daily traffic snapshot for one subscription.
 ///
-/// Computed by the M10 aggregation job: sums all [`TrafficRecord`]s for a
-/// subscription on a given UTC day. The `(subscription_id, date)` pair is
-/// unique — re-running the aggregation upserts the row. See
-/// `docs/plan/milestones/M10-observability-and-audit.md` §"Traffic daily
-/// snapshot model".
+/// Maintained atomically with traffic deltas, independently of raw retention.
+/// The `(subscription_id, date)` pair is unique. See the M10 blueprint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrafficDailySnapshot {
     pub subscription_id: SubscriptionId,

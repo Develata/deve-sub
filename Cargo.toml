@@ -85,7 +85,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 webpki-roots = "1"
 rcgen = { version = "0.13", default-features = false, features = ["ring"] }
-shadowsocks = "1"
+shadowsocks = { version = "1", default-features = false, features = ["aead-cipher"] }
 uuid = "1"
 md-5 = "0.11"
 aes = "0.8"

@@ -20,6 +20,7 @@ use deve_sub_kernel::SubscriptionId;
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
 use crate::probes::{error_class_to_dto, kind_to_dto, probe_type_to_dto, sync_status_to_dto};
+use crate::state::DashboardState;
 use crate::traffic::map_source_kind;
 
 /// `GET /api/v1/dashboard/latency` — recent latency records across all nodes
@@ -38,7 +39,7 @@ use crate::traffic::map_source_kind;
     )
 )]
 async fn get_dashboard_latency(
-    State(state): State<AppState>,
+    State(state): State<DashboardState>,
     _admin: AdminUser,
     Query(q): Query<DashboardLatencyQuery>,
 ) -> Result<Json<DashboardLatencyResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -77,7 +78,7 @@ async fn get_dashboard_latency(
     )
 )]
 async fn get_dashboard_traffic(
-    State(state): State<AppState>,
+    State(state): State<DashboardState>,
     _admin: AdminUser,
     Query(q): Query<DashboardTrafficQuery>,
 ) -> Result<Json<DashboardTrafficResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -169,7 +170,7 @@ fn map_dashboard_error(e: ProbeAppError) -> (StatusCode, Json<ErrorResponse>) {
     )
 )]
 async fn get_traffic_history(
-    State(state): State<AppState>,
+    State(state): State<DashboardState>,
     _admin: AdminUser,
     Query(q): Query<TrafficHistoryQuery>,
 ) -> Result<Json<TrafficHistoryResponse>, (StatusCode, Json<ErrorResponse>)> {

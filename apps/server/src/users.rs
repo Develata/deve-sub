@@ -17,6 +17,7 @@ use deve_sub_kernel::UserId;
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, user_to_dto};
+use crate::state::UserState;
 
 /// Query parameters for `GET /api/v1/users` (cursor pagination).
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -51,7 +52,7 @@ fn default_page_size() -> u32 {
     )
 )]
 async fn create_user(
-    State(state): State<AppState>,
+    State(state): State<UserState>,
     admin: AdminUser,
     Json(req): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<CreateUserResponse>), (StatusCode, Json<ErrorResponse>)> {
@@ -112,7 +113,7 @@ async fn create_user(
     )
 )]
 async fn list_users(
-    State(state): State<AppState>,
+    State(state): State<UserState>,
     _admin: AdminUser,
     Query(q): Query<ListUsersQuery>,
 ) -> Result<Json<ListUsersResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -176,7 +177,7 @@ async fn list_users(
     )
 )]
 async fn disable_user(
-    State(state): State<AppState>,
+    State(state): State<UserState>,
     admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -241,7 +242,7 @@ async fn disable_user(
     )
 )]
 async fn force_logout(
-    State(state): State<AppState>,
+    State(state): State<UserState>,
     admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {

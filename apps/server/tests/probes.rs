@@ -1029,3 +1029,6 @@ async fn batch_cancel_probe_run_aborts_inflight_and_skips_pending() {
         "expected at least 1 skipped probe, got {skipped_count}"
     );
 }
+
+#[path = "resource_admission/probe.rs"]
+mod resource_admission;

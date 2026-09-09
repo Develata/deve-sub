@@ -23,6 +23,7 @@ use axum::routing::get;
 use deve_sub_application::subscription;
 
 use crate::AppState;
+use crate::state::DeliveryState;
 
 /// HTTP `Cache-Control` header value for delivery responses.
 const CACHE_CONTROL: &str = "private, no-cache";
@@ -30,7 +31,7 @@ const CACHE_CONTROL: &str = "private, no-cache";
 /// `GET /sub/{token}/{profile}` — deliver a subscription for an explicit
 /// profile.
 async fn deliver_with_profile(
-    State(state): State<AppState>,
+    State(state): State<DeliveryState>,
     Path((token, profile)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
@@ -54,7 +55,7 @@ async fn deliver_with_profile(
 
 /// `GET /sub/{token}` — deliver a subscription with User-Agent auto-detect.
 async fn deliver_auto(
-    State(state): State<AppState>,
+    State(state): State<DeliveryState>,
     Path(token): Path<String>,
     headers: HeaderMap,
 ) -> Response {
@@ -71,7 +72,7 @@ async fn deliver_auto(
 
 /// `GET /s/{code}/{profile}` — deliver via short code for an explicit profile.
 async fn deliver_short_code_with_profile(
-    State(state): State<AppState>,
+    State(state): State<DeliveryState>,
     Path((code, profile)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
@@ -84,7 +85,7 @@ async fn deliver_short_code_with_profile(
 
 /// `GET /s/{code}` — deliver via short code with User-Agent auto-detect.
 async fn deliver_short_code_auto(
-    State(state): State<AppState>,
+    State(state): State<DeliveryState>,
     Path(code): Path<String>,
     headers: HeaderMap,
 ) -> Response {
@@ -107,7 +108,7 @@ async fn deliver_short_code_auto(
 /// queried first; only if that misses do we query the temp link table. This
 /// avoids a second HMAC + DB round-trip for the common permanent-token case.
 async fn deliver_token(
-    state: &AppState,
+    state: &DeliveryState,
     token: &str,
     profile: Option<&str>,
     user_agent: Option<&str>,
@@ -134,7 +135,7 @@ async fn deliver_token(
 
 /// Short-code delivery: resolve code → subscription → standard pipeline.
 async fn deliver_code(
-    state: &AppState,
+    state: &DeliveryState,
     code: &str,
     profile: Option<&str>,
     user_agent: Option<&str>,
@@ -150,7 +151,7 @@ async fn deliver_code(
     }
 }
 
-fn make_deps(state: &AppState) -> subscription::DeliveryDeps<'_> {
+fn make_deps(state: &DeliveryState) -> subscription::DeliveryDeps<'_> {
     subscription::DeliveryDeps {
         token_repo: state.subscription_token_repo.as_ref(),
         short_code_repo: state.short_code_repo.as_ref(),

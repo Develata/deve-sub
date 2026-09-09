@@ -15,6 +15,7 @@ mod commands;
 mod db_lock;
 mod health;
 mod node_cmds;
+mod runtime;
 mod serve;
 mod subscription_cmds;
 mod template_cmds;

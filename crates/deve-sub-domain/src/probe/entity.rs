@@ -21,30 +21,6 @@ pub enum ProbeSourceKind {
 }
 
 impl ProbeSourceKind {
-    /// Convert to the single-character discriminator stored in the database.
-    #[must_use]
-    pub const fn as_db_char(&self) -> &'static str {
-        match self {
-            Self::Nezha => "N",
-            Self::DStatus => "D",
-            Self::Komari => "K",
-        }
-    }
-
-    /// Parse from the single-character database discriminator.
-    ///
-    /// # Errors
-    /// Returns `None` if `c` is not a recognized discriminator.
-    #[must_use]
-    pub fn from_db_char(c: &str) -> Option<Self> {
-        match c {
-            "N" => Some(Self::Nezha),
-            "D" => Some(Self::DStatus),
-            "K" => Some(Self::Komari),
-            _ => None,
-        }
-    }
-
     /// Convert to kebab-case string for API serialization.
     #[must_use]
     pub const fn as_kebab(&self) -> &'static str {
@@ -82,30 +58,6 @@ pub enum ProbeType {
 }
 
 impl ProbeType {
-    /// Convert to the single-character discriminator stored in the database.
-    #[must_use]
-    pub const fn as_db_char(&self) -> &'static str {
-        match self {
-            Self::TcpConnect => "T",
-            Self::QuicHandshake => "Q",
-            Self::RealProxy => "R",
-        }
-    }
-
-    /// Parse from the single-character database discriminator.
-    ///
-    /// # Errors
-    /// Returns `None` if `c` is not a recognized discriminator.
-    #[must_use]
-    pub fn from_db_char(c: &str) -> Option<Self> {
-        match c {
-            "T" => Some(Self::TcpConnect),
-            "Q" => Some(Self::QuicHandshake),
-            "R" => Some(Self::RealProxy),
-            _ => None,
-        }
-    }
-
     /// Convert to kebab-case string for API serialization.
     #[must_use]
     pub const fn as_kebab(&self) -> &'static str {
@@ -148,39 +100,6 @@ pub enum ErrorClass {
     Ok,
 }
 
-impl ErrorClass {
-    /// Convert to the single-character discriminator stored in the database.
-    /// `None` means no error (success); stored as NULL.
-    #[must_use]
-    pub const fn as_db_char(&self) -> &'static str {
-        match self {
-            Self::Refused => "R",
-            Self::DnsFailed => "D",
-            Self::Timeout => "T",
-            Self::TlsFailed => "L",
-            Self::QuicFailed => "Q",
-            Self::Ok => "O",
-        }
-    }
-
-    /// Parse from the single-character database discriminator.
-    ///
-    /// # Errors
-    /// Returns `None` if `c` is not a recognized discriminator.
-    #[must_use]
-    pub fn from_db_char(c: &str) -> Option<Self> {
-        match c {
-            "R" => Some(Self::Refused),
-            "D" => Some(Self::DnsFailed),
-            "T" => Some(Self::Timeout),
-            "L" => Some(Self::TlsFailed),
-            "Q" => Some(Self::QuicFailed),
-            "O" => Some(Self::Ok),
-            _ => None,
-        }
-    }
-}
-
 /// The status of a probe run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProbeRunStatus {
@@ -198,34 +117,6 @@ pub enum ProbeRunStatus {
 }
 
 impl ProbeRunStatus {
-    /// Convert to the single-character discriminator stored in the database.
-    #[must_use]
-    pub const fn as_db_char(&self) -> &'static str {
-        match self {
-            Self::Pending => "P",
-            Self::Running => "R",
-            Self::Completed => "C",
-            Self::Cancelled => "X",
-            Self::Failed => "F",
-        }
-    }
-
-    /// Parse from the single-character database discriminator.
-    ///
-    /// # Errors
-    /// Returns `None` if `c` is not a recognized discriminator.
-    #[must_use]
-    pub fn from_db_char(c: &str) -> Option<Self> {
-        match c {
-            "P" => Some(Self::Pending),
-            "R" => Some(Self::Running),
-            "C" => Some(Self::Completed),
-            "X" => Some(Self::Cancelled),
-            "F" => Some(Self::Failed),
-            _ => None,
-        }
-    }
-
     /// Convert to kebab-case string for API serialization.
     #[must_use]
     pub const fn as_kebab(&self) -> &'static str {
@@ -313,6 +204,8 @@ pub struct ProbeRun {
 /// data source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProbeSource {
+    /// Optimistic concurrency revision; a successful mutation advances it.
+    pub revision: u64,
     /// Unique identifier (ULID).
     pub id: ProbeSourceId,
     /// The panel kind.

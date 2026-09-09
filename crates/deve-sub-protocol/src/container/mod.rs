@@ -24,6 +24,17 @@ pub use singbox::parse_singbox_json;
 pub use uri_list::parse_uri_list;
 pub use xray_v2ray::{parse_v2ray_json, parse_xray_json};
 
+/// Maximum entries in one subscription container, including unsupported nodes.
+pub const MAX_ENTRIES: usize = 10_000;
+
+pub(crate) fn check_entry_count(count: usize) -> Result<(), crate::ParseError> {
+    if count > MAX_ENTRIES {
+        Err(crate::ParseError::TooManyEntries(count))
+    } else {
+        Ok(())
+    }
+}
+
 use serde_json::Value;
 
 use deve_sub_domain::{Host, Node, ProtocolConfig, ProtocolKind, TlsConfig, UnsupportedNode};

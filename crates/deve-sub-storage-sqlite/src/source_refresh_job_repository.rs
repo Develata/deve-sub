@@ -5,6 +5,7 @@
 //! a second Running job for the same source fails with a SQLITE_CONSTRAINT
 //! error, which is mapped to [`SourceError::RefreshInProgress`].
 
+use crate::discriminant::SqliteDiscriminant;
 use async_trait::async_trait;
 use deve_sub_domain::source::refresh_job::{
     RefreshPhase, SourceRefreshJob, SourceRefreshJobStatus,
@@ -45,9 +46,9 @@ struct JobRow {
 
 impl JobRow {
     fn to_domain(&self) -> Result<SourceRefreshJob, SourceError> {
-        let status = SourceRefreshJobStatus::from_db_char(&self.status)
+        let status = SourceRefreshJobStatus::decode(&self.status)
             .ok_or_else(|| SourceError::Storage(format!("invalid job status '{}'", self.status)))?;
-        let phase = RefreshPhase::from_db_str(&self.phase)
+        let phase = RefreshPhase::decode(&self.phase)
             .ok_or_else(|| SourceError::Storage(format!("invalid phase '{}'", self.phase)))?;
         let finished_at = match &self.finished_at {
             Some(s) => Some(parse_ts(s).map_err(SourceError::Storage)?),
@@ -88,8 +89,8 @@ impl SourceRefreshJobRepository for SqliteSourceRefreshJobRepository {
         )
         .bind(job.id.to_string())
         .bind(job.source_id.to_string())
-        .bind(job.status.as_db_char())
-        .bind(job.phase.as_db_str())
+        .bind(job.status.encode())
+        .bind(job.phase.encode())
         .bind(started_at)
         .execute(&self.pool)
         .await;
@@ -174,7 +175,7 @@ impl SourceRefreshJobRepository for SqliteSourceRefreshJobRepository {
         // than `lease_timeout` — not jobs whose total duration exceeds it.
         let now = format_ts(deve_sub_kernel::Timestamp::now()).map_err(SourceError::Storage)?;
         sqlx::query("UPDATE source_refresh_jobs SET phase = ?, started_at = ? WHERE id = ?")
-            .bind(phase.as_db_str())
+            .bind(phase.encode())
             .bind(now)
             .bind(id.to_string())
             .execute(&self.pool)

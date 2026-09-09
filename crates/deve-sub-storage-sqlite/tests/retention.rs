@@ -16,8 +16,8 @@ use deve_sub_kernel::{
     Timestamp,
 };
 use deve_sub_storage_sqlite::{
-    SqliteGenerationCacheRepository, SqliteLatencyRecordRepository, SqliteNodePoolRepository,
-    SqliteProbeRunRepository, SqliteSourceRepository,
+    SqliteGenerationCacheRepository, SqliteLatencyRecordRepository, SqliteMaintenance,
+    SqliteNodePoolRepository, SqliteProbeRunRepository, SqliteSourceRepository,
 };
 
 struct TestDb {
@@ -255,7 +255,7 @@ async fn generation_cache_store_prunes_inactive_beyond_retention() {
 }
 
 // ---------------------------------------------------------------------------
-// probe_runs retention (prune_older_than cascades latency_records)
+// probe_runs retention (maintenance cascades latency_records)
 // ---------------------------------------------------------------------------
 
 fn make_run(suffix: u32, created_days_ago: i64) -> ProbeRun {
@@ -271,7 +271,7 @@ fn make_run(suffix: u32, created_days_ago: i64) -> ProbeRun {
 }
 
 #[tokio::test]
-async fn prune_older_than_removes_old_runs_and_cascades_latency_records() {
+async fn maintenance_prunes_terminal_runs_and_cascades_latency_records() {
     let db = TestDb::new().await;
     let run_repo = SqliteProbeRunRepository::new(db.pool.clone());
     let latency_repo = SqliteLatencyRecordRepository::new(db.pool.clone());
@@ -314,8 +314,21 @@ async fn prune_older_than_removes_old_runs_and_cascades_latency_records() {
         .await
         .expect("latency fresh");
 
-    let cutoff = days_ago(30);
-    let pruned = run_repo.prune_older_than(cutoff).await.expect("prune");
+    for run in [&old_run, &fresh_run] {
+        run_repo
+            .update_status(run.id, run.status, &[], Some(run.created_at))
+            .await
+            .expect("complete run");
+    }
+    let mut active_runs = Vec::new();
+    for (suffix, status) in [(2, ProbeRunStatus::Pending), (3, ProbeRunStatus::Running)] {
+        let mut run = make_run(suffix, 40);
+        run.status = status;
+        run_repo.create(&run).await.expect("create active run");
+        active_runs.push(run);
+    }
+    let maintenance = SqliteMaintenance::new(db.pool.clone(), db._dir.path().join("test.db"));
+    let pruned = maintenance.prune_history().await.expect("prune");
     assert_eq!(pruned, 1, "only the 40-day-old run is pruned");
 
     assert!(run_repo.find_by_id(old_run.id).await.unwrap().is_none());
@@ -328,9 +341,96 @@ async fn prune_older_than_removes_old_runs_and_cascades_latency_records() {
     assert_eq!(latency_count, 1, "cascade removed the old run's records");
 
     // Idempotent: re-pruning removes nothing more.
-    let pruned_again = run_repo
-        .prune_older_than(cutoff)
-        .await
-        .expect("prune again");
+    let pruned_again = maintenance.prune_history().await.expect("prune again");
+    for run in active_runs {
+        let retained = run_repo
+            .find_by_id(run.id)
+            .await
+            .expect("read")
+            .expect("active run");
+        assert_eq!(retained.status, run.status);
+    }
     assert_eq!(pruned_again, 0);
+}
+
+#[tokio::test]
+async fn crash_recovery_starts_a_retention_window_and_is_idempotent() {
+    let db = TestDb::new().await;
+    let repo = SqliteProbeRunRepository::new(db.pool.clone());
+    for (suffix, status) in [(0, ProbeRunStatus::Pending), (1, ProbeRunStatus::Running)] {
+        let mut run = make_run(suffix, 40);
+        run.status = status;
+        repo.create(&run).await.expect("create unfinished run");
+    }
+    let before = Timestamp::now() - time::Duration::seconds(1);
+    assert_eq!(repo.recover_crashed_runs().await.expect("recover"), 2);
+    assert_eq!(repo.recover_crashed_runs().await.expect("recover again"), 0);
+    for suffix in 0..2 {
+        let run = repo
+            .find_by_id(make_run(suffix, 40).id)
+            .await
+            .expect("read")
+            .expect("run");
+        assert_eq!(run.status, ProbeRunStatus::Failed);
+        assert!(run.completed_at.expect("recovery completion time") >= before);
+    }
+    let maintenance = SqliteMaintenance::new(db.pool.clone(), db._dir.path().join("test.db"));
+    assert_eq!(
+        maintenance.prune_history().await.expect("keep diagnosis"),
+        0
+    );
+    sqlx::query(
+        "UPDATE probe_runs SET completed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-31 days')",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("age recovered runs");
+    assert_eq!(
+        maintenance.prune_history().await.expect("expire diagnosis"),
+        2
+    );
+}
+
+#[tokio::test]
+async fn upgrade_starts_retention_for_legacy_terminal_runs_without_touching_active_runs() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("legacy.db");
+    let pool = sqlx::sqlite::SqlitePool::connect(&format!("sqlite://{}?mode=rwc", path.display()))
+        .await
+        .expect("pool");
+    let mut migrator = sqlx::migrate!("../../migrations");
+    migrator.migrations = migrator
+        .migrations
+        .iter()
+        .filter(|m| m.version <= 23)
+        .cloned()
+        .collect::<Vec<_>>()
+        .into();
+    migrator.run(&pool).await.expect("legacy migrations");
+    for status in ["C", "F", "X", "P", "R"] {
+        sqlx::query("INSERT INTO probe_runs (id, probe_type, node_ids, status, created_at) VALUES (?, 'T', '[]', ?, '2025-01-01T00:00:00Z')")
+            .bind(status).bind(status).execute(&pool).await.expect("legacy run");
+    }
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("upgrade");
+    let completed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM probe_runs WHERE status IN ('C','F','X') AND completed_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 minute')")
+        .fetch_one(&pool).await.expect("completed windows");
+    assert_eq!(completed, 3);
+    let unfinished: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM probe_runs WHERE status IN ('P','R') AND completed_at IS NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("active runs");
+    assert_eq!(unfinished, 2);
+    let maintenance = SqliteMaintenance::new(pool.clone(), path);
+    assert_eq!(
+        maintenance
+            .prune_history()
+            .await
+            .expect("preserve diagnosis"),
+        0
+    );
 }

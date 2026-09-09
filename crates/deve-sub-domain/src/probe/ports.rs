@@ -40,6 +40,15 @@ pub trait ProbeSourceRepository: Send + Sync {
     /// [`ProbeError::NameExists`] on name collision.
     async fn update(&self, source: &ProbeSource) -> Result<(), ProbeError>;
 
+    /// Atomically compare the source revision, update its counter and status,
+    /// and persist every traffic delta. Conflict or any write failure commits
+    /// nothing. Records must belong to the source's subscription and be Probe.
+    async fn commit_sync(
+        &self,
+        source: &ProbeSource,
+        records: &[crate::TrafficRecord],
+    ) -> Result<(), ProbeError>;
+
     /// Delete a probe source.
     async fn delete(&self, id: ProbeSourceId) -> Result<(), ProbeError>;
 }
@@ -104,16 +113,9 @@ pub trait ProbeRunRepository: Send + Sync {
         completed_at: Option<Timestamp>,
     ) -> Result<(), ProbeError>;
 
-    /// Mark any runs in `Running` status as `Failed` (crash recovery on
-    /// startup). Returns the count of recovered runs.
+    /// Mark pending/running runs as failed with a completion time on startup.
+    /// Returns the count of recovered runs.
     async fn recover_crashed_runs(&self) -> Result<u64, ProbeError>;
-
-    /// Delete all runs created strictly before `cutoff`; their latency
-    /// records are removed by cascade. Returns the number of runs deleted.
-    ///
-    /// Retention hook invoked by the daily maintenance tick so
-    /// `probe_runs`/`latency_records` stay bounded. Idempotent.
-    async fn prune_older_than(&self, cutoff: Timestamp) -> Result<u64, ProbeError>;
 
     /// Delete a probe run and its results.
     async fn delete(&self, id: ProbeRunId) -> Result<(), ProbeError>;

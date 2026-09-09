@@ -18,6 +18,7 @@ use deve_sub_kernel::NodeId;
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
 use crate::sources::source_type_from_dto;
+use crate::state::NodeState;
 
 /// Query parameters for `GET /api/v1/nodes` (cursor pagination + filters).
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -104,7 +105,7 @@ pub(crate) fn tag_to_dto(tag: &Tag) -> TagDto {
     )
 )]
 async fn list_nodes(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Query(q): Query<ListNodesQuery>,
 ) -> Result<Json<ListNodesResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -180,7 +181,7 @@ async fn list_nodes(
     )
 )]
 async fn get_node(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<NodeResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -236,7 +237,7 @@ async fn get_node(
     )
 )]
 async fn import_nodes(
-    State(state): State<AppState>,
+    State(state): State<NodeState>,
     _admin: AdminUser,
     Json(req): Json<ImportNodesRequest>,
 ) -> Result<Json<ImportNodesResponse>, (StatusCode, Json<ErrorResponse>)> {

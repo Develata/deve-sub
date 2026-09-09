@@ -4,10 +4,12 @@
 //! contract crate per ADR-0004.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// A single audit log entry.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct AuditLogDto {
     /// ULID identifier.
     pub id: String,
@@ -26,7 +28,8 @@ pub struct AuditLogDto {
 }
 
 /// Response body for `GET /api/v1/audit-logs` (cursor-paginated audit log).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListAuditLogsResponse {
     /// Audit log entries in the current page (newest first).
     pub entries: Vec<AuditLogDto>,

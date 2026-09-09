@@ -206,12 +206,6 @@ impl ProbeRunRepository for StubRunRepo {
     async fn find_by_id(&self, _id: ProbeRunId) -> Result<Option<ProbeRun>, ProbeError> {
         Ok(None)
     }
-    async fn prune_older_than(
-        &self,
-        _cutoff: deve_sub_kernel::Timestamp,
-    ) -> Result<u64, ProbeError> {
-        Ok(0)
-    }
     async fn update_status(
         &self,
         _id: ProbeRunId,

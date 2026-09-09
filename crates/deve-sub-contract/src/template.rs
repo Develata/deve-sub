@@ -5,6 +5,7 @@
 //! derives live here, not in the API crate.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::{IntoParams, ToSchema};
 
 /// Request body for `POST /api/v1/templates`.
@@ -12,7 +13,8 @@ use utoipa::{IntoParams, ToSchema};
 /// The `spec_yaml` field is the full V3 template document (apiVersion,
 /// kind, metadata, spec) as a YAML string. The server validates it against
 /// the M5 schema constraints before persistence (GEN-002).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateTemplateRequest {
     /// Human-readable template name.
@@ -25,7 +27,8 @@ pub struct CreateTemplateRequest {
 }
 
 /// Request body for `PUT /api/v1/templates/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct UpdateTemplateRequest {
     /// Human-readable template name.
@@ -37,7 +40,8 @@ pub struct UpdateTemplateRequest {
 }
 
 /// Template information returned by template management endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TemplateDto {
     /// ULID identifier.
     pub id: String,
@@ -57,7 +61,8 @@ pub struct TemplateDto {
 }
 
 /// Template version information.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TemplateVersionDto {
     /// ULID identifier.
     pub id: String,
@@ -74,7 +79,8 @@ pub struct TemplateVersionDto {
 }
 
 /// Response body for `POST /api/v1/templates` and `PUT /api/v1/templates/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TemplateResponse {
     /// The template aggregate.
     pub template: TemplateDto,
@@ -83,7 +89,8 @@ pub struct TemplateResponse {
 }
 
 /// Response body for `GET /api/v1/templates` (cursor-paginated).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListTemplatesResponse {
     /// Templates in the current page.
     pub templates: Vec<TemplateDto>,
@@ -92,40 +99,45 @@ pub struct ListTemplatesResponse {
 }
 
 /// Response body for `GET /api/v1/templates/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct GetTemplateResponse {
     /// The template aggregate.
     pub template: TemplateDto,
 }
 
 /// Response body for `GET /api/v1/templates/{id}/versions`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListVersionsResponse {
     /// Versions, newest first.
     pub versions: Vec<TemplateVersionDto>,
 }
 
 /// Response body for `POST /api/v1/templates/{id}/rollback`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct RollbackTemplateResponse {
     /// The activated version.
     pub version: TemplateVersionDto,
 }
 
 /// Query parameters for `GET /api/v1/templates`.
-#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams, ToSchema))]
 pub struct ListTemplatesQuery {
     /// Pagination cursor — the ULID of the last template from the previous
     /// page.
     pub cursor: Option<String>,
     /// Maximum number of templates to return (default 50, max 100).
     #[serde(default)]
-    #[param(default = 50, minimum = 1, maximum = 100)]
+    #[cfg_attr(feature = "openapi", param(default = 50, minimum = 1, maximum = 100))]
     pub limit: Option<u32>,
 }
 
 /// A node reference that could not be resolved to an active pool entry.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct MissingNodeRefDto {
     /// The node ULID that was referenced.
     pub node_id: String,
@@ -135,7 +147,8 @@ pub struct MissingNodeRefDto {
 }
 
 /// Resolution of a single proxy group's membership against the live pool.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct GroupResolutionDto {
     /// The group name from the template spec.
     pub group_name: String,
@@ -152,7 +165,8 @@ pub struct GroupResolutionDto {
 ///
 /// Resolves the template's `nodeSelector` and `proxyGroups` against the live
 /// node pool. Read-only: no generation, no caching, no state change.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ResolveTemplateResponse {
     /// Node IDs selected by the template's `nodeSelector`.
     pub selected_node_ids: Vec<String>,
@@ -168,7 +182,8 @@ pub struct ResolveTemplateResponse {
 }
 
 /// A directed edge in the chain proxy dependency graph.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ChainEdgeDto {
     /// Source vertex: `node:<ULID>` or `group:<name>`.
     pub from: String,
@@ -178,7 +193,8 @@ pub struct ChainEdgeDto {
 
 /// A node excluded from generation because it is incompatible with the
 /// requested target profile.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ExcludedNodeDto {
     /// The node ULID.
     pub node_id: String,
@@ -193,7 +209,8 @@ pub struct ExcludedNodeDto {
 /// Reports which resolved nodes are included in and excluded from generation
 /// for a given target profile. Incompatible nodes are never silently dropped
 /// (constraint #7): they appear in `excluded` with a reason.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct CompatibilityReportDto {
     /// The target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,
     /// `shadowrocket`, or `uri_list`.
@@ -210,7 +227,8 @@ pub struct CompatibilityReportDto {
 /// the compatibility report (included/excluded nodes), and any warnings
 /// (missing references, empty pool). In strict mode, the request fails with
 /// 422 instead of returning this body when any node is excluded (GEN-014).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct GenerationResultDto {
     /// The emitted subscription content (YAML for mihomo, JSON for
     /// sing-box/xray/v2ray, base64 URI list for shadowrocket, plain URI list
@@ -228,7 +246,8 @@ pub struct GenerationResultDto {
 }
 
 /// Query parameters for `POST /api/v1/templates/{id}/generate`.
-#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams, ToSchema))]
 pub struct GenerateQuery {
     /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,
     /// `shadowrocket`, or `uri_list`.
@@ -240,7 +259,8 @@ pub struct GenerateQuery {
 }
 
 /// Query parameters for `GET /api/v1/templates/{id}/generations/active`.
-#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams, ToSchema))]
 pub struct ActiveGenerationQuery {
     /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`,
     /// `shadowrocket`, or `uri_list`.
@@ -253,7 +273,8 @@ pub struct ActiveGenerationQuery {
 /// the given template + profile. On generation failure, the previous active
 /// generation remains served (GEN-015, constraint #19). Returns 404 if no
 /// active generation exists.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ActiveGenerationResponse {
     /// The emitted subscription content.
     pub content: String,
@@ -268,7 +289,8 @@ pub struct ActiveGenerationResponse {
 }
 
 /// Request body for `POST /api/v1/templates/{id}/rollback`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct RollbackRequest {
     /// The version ULID to activate.
@@ -276,7 +298,8 @@ pub struct RollbackRequest {
 }
 
 /// Query parameters for `GET /api/v1/templates/{id}/compatibility`.
-#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams, ToSchema))]
 pub struct CompatibilityQuery {
     /// Target profile: `mihomo`, `sing-box`, `xray`, `v2ray`, `shadowrocket`,
     /// or `uri_list`.

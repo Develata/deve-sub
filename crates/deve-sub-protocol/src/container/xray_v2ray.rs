@@ -54,6 +54,7 @@ fn parse_xray_v2ray(text: &str, raw_format: &str) -> Result<Vec<Node>, ParseErro
         .ok_or(ParseError::MissingContainerKey("outbounds"))?
         .as_array()
         .ok_or(ParseError::MissingContainerKey("outbounds (not a list)"))?;
+    super::check_entry_count(outbounds.len())?;
 
     Ok(outbounds
         .iter()

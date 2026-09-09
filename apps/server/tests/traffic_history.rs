@@ -14,9 +14,7 @@ use axum::http::{Request, StatusCode};
 use time::OffsetDateTime;
 use tower::ServiceExt;
 
-use deve_sub_application::{
-    DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher, aggregate_daily_traffic,
-};
+use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
     NodeOverrideRepository, NodePoolRepository, PoolMetaRepository, ProbeRunRepository,
@@ -336,16 +334,6 @@ fn ts_at(year: i32, month: u8, day: u8, hour: u8) -> Timestamp {
     Timestamp::from_offset_date_time(dt)
 }
 
-fn iso_at(year: i32, month: u8, day: u8) -> String {
-    let dt = OffsetDateTime::new_utc(
-        time::Date::from_calendar_date(year, time::Month::try_from(month).expect("month"), day)
-            .expect("date"),
-        time::Time::from_hms(0, 0, 0).expect("time"),
-    );
-    dt.format(&time::format_description::well_known::Rfc3339)
-        .expect("iso")
-}
-
 /// TRAFFIC-001: aggregation sums per-day traffic per subscription and
 /// upserts `traffic_daily_snapshots` with correct totals and source breakdown.
 #[tokio::test]
@@ -360,8 +348,6 @@ async fn traffic001_daily_snapshot_aggregation() {
     // Insert traffic records on 2025-06-10 (two AirportHeader + one Probe),
     // plus one record on 2025-06-11 that must NOT be counted in the 06-10 day.
     let day = "2025-06-10";
-    let day_start = iso_at(2025, 6, 10);
-    let day_end = iso_at(2025, 6, 11);
 
     let records = [
         make_record(
@@ -405,17 +391,6 @@ async fn traffic001_daily_snapshot_aggregation() {
             .expect("create traffic record");
     }
 
-    let count = aggregate_daily_traffic(
-        app.state.traffic_repo.as_ref(),
-        app.state.traffic_daily_snapshot_repo.as_ref(),
-        day,
-        &day_start,
-        &day_end,
-    )
-    .await
-    .expect("aggregate");
-    assert_eq!(count, 1, "one subscription had traffic on that day");
-
     let snapshots = app
         .state
         .traffic_daily_snapshot_repo
@@ -430,19 +405,18 @@ async fn traffic001_daily_snapshot_aggregation() {
     let mut by_kind: std::collections::BTreeMap<&str, (u64, u64)> = snap
         .source_breakdown
         .iter()
-        .map(|(k, u, d)| (k.as_db_char(), (*u, *d)))
+        .map(|(k, u, d)| (k.as_kebab(), (*u, *d)))
         .collect();
-    let airport = by_kind.remove("A").expect("airport breakdown");
+    let airport = by_kind.remove("airport-header").expect("airport breakdown");
     assert_eq!(airport, (1_500, 2_700), "1000+500 up, 2000+700 down");
-    let probe = by_kind.remove("P").expect("probe breakdown");
+    let probe = by_kind.remove("probe").expect("probe breakdown");
     assert_eq!(probe, (300, 400));
     assert!(by_kind.is_empty(), "no other source kinds");
 }
 
-/// TRAFFIC-001: idempotency — re-running aggregation for the same day
-/// replaces (not appends) the snapshot.
+/// TRAFFIC-001: duplicate observation IDs cannot double-count daily totals.
 #[tokio::test]
-async fn traffic001_aggregation_is_idempotent() {
+async fn traffic001_duplicate_observation_is_atomic() {
     let app = TestApp::new().await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
@@ -451,8 +425,6 @@ async fn traffic001_aggregation_is_idempotent() {
     let sub_id = SubscriptionId::parse(&sub_id_str).expect("sub id");
 
     let day = "2025-06-10";
-    let day_start = iso_at(2025, 6, 10);
-    let day_end = iso_at(2025, 6, 11);
 
     let record = make_record(
         sub_id,
@@ -469,15 +441,10 @@ async fn traffic001_aggregation_is_idempotent() {
         .expect("create");
 
     for _ in 0..3 {
-        aggregate_daily_traffic(
-            app.state.traffic_repo.as_ref(),
-            app.state.traffic_daily_snapshot_repo.as_ref(),
-            day,
-            &day_start,
-            &day_end,
-        )
-        .await
-        .expect("aggregate");
+        assert!(
+            app.state.traffic_repo.create(&record).await.is_err(),
+            "duplicate observation must not increment any projection"
+        );
     }
 
     let snapshots = app
@@ -516,16 +483,8 @@ async fn traffic002_history_api_continuous_with_gaps() {
         400,
         vec![(TrafficSourceKind::Probe, 300, 400)],
     );
-    app.state
-        .traffic_daily_snapshot_repo
-        .upsert(&snap_a)
-        .await
-        .expect("upsert a");
-    app.state
-        .traffic_daily_snapshot_repo
-        .upsert(&snap_c)
-        .await
-        .expect("upsert c");
+    seed_daily_projection(&app, &snap_a).await;
+    seed_daily_projection(&app, &snap_c).await;
 
     let uri = format!("/api/v1/dashboard/traffic/history?subscription_id={sub_id_str}&days=3");
     // days=3 from "today" would not cover 2025-06-08..10, so we rely on the
@@ -601,16 +560,8 @@ async fn traffic002_history_api_global_aggregation() {
         60,
         vec![(TrafficSourceKind::Probe, 50, 60)],
     );
-    app.state
-        .traffic_daily_snapshot_repo
-        .upsert(&snap_a)
-        .await
-        .expect("upsert a");
-    app.state
-        .traffic_daily_snapshot_repo
-        .upsert(&snap_b)
-        .await
-        .expect("upsert b");
+    seed_daily_projection(&app, &snap_a).await;
+    seed_daily_projection(&app, &snap_b).await;
 
     let points = deve_sub_application::list_traffic_history_global(
         app.state.traffic_daily_snapshot_repo.as_ref(),
@@ -627,10 +578,10 @@ async fn traffic002_history_api_global_aggregation() {
     let mut kinds: std::collections::BTreeMap<&str, (u64, u64)> = points[0]
         .source_breakdown
         .iter()
-        .map(|(k, u, d)| (k.as_db_char(), (*u, *d)))
+        .map(|(k, u, d)| (k.as_kebab(), (*u, *d)))
         .collect();
-    assert_eq!(kinds.remove("A").expect("airport"), (100, 200));
-    assert_eq!(kinds.remove("P").expect("probe"), (50, 60));
+    assert_eq!(kinds.remove("airport-header").expect("airport"), (100, 200));
+    assert_eq!(kinds.remove("probe").expect("probe"), (50, 60));
     assert!(kinds.is_empty());
 }
 
@@ -664,4 +615,27 @@ async fn traffic002_history_api_requires_auth() {
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+async fn seed_daily_projection(app: &TestApp, snapshot: &deve_sub_domain::TrafficDailySnapshot) {
+    let at = time::OffsetDateTime::parse(
+        &format!("{}T12:00:00Z", snapshot.date),
+        &time::format_description::well_known::Rfc3339,
+    )
+    .expect("date");
+    for &(kind, upload, download) in &snapshot.source_breakdown {
+        let mut record = TrafficRecord::new(
+            snapshot.subscription_id,
+            kind,
+            upload,
+            download,
+            "nezha:test".into(),
+        );
+        record.recorded_at = Timestamp::from_offset_date_time(at);
+        app.state
+            .traffic_repo
+            .create(&record)
+            .await
+            .expect("seed traffic projection");
+    }
 }

@@ -20,6 +20,7 @@ use deve_sub_kernel::SubscriptionId;
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
+use crate::state::SubscriptionState;
 
 pub(crate) fn map_source_kind(k: TrafficSourceKind) -> TrafficSourceKindDto {
     match k {
@@ -46,7 +47,7 @@ pub(crate) fn map_source_kind(k: TrafficSourceKind) -> TrafficSourceKindDto {
     )
 )]
 async fn get_traffic(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<TrafficSummaryResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -101,7 +102,7 @@ async fn get_traffic(
     )
 )]
 async fn apply_traffic_correction(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<ManualCorrectionRequest>,

@@ -17,6 +17,7 @@ use deve_sub_kernel::Timestamp;
 use time::format_description::well_known::Rfc3339;
 
 use crate::AppState;
+use crate::state::AuthState;
 
 /// Session cookie name.
 const SESSION_COOKIE: &str = "deve_sub_session";
@@ -32,13 +33,18 @@ pub struct AuthSession {
     pub session: Session,
 }
 
-impl FromRequestParts<AppState> for AuthSession {
+impl<S> FromRequestParts<S> for AuthSession
+where
+    S: Send + Sync,
+    AuthState: axum::extract::FromRef<S>,
+{
     type Rejection = (StatusCode, Json<ErrorResponse>);
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
-        state: &AppState,
+        state: &S,
     ) -> Result<Self, Self::Rejection> {
+        let state = <AuthState as axum::extract::FromRef<S>>::from_ref(state);
         let token = extract_session_token(&parts.headers)
             .ok_or_else(|| err(StatusCode::UNAUTHORIZED, "unauthorized", "no session"))?;
 
@@ -93,12 +99,16 @@ pub struct AdminUser {
     pub session: Session,
 }
 
-impl FromRequestParts<AppState> for AdminUser {
+impl<S> FromRequestParts<S> for AdminUser
+where
+    S: Send + Sync,
+    AuthState: axum::extract::FromRef<S>,
+{
     type Rejection = (StatusCode, Json<ErrorResponse>);
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
-        state: &AppState,
+        state: &S,
     ) -> Result<Self, Self::Rejection> {
         let auth_session = AuthSession::from_request_parts(parts, state).await?;
         if auth_session.user.role != Role::Admin {
@@ -218,7 +228,7 @@ pub(crate) fn user_to_dto(user: &User) -> UserDto {
     )
 )]
 async fn setup(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
     Json(req): Json<SetupAdminRequest>,
 ) -> Result<(StatusCode, Json<SetupAdminResponse>), (StatusCode, Json<ErrorResponse>)> {
     let user = auth::setup_admin(state.user_repo.as_ref(), &req.username, &req.password)
@@ -266,7 +276,7 @@ async fn setup(
     )
 )]
 async fn login(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
     headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -354,7 +364,7 @@ async fn login(
     )
 )]
 async fn logout(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
     auth_session: AuthSession,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     auth::logout(state.session_repo.as_ref(), auth_session.session.id)
@@ -413,7 +423,7 @@ async fn me(
     )
 )]
 async fn status(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
 ) -> Result<Json<AuthStatusResponse>, (StatusCode, Json<ErrorResponse>)> {
     let initialized = auth::is_initialized(state.user_repo.as_ref())
         .await

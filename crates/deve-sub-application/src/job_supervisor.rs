@@ -1,101 +1,173 @@
-//! Unified background job supervisor (constraint #20).
-//!
-//! Tracks spawned background tasks in a [`JoinSet`] and provides a
-//! timeout-bounded graceful shutdown. On shutdown, the caller should first
-//! signal jobs to cancel (e.g. set cancellation flags), then call
-//! [`JobSupervisor::shutdown`]. Tasks that do not finish within the timeout
-//! are aborted; their associated state (e.g. probe run rows left in
-//! `Running`) is recovered on the next process start via
-//! `recover_crashed_runs`.
+//! Bounded background-task ownership and shutdown (constraint #20).
 
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use tokio::task::JoinSet;
+use tokio::task::{JoinError, JoinSet};
 
-/// Supervises background tasks, ensuring they are tracked, joinable, and
-/// safely shut down.
+/// Maximum concurrently tracked request-triggered jobs. Completed jobs are
+/// reaped before admission; callers reject excess work instead of queueing it.
+const MAX_JOBS: usize = 64;
+
+/// Why a new job could not be admitted.
+#[derive(Debug, thiserror::Error)]
+pub enum SpawnError {
+    /// The process is draining and must not accept additional work.
+    #[error("background jobs are shutting down")]
+    ShuttingDown,
+    /// The fixed concurrent-job budget is exhausted.
+    #[error("background job capacity reached")]
+    AtCapacity,
+}
+
+struct State {
+    tasks: JoinSet<()>,
+    closed: bool,
+}
+
+/// Owns request-triggered jobs, reaping completions during normal operation.
 ///
-/// Stored in [`AppState`](crate::AppState) as `Arc<JobSupervisor>` and
-/// shared across all route handlers. The `Mutex<JoinSet>` is cheap —
-/// `spawn` and `shutdown` are the only operations, and contention is low
-/// (probe runs are infrequent relative to HTTP traffic).
+/// `spawn` and `reap_finished` never await while holding the mutex. Closing
+/// admission and taking ownership for shutdown happen under that same mutex,
+/// so a racing spawn cannot escape the shutdown drain.
 pub struct JobSupervisor {
-    tasks: Mutex<JoinSet<()>>,
+    state: Mutex<State>,
+    panics: AtomicU64,
+    cancellations: AtomicU64,
 }
 
 impl JobSupervisor {
-    /// Create a new empty supervisor.
+    /// Create an empty supervisor with a fixed concurrency budget.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            tasks: Mutex::new(JoinSet::new()),
+            state: Mutex::new(State {
+                tasks: JoinSet::new(),
+                closed: false,
+            }),
+            panics: AtomicU64::new(0),
+            cancellations: AtomicU64::new(0),
         }
     }
 
-    /// Spawn a background task under this supervisor's tracking.
-    ///
-    /// The task's `Output` must be `()` — callers are expected to handle
-    /// errors inside the closure (e.g. write a `Failed` terminal status)
-    /// so that the supervisor does not need domain-specific knowledge.
-    pub fn spawn<F>(&self, job: F)
+    /// Admit a job or return a capacity/shutdown error, dropping its future.
+    /// The future must handle its business errors and persist terminal status.
+    pub fn spawn<F>(&self, job: F) -> Result<(), SpawnError>
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
-        self.tasks
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .spawn(job);
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        self.drain_finished(&mut state.tasks);
+        if state.closed {
+            return Err(SpawnError::ShuttingDown);
+        }
+        if state.tasks.len() >= MAX_JOBS {
+            return Err(SpawnError::AtCapacity);
+        }
+        state.tasks.spawn(job);
+        Ok(())
     }
 
-    /// Gracefully shut down all tracked tasks within `timeout`.
-    ///
-    /// Waits for each task to complete. Tasks that do not finish before
-    /// the deadline are aborted. Aborted tasks may leave domain state in
-    /// a non-terminal state (e.g. probe runs stuck in `Running`); the
-    /// caller is responsible for crash recovery on the next start.
-    pub async fn shutdown(&self, timeout: Duration) {
-        // Take the JoinSet out of the mutex so the lock is not held across
-        // await points (clippy::await_holding_lock). New `spawn` calls during
-        // shutdown add to a fresh empty JoinSet inside the mutex; those tasks
-        // are intentionally not drained — shutdown means stop accepting work.
-        let mut tasks = {
-            let mut guard = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
-            std::mem::take(&mut *guard)
-        };
-
-        if tasks.is_empty() {
-            return;
-        }
-
-        let deadline = tokio::time::Instant::now() + timeout;
-        loop {
-            match tokio::time::timeout_at(deadline, tasks.join_next()).await {
-                Ok(Some(_)) => continue,
-                Ok(None) => break,
-                Err(_) => {
-                    let remaining = tasks.len();
-                    tasks.abort_all();
-                    tracing::warn!(
-                        remaining,
-                        "job supervisor shutdown timeout, aborted remaining tasks"
-                    );
-                    break;
-                }
+    fn record(&self, result: Result<(), JoinError>) {
+        if let Err(error) = result {
+            if error.is_panic() {
+                self.panics.fetch_add(1, Ordering::Relaxed);
+                // Panic payloads may contain credentials; only log task identity.
+                tracing::error!(task_id = %error.id(), "background task panicked");
+            } else {
+                self.cancellations.fetch_add(1, Ordering::Relaxed);
+                tracing::warn!(task_id = %error.id(), "background task cancelled");
             }
         }
     }
 
-    /// Returns the number of currently tracked tasks.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.tasks.lock().unwrap_or_else(|e| e.into_inner()).len()
+    fn drain_finished(&self, tasks: &mut JoinSet<()>) -> usize {
+        let mut count = 0;
+        while let Some(result) = tasks.try_join_next() {
+            self.record(result);
+            count += 1;
+        }
+        count
     }
 
-    /// Returns `true` if no tasks are tracked.
+    /// Reclaim completed jobs without waiting for running jobs.
+    pub fn reap_finished(&self) -> usize {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        self.drain_finished(&mut state.tasks)
+    }
+
+    /// Close admission immediately; existing jobs remain owned until shutdown.
+    pub fn close(&self) {
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).closed = true;
+    }
+
+    /// Close admission and drain, aborting jobs after `timeout`.
+    ///
+    /// Cancellation destructors normally run immediately. Their drain has a
+    /// separate one-second bound because Tokio cannot forcibly stop a future
+    /// that blocks a runtime thread without yielding. Dropping the remaining
+    /// JoinSet requests cancellation again; process exit is the final boundary.
+    pub async fn shutdown(&self, timeout: Duration) {
+        let mut tasks = {
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            state.closed = true;
+            std::mem::take(&mut state.tasks)
+        };
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            match tokio::time::timeout_at(deadline, tasks.join_next()).await {
+                Ok(Some(result)) => self.record(result),
+                Ok(None) => return,
+                Err(_) => break,
+            }
+        }
+        tracing::warn!(
+            remaining = tasks.len(),
+            "background job grace expired; aborting"
+        );
+        tasks.abort_all();
+        if tokio::time::timeout(Duration::from_secs(1), async {
+            while let Some(result) = tasks.join_next().await {
+                self.record(result);
+            }
+        })
+        .await
+        .is_err()
+        {
+            tracing::error!(
+                remaining = tasks.len(),
+                "background jobs did not yield after abort"
+            );
+        }
+    }
+
+    /// Number of running or completed-but-not-yet-reaped tasks (at most 64).
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .tasks
+            .len()
+    }
+
+    /// Whether there are any tracked tasks.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Cumulative task panics, without per-job metric labels.
+    #[must_use]
+    pub fn panic_count(&self) -> u64 {
+        self.panics.load(Ordering::Relaxed)
+    }
+
+    /// Cumulative joined cancellations, including forced shutdown aborts.
+    #[must_use]
+    pub fn cancellation_count(&self) -> u64 {
+        self.cancellations.load(Ordering::Relaxed)
     }
 }
 
@@ -104,3 +176,7 @@ impl Default for JobSupervisor {
         Self::new()
     }
 }
+
+#[cfg(test)]
+#[path = "job_supervisor_tests.rs"]
+mod tests;

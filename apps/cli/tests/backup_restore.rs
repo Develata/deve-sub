@@ -40,149 +40,21 @@ async fn setup_db(db_path: &std::path::Path) {
     pool.close().await;
 }
 
-/// Create a database migrated only up to migration 13 (reverses migrations
-/// 0014 and 0015, then removes their migration rows), simulating an
-/// older-schema backup source.
-async fn setup_db_schema_13(db_path: &std::path::Path) {
+/// Build the actual old schema; do not reverse migrations from current HEAD.
+async fn setup_db_schema(db_path: &std::path::Path, version: i64) {
     let url = format!("sqlite://{}?mode=rwc", db_path.display());
     let pool = sqlx::sqlite::SqlitePool::connect(&url).await.expect("pool");
-    sqlx::migrate!("../../migrations")
-        .run(&pool)
-        .await
-        .expect("migrations");
+    let mut migrator = sqlx::migrate!("../../migrations");
+    migrator.migrations = migrator
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= version)
+        .cloned()
+        .collect::<Vec<_>>()
+        .into();
+    migrator.run(&pool).await.expect("old migrations");
     sqlx::query("INSERT INTO users (id, username, password_hash, role, enabled, created_at) VALUES ('01HTEST000000000000000000A', 'admin', 'hash', 'admin', 1, '2025-01-01T00:00:00Z')")
-        .execute(&pool)
-        .await
-        .expect("insert user");
-
-    // Reverse migration 0014: drop the traffic_daily_snapshots table.
-    sqlx::query("DROP TABLE IF EXISTS traffic_daily_snapshots")
-        .execute(&pool)
-        .await
-        .expect("drop table");
-
-    // Reverse migration 0015: drop the _encrypted columns and restore the
-    // plaintext columns that 0015 dropped, so the schema matches pre-0015
-    // state and forward-migrating through 0015 succeeds on restore.
-    for stmt in [
-        "ALTER TABLE sources DROP COLUMN url_encrypted",
-        "ALTER TABLE sources DROP COLUMN headers_encrypted",
-        "ALTER TABLE sources ADD COLUMN url TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE sources ADD COLUMN headers_encrypted TEXT",
-        "ALTER TABLE source_items DROP COLUMN raw_uri_encrypted",
-        "ALTER TABLE source_items ADD COLUMN raw_uri TEXT NOT NULL DEFAULT ''",
-        "ALTER TABLE node_source_bindings DROP COLUMN raw_uri_encrypted",
-        "ALTER TABLE node_source_bindings ADD COLUMN raw_uri TEXT",
-        "ALTER TABLE nodes DROP COLUMN protocol_config_json_encrypted",
-        "ALTER TABLE nodes DROP COLUMN authentication_json_encrypted",
-        "ALTER TABLE nodes DROP COLUMN tls_json_encrypted",
-        "ALTER TABLE nodes DROP COLUMN transport_json_encrypted",
-        "ALTER TABLE nodes DROP COLUMN obfuscation_json_encrypted",
-        "ALTER TABLE nodes DROP COLUMN extras_json_encrypted",
-        "ALTER TABLE nodes ADD COLUMN protocol_config_json TEXT NOT NULL DEFAULT '{}'",
-        "ALTER TABLE nodes ADD COLUMN authentication_json TEXT NOT NULL DEFAULT '{}'",
-        "ALTER TABLE nodes ADD COLUMN tls_json TEXT",
-        "ALTER TABLE nodes ADD COLUMN transport_json TEXT",
-        "ALTER TABLE nodes ADD COLUMN obfuscation_json TEXT",
-        "ALTER TABLE nodes ADD COLUMN extras_json TEXT NOT NULL DEFAULT '{}'",
-    ] {
-        sqlx::query(stmt)
-            .execute(&pool)
-            .await
-            .expect("reverse 0015");
-    }
-
-    // Reverse migration 0016: drop the `mode` column from generation_cache.
-    sqlx::query("ALTER TABLE generation_cache DROP COLUMN mode")
-        .execute(&pool)
-        .await
-        .expect("reverse 0016");
-
-    // Reverse migration 0023: drop the covering indexes added by 0023
-    // before reversing 0017, since idx_nodes_missing_fingerprint depends
-    // on the identity_fingerprint column that 0017 added. SQLite refuses
-    // to drop a column while an index references it.
-    sqlx::query("DROP INDEX IF EXISTS idx_nodes_missing_fingerprint")
-        .execute(&pool)
-        .await
-        .expect("reverse 0023 node fingerprint index");
-    sqlx::query("DROP INDEX IF EXISTS idx_subscription_traffic_source_kind_recorded_at")
-        .execute(&pool)
-        .await
-        .expect("reverse 0023 traffic index");
-
-    // Reverse migration 0017: drop identity_fingerprint column and restore
-    // the old (protocol_kind, host, port) dedup unique index.
-    sqlx::query("DROP INDEX IF EXISTS idx_nodes_dedup")
-        .execute(&pool)
-        .await
-        .expect("drop idx_nodes_dedup for 0017 reversal");
-    sqlx::query("ALTER TABLE nodes DROP COLUMN identity_fingerprint")
-        .execute(&pool)
-        .await
-        .expect("reverse 0017");
-    sqlx::query(
-        "CREATE UNIQUE INDEX idx_nodes_dedup \
-         ON nodes(protocol_kind, host, port) WHERE missing_from_source = 0",
-    )
-    .execute(&pool)
-    .await
-    .expect("recreate old idx_nodes_dedup");
-
-    // Reverse migration 0018: drop the key_metadata table so forward-
-    // migrating through 0018 succeeds on restore.
-    sqlx::query("DROP TABLE IF EXISTS key_metadata")
-        .execute(&pool)
-        .await
-        .expect("reverse 0018");
-
-    // Reverse migration 0019: drop source_refresh_jobs table and the
-    // snapshots (source_id, version) unique index so forward-migrating
-    // through 0019 succeeds on restore.
-    sqlx::query("DROP INDEX IF EXISTS idx_snapshots_source_version_unique")
-        .execute(&pool)
-        .await
-        .expect("reverse 0019 index");
-    sqlx::query("DROP TABLE IF EXISTS source_refresh_jobs")
-        .execute(&pool)
-        .await
-        .expect("reverse 0019 table");
-
-    // Reverse migration 0020: drop the UNIQUE indexes so forward-migrating
-    // through 0020 (which does DROP INDEX IF EXISTS then CREATE UNIQUE INDEX)
-    // succeeds on restore.
-    sqlx::query("DROP INDEX IF EXISTS idx_template_versions_template")
-        .execute(&pool)
-        .await
-        .expect("drop 0020 template_versions unique");
-    sqlx::query("DROP INDEX IF EXISTS idx_subscription_tokens_subscription")
-        .execute(&pool)
-        .await
-        .expect("drop 0020 subscription_tokens unique");
-    sqlx::query("DROP INDEX IF EXISTS idx_subscription_short_codes_subscription")
-        .execute(&pool)
-        .await
-        .expect("drop 0020 subscription_short_codes unique");
-
-    // Reverse migration 0021: drop the retention index so forward-migrating
-    // through 0021 (CREATE INDEX idx_latency_records_measured) succeeds.
-    sqlx::query("DROP INDEX IF EXISTS idx_latency_records_measured")
-        .execute(&pool)
-        .await
-        .expect("reverse 0021 index");
-
-    // Reverse migration 0022: drop the TOTP replay-protection column so
-    // forward-migrating through 0022 (ALTER TABLE ... ADD COLUMN
-    // last_used_timestep) succeeds.
-    sqlx::query("ALTER TABLE totp_secrets DROP COLUMN last_used_timestep")
-        .execute(&pool)
-        .await
-        .expect("reverse 0022 totp column");
-
-    sqlx::query("DELETE FROM _sqlx_migrations WHERE version >= 14")
-        .execute(&pool)
-        .await
-        .expect("delete migration rows");
+        .execute(&pool).await.expect("insert user");
     pool.close().await;
 }
 
@@ -353,7 +225,7 @@ async fn backup003_restore_passes_integrity_check() {
 async fn backup004_restore_runs_forward_migrations() {
     let dir = tempfile::tempdir().expect("tempdir");
     let src_db = dir.path().join("src13.db");
-    setup_db_schema_13(&src_db).await;
+    setup_db_schema(&src_db, 13).await;
 
     let backup_path = dir.path().join("backup13.tar");
     let status = Command::new(BIN)
@@ -708,4 +580,82 @@ async fn backup009_failed_restore_preserves_existing_db() {
         "production DB must be preserved after failed restore"
     );
     verify_pool.close().await;
+}
+
+/// BACKUP-004: old manifest counts precede projection backfill; a subsequent
+/// backup after raw-history pruning must retain lifetime accounting.
+#[tokio::test(flavor = "multi_thread")]
+async fn backup004_old_traffic_and_pruned_totals_round_trip() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let old = dir.path().join("v23.db");
+    setup_db_schema(&old, 23).await;
+    let pool = sqlx::SqlitePool::connect(&format!("sqlite://{}", old.display()))
+        .await
+        .expect("pool");
+    sqlx::raw_sql("INSERT INTO templates (id, name) VALUES ('t', 'test');
+        INSERT INTO subscriptions (id, name, slug, owner_id, template_id, profile, node_selection, token_id)
+        VALUES ('s', 's', 's', '01HTEST000000000000000000A', 't', 'mihomo', '{}', 'TEST_TOKEN_ID');
+        INSERT INTO subscription_traffic (id, subscription_id, source_kind, upload, download, recorded_at, source_ref)
+        VALUES ('r', 's', 'P', 123, 456, '2025-01-01T00:00:00Z', 'nezha:test');")
+        .execute(&pool).await.expect("old data");
+    pool.close().await;
+    let mut source = old;
+    for round in 0..2 {
+        let archive = dir.path().join(format!("round-{round}.tar"));
+        let restored = dir.path().join(format!("restored-{round}.db"));
+        for (command, flag, path, db) in [
+            ("backup", "--output", &archive, &source),
+            ("restore", "--input", &archive, &restored),
+        ] {
+            let output = Command::new(BIN)
+                .args([
+                    command,
+                    flag,
+                    path.to_str().expect("path"),
+                    "--db-path",
+                    db.to_str().expect("db path"),
+                ])
+                .output()
+                .expect("command");
+            assert!(
+                output.status.success(),
+                "{command}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let pool = sqlx::SqlitePool::connect(&format!("sqlite://{}", restored.display()))
+            .await
+            .expect("pool");
+        let totals: (i64, i64) =
+            sqlx::query_as("SELECT upload, download FROM traffic_totals WHERE subscription_id='s'")
+                .fetch_one(&pool)
+                .await
+                .expect("totals");
+        assert_eq!(totals, (123, 456));
+        let version: i64 = sqlx::query_scalar("SELECT MAX(version) FROM _sqlx_migrations")
+            .fetch_one(&pool)
+            .await
+            .expect("version");
+        assert_eq!(version, deve_sub_storage_sqlite::embedded_schema_version());
+        if round == 0 {
+            let daily: i64 = sqlx::query_scalar(
+                "SELECT total_upload FROM traffic_daily_snapshots WHERE subscription_id='s'",
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("backfilled daily");
+            assert_eq!(daily, 123);
+            deve_sub_storage_sqlite::SqliteMaintenance::new(pool.clone(), &restored)
+                .prune_history()
+                .await
+                .expect("prune");
+        }
+        let raw: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM subscription_traffic")
+            .fetch_one(&pool)
+            .await
+            .expect("raw");
+        assert_eq!(raw, 0);
+        pool.close().await;
+        source = restored;
+    }
 }

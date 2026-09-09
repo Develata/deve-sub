@@ -31,31 +31,6 @@ pub enum SourceRefreshJobStatus {
 }
 
 impl SourceRefreshJobStatus {
-    /// Convert to the single-character discriminator stored in the database.
-    #[must_use]
-    pub const fn as_db_char(&self) -> &'static str {
-        match self {
-            Self::Pending => "P",
-            Self::Running => "R",
-            Self::Completed => "C",
-            Self::Failed => "F",
-            Self::Cancelled => "X",
-        }
-    }
-
-    /// Parse from the single-character database discriminator.
-    #[must_use]
-    pub fn from_db_char(c: &str) -> Option<Self> {
-        match c {
-            "P" => Some(Self::Pending),
-            "R" => Some(Self::Running),
-            "C" => Some(Self::Completed),
-            "F" => Some(Self::Failed),
-            "X" => Some(Self::Cancelled),
-            _ => None,
-        }
-    }
-
     /// Convert to kebab-case string for API serialization.
     #[must_use]
     pub const fn as_kebab(&self) -> &'static str {
@@ -96,9 +71,9 @@ pub enum RefreshPhase {
 }
 
 impl RefreshPhase {
-    /// Convert to the database discriminator string.
+    /// Stable phase name used in API progress reports.
     #[must_use]
-    pub const fn as_db_str(&self) -> &'static str {
+    pub const fn as_kebab(&self) -> &'static str {
         match self {
             Self::Idle => "idle",
             Self::Fetching => "fetching",
@@ -106,20 +81,6 @@ impl RefreshPhase {
             Self::Enriching => "enriching",
             Self::Reconciling => "reconciling",
             Self::Publishing => "publishing",
-        }
-    }
-
-    /// Parse from the database discriminator string.
-    #[must_use]
-    pub fn from_db_str(s: &str) -> Option<Self> {
-        match s {
-            "idle" => Some(Self::Idle),
-            "fetching" => Some(Self::Fetching),
-            "parsing" => Some(Self::Parsing),
-            "enriching" => Some(Self::Enriching),
-            "reconciling" => Some(Self::Reconciling),
-            "publishing" => Some(Self::Publishing),
-            _ => None,
         }
     }
 }

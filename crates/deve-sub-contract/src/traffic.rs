@@ -4,6 +4,7 @@
 //! manual correction. They are owned by the contract crate per ADR-0004.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// The origin of a traffic observation (kebab-case wire form).
@@ -11,7 +12,8 @@ use utoipa::ToSchema;
 /// Mirrors `deve_sub_domain::TrafficSourceKind::as_kebab()` without a
 /// cross-layer dependency (contract is a leaf DTO layer). The variants and
 /// their serialization MUST stay in lockstep with the domain enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "kebab-case")]
 pub enum TrafficSourceKindDto {
     /// Parsed from an upstream `subscription-userinfo` response header.
@@ -23,7 +25,8 @@ pub enum TrafficSourceKindDto {
 }
 
 /// Per-source-kind breakdown entry in a [`TrafficSummaryResponse`].
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TrafficSourceBreakdownDto {
     /// Source kind.
     pub source_kind: TrafficSourceKindDto,
@@ -38,7 +41,8 @@ pub struct TrafficSourceBreakdownDto {
 /// Returns the aggregated consumed traffic for a subscription, broken down by
 /// source kind. The `total` is `upload + download`. Used by the admin traffic
 /// dashboard and to verify quota enforcement state (OUT-010/OUT-011).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TrafficSummaryResponse {
     /// The subscription ULID.
     pub subscription_id: String,
@@ -56,7 +60,8 @@ pub struct TrafficSummaryResponse {
 ///
 /// Records a manual traffic correction (admin escape hatch for drifted totals).
 /// The correction is appended like any other record; aggregation is sum-based.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct ManualCorrectionRequest {
     /// Upload bytes to record.
@@ -68,7 +73,8 @@ pub struct ManualCorrectionRequest {
 }
 
 /// Response body for `POST /api/v1/subscriptions/{id}/traffic-correction`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ManualCorrectionResponse {
     /// The traffic record ULID.
     pub record_id: String,

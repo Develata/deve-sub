@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 
 use deve_sub_application::{
     DbHealthPort, GeoIpPort, GraceTokenCleanupScheduler, JobSupervisor, LoginRateLimiter,
-    RefreshScheduler, SubscriptionFetcher, TrafficDailySnapshotScheduler,
+    RefreshScheduler, SubscriptionFetcher,
 };
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,
@@ -216,7 +216,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         ));
 
     let db_health: Arc<dyn DbHealthPort> =
-        Arc::new(deve_sub_storage_sqlite::SqliteHealthCheck::new(db));
+        Arc::new(deve_sub_storage_sqlite::SqliteHealthCheck::new(db.clone()));
 
     let cancelled_flags: Arc<
         Mutex<HashMap<deve_sub_kernel::ProbeRunId, Arc<std::sync::atomic::AtomicBool>>>,
@@ -261,7 +261,7 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         job_supervisor: Arc::clone(&job_supervisor),
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
-        rate_limiter,
+        rate_limiter: Arc::clone(&rate_limiter),
         db_health,
     };
 
@@ -318,52 +318,76 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
             .await;
     });
 
-    let traffic_snapshot_scheduler = TrafficDailySnapshotScheduler::new(
-        Arc::clone(&state.traffic_repo),
-        Arc::clone(&state.traffic_daily_snapshot_repo),
-        Arc::clone(&state.probe_run_repo),
-    );
-    let traffic_snapshot_rx = shutdown_tx.subscribe();
-    let traffic_snapshot_handle = tokio::spawn(async move {
-        traffic_snapshot_scheduler
-            .run(async move {
-                let mut rx = traffic_snapshot_rx;
-                let _ = rx.recv().await;
-            })
-            .await;
-    });
-
+    let maintenance = Arc::new(deve_sub_storage_sqlite::SqliteMaintenance::new(
+        db.clone(),
+        &config.database.path,
+    ));
+    let maintenance_handle = tokio::spawn(crate::runtime::maintain(
+        Arc::clone(&maintenance),
+        Arc::clone(&job_supervisor),
+        Arc::clone(&rate_limiter),
+        shutdown_tx.subscribe(),
+    ));
     let router = build_router(state);
 
     let signal_tx = shutdown_tx.clone();
-    tokio::spawn(async move {
+    let signal_handle = tokio::spawn(async move {
         create_shutdown_signal().await;
         let _ = signal_tx.send(());
     });
 
     let server_rx = shutdown_tx.subscribe();
-    deve_sub_server::serve(router, bind, async move {
+    let closing_jobs = Arc::clone(&job_supervisor);
+    let server_result = deve_sub_server::serve(router, bind, async move {
         let mut rx = server_rx;
         let _ = rx.recv().await;
+        closing_jobs.close();
     })
-    .await
-    .map_err(|e| anyhow::anyhow!(e))?;
+    .await;
+    // Bind errors also own the shutdown path; do not detach initialized workers.
+    let _ = shutdown_tx.send(());
+    job_supervisor.close();
+    signal_handle.abort();
+    let _ = signal_handle.await;
 
-    stop_scheduler(scheduler_handle, "refresh-scheduler").await;
-    stop_scheduler(grace_handle, "grace-token-scheduler").await;
-    stop_scheduler(traffic_snapshot_handle, "traffic-snapshot-scheduler").await;
-
-    // B-14: cancel all in-flight probe runs so the runner writes Cancelled
-    // terminal status, then wait for probe jobs to finish within a timeout.
-    // Tasks that don't finish are aborted; their runs stay in Running and
-    // are recovered as Failed on the next process start.
-    if let Ok(flags) = cancelled_flags.lock() {
-        for flag in flags.values() {
+    for flags in [
+        cancelled_flags
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .cloned()
+            .collect::<Vec<_>>(),
+        refresh_cancel_flags
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .cloned()
+            .collect::<Vec<_>>(),
+    ] {
+        for flag in flags {
             flag.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
+    stop_scheduler(scheduler_handle, "refresh-scheduler").await;
+    stop_scheduler(grace_handle, "grace-token-scheduler").await;
+
+    stop_scheduler(maintenance_handle, "sqlite-maintenance").await;
     job_supervisor.shutdown(Duration::from_secs(30)).await;
-    tracing::info!("background jobs stopped, server exiting");
+    crate::runtime::checkpoint(&maintenance).await;
+    if tokio::time::timeout(Duration::from_secs(10), db.close())
+        .await
+        .is_err()
+    {
+        tracing::warn!("database pool close timed out");
+    }
+    tracing::info!(
+        tracked_jobs = job_supervisor.len(),
+        task_panics = job_supervisor.panic_count(),
+        task_cancellations = job_supervisor.cancellation_count(),
+        rate_limiter_entries = rate_limiter.resident_entries(),
+        "background jobs stopped, server exiting"
+    );
+    server_result.map_err(|e| anyhow::anyhow!(e))?;
 
     Ok(())
 }
@@ -385,6 +409,13 @@ async fn stop_scheduler(mut handle: tokio::task::JoinHandle<()>, name: &'static 
                 "scheduler exceeded 30s shutdown grace — aborting"
             );
             handle.abort();
+            match tokio::time::timeout(Duration::from_secs(1), &mut handle).await {
+                Ok(Err(error)) if !error.is_cancelled() => {
+                    tracing::warn!(task = name, %error, "scheduler join failed")
+                }
+                Err(_) => tracing::warn!(task = name, "scheduler did not yield after abort"),
+                _ => {}
+            }
         }
     }
 }

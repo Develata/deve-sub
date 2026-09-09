@@ -237,25 +237,14 @@ pub trait TempLinkRepository: Send + Sync {
 /// expiry policy framework".
 #[async_trait]
 pub trait TrafficRepository: Send + Sync {
-    /// Insert a new traffic record.
+    /// Insert a delta and update lifetime/daily projections atomically.
     async fn create(&self, record: &TrafficRecord) -> Result<(), SubscriptionError>;
 
-    /// Sum all traffic records for a subscription, returning the aggregate
+    /// Read lifetime traffic totals for a subscription, returning the aggregate
     /// upload/download totals and a per-source-kind breakdown.
     async fn get_summary(
         &self,
         subscription_id: SubscriptionId,
-    ) -> Result<TrafficSummary, SubscriptionError>;
-
-    /// Sum traffic records for a subscription within a timestamp range
-    /// `[start_iso, end_iso)`, returning the aggregate upload/download totals
-    /// and a per-source-kind breakdown. Used by the M10 daily snapshot
-    /// aggregation job.
-    async fn get_summary_in_range(
-        &self,
-        subscription_id: SubscriptionId,
-        start_iso: &str,
-        end_iso: &str,
     ) -> Result<TrafficSummary, SubscriptionError>;
 
     /// Sum all traffic records across all subscriptions owned by a user,
@@ -285,42 +274,17 @@ pub trait TrafficRepository: Send + Sync {
     async fn get_probe_traffic_attributions(
         &self,
     ) -> Result<Vec<(SubscriptionId, String, u64, u64)>, SubscriptionError>;
-
-    /// Return the distinct subscription IDs that have traffic records in the
-    /// given date range. Used by the M10 aggregation job to know which
-    /// subscriptions need snapshot computation.
-    async fn subscriptions_with_traffic_in_range(
-        &self,
-        start_date: &str,
-        end_date: &str,
-    ) -> Result<Vec<SubscriptionId>, SubscriptionError>;
-
-    /// Sum traffic records grouped by subscription for the timestamp range
-    /// `[start_iso, end_iso)`, returning one [`TrafficSummary`] per
-    /// subscription that has records in the range. Replaces the
-    /// per-subscription `get_summary_in_range` loop in the M10 aggregation
-    /// job — one `GROUP BY subscription_id, source_kind` query instead of
-    /// 1 + N (PERF-18).
-    async fn summaries_by_subscription_in_range(
-        &self,
-        start_iso: &str,
-        end_iso: &str,
-    ) -> Result<Vec<(SubscriptionId, TrafficSummary)>, SubscriptionError>;
 }
 
 /// Storage boundary for daily traffic snapshots (M10).
 ///
-/// The M10 aggregation job upserts one row per `(subscription_id, date)`.
+/// Traffic writes atomically maintain one row per `(subscription_id, date)`.
 /// The history query reads snapshots by subscription and date range, or
 /// globally across all subscriptions. See
 /// `docs/plan/milestones/M10-observability-and-audit.md` §"Traffic daily
 /// snapshot model".
 #[async_trait]
 pub trait TrafficDailySnapshotRepository: Send + Sync {
-    /// Upsert a daily snapshot. If a row for `(subscription_id, date)`
-    /// already exists, it is replaced.
-    async fn upsert(&self, snapshot: &TrafficDailySnapshot) -> Result<(), SubscriptionError>;
-
     /// List daily snapshots for a subscription within a date range
     /// (inclusive), ordered by date ascending.
     async fn list_for_subscription(

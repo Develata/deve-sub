@@ -9,8 +9,8 @@ repository.workspace = true
 
 [dependencies]
 deve-sub-application = { workspace = true }
+sha2 = { workspace = true }
 async-trait = { workspace = true }
-tokio = { workspace = true }
 
 [lints]
 workspace = true

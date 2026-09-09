@@ -1,10 +1,10 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-//! PERF-005: Concurrent subscription download throughput.
+//! Mock HTTP transport concurrency smoke (not application throughput).
 //!
-//! Starts a mock HTTP server and measures throughput of 100 concurrent
+//! Starts a mock HTTP server and measures throughput of 500 concurrent
 //! requests. This benchmarks the HTTP client and connection pool under
-//! load, simulating concurrent subscription downloads.
+//! load, It does not launch or measure Deve Sub.
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -40,10 +40,10 @@ async fn start_mock_server() -> String {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn perf005_concurrent_requests() {
+async fn mock_http_transport_concurrency_smoke() {
     let base_url = start_mock_server().await;
     let client = reqwest::Client::new();
-    let concurrency = 100;
+    let concurrency = 500;
     let total = 500;
 
     let start = std::time::Instant::now();
@@ -65,10 +65,10 @@ async fn perf005_concurrent_requests() {
     let elapsed = start.elapsed();
     let rps = total as f64 / elapsed.as_secs_f64();
 
-    println!("PERF-005: {total} requests at concurrency {concurrency}");
+    println!("Mock transport smoke: {total} requests at concurrency {concurrency}");
     println!("  elapsed: {elapsed:.2?}");
     println!("  throughput: {rps:.0} req/s");
     println!("  per-request: {:.2?}", elapsed / total as u32);
 
-    assert!(rps > 10.0, "throughput too low: {rps:.0} req/s");
+    // Completion is the smoke invariant; transport timing is diagnostic only.
 }

@@ -5,10 +5,12 @@
 //! here, not in the API crate.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
 /// Input format of a subscription source.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum SourceTypeDto {
     /// Auto-detect from content type and body.
@@ -31,7 +33,8 @@ pub enum SourceTypeDto {
 
 /// Include/exclude filter rules applied to parsed nodes before reconcile
 /// (SRC-010).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SourceFilterRulesDto {
     /// Protocols to keep; empty means keep all.
     #[serde(default)]
@@ -50,7 +53,8 @@ pub struct SourceFilterRulesDto {
 /// Source information returned by source management endpoints.
 ///
 /// Never includes encrypted headers ciphertext in responses.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SourceDto {
     /// ULID identifier.
     pub id: String,
@@ -76,7 +80,8 @@ pub struct SourceDto {
 }
 
 /// Request body for `POST /api/v1/sources`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateSourceRequest {
     /// Human-readable name.
@@ -100,7 +105,8 @@ pub struct CreateSourceRequest {
 }
 
 /// Request body for `PUT /api/v1/sources/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct UpdateSourceRequest {
     /// Human-readable name.
@@ -123,14 +129,16 @@ pub struct UpdateSourceRequest {
 }
 
 /// Response body for `POST /api/v1/sources` and `PUT /api/v1/sources/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SourceResponse {
     /// The source.
     pub source: SourceDto,
 }
 
 /// Response body for `GET /api/v1/sources` (cursor-paginated source list).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListSourcesResponse {
     /// Sources in the current page.
     pub sources: Vec<SourceDto>,
@@ -139,7 +147,8 @@ pub struct ListSourcesResponse {
 }
 
 /// Response body for `POST /api/v1/sources/{id}/refresh`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct RefreshSourceResponse {
     /// ULID of the snapshot created (or the previously active one on 304).
     pub snapshot_id: String,
@@ -154,7 +163,8 @@ pub struct RefreshSourceResponse {
 }
 
 /// Reconciliation counts returned by a source refresh.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ReconcileCountsDto {
     /// Nodes newly inserted into the pool.
     pub new_nodes: u64,
@@ -178,7 +188,8 @@ fn default_keep_on_fail() -> bool {
 ///
 /// The refresh is now asynchronous: the API returns 202 with a job ID.
 /// The client polls `GET /api/v1/sources/refresh-jobs/{job_id}` for status.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct RefreshJobAcceptedResponse {
     /// ULID of the created refresh job.
     pub job_id: String,
@@ -190,7 +201,8 @@ pub struct RefreshJobAcceptedResponse {
 
 /// Response body for `GET /api/v1/sources/refresh-jobs/{job_id}` and
 /// `GET /api/v1/sources/{id}/refresh-jobs/latest`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SourceRefreshJobDto {
     /// ULID of the refresh job.
     pub id: String,
@@ -222,7 +234,8 @@ pub struct SourceRefreshJobDto {
 }
 
 /// Response body for `POST /api/v1/sources/refresh-jobs/{job_id}/cancel`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct CancelRefreshJobResponse {
     /// ULID of the refresh job.
     pub job_id: String,

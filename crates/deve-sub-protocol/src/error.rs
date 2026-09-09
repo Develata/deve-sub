@@ -9,6 +9,10 @@ use thiserror::Error;
 /// canonical [`deve_sub_domain::Node`].
 #[derive(Debug, Error)]
 pub enum ParseError {
+    /// Container entry count exceeds the supported resource envelope.
+    #[error("too many container entries: {0}")]
+    TooManyEntries(usize),
+
     /// The URI is not parseable by the URL parser.
     #[error("invalid URI: {0}")]
     InvalidUri(String),

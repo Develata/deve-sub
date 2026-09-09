@@ -9,8 +9,8 @@ use deve_sub_contract::{
 };
 use deve_sub_kernel::TemplateId;
 
-use crate::AppState;
 use crate::auth::{AdminUser, err};
+use crate::state::TemplateState;
 
 use super::mappers::{compat_report_to_dto, resolution_to_dto};
 
@@ -32,7 +32,7 @@ use super::mappers::{compat_report_to_dto, resolution_to_dto};
     )
 )]
 pub(super) async fn resolve_template_route(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<ResolveTemplateResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -125,7 +125,7 @@ pub(super) async fn resolve_template_route(
     )
 )]
 pub(super) async fn check_compatibility_route(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Query(q): Query<CompatibilityQuery>,

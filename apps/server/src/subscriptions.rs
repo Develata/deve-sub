@@ -27,6 +27,7 @@ use time::format_description::well_known::Rfc3339;
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
+use crate::state::SubscriptionState;
 
 fn subscription_to_dto(s: &Subscription, short_code: Option<String>) -> SubscriptionDto {
     SubscriptionDto {
@@ -75,7 +76,7 @@ fn parse_iso8601(s: &str) -> Result<Timestamp, (StatusCode, Json<ErrorResponse>)
     )
 )]
 async fn create_subscription(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     admin: AdminUser,
     Json(req): Json<CreateSubscriptionRequest>,
 ) -> Result<(StatusCode, Json<SubscriptionResponse>), (StatusCode, Json<ErrorResponse>)> {
@@ -141,7 +142,7 @@ async fn create_subscription(
     )
 )]
 async fn list_subscriptions(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     admin: AdminUser,
     Query(q): Query<ListSubscriptionsQuery>,
 ) -> Result<Json<ListSubscriptionsResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -198,7 +199,7 @@ async fn list_subscriptions(
     )
 )]
 async fn get_subscription(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<GetSubscriptionResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -248,7 +249,7 @@ async fn get_subscription(
     )
 )]
 async fn update_subscription(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateSubscriptionRequest>,
@@ -309,7 +310,7 @@ async fn update_subscription(
     )
 )]
 async fn delete_subscription(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -351,7 +352,7 @@ async fn delete_subscription(
     )
 )]
 async fn rotate_token(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<RotateTokenRequest>,
@@ -411,7 +412,7 @@ async fn rotate_token(
     )
 )]
 async fn regenerate_short_code(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<ShortCodeResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -455,7 +456,7 @@ async fn regenerate_short_code(
     )
 )]
 async fn create_temp_link(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     _admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<CreateTempLinkRequest>,
@@ -513,7 +514,7 @@ async fn create_temp_link(
     )
 )]
 async fn revoke_temp_link(
-    State(state): State<AppState>,
+    State(state): State<SubscriptionState>,
     _admin: AdminUser,
     Path((id, temp_link_id)): Path<(String, String)>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {

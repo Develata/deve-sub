@@ -138,9 +138,11 @@ const COUNTED_TABLES: &[&str] = &[
     "pool_meta",
     "probe_runs",
     "probe_sources",
+    "probe_traffic_totals",
     "recovery_codes",
     "sessions",
     "source_items",
+    "source_refresh_jobs",
     "source_snapshots",
     "sources",
     "subscription_short_codes",
@@ -153,6 +155,7 @@ const COUNTED_TABLES: &[&str] = &[
     "templates",
     "totp_secrets",
     "traffic_daily_snapshots",
+    "traffic_totals",
     "users",
 ];
 
@@ -406,6 +409,10 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
 
     let pool = open_db(&staging_path.to_string_lossy(), 1).await?;
 
+    // WHY: the manifest describes the archived schema. Forward migrations
+    // may legitimately backfill projection rows (0024); compare before them.
+    verify_restore(&pool, &manifest).await?;
+
     if manifest.schema_version < current_version {
         tracing::info!(
             backup_schema = manifest.schema_version,
@@ -415,8 +422,6 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
         deve_sub_storage_sqlite::run_migrations(&pool).await?;
         tracing::info!("forward migrations applied to staged DB");
     }
-
-    verify_restore(&pool, &manifest).await?;
 
     let integrity = integrity_check(&pool).await?;
     if integrity != "ok" {
@@ -641,6 +646,7 @@ fn extract_archive(archive_path: &Path, dest: &Path) -> Result<(BackupManifest, 
 
     let mut manifest: Option<BackupManifest> = None;
     let mut snapshot_found = false;
+    let mut seen_entries = std::collections::HashSet::new();
 
     for entry in archive
         .entries()
@@ -661,6 +667,20 @@ fn extract_archive(archive_path: &Path, dest: &Path) -> Result<(BackupManifest, 
         {
             tracing::warn!(entry = %name, "skipping entry with unsafe path");
             continue;
+        }
+
+        // WHY: matching a safe filename is insufficient: tar symlinks and
+        // hardlinks can redirect extraction outside the staging directory.
+        if matches!(
+            name.as_str(),
+            "manifest.json" | "database.sqlite" | "config.json" | "metadata.json"
+        ) {
+            if !entry.header().entry_type().is_file() {
+                bail!("backup entry {name} must be a regular file");
+            }
+            if !seen_entries.insert(name.clone()) {
+                bail!("duplicate backup entry {name}");
+            }
         }
 
         match &name[..] {
@@ -684,7 +704,9 @@ fn extract_archive(archive_path: &Path, dest: &Path) -> Result<(BackupManifest, 
                 snapshot_found = true;
             }
             "config.json" | "metadata.json" => {
-                let _ = entry.unpack(dest.join(&*name));
+                entry
+                    .unpack(dest.join(&*name))
+                    .context("unpack backup metadata")?;
             }
             _ => {
                 tracing::warn!(entry = %name, "skipping unknown archive entry");
@@ -819,3 +841,7 @@ fn fsync_dir(dir: &Path) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "backup_archive_tests.rs"]
+mod archive_tests;

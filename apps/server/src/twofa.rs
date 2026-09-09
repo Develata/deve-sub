@@ -15,6 +15,7 @@ use deve_sub_contract::{
 
 use crate::AppState;
 use crate::auth::{AuthSession, err, set_cookie_header, user_to_dto};
+use crate::state::AuthState;
 
 /// `POST /api/v1/auth/2fa/setup` — generate a TOTP secret.
 ///
@@ -32,7 +33,7 @@ use crate::auth::{AuthSession, err, set_cookie_header, user_to_dto};
     )
 )]
 async fn setup(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
     auth_session: AuthSession,
 ) -> Result<Json<TwoFactorSetupResponse>, (StatusCode, Json<ErrorResponse>)> {
     let result = auth::setup_2fa(
@@ -82,7 +83,7 @@ async fn setup(
     )
 )]
 async fn verify(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
     auth_session: AuthSession,
     Json(req): Json<TwoFactorVerifyRequest>,
 ) -> Result<Json<TwoFactorVerifyResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -155,7 +156,7 @@ async fn verify(
     )
 )]
 async fn disable(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
     auth_session: AuthSession,
     Json(req): Json<TwoFactorDisableRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
@@ -210,7 +211,7 @@ async fn disable(
     )
 )]
 async fn recovery_codes(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
     auth_session: AuthSession,
     Json(req): Json<RegenerateRecoveryCodesRequest>,
 ) -> Result<Json<RegenerateRecoveryCodesResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -262,7 +263,7 @@ async fn recovery_codes(
     )
 )]
 async fn login_2fa(
-    State(state): State<AppState>,
+    State(state): State<AuthState>,
     headers: axum::http::HeaderMap,
     Json(req): Json<LoginTwoFactorRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {

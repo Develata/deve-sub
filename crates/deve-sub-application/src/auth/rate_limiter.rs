@@ -1,7 +1,7 @@
 //! Login rate limiter port.
 //!
 //! This trait defines the boundary for login attempt tracking and temporary
-//! lockout. The in-memory adapter lives in the server crate; the application
+//! lockout. The in-memory adapter lives in the inmemory crate; the application
 //! layer calls these methods from the `login` command. See
 //! `docs/plan/milestones/M2-auth-and-users.md` Slice 3 (AUTH-004).
 
@@ -17,6 +17,12 @@ use super::error::AuthError;
 /// in-memory. If a database-backed implementation is needed later, the trait
 /// can be changed to `async_trait`.
 pub trait LoginRateLimiter: Send + Sync {
+    /// Resident failure records, when available, for low-cardinality resource
+    /// telemetry. Implementations without local storage may return `None`.
+    fn resident_entries(&self) -> Option<usize> {
+        None
+    }
+
     /// Check if login is allowed for the given username and optional IP.
     ///
     /// Returns `Err(AuthError::RateLimited)` if either the username or IP

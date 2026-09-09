@@ -14,8 +14,8 @@ use deve_sub_contract::{
 };
 use deve_sub_kernel::{TemplateId, TemplateVersionId};
 
-use crate::AppState;
 use crate::auth::{AdminUser, err};
+use crate::state::TemplateState;
 
 use super::error::map_template_app_error;
 use super::mappers::{template_to_dto, version_to_dto};
@@ -36,7 +36,7 @@ use super::mappers::{template_to_dto, version_to_dto};
     )
 )]
 pub(super) async fn create_template(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     admin: AdminUser,
     Json(req): Json<CreateTemplateRequest>,
 ) -> Result<(StatusCode, Json<TemplateResponse>), (StatusCode, Json<ErrorResponse>)> {
@@ -87,7 +87,7 @@ pub(super) async fn create_template(
     )
 )]
 pub(super) async fn list_templates(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     _admin: AdminUser,
     Query(q): Query<ListTemplatesQuery>,
 ) -> Result<Json<ListTemplatesResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -146,7 +146,7 @@ pub(super) async fn list_templates(
     )
 )]
 pub(super) async fn get_template(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<GetTemplateResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -199,7 +199,7 @@ pub(super) async fn get_template(
     )
 )]
 pub(super) async fn update_template(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateTemplateRequest>,
@@ -251,7 +251,7 @@ pub(super) async fn update_template(
     )
 )]
 pub(super) async fn delete_template(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -290,7 +290,7 @@ pub(super) async fn delete_template(
     )
 )]
 pub(super) async fn list_versions(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     _admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<Json<ListVersionsResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -338,7 +338,7 @@ pub(super) async fn list_versions(
     )
 )]
 pub(super) async fn rollback_template(
-    State(state): State<AppState>,
+    State(state): State<TemplateState>,
     admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<RollbackRequest>,

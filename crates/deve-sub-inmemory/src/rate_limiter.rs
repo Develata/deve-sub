@@ -1,135 +1,118 @@
-//! In-memory login rate limiter.
+//! Process-local login failure tracking with a hard resident-key bound.
 //!
-//! Tracks failed login attempts per username and per IP address using a
-//! `Mutex<HashMap>`. After `max_attempts` failures, the key is locked for
-//! `lockout_duration`. This is process-local state — it is not shared across
-//! instances and is lost on restart. For a self-hosted single-binary product,
-//! this is sufficient and avoids a database migration (AUTH-004).
-//!
-//! The rate limiter is intentionally in-memory rather than database-backed.
-//! Rationale: per-IP tracking cannot use columns on the `users` table, and
-//! in-memory rate limiting is simpler, faster, and adequate for a
-//! single-instance deployment. The lockout resets on restart, which is
-//! acceptable for a self-hosted product.
+//! Full capacity fails closed for unknown keys instead of evicting active
+//! lockouts. Pressure cleanup only removes expired entries, at most once per
+//! second. Fixed-size, domain-separated digests bound memory even for long
+//! attacker-controlled usernames. State is intentionally lost on restart.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use deve_sub_application::auth::{AuthError, LoginRateLimiter};
+use sha2::{Digest, Sha256};
 
-/// In-memory implementation of [`LoginRateLimiter`].
+/// Maximum combined number of username and IP failure records.
+const MAX_ENTRIES: usize = 10_000;
+
+/// Bounded in-memory implementation of [`LoginRateLimiter`].
 pub struct InMemoryLoginRateLimiter {
     max_attempts: u32,
     lockout_duration: Duration,
-    entries: Mutex<HashMap<String, RateLimitEntry>>,
+    state: Mutex<State>,
+}
+
+struct State {
+    entries: HashMap<[u8; 32], RateLimitEntry>,
+    next_sweep: Instant,
 }
 
 struct RateLimitEntry {
     failed_attempts: u32,
     locked_until: Option<Instant>,
-    /// When the last failure was recorded. Used by `evict_expired` to
-    /// remove stale entries and prevent unbounded HashMap growth.
     last_failure: Instant,
 }
 
-/// Maximum number of entries before triggering eviction of expired entries.
-/// WHY: prevents unbounded HashMap growth from attacker-generated unique
-/// keys (e.g., rotating XFF values). 10_000 entries × ~100 bytes ≈ 1 MB.
-const MAX_ENTRIES: usize = 10_000;
-
 impl InMemoryLoginRateLimiter {
-    /// Create a new rate limiter with the given threshold and lockout
-    /// duration.
+    /// Create a limiter with a shared 10,000-entry username/IP budget.
     #[must_use]
     pub fn new(max_attempts: u32, lockout_duration: Duration) -> Self {
         Self {
             max_attempts,
             lockout_duration,
-            entries: Mutex::new(HashMap::new()),
+            state: Mutex::new(State {
+                entries: HashMap::new(),
+                next_sweep: Instant::now(),
+            }),
         }
     }
 
-    /// Keys to check/record for a given username and optional IP.
-    fn keys(username: &str, ip: Option<&str>) -> Vec<String> {
-        let mut keys = vec![username.to_owned()];
-        if let Some(ip) = ip {
-            keys.push(format!("ip:{ip}"));
-        }
-        keys
+    fn key(namespace: u8, value: &str) -> [u8; 32] {
+        let mut hash = Sha256::new();
+        hash.update([namespace]);
+        hash.update(value.as_bytes());
+        hash.finalize().into()
     }
 
-    /// Evict entries whose lockout has expired OR whose last failure is
-    /// older than `2 × lockout_duration`. Called when the map exceeds
-    /// `MAX_ENTRIES` to prevent unbounded memory growth.
-    ///
-    /// WHY: eviction is a memory-boundary mechanism, not a security decay
-    /// policy. When the map is under `MAX_ENTRIES`, stale failure counts may
-    /// persist longer than `2 × lockout_duration` — the security policy is
-    /// enforced by `check` (lockout expiry resets the counter) and
-    /// `record_success` (clears the username key), not by eviction. The
-    /// inconsistency is acceptable: a few hundred stale entries cost
-    /// negligible memory, and their counts only matter if the same key
-    /// accumulates further failures, at which point the existing count
-    /// contributes to a lockout — the desired behavior.
-    fn evict_expired(entries: &mut HashMap<String, RateLimitEntry>, lockout_duration: Duration) {
-        let now = Instant::now();
-        let max_age = lockout_duration * 2;
-        entries.retain(|_, entry| {
-            if let Some(locked_until) = entry.locked_until {
-                // Keep entries that are still locked.
-                locked_until > now
-            } else {
-                // Keep entries with recent failures (within 2× lockout
-                // duration). Older entries are stale and can be evicted.
-                now.duration_since(entry.last_failure) < max_age
-            }
+    fn keys(username: &str, ip: Option<&str>) -> impl Iterator<Item = [u8; 32]> {
+        [Some(Self::key(0, username)), ip.map(|ip| Self::key(1, ip))]
+            .into_iter()
+            .flatten()
+    }
+
+    fn sweep_at_capacity(&self, state: &mut State, now: Instant) {
+        if state.entries.len() < MAX_ENTRIES || now < state.next_sweep {
+            return;
+        }
+        // WHY: preserve the existing pressure-eviction semantics, including
+        // sticky failure counts below capacity. Never evict an active lockout;
+        // otherwise rotating usernames would buy fresh brute-force budgets.
+        let max_age = self.lockout_duration.saturating_mul(2);
+        state.entries.retain(|_, entry| match entry.locked_until {
+            Some(until) => until > now,
+            None => now.duration_since(entry.last_failure) < max_age,
         });
+        state.next_sweep = now + Duration::from_secs(1);
     }
 }
 
 impl LoginRateLimiter for InMemoryLoginRateLimiter {
     fn check(&self, username: &str, ip: Option<&str>) -> Result<(), AuthError> {
-        // WHY: recover from a poisoned mutex rather than panicking. A poisoned
-        // mutex means another thread panicked while holding the lock; the data
-        // may be stale but is still usable for a rate limiter.
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
-
+        self.sweep_at_capacity(&mut state, now);
+        let mut missing = 0;
         for key in Self::keys(username, ip) {
-            if let Some(entry) = entries.get_mut(&key)
-                && let Some(locked_until) = entry.locked_until
-            {
-                if locked_until > now {
-                    return Err(AuthError::RateLimited);
+            match state.entries.get_mut(&key) {
+                Some(entry) => {
+                    if let Some(until) = entry.locked_until {
+                        if until > now {
+                            return Err(AuthError::RateLimited);
+                        }
+                        // Retain the count: one failure after expiry re-locks.
+                        entry.locked_until = None;
+                    }
                 }
-                // WHY (P0-12): lockout expired — clear the lockout but KEEP
-                // the failure count. Previously the counter was reset to 0,
-                // letting an attacker try max_attempts passwords every
-                // lockout_duration cycle. Keeping the count means the next
-                // single failure immediately re-locks (failed_attempts is
-                // already >= max_attempts), reducing the brute-force rate
-                // from max_attempts per cycle to 1 per cycle. Only a
-                // successful login (record_success) clears the counter.
-                entry.locked_until = None;
+                None => missing += 1,
             }
         }
-
+        if missing > MAX_ENTRIES - state.entries.len() {
+            return Err(AuthError::RateLimited);
+        }
         Ok(())
     }
 
     fn record_failure(&self, username: &str, ip: Option<&str>) {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
-
-        // WHY: evict expired entries when the map grows large to prevent
-        // unbounded memory growth from attacker-generated unique keys.
-        if entries.len() > MAX_ENTRIES {
-            Self::evict_expired(&mut entries, self.lockout_duration);
-        }
-
+        self.sweep_at_capacity(&mut state, now);
         for key in Self::keys(username, ip) {
-            let entry = entries.entry(key).or_insert(RateLimitEntry {
+            // Concurrent checks do not reserve slots. Recheck under the same
+            // mutex as insertion so racing failures cannot exceed the bound.
+            if !state.entries.contains_key(&key) && state.entries.len() == MAX_ENTRIES {
+                continue;
+            }
+            let entry = state.entries.entry(key).or_insert(RateLimitEntry {
                 failed_attempts: 0,
                 locked_until: None,
                 last_failure: now,
@@ -137,24 +120,85 @@ impl LoginRateLimiter for InMemoryLoginRateLimiter {
             entry.failed_attempts = entry.failed_attempts.saturating_add(1);
             entry.last_failure = now;
             if entry.failed_attempts >= self.max_attempts {
-                entry.locked_until = Some(now + self.lockout_duration);
+                entry.locked_until = now.checked_add(self.lockout_duration);
             }
         }
     }
 
     fn record_success(&self, username: &str, _ip: Option<&str>) {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        // WHY: only remove the username key, not the IP key. Removing the
-        // IP key would let an attacker on a shared IP reset the IP-level
-        // counter by successfully logging in as themselves, then resume
-        // attacking other users from the same IP.
-        entries.remove(username);
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        // A successful login must never clear the shared IP's failure count.
+        state.entries.remove(&Self::key(0, username));
+    }
+
+    fn resident_entries(&self) -> Option<usize> {
+        Some(
+            self.state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .entries
+                .len(),
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn high_cardinality_is_hard_bounded_and_does_not_evict_lockouts() {
+        let limiter = InMemoryLoginRateLimiter::new(1, Duration::from_secs(3600));
+        limiter.record_failure("protected", None);
+        for i in 0..100_000 {
+            limiter.record_failure(&format!("user-{i}"), Some(&format!("ip-{i}")));
+            assert!(limiter.resident_entries().expect("local entries") <= MAX_ENTRIES);
+        }
+        assert_eq!(limiter.resident_entries(), Some(MAX_ENTRIES));
+        assert!(matches!(
+            limiter.check("protected", None),
+            Err(AuthError::RateLimited)
+        ));
+        assert!(matches!(
+            limiter.check("new", None),
+            Err(AuthError::RateLimited)
+        ));
+    }
+
+    #[test]
+    fn expired_pressure_entries_allow_admission_again() {
+        let limiter = InMemoryLoginRateLimiter::new(1, Duration::from_secs(60));
+        for i in 0..MAX_ENTRIES {
+            limiter.record_failure(&format!("user-{i}"), None);
+        }
+        {
+            let mut state = limiter.state.lock().expect("lock");
+            let expired = Instant::now() - Duration::from_secs(1);
+            for entry in state.entries.values_mut() {
+                entry.locked_until = Some(expired);
+            }
+            state.next_sweep = expired;
+        }
+        assert!(limiter.check("new", None).is_ok());
+        assert_eq!(limiter.resident_entries(), Some(0));
+        limiter.record_failure("new", None);
+        assert!(matches!(
+            limiter.check("new", None),
+            Err(AuthError::RateLimited)
+        ));
+    }
+
+    #[test]
+    fn username_cannot_alias_or_reset_ip_key() {
+        let limiter = InMemoryLoginRateLimiter::new(1, Duration::from_secs(60));
+        limiter.record_failure("alice", Some("192.0.2.1"));
+        limiter.record_success("ip:192.0.2.1", None);
+        assert!(matches!(
+            limiter.check("bob", Some("192.0.2.1")),
+            Err(AuthError::RateLimited)
+        ));
+        assert!(limiter.check("ip:192.0.2.1", None).is_ok());
+    }
 
     #[test]
     fn allows_login_under_threshold() {

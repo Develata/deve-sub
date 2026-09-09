@@ -1,10 +1,9 @@
 //! SQLite implementation of [`TrafficRepository`].
 //!
-//! Traffic records are append-only observations per subscription. Aggregation
-//! (sum of upload/download, optionally grouped by source_kind) is computed at
-//! read time. See `docs/plan/milestones/M6-subscription-distribution.md`
-//! §"Traffic and expiry policy framework".
+//! Raw deltas and lifetime/daily projections commit together via migration
+//! 0024 triggers. Lifetime queries never scan retained raw history.
 
+use crate::discriminant::SqliteDiscriminant;
 use async_trait::async_trait;
 use deve_sub_domain::{
     SubscriptionError, TrafficRecord, TrafficRepository, TrafficSourceKind, TrafficSummary,
@@ -34,20 +33,12 @@ struct AggregateRow {
     download: i64,
 }
 
-#[derive(sqlx::FromRow)]
-struct GroupedAggregateRow {
-    subscription_id: String,
-    source_kind: String,
-    upload: i64,
-    download: i64,
-}
-
 fn build_summary(rows: Vec<AggregateRow>) -> Result<TrafficSummary, SubscriptionError> {
     let mut upload: u64 = 0;
     let mut download: u64 = 0;
     let mut by_source: Vec<(TrafficSourceKind, u64, u64)> = Vec::new();
     for row in rows {
-        let kind = TrafficSourceKind::from_db_char(&row.source_kind).ok_or_else(|| {
+        let kind = TrafficSourceKind::decode(&row.source_kind).ok_or_else(|| {
             SubscriptionError::Storage(format!("unknown source_kind '{}'", row.source_kind))
         })?;
         let u = row.upload.max(0) as u64;
@@ -74,7 +65,7 @@ impl TrafficRepository for SqliteTrafficRepository {
         )
         .bind(record.id.to_string())
         .bind(record.subscription_id.to_string())
-        .bind(record.source_kind.as_db_char())
+        .bind(record.source_kind.encode())
         .bind(record.upload as i64)
         .bind(record.download as i64)
         .bind(recorded_at)
@@ -90,32 +81,10 @@ impl TrafficRepository for SqliteTrafficRepository {
         subscription_id: SubscriptionId,
     ) -> Result<TrafficSummary, SubscriptionError> {
         let rows: Vec<AggregateRow> = sqlx::query_as(
-            "SELECT source_kind, SUM(upload) AS upload, SUM(download) AS download \
-             FROM subscription_traffic WHERE subscription_id = ? \
-             GROUP BY source_kind",
+            "SELECT source_kind, upload, download \
+             FROM traffic_totals WHERE subscription_id = ? ORDER BY source_kind",
         )
         .bind(subscription_id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
-        build_summary(rows)
-    }
-
-    async fn get_summary_in_range(
-        &self,
-        subscription_id: SubscriptionId,
-        start_iso: &str,
-        end_iso: &str,
-    ) -> Result<TrafficSummary, SubscriptionError> {
-        let rows: Vec<AggregateRow> = sqlx::query_as(
-            "SELECT source_kind, SUM(upload) AS upload, SUM(download) AS download \
-             FROM subscription_traffic \
-             WHERE subscription_id = ? AND recorded_at >= ? AND recorded_at < ? \
-             GROUP BY source_kind",
-        )
-        .bind(subscription_id.to_string())
-        .bind(start_iso)
-        .bind(end_iso)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
@@ -128,7 +97,7 @@ impl TrafficRepository for SqliteTrafficRepository {
     ) -> Result<TrafficSummary, SubscriptionError> {
         let rows: Vec<AggregateRow> = sqlx::query_as(
             "SELECT t.source_kind, SUM(t.upload) AS upload, SUM(t.download) AS download \
-             FROM subscription_traffic t \
+             FROM traffic_totals t \
              INNER JOIN subscriptions s ON t.subscription_id = s.id \
              WHERE s.owner_id = ? \
              GROUP BY t.source_kind",
@@ -143,7 +112,7 @@ impl TrafficRepository for SqliteTrafficRepository {
     async fn get_global_summary(&self) -> Result<TrafficSummary, SubscriptionError> {
         let rows: Vec<AggregateRow> = sqlx::query_as(
             "SELECT source_kind, SUM(upload) AS upload, SUM(download) AS download \
-             FROM subscription_traffic GROUP BY source_kind",
+             FROM traffic_totals GROUP BY source_kind",
         )
         .fetch_all(&self.pool)
         .await
@@ -155,31 +124,31 @@ impl TrafficRepository for SqliteTrafficRepository {
         &self,
         subscription_id: SubscriptionId,
     ) -> Result<(), SubscriptionError> {
-        sqlx::query("DELETE FROM subscription_traffic WHERE subscription_id = ?")
-            .bind(subscription_id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
+        // WHY: explicit reset must remove every projection in the same commit.
+        // Retention uses raw-only deletes and intentionally preserves totals.
+        let mut tx = self.pool.begin().await.map_err(storage_error)?;
+        for table in [
+            "subscription_traffic",
+            "traffic_totals",
+            "probe_traffic_totals",
+            "traffic_daily_snapshots",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table} WHERE subscription_id = ?"))
+                .bind(subscription_id.to_string())
+                .execute(&mut *tx)
+                .await
+                .map_err(storage_error)?;
+        }
+        tx.commit().await.map_err(storage_error)?;
         Ok(())
     }
 
     async fn get_probe_traffic_attributions(
         &self,
     ) -> Result<Vec<(SubscriptionId, String, u64, u64)>, SubscriptionError> {
-        // WHY: source_ref shape is "{kind_kebab}:{external_server_id}".
-        // substr(..., 1, instr(..., ':') - 1) extracts the kind prefix; the
-        // -1 removes the trailing ':'; if there is no ':' the prefix is the
-        // full value (lenient — non-probe refs without ':' fall here too,
-        // but the WHERE clause restricts to source_kind = 'p' (Probe)).
         let rows: Vec<(String, String, i64, i64)> = sqlx::query_as(
-            "SELECT subscription_id, \
-                    CASE WHEN instr(source_ref, ':') > 0 \
-                         THEN substr(source_ref, 1, instr(source_ref, ':') - 1) \
-                         ELSE source_ref END AS prefix, \
-                    SUM(upload) AS upload, SUM(download) AS download \
-             FROM subscription_traffic \
-             WHERE source_kind = 'P' \
-             GROUP BY subscription_id, prefix",
+            "SELECT subscription_id, prefix, upload, download FROM probe_traffic_totals \
+             ORDER BY subscription_id, prefix",
         )
         .fetch_all(&self.pool)
         .await
@@ -194,81 +163,8 @@ impl TrafficRepository for SqliteTrafficRepository {
         }
         Ok(out)
     }
+}
 
-    async fn subscriptions_with_traffic_in_range(
-        &self,
-        start_date: &str,
-        end_date: &str,
-    ) -> Result<Vec<SubscriptionId>, SubscriptionError> {
-        let rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT DISTINCT subscription_id FROM subscription_traffic \
-             WHERE recorded_at >= ? AND recorded_at < ?",
-        )
-        .bind(start_date)
-        .bind(end_date)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
-        rows.into_iter()
-            .map(|(s,)| {
-                SubscriptionId::parse(&s).map_err(|e| {
-                    SubscriptionError::Storage(format!("invalid subscription id: {e}"))
-                })
-            })
-            .collect()
-    }
-
-    async fn summaries_by_subscription_in_range(
-        &self,
-        start_iso: &str,
-        end_iso: &str,
-    ) -> Result<Vec<(SubscriptionId, TrafficSummary)>, SubscriptionError> {
-        let rows: Vec<GroupedAggregateRow> = sqlx::query_as(
-            "SELECT subscription_id, source_kind, \
-                    SUM(upload) AS upload, SUM(download) AS download \
-             FROM subscription_traffic \
-             WHERE recorded_at >= ? AND recorded_at < ? \
-             GROUP BY subscription_id, source_kind",
-        )
-        .bind(start_iso)
-        .bind(end_iso)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
-
-        // WHY: rows arrive grouped by (subscription_id, source_kind); fold
-        // consecutive rows into one TrafficSummary per subscription. A
-        // BTreeMap yields deterministic subscription order so aggregation
-        // output is stable across runs.
-        let mut by_sub: std::collections::BTreeMap<String, TrafficSummary> =
-            std::collections::BTreeMap::new();
-        for row in rows {
-            let kind = TrafficSourceKind::from_db_char(&row.source_kind).ok_or_else(|| {
-                SubscriptionError::Storage(format!("unknown source_kind '{}'", row.source_kind))
-            })?;
-            let u = row.upload.max(0) as u64;
-            let d = row.download.max(0) as u64;
-            let entry = by_sub
-                .entry(row.subscription_id)
-                .or_insert_with(|| TrafficSummary {
-                    upload: 0,
-                    download: 0,
-                    by_source: Vec::new(),
-                });
-            entry.upload = entry.upload.saturating_add(u);
-            entry.download = entry.download.saturating_add(d);
-            entry.by_source.push((kind, u, d));
-        }
-
-        by_sub
-            .into_iter()
-            .map(|(s, summary)| {
-                SubscriptionId::parse(&s)
-                    .map(|id| (id, summary))
-                    .map_err(|e| {
-                        SubscriptionError::Storage(format!("invalid subscription id '{s}': {e}"))
-                    })
-            })
-            .collect()
-    }
+fn storage_error(error: sqlx::Error) -> SubscriptionError {
+    SubscriptionError::Storage(error.to_string())
 }

@@ -7,7 +7,7 @@
 //! pipeline (resolve context → select nodes → compatibility check → emit →
 //! validate → store + activate cache).
 //!
-//! Setup: 100 Trojan nodes in the pool, one minimal mihomo V3 template with
+//! Setup: 100 / 1,000 / 10,000 Trojan nodes in the pool, one minimal mihomo V3 template with
 //! `nodeSelector: mode: dynamic` (selects all active nodes).
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
@@ -162,57 +162,40 @@ fn make_request(template_id: deve_sub_kernel::TemplateId) -> GenerationRequest {
 
 fn bench_generate(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    let db = rt.block_on(BenchDb::new(100));
+    for count in [100, 1_000, 10_000] {
+        let db = rt.block_on(BenchDb::new(count));
 
-    let template_repo = SqliteTemplateRepository::new(db.pool.clone());
-    let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
-    let pool_repo =
-        SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
-    let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
-    let request = make_request(db.template_id);
+        let template_repo = SqliteTemplateRepository::new(db.pool.clone());
+        let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
+        let pool_repo =
+            SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
+        let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+        let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
+        let request = make_request(db.template_id);
 
-    // PERF-003: prime the cache so every iteration hits.
-    rt.block_on(generate(
-        &template_repo,
-        &version_repo,
-        &pool_repo,
-        &cache_repo,
-        &pool_meta_repo,
-        request.clone(),
-    ))
-    .expect("prime cache");
+        // PERF-003: prime the cache so every iteration hits.
+        rt.block_on(generate(
+            &template_repo,
+            &version_repo,
+            &pool_repo,
+            &cache_repo,
+            &pool_meta_repo,
+            request.clone(),
+        ))
+        .expect("prime cache");
 
-    let mut group = c.benchmark_group("generate");
+        let mut group = c.benchmark_group(format!("generate/{count}"));
+        group
+            .sample_size(30)
+            .warm_up_time(std::time::Duration::from_secs(1))
+            .measurement_time(std::time::Duration::from_secs(3));
 
-    // PERF-003: cached path (cache hit).
-    group.bench_with_input(
-        BenchmarkId::new("generate", "cached"),
-        &request,
-        |b, req| {
-            b.iter(|| {
-                rt.block_on(generate(
-                    &template_repo,
-                    &version_repo,
-                    &pool_repo,
-                    &cache_repo,
-                    &pool_meta_repo,
-                    req.clone(),
-                ))
-                .expect("generate cached")
-            });
-        },
-    );
-
-    // PERF-004: uncached path (full pipeline). Clear the cache before each
-    // measurement so every call misses and runs the full pipeline.
-    group.bench_with_input(
-        BenchmarkId::new("generate", "uncached"),
-        &request,
-        |b, req| {
-            b.iter_batched(
-                || rt.block_on(db.clear_cache()),
-                |_| {
+        // PERF-003: cached path (cache hit).
+        group.bench_with_input(
+            BenchmarkId::new("generate", "cached"),
+            &request,
+            |b, req| {
+                b.iter(|| {
                     rt.block_on(generate(
                         &template_repo,
                         &version_repo,
@@ -221,14 +204,38 @@ fn bench_generate(c: &mut Criterion) {
                         &pool_meta_repo,
                         req.clone(),
                     ))
-                    .expect("generate uncached")
-                },
-                BatchSize::SmallInput,
-            );
-        },
-    );
+                    .expect("generate cached")
+                });
+            },
+        );
 
-    group.finish();
+        // PERF-004: uncached path (full pipeline). Clear the cache before each
+        // measurement so every call misses and runs the full pipeline.
+        group.bench_with_input(
+            BenchmarkId::new("generate", "uncached"),
+            &request,
+            |b, req| {
+                b.iter_batched(
+                    || rt.block_on(db.clear_cache()),
+                    |_| {
+                        rt.block_on(generate(
+                            &template_repo,
+                            &version_repo,
+                            &pool_repo,
+                            &cache_repo,
+                            &pool_meta_repo,
+                            req.clone(),
+                        ))
+                        .expect("generate uncached")
+                    },
+                    BatchSize::PerIteration,
+                );
+            },
+        );
+
+        group.finish();
+        rt.block_on(db.pool.close());
+    }
 }
 
 criterion_group!(benches, bench_generate);

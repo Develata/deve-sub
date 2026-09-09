@@ -19,15 +19,18 @@ use super::unsupported_entry;
 /// subscription providers often include non-URI content.
 ///
 /// # Errors
-/// This function always returns `Ok`. An empty or all-comment input yields
-/// an empty `Vec`.
+/// Returns `TooManyEntries` above the container input limit. Empty/comment
+/// input yields an empty `Vec`.
 pub fn parse_uri_list(text: &str) -> Result<Vec<Node>, ParseError> {
     let mut nodes = Vec::new();
+    let mut entry_count = 0;
     for line in text.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
+        entry_count += 1;
+        super::check_entry_count(entry_count)?;
         match crate::parse_uri(trimmed) {
             Ok(node) => nodes.push(node),
             Err(ParseError::UnknownScheme(scheme)) => {

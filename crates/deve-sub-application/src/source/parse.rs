@@ -21,11 +21,16 @@ use thiserror::Error;
 /// WHY: combined with the HTTP body size limit in the fetcher, this caps
 /// the memory impact of a YAML/JSON bomb (SEC-005). A 10 MB response with
 /// 10 000 nodes is a generous upper bound for real subscriptions.
-const MAX_NODES: usize = 10_000;
+const MAX_NODES: usize = deve_sub_protocol::container::MAX_ENTRIES;
+const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 
 /// Errors produced by content parsing.
 #[derive(Debug, Error)]
 pub enum ParseContentError {
+    /// Content exceeded the parser's input byte ceiling before decoding.
+    #[error("input exceeds {MAX_BODY_BYTES} bytes")]
+    TooLarge,
+
     /// The response body was not valid UTF-8.
     #[error("invalid UTF-8 in response body: {0}")]
     InvalidUtf8(String),
@@ -53,11 +58,14 @@ pub fn parse_content(
     content_type: Option<&str>,
     body: &[u8],
 ) -> Result<Vec<ReconcileEntry>, ParseContentError> {
+    if body.len() > MAX_BODY_BYTES {
+        return Err(ParseContentError::TooLarge);
+    }
     let text =
         std::str::from_utf8(body).map_err(|e| ParseContentError::InvalidUtf8(e.to_string()))?;
 
     let entries = match source_type {
-        SourceType::UriList => parse_uri_list_text(text),
+        SourceType::UriList => parse_uri_list_text(text)?,
         SourceType::Base64 => parse_base64_text(text)?,
         SourceType::MihomoYaml => {
             parse_container(text, deve_sub_protocol::container::parse_mihomo_yaml)?
@@ -77,7 +85,7 @@ pub fn parse_content(
         SourceType::Auto => auto_detect_and_parse(content_type, text)?,
     };
 
-    let node_count = entries.iter().filter(|e| e.node.is_some()).count();
+    let node_count = entries.len();
     if node_count > MAX_NODES {
         return Err(ParseContentError::TooManyNodes(node_count));
     }
@@ -139,12 +147,19 @@ pub struct ImportParseResult {
 }
 
 /// Parse a URI list: one URI per line, skipping blanks and comments.
-fn parse_uri_list_text(text: &str) -> Vec<ReconcileEntry> {
-    text.lines()
+fn parse_uri_list_text(text: &str) -> Result<Vec<ReconcileEntry>, ParseContentError> {
+    let mut entries = Vec::new();
+    for line in text
+        .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(parse_single_uri)
-        .collect()
+    {
+        if entries.len() == MAX_NODES {
+            return Err(ParseContentError::TooManyNodes(MAX_NODES + 1));
+        }
+        entries.push(parse_single_uri(line));
+    }
+    Ok(entries)
 }
 
 /// Parse a single URI into a `ReconcileEntry`.
@@ -174,7 +189,7 @@ fn parse_base64_text(text: &str) -> Result<Vec<ReconcileEntry>, ParseContentErro
     })?;
     let decoded_str =
         String::from_utf8(decoded).map_err(|e| ParseContentError::InvalidUtf8(e.to_string()))?;
-    Ok(parse_uri_list_text(&decoded_str))
+    parse_uri_list_text(&decoded_str)
 }
 
 /// Try standard and URL-safe base64 decoders.
@@ -191,7 +206,10 @@ fn parse_container(
     text: &str,
     parser: fn(&str) -> Result<Vec<Node>, ParseError>,
 ) -> Result<Vec<ReconcileEntry>, ParseContentError> {
-    let nodes = parser(text).map_err(|e| ParseContentError::Parse(e.to_string()))?;
+    let nodes = parser(text).map_err(|e| match e {
+        ParseError::TooManyEntries(n) => ParseContentError::TooManyNodes(n),
+        other => ParseContentError::Parse(other.to_string()),
+    })?;
     Ok(nodes
         .into_iter()
         .map(|node| {
@@ -237,10 +255,12 @@ fn auto_detect_and_parse(
     if ct.contains("json") || trimmed.starts_with('{') || trimmed.starts_with('[') {
         return try_json_formats(text);
     }
-    if try_decode_base64(trimmed).is_some() {
-        return parse_base64_text(text);
+    if let Some(decoded) = try_decode_base64(trimmed) {
+        let decoded = std::str::from_utf8(&decoded)
+            .map_err(|e| ParseContentError::InvalidUtf8(e.to_string()))?;
+        return parse_uri_list_text(decoded);
     }
-    Ok(parse_uri_list_text(text))
+    parse_uri_list_text(text)
 }
 
 /// Try JSON container formats in order: sing-box, Xray, V2Ray.
@@ -292,3 +312,7 @@ mod tests {
         assert!(result.is_ok(), "exactly MAX_NODES should be accepted");
     }
 }
+
+#[cfg(test)]
+#[path = "parse_bounds_tests.rs"]
+mod bounds_tests;

@@ -7,10 +7,12 @@
 //! domain crate; the application layer parses it into a typed `NodeSelector`.
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
 use utoipa::{IntoParams, ToSchema};
 
 /// Request body for `POST /api/v1/subscriptions`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateSubscriptionRequest {
     /// Human-readable subscription name.
@@ -34,7 +36,8 @@ pub struct CreateSubscriptionRequest {
 }
 
 /// Request body for `PUT /api/v1/subscriptions/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct UpdateSubscriptionRequest {
     /// Human-readable subscription name.
@@ -60,7 +63,8 @@ pub struct UpdateSubscriptionRequest {
 }
 
 /// Subscription information returned by subscription management endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SubscriptionDto {
     /// ULID identifier.
     pub id: String,
@@ -103,7 +107,8 @@ pub struct SubscriptionDto {
 /// The `token_plaintext` is the CSPRNG-generated delivery token shown exactly
 /// once at creation time. The server stores only the HMAC-SHA256 digest; the
 /// plaintext is never persisted and never appears in logs (SEC-009).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct SubscriptionResponse {
     /// The created subscription aggregate.
     pub subscription: SubscriptionDto,
@@ -117,7 +122,8 @@ pub struct SubscriptionResponse {
 /// old and new tokens remain valid. `null` or `-1` means permanent grace (the
 /// old token stays valid indefinitely). `0` means no grace (the old token is
 /// immediately invalid).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct RotateTokenRequest {
     /// Grace period in seconds. `null` or `-1` = permanent grace.
@@ -126,7 +132,8 @@ pub struct RotateTokenRequest {
 }
 
 /// Response body for `POST /api/v1/subscriptions/{id}/rotate-token`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TokenRotationResponse {
     /// The token row ULID (stable across rotations).
     pub token_id: String,
@@ -139,7 +146,8 @@ pub struct TokenRotationResponse {
 /// The short code is a CSPRNG-generated base62 string (8 chars). Unlike the
 /// delivery token, it is not a secret — it is a public lookup key for
 /// `GET /s/{code}`. If a short code already exists, it is replaced.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ShortCodeResponse {
     /// The short code row ULID.
     pub short_code_id: String,
@@ -152,7 +160,8 @@ pub struct ShortCodeResponse {
 /// A temp link is an alternative delivery token with a mandatory expiry and
 /// revocation. The plaintext is returned once at creation; only the
 /// HMAC-SHA256 digest is persisted.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateTempLinkRequest {
     /// When the temp link expires (ISO 8601 UTC). Required.
@@ -160,7 +169,8 @@ pub struct CreateTempLinkRequest {
 }
 
 /// Response body for `POST /api/v1/subscriptions/{id}/temp-links`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct CreateTempLinkResponse {
     /// The temp link row ULID.
     pub temp_link_id: String,
@@ -171,7 +181,8 @@ pub struct CreateTempLinkResponse {
 }
 
 /// Response body for `GET /api/v1/subscriptions` (cursor-paginated).
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ListSubscriptionsResponse {
     /// Subscriptions in the current page.
     pub subscriptions: Vec<SubscriptionDto>,
@@ -180,20 +191,22 @@ pub struct ListSubscriptionsResponse {
 }
 
 /// Response body for `GET /api/v1/subscriptions/{id}`.
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct GetSubscriptionResponse {
     /// The subscription aggregate.
     pub subscription: SubscriptionDto,
 }
 
 /// Query parameters for `GET /api/v1/subscriptions`.
-#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams, ToSchema))]
 pub struct ListSubscriptionsQuery {
     /// Pagination cursor — the ULID of the last subscription from the
     /// previous page.
     pub cursor: Option<String>,
     /// Maximum number of subscriptions to return (default 50, max 100).
     #[serde(default)]
-    #[param(default = 50, minimum = 1, maximum = 100)]
+    #[cfg_attr(feature = "openapi", param(default = 50, minimum = 1, maximum = 100))]
     pub limit: Option<u32>,
 }

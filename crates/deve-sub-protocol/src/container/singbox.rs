@@ -38,6 +38,7 @@ pub fn parse_singbox_json(text: &str) -> Result<Vec<Node>, ParseError> {
         .ok_or(ParseError::MissingContainerKey("outbounds"))?
         .as_array()
         .ok_or(ParseError::MissingContainerKey("outbounds (not a list)"))?;
+    super::check_entry_count(outbounds.len())?;
 
     // WHY: ShadowTLS in sing-box uses two outbounds — a `shadowtls` outbound
     // and an inner protocol outbound that chains via `detour`. The canonical

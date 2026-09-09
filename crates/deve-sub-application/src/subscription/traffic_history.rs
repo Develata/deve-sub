@@ -1,59 +1,15 @@
 //! Traffic history aggregation and query (M10).
 //!
-//! `aggregate_daily_traffic` sums all [`TrafficRecord`]s for a given UTC day
-//! and upserts a [`TrafficDailySnapshot`] per subscription. `list_traffic_history`
-//! reads snapshots for chart rendering, filling gaps with zero-value entries.
+//! Reads transactionally maintained daily snapshots for chart rendering.
 //!
 //! See `docs/plan/milestones/M10-observability-and-audit.md`.
 
 use std::collections::BTreeMap;
 
 use deve_sub_domain::{
-    SubscriptionError, TrafficDailySnapshot, TrafficDailySnapshotRepository, TrafficRepository,
-    TrafficSourceKind,
+    SubscriptionError, TrafficDailySnapshot, TrafficDailySnapshotRepository, TrafficSourceKind,
 };
 use deve_sub_kernel::SubscriptionId;
-
-/// Aggregate traffic records for a single UTC day into daily snapshots.
-///
-/// For each subscription with traffic records in `[day_start, day_end)`, sums
-/// upload/download grouped by `source_kind` and upserts a snapshot row. The
-/// job is idempotent: re-running for the same day replaces existing snapshots.
-///
-/// # Parameters
-/// - `traffic_repo`: raw traffic records.
-/// - `snapshot_repo`: daily snapshot upsert target.
-/// - `day`: the UTC date string (`YYYY-MM-DD`).
-/// - `day_start_iso`: ISO 8601 timestamp for the start of the day (inclusive).
-/// - `day_end_iso`: ISO 8601 timestamp for the start of the next day (exclusive).
-///
-/// # Returns
-/// The number of subscription snapshots upserted.
-pub async fn aggregate_daily_traffic(
-    traffic_repo: &dyn TrafficRepository,
-    snapshot_repo: &dyn TrafficDailySnapshotRepository,
-    day: &str,
-    day_start_iso: &str,
-    day_end_iso: &str,
-) -> Result<usize, SubscriptionError> {
-    let summaries = traffic_repo
-        .summaries_by_subscription_in_range(day_start_iso, day_end_iso)
-        .await?;
-
-    let mut count = 0;
-    for (sub_id, summary) in summaries {
-        let snapshot = TrafficDailySnapshot::new(
-            sub_id,
-            day.to_owned(),
-            summary.upload,
-            summary.download,
-            summary.by_source,
-        );
-        snapshot_repo.upsert(&snapshot).await?;
-        count += 1;
-    }
-    Ok(count)
-}
 
 /// A single day's traffic data point for the history chart.
 #[derive(Debug, Clone)]
@@ -95,7 +51,7 @@ pub async fn list_traffic_history_global(
     Ok(fill_gaps(snapshots, start_date, end_date))
 }
 
-type DayAccumulator = (u64, u64, BTreeMap<&'static str, (u64, u64)>);
+type DayAccumulator = (u64, u64, BTreeMap<TrafficSourceKind, (u64, u64)>);
 
 fn fill_gaps(
     snapshots: Vec<TrafficDailySnapshot>,
@@ -118,7 +74,7 @@ fn fill_gaps(
         entry.0 = entry.0.saturating_add(snap.total_upload);
         entry.1 = entry.1.saturating_add(snap.total_download);
         for (kind, up, down) in &snap.source_breakdown {
-            let ke = entry.2.entry(kind.as_db_char()).or_insert((0, 0));
+            let ke = entry.2.entry(*kind).or_insert((0, 0));
             ke.0 = ke.0.saturating_add(*up);
             ke.1 = ke.1.saturating_add(*down);
         }
@@ -130,7 +86,7 @@ fn fill_gaps(
         let (up, down, breakdown_map) = by_date.remove(&current).unwrap_or((0, 0, BTreeMap::new()));
         let source_breakdown: Vec<(TrafficSourceKind, u64, u64)> = breakdown_map
             .into_iter()
-            .filter_map(|(key, (u, d))| TrafficSourceKind::from_db_char(key).map(|k| (k, u, d)))
+            .map(|(kind, (u, d))| (kind, u, d))
             .collect();
         result.push(TrafficHistoryPoint {
             date: current.clone(),

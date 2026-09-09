@@ -6,6 +6,8 @@
 //! depend on Port traits defined in `crates/application`, not the other way
 //! around.
 
+#![cfg_attr(test, allow(clippy::expect_used))]
+
 pub mod geoip;
 pub mod rate_limiter;
 

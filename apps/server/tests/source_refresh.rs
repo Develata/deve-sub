@@ -509,3 +509,6 @@ async fn concurrent_refresh_returns_409() {
         .expect("second refresh");
     assert_eq!(second.status(), StatusCode::CONFLICT);
 }
+
+#[path = "resource_admission/source.rs"]
+mod resource_admission;

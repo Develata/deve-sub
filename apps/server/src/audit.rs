@@ -14,6 +14,7 @@ use deve_sub_kernel::{AuditLogId, UserId};
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
+use crate::state::AuditState;
 
 /// Query parameters for `GET /api/v1/audit-logs`.
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -73,7 +74,7 @@ fn entry_to_dto(entry: &deve_sub_domain::AuditLog) -> AuditLogDto {
     )
 )]
 async fn list_audit_logs(
-    State(state): State<AppState>,
+    State(state): State<AuditState>,
     _admin: AdminUser,
     Query(q): Query<ListAuditLogsQuery>,
 ) -> Result<Json<ListAuditLogsResponse>, (StatusCode, Json<ErrorResponse>)> {

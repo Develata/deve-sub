@@ -115,7 +115,7 @@ async fn start_mock_server(
 /// Copy the current deve-sub binary to a temp path for testing.
 fn copy_current_binary(dir: &std::path::Path) -> std::path::PathBuf {
     let dest = dir.join("deve-sub");
-    std::fs::copy(std::env::current_exe().expect("exe"), &dest).expect("copy");
+    std::fs::copy(BIN, &dest).expect("copy");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -145,6 +145,7 @@ async fn update001_successful_update_no_restart() {
     let output = Command::new(BIN)
         .args([
             "update",
+            "--binary-only",
             "--manifest-url",
             &format!("{base_url}/manifest"),
             "--binary-path",
@@ -194,6 +195,7 @@ async fn update002_bad_binary_rejected_before_swap() {
     let status = Command::new(BIN)
         .args([
             "update",
+            "--binary-only",
             "--manifest-url",
             &format!("{base_url}/manifest"),
             "--binary-path",
@@ -236,6 +238,7 @@ async fn update001_unsigned_release_rejected_by_default() {
     let output = Command::new(BIN)
         .args([
             "update",
+            "--binary-only",
             "--manifest-url",
             &format!("{base_url}/manifest"),
             "--binary-path",
@@ -265,6 +268,7 @@ async fn update001_unsigned_opt_in_never_bypasses_invalid_signature() {
         let output = Command::new(BIN)
             .args([
                 "update",
+                "--binary-only",
                 "--manifest-url",
                 &format!("{base_url}/manifest"),
                 "--binary-path",
@@ -280,4 +284,91 @@ async fn update001_unsigned_opt_in_never_bypasses_invalid_signature() {
         assert!(error.contains(expected), "{error}");
         assert_eq!(read_file(&binary_path), original_bytes);
     }
+}
+
+#[test]
+fn native_web_update_refuses_before_network_or_mutation() {
+    let dir = tempfile::tempdir().unwrap();
+    let binary = dir.path().join("deve-sub");
+    std::fs::write(&binary, b"unchanged").unwrap();
+    let output = Command::new(BIN)
+        .args([
+            "update",
+            "--binary-path",
+            binary.to_str().unwrap(),
+            "--manifest-url",
+            "http://127.0.0.1:1/unreachable",
+            "--force",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("--binary-only"), "{error}");
+    assert_eq!(std::fs::read(&binary).unwrap(), b"unchanged");
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn broken_config_never_falls_back_to_headless_defaults() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("invalid.toml");
+    std::fs::write(&config, "[invalid").unwrap();
+    let output = Command::new(BIN)
+        .args([
+            "update",
+            "--config",
+            config.to_str().unwrap(),
+            "--manifest-url",
+            "http://127.0.0.1:1/unreachable",
+            "--force",
+        ])
+        .output()
+        .unwrap();
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("config"), "{error}");
+    assert!(!error.contains("manifest fetch"), "{error}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn force_is_not_implicit_downgrade_permission() {
+    let base = start_mock_server(Vec::new(), true, "0.0.0", 0).await;
+    let output = Command::new(BIN)
+        .args([
+            "update",
+            "--binary-only",
+            "--force",
+            "--allow-unsigned",
+            "--manifest-url",
+            &format!("{base}/manifest"),
+        ])
+        .output()
+        .unwrap();
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(error.contains("--allow-downgrade"), "{error}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn explicit_headless_config_reaches_authentication_without_binary_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.json");
+    std::fs::write(&config, r#"{"server":{"serve_web":false}}"#).unwrap();
+    let base = start_mock_server(Vec::new(), true, env!("CARGO_PKG_VERSION"), 0).await;
+    let output = Command::new(BIN)
+        .args([
+            "update",
+            "--config",
+            config.to_str().unwrap(),
+            "--force",
+            "--binary-path",
+            dir.path().join("binary").to_str().unwrap(),
+            "--manifest-url",
+            &format!("{base}/manifest"),
+        ])
+        .output()
+        .unwrap();
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(error.contains("release is unsigned"), "{error}");
 }

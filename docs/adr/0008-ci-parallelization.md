@@ -104,6 +104,17 @@ source identity. Docker retains source builds with separate cache writers and
 a shared frontend stage. Selective PR execution remains deferred pending
 shadow evidence and per-shard receipts.
 
+## 2026-09-11 convergence amendment
+
+The current plan removes unused shadow selection and unsigned shard receipts.
+Static matrix/command validation, GitHub job results, artifact provenance and
+the final acceptance gate retain distinct responsibilities. Selective execution
+remains deferred. Run 34532357779 at unchanged HEAD spent 8m39s installing dx;
+the rust-cache key changed when an unrelated runner Rust toolchain changed.
+An isolated Dioxus install-root cache addresses that measured invalidation.
+Its future wall-time benefit must be measured on a new GitHub run, not inferred
+from a local cache hit.
+
 ## References
 
 - `.github/workflows/ci.yml` — WHY comments carry the change-set labels

@@ -199,6 +199,10 @@ cases:
         - "apps/server/tests/security.rs::rate_limiting_per_ip"
         - "apps/server/tests/security.rs::rate_limiting_applies_to_nonexistent_user"
         - "apps/server/tests/security.rs::successful_login_resets_counter"
+        - "crates/deve-sub-inmemory/src/rate_limiter.rs::probation_pressure_allows_new_identity_without_flushing_active_lockouts"
+        - "crates/deve-sub-inmemory/src/rate_limiter.rs::two_new_keys_reclaim_expired_entries_with_one_slot_remaining"
+        - "crates/deve-sub-inmemory/src/rate_limiter.rs::pressure_preserves_current_ip_probation_until_it_locks"
+        - "crates/deve-sub-inmemory/src/rate_limiter.rs::nearly_all_locked_pressure_does_not_rescan_for_each_probation"
       status: pass
   - id: AUTH-005
     title: 2FA
@@ -1620,8 +1624,9 @@ cases:
     assertions: ["systemd 正常运行"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "scripts/tests/native_vm.py"
+      status: pass
   - id: DEPLOY-003
     title: amd64 镜像
     priority: P1
@@ -1677,7 +1682,7 @@ cases:
         - "apps/cli/src/update_manifest.rs::embedded_key_verifies_fixture_signature"
         - "apps/cli/tests/update.rs::update001_unsigned_release_rejected_by_default"
         - "apps/cli/tests/update.rs::update001_unsigned_opt_in_never_bypasses_invalid_signature"
-      status: pass
+      status: not-run
   - id: UPDATE-002
     title: 更新失败
     priority: P1
@@ -1690,7 +1695,7 @@ cases:
     evidence:
       tests:
         - "apps/cli/tests/update.rs::update002_bad_binary_rejected_before_swap"
-      status: pass
+      status: not-run
   - id: SEC-001
     title: localhost SSRF
     priority: P0

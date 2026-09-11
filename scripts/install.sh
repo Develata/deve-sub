@@ -4,7 +4,7 @@
 # Downloads a release binary and its Web assets, installs them, creates a
 # dedicated system user, runs migrations, and starts a hardened systemd
 # service. The script is idempotent: re-running it upgrades the binary,
-# re-migrates, and repairs the service unit.
+# checks the existing schema at startup, and repairs the service unit.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/Develata/deve-sub/main/scripts/install.sh | sudo sh
@@ -21,6 +21,7 @@
 # convenience-only, not supply-chain secure.
 
 set -eu
+umask 077
 
 BIN_PATH="/usr/local/bin/deve-sub"
 WEB_DIR="/usr/local/share/deve-sub/web"
@@ -42,6 +43,25 @@ need sha256sum
 need uname
 need systemctl
 need tar
+need timeout
+need flock
+[ "$(id -u)" -eq 0 ] || err "root privileges required (run with sudo)"
+# These paths are interpolated into a systemd unit, not shell-escaped arguments.
+case "$DATA_DIR" in
+    /*) ;;
+    *) err "data directory must be absolute" ;;
+esac
+case "$DATA_DIR" in
+    *[!a-zA-Z0-9_./-]*|/home|/home/*|/root|/root/*|/run/user/*|*/../*|*/..)
+        err "unsupported data directory for the hardened systemd unit" ;;
+esac
+case "$BIND_ADDR" in *[!a-zA-Z0-9.:\[\]-]*) err "invalid bind address" ;; esac
+exec 9> "$BIN_PATH.deve-sub.update.lock"
+flock -n 9 || err "another install/update is in progress"
+PENDING=/var/tmp/deve-sub-install.pending
+[ ! -e "$PENDING" ] && [ ! -L "$PENDING" ] || err "interrupted installation: inspect $PENDING and its retained backups before retrying"
+curl() { command curl --connect-timeout 15 --max-time 300 --max-filesize 268435456 "$@"; }
+systemctl() { timeout --kill-after=5 45 systemctl "$@"; }
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -83,7 +103,7 @@ printf '%s\n' "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(
     || err "invalid release version: $VERSION"
 DOWNLOAD_BASE="https://github.com/$REPO/releases/download/$VERSION"
 
-TMPDIR="$(mktemp -d)"
+TMPDIR="$(mktemp -d /var/tmp/deve-sub-install.XXXXXX)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
 info "downloading $ASSET..."
@@ -103,22 +123,26 @@ for asset in "$ASSET" "$WEB_ASSET"; do
 done
 
 chmod 0755 "$TMPDIR/$ASSET"
-INSTALLED_VERSION=$("$TMPDIR/$ASSET" --version | awk '{print $NF}')
+INSTALLED_VERSION=$(timeout --kill-after=2 5 "$TMPDIR/$ASSET" --version | awk '{print $NF}')
 [ "$INSTALLED_VERSION" = "${VERSION#v}" ] || err "binary version does not match release $VERSION"
 
 # Extract only regular files/directories into fresh staging. Links and parent
 # traversal could redirect a privileged install outside its owned directory.
-tar -tzf "$TMPDIR/$WEB_ASSET" > "$TMPDIR/web-entries"
+timeout --kill-after=5 60 tar -tzf "$TMPDIR/$WEB_ASSET" > "$TMPDIR/web-entries"
 while IFS= read -r entry; do
     case "$entry" in
         /*|..|../*|*/../*|*/..) err "unsafe frontend archive path" ;;
     esac
 done < "$TMPDIR/web-entries"
-tar -tvzf "$TMPDIR/$WEB_ASSET" > "$TMPDIR/web-types"
+timeout --kill-after=5 60 tar -tvzf "$TMPDIR/$WEB_ASSET" > "$TMPDIR/web-types"
 awk 'substr($1,1,1) != "-" && substr($1,1,1) != "d" {exit 1}' "$TMPDIR/web-types" \
     || err "frontend archive contains a link or special file"
+awk '{total += $3; if (total > 268435456 || NR > 8192) exit 1}' "$TMPDIR/web-types" \
+    || err "frontend archive exceeds file/expanded-size budget"
+[ "$(sort "$TMPDIR/web-entries" | uniq -d | wc -l)" -eq 0 ] \
+    || err "frontend archive contains duplicate paths"
 mkdir "$TMPDIR/web"
-tar --no-same-owner --no-same-permissions -xzf "$TMPDIR/$WEB_ASSET" -C "$TMPDIR/web"
+timeout --kill-after=5 60 tar --no-same-owner --no-same-permissions -xzf "$TMPDIR/$WEB_ASSET" -C "$TMPDIR/web"
 [ -s "$TMPDIR/web/index.html" ] || err "frontend archive is missing index.html"
 for extension in wasm js css; do
     find "$TMPDIR/web/assets" -type f -name "*.$extension" -size +0c -print -quit \
@@ -131,6 +155,7 @@ fi
 
 # Backups and the recovery trap precede stopping the existing service.
 BINARY_BACKUP=""
+PREVIOUS_VERSION=""
 WEB_BACKUP=""
 SERVICE_BACKUP=""
 BINARY_INSTALLED=0
@@ -142,6 +167,8 @@ if systemctl is-active --quiet deve-sub; then WAS_ACTIVE=1; fi
 if [ -f "$BIN_PATH" ]; then
     BINARY_BACKUP="$TMPDIR/deve-sub.bak"
     cp -a "$BIN_PATH" "$BINARY_BACKUP"
+    PREVIOUS_VERSION=$(timeout --kill-after=2 5 "$BINARY_BACKUP" --version | awk '{print $NF}')
+    [ -n "$PREVIOUS_VERSION" ] || err "cannot determine previous binary version before installation"
 fi
 [ ! -L "$WEB_DIR" ] || err "frontend destination must not be a symlink"
 if [ -d "$WEB_DIR" ]; then
@@ -181,7 +208,21 @@ rollback_install() {
         fi
         systemctl daemon-reload || return 1
     fi
-    if [ "$WAS_ACTIVE" -eq 1 ]; then systemctl start deve-sub || return 1; fi
+    if [ "$WAS_ACTIVE" -eq 1 ]; then
+        systemctl start deve-sub || return 1
+        # Type=simple start only acknowledges spawning. Keep the recovery
+        # checkpoint until the old process actually serves ready + its version.
+        for attempt in $(seq 1 10); do
+            if systemctl is-active --quiet deve-sub && \
+                curl --max-time 2 --max-filesize 4096 -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/ready" >/dev/null 2>&1; then
+                restored=$(curl --max-time 2 --max-filesize 4096 -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/live" 2>/dev/null || echo "")
+                if printf '%s' "$restored" | grep -qF "\"version\":\"$PREVIOUS_VERSION\""; then return 0; fi
+            fi
+            sleep 1
+        done
+        echo "ERROR: previous files restored but service readiness/version is unverified; inspect the restored unit and restart it" >&2
+        return 1
+    fi
 }
 finish() {
     rc=$?
@@ -190,6 +231,7 @@ finish() {
         echo "ERROR: rollback incomplete; recovery backups retained at $TMPDIR" >&2
         exit "$rc"
     fi
+    rm -f "$PENDING"
     rm -rf "$TMPDIR"
     exit "$rc"
 }
@@ -197,6 +239,11 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# Persist recovery evidence before changing the running installation. A killed
+# process leaves a clear operator checkpoint instead of silently overwriting it.
+(set -C; printf '%s\n' "$TMPDIR" > "$PENDING")
+sync -f "$TMPDIR"
+sync -f "$PENDING"
 if [ "$WAS_ACTIVE" -eq 1 ]; then systemctl stop deve-sub; fi
 
 info "installing binary to $BIN_PATH..."
@@ -246,7 +293,7 @@ info "initializing master key..."
 # On upgrade the key already exists and `key init` would bail, breaking
 # idempotency. Migrations and service restart handle the upgrade path.
 if [ ! -f "$DATA_DIR/master.key" ]; then
-    sudo -u "$DEVE_USER" "$BIN_PATH" key init \
+    timeout --kill-after=5 30 sudo -u "$DEVE_USER" "$BIN_PATH" key init \
         --key-path "$DATA_DIR/master.key" \
         --db-path "$DATA_DIR/deve-sub.db"
 else
@@ -257,7 +304,11 @@ info "running database migrations..."
 # WHY: migrate before writing the service unit and starting, so a migration
 # failure aborts the install without leaving a broken service (DS-AUD-006).
 # Run as the service user so the DB file is owned correctly.
-sudo -u "$DEVE_USER" "$BIN_PATH" migrate --db-path "$DATA_DIR/deve-sub.db"
+if [ ! -f "$DATA_DIR/deve-sub.db" ]; then
+    timeout --kill-after=5 120 sudo -u "$DEVE_USER" "$BIN_PATH" migrate --db-path "$DATA_DIR/deve-sub.db"
+else
+    info "existing DB retained; startup checks schema (migration requires a separate backup)"
+fi
 
 info "writing systemd service unit..."
 UNIT_INSTALLED=1
@@ -274,6 +325,10 @@ ExecStart=$BIN_PATH serve --db-path $DATA_DIR/deve-sub.db --key-path $DATA_DIR/m
 WorkingDirectory=$DATA_DIR
 Restart=on-failure
 RestartSec=5
+TimeoutStartSec=45
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
 
 # Hardening (DS-AUD-006)
 NoNewPrivileges=true
@@ -301,10 +356,10 @@ systemctl restart deve-sub
 
 info "waiting for healthy state..."
 for i in $(seq 1 60); do
-    if curl -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/ready" >/dev/null 2>&1; then
+    if curl --max-time 2 --max-filesize 4096 -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/ready" >/dev/null 2>&1; then
         info "service is healthy"
         # Verify the running binary matches the installed version (DS-AUD-006).
-        RUNNING_VERSION=$(curl -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/live" 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+        RUNNING_VERSION=$(curl --max-time 2 --max-filesize 4096 -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/live" 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
         if [ "$RUNNING_VERSION" != "$INSTALLED_VERSION" ]; then
             err "version mismatch: installed $INSTALLED_VERSION but service reports $RUNNING_VERSION — restart may have failed"
         fi
@@ -321,4 +376,4 @@ for i in $(seq 1 60); do
     sleep 1
 done
 
-err "service did not become healthy within 60s. Check: journalctl -u deve-sub"
+err "service did not become healthy after 60 bounded attempts (up to 180s). Check: journalctl -u deve-sub"

@@ -8,62 +8,37 @@ machine evidence boundary lives in `contracts/ci-evidence.md`; ADR-0008 records
 the original parallelization decision. Product behavior and the production
 `deve-sub` command surface do not change.
 
-## Execution and impact graphs
+## Static execution and final gate
 
-The initial impact planner is **shadow-only**: every supported CI event still
-runs the full existing verification suite. Its proposed package/shard/case
-selection is diagnostic information, never an input to job conditions. The
-workflow's static Rust matrix owns package partitioning; metadata must prove
-that each workspace member belongs to exactly one shard. All-targets,
-all-features and the separate doctest gate remain intact.
+Every supported event runs the full baseline. The workflow's static matrix
+owns package partitioning; Cargo metadata proves that every workspace member
+belongs to exactly one shard. Inventory validation also requires the exact
+locked/all-targets/all-features Cargo command, without conditions, filters,
+error suppression or additional shell commands. Doctests remain a separate gate.
+Selective CI and shadow impact planning are not enabled.
 
-Impact analysis includes normal, dev and build dependencies, conservatively
-unioned across targets/features. Reverse reachability includes test consumers;
-cycles in that graph do not become job dependency cycles. Runtime consumers
-(validators, binary/WASM browser tests, soak and Docker) are explicit edges.
-Case references associate proof with owners; they are not executable commands
-and do not prove that an assertion ran.
+Static checks and candidate builds may run concurrently. Runtime consumers
+wait for their exact artifacts; Docker still builds from source. Distribution
+builds, signing and publication wait for the entire reusable CI workflow.
+The final `acceptance-gate` always evaluates every required GitHub job.
+Only multiarch on PR may be skipped, reported as not-run. Missing jobs,
+unexpected skips, cancellation and failure block acceptance.
 
-Unknown paths or an unavailable comparison base propose full execution. Public
-contracts/authority, domain/kernel/security boundaries, manifests/lockfile,
-toolchain/build configuration, migrations/recovery, shared fixtures and
-CI/acceptance rules require full execution. Main, nightly, release, deployment
-and recovery always require full execution. A malformed graph, missing member,
-duplicate shard owner or invalid case association fails the planner; a full
-fallback cannot turn missing verification into a pass.
+The convergence round removes the shadow planner and Rust execution receipts.
+The planner did not reduce execution or provide measured selection benefits.
+Receipts caught command/source drift, but were unsigned statements produced by
+the same trusted runner. Static command/partition checks now catch omitted
+packages, wrong flags and replaced commands; GitHub owns execution status and
+cancellation. This deliberately trusts the reviewed workflow and runner. It
+does not independently attest to a compromised runner or a test that mutates
+its checkout. Such a test could also forge an unsigned receipt.
 
-## Scheduling and final gate
-
-Static checks, Rust tests, candidate binary construction and WASM construction
-may run concurrently. A candidate build is unprivileged verification input,
-not an approved release. Runtime consumers wait for their exact artifacts;
-Docker continues to build from source. The release workflow still waits for
-the complete reusable CI workflow before constructing distribution binaries,
-signing or publishing. No publication permission moves into candidate jobs.
-
-The final `acceptance-gate` always evaluates every required CI job, including
-the planner, documentation, validators, supply-chain, build and runtime jobs.
-Only the existing PR exclusion of multiarch is permitted; it is recorded as
-not-run, never pass. A missing job, unexpected skip, cancellation, timeout or
-failure blocks the gate. Job success does not promote historical matrix
-statuses or claim all registered acceptance cases passed.
-
-Each Rust matrix invocation writes a source-bound execution receipt before
-starting Cargo and finalizes it after the process exits. The wrapper constructs
-the existing locked/all-targets/all-features command from the package list; it
-does not accept an arbitrary shell command or a test filter. The static matrix
-remains the package-partition authority. Receipts record the command, compiler,
-packages, elapsed time and terminal outcome, including failure or cancellation.
-Process children belong to the invocation and are stopped on cancellation.
-
-The final gate requires exactly one successful receipt for every static Rust
-shard, in addition to successful GitHub job results. It rejects missing, extra,
-incomplete, stale or mismatched receipts and source changes during execution.
-Source identity covers repository fixtures as well as code. Receipt collection
-uses artifacts from the current workflow run/attempt, outside the checkout.
-This is command-execution evidence, not a signature or a claim that ignored
-tests and associated acceptance cases passed. Doctests and runtime capabilities
-remain separate mandatory jobs; selective PR execution is still deferred.
+Artifact provenance remains necessary: a successful producer job alone cannot
+prove that a consumer downloaded the exact payload from the same source and
+workflow attempt. Final aggregation does not promote historical acceptance
+statuses or claim every registered case ran. Future selective execution would
+need new evidence of coverage and meaningful savings; no dormant planner is
+maintained in anticipation of that work.
 
 ## Artifacts and caches
 
@@ -94,26 +69,27 @@ invocation's disposable synthetic login/session metadata; the fixture database
 is destroyed at teardown and no production state is used. No cleanup targets
 another invocation's files.
 
-On planner or evidence failure, rerun the complete gate after correcting the
+On inventory or evidence failure, rerun the complete gate after correcting the
 cause. On a cache failure, rebuild from source. On artifact mismatch, reject
 the artifact and rebuild; do not silently regenerate provenance for it. No
 failed optimization permits publishing a candidate or skipping a baseline.
 Artifact identity includes the workflow attempt: retry the whole workflow,
 not only a failed consumer with a previous attempt's candidate artifact.
 
-## Verification and migration
+## Verification
 
-`python3 -m unittest discover -s scripts/ci/tests` exercises missing/duplicate
-members, reverse test consumers, unknown changes, invalid evidence, unexpected
-skips and artifact corruption. `python3 scripts/ci/plan.py` exercises real
-metadata/workflow/case inventory. Browser smoke exercises isolated lifecycle.
+`python3 -m unittest discover -s scripts/ci/tests` checks missing/duplicate
+members, weakened commands, unexpected skips and artifact corruption.
+`python3 scripts/ci/inventory.py` verifies the real metadata/workflow partition.
 Existing Rust, docs, compatibility, browser, soak and Docker gates remain.
-Receipt tests additionally cover process failure/cancellation, source drift,
-invalid command scope, incomplete collections and replay across attempts.
+The docs gate checks that historical pass cases have existing proof references.
 
-Enable selective PR execution only after shadow/full comparisons demonstrate
-complete mappings and per-shard execution receipts exist. The current phase
-does not satisfy that activation condition. Main/nightly/release full baselines
-remain mandatory even after future PR activation. Fine-grained case execution,
-an additional product CLI and publication from promoted image digests require
-their own proved implementation; they are not implied by shadow selection.
+Dioxus CLI uses an isolated install-root cache keyed by runner OS/architecture,
+runner image generation, project Rust version and CLI version. Other installed
+Rust toolchains and Cargo.lock do not invalidate this tool-only cache. A hit
+must report the expected version; a miss builds from locked source. Cache hits
+never substitute for WASM build, artifact verification or runtime acceptance.
+
+Long application soak is a separate optional manual/weekly workflow. The main
+baseline keeps its 90-second regression soak. Long-run reports retain time and
+work-normalized slopes and SQLite free/page counts; no full VACUUM is automatic.

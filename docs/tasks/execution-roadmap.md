@@ -98,10 +98,10 @@ all pass; NODE-012 through NODE-018 all pass.
 ## Remaining acceptance gaps
 
 M8 CI optimization follows `plan/14-ci-verification.md`: retain full execution,
-validate the package inventory, record shadow impact proposals, verify artifact
-handoffs and aggregate every mandatory job. Selective PR execution remains
-deferred until shadow/full comparisons justify it; source-bound Rust shard
-receipts supplement job aggregation without changing the execution set.
+validate the static package/command inventory, verify artifact handoffs and
+aggregate every mandatory GitHub job result. Unused shadow planning and unsigned
+Rust execution receipts have been removed. Selective PR execution remains
+deferred until coverage and timing evidence justify a new implementation.
 Local configuration changes alone do not establish remote timing improvements.
 First-release preparation follows `contracts/release-artifacts.md`: production
 signing key correspondence, signed-default updates, matching native Web assets,

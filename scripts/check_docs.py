@@ -280,7 +280,16 @@ def check_test_symbols(yaml_data: dict) -> int:
         if ev.get("status") != "pass":
             continue
         tests = ev.get("tests", [])
+        if not tests:
+            print(f"FAIL: {case['id']} pass has no proof reference", file=sys.stderr)
+            failures += 1
         for ref in tests:
+            proof = ref.rsplit("::", 1)[0].split(" (", 1)[0] if isinstance(ref, str) else ""
+            resolved = (ROOT / proof).resolve()
+            if not resolved.is_relative_to(ROOT.resolve()) or not resolved.is_file():
+                print(f"FAIL: {case['id']} missing/unsafe proof path: {proof}", file=sys.stderr)
+                failures += 1
+                continue
             if not isinstance(ref, str) or "::" not in ref:
                 continue
             path_str, symbol = ref.rsplit("::", 1)

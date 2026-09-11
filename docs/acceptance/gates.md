@@ -67,14 +67,12 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
 
 ## Engineering resource and architecture gates
 
-- CI topology and shadow selection: `plan/14-ci-verification.md`; evidence
-  format: `contracts/ci-evidence.md`. Run
-  `python3 -m unittest discover -s scripts/ci/tests` and
-  `python3 scripts/ci/plan.py`. A shadow proposal never skips the full baseline
-  or promotes registered matrix evidence into current execution results.
-  Rust matrix jobs use `scripts/ci/run_shard.py`; the final gate also checks
-  the complete current-source/current-attempt receipt set. Missing or cancelled
-  execution evidence fails the gate even if other jobs succeeded.
+- CI static topology: `plan/14-ci-verification.md`; evidence format:
+  `contracts/ci-evidence.md`. Run `python3 -m unittest discover -s scripts/ci/tests`
+  and `python3 scripts/ci/inventory.py`. The matrix covers every workspace member
+  and must run the exact full Cargo command. GitHub job results feed the final
+  gate; artifacts retain separate source/run/content provenance. There is no
+  shadow planner or Rust execution receipt protocol.
 
 - `python3 scripts/check_architecture.py`: Cargo boundaries, scoped HTTP state,
   optional OpenAPI dependency, source fuse and immutable Action references.
@@ -136,3 +134,33 @@ The harness records input binary and installer hashes with exact case outcomes.
 Keep diagnostic JSON; do not publish VM disks, keys or fixture databases.
 Power loss during multi-file replacement is not atomic. The pending checkpoint
 requires operator recovery; this test does not establish automatic boot recovery.
+
+## Long soak and control-plane boundaries
+
+The separate `optional-long-soak` workflow runs 1800 seconds weekly or manually,
+with a 75-minute job limit and 90-day JSON retention. The ordinary CI gate retains
+90 seconds. Reports include initial/peak/final RSS, FD, WAL and DB, per-cycle and
+per-second tail slopes, page/freelist counts, history rows and task/limiter counts.
+A failed assertion retains partial numeric evidence and never reports PASS.
+Freelist is reusable SQLite capacity, not a leak; there is no automatic VACUUM.
+
+Local measurement on 2026-09-11: 1800.062 seconds, 51,641 cycles, 242,732
+requests, zero unexpected failures or error logs, graceful shutdown PASS.
+RSS initial/peak/final was 40,996,864 / 65,466,368 / 60,534,784 bytes;
+FD 18 / 25 / 21; WAL 1,133,032 / 4,371,352 / 4,371,352 bytes;
+DB 512,000 / 75,923,456 / 75,923,456 bytes. Tracked jobs peaked at 1 and
+finished at 0; panics/cancellations stayed 0; limiter entries peaked/finished
+at 5,165. Final page/freelist counts were 18,539 / 0. RSS tail slope remained
+positive at 621.626 bytes/second; FD tail slope was zero. This is one measured
+envelope, not proof of zero slow leak or a cross-run trend. The run accumulated
+51,641 traffic observations and 5,165 refresh/probe rows each inside retention;
+DB growth here does not measure expiry reclamation throughput. Final explicit
+closure of the harness's SQLite sampling connections was separately exercised
+by a 10-second real-process smoke after this long run had started.
+
+The 2026-09-11 read-only GitHub audit found no main protection, repository
+rulesets or release-environment protection rules. Repository code does not fix
+these settings. Operator action remains: prohibit main force-push/deletion,
+require `acceptance-gate`, protect immutable `v*` tags and configure the intended
+release environment. No additional reviewer quota or commit-signing ritual is
+required by this round; publisher authentication remains the signed manifest.

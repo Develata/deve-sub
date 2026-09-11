@@ -6,6 +6,7 @@ SSRF rejection against loopback; successful fetch/reconcile has separate adapter
 and reconciliation tests. No production SSRF bypass is added for this harness.
 """
 import argparse
+from contextlib import closing
 import http.client
 import json
 import os
@@ -69,7 +70,11 @@ class Api:
 
 def resources(pid, database, elapsed, cycles):
     status = Path(f"/proc/{pid}/status").read_text()
+    with closing(sqlite3.connect(f"file:{database}?mode=ro", uri=True, timeout=1)) as db:
+        pages = db.execute("PRAGMA page_count").fetchone()[0]
+        free = db.execute("PRAGMA freelist_count").fetchone()[0]
     return {
+        "page_count": pages, "freelist_count": free,
         "seconds": round(elapsed, 3), "cycles": cycles,
         "rss_bytes": int(re.search(r"VmRSS:\s+(\d+)", status)[1]) * 1024,
         "fds": len(list(Path(f"/proc/{pid}/fd").iterdir())),
@@ -86,7 +91,11 @@ def summary(samples, field):
     xm, ym = sum(xs) / len(xs), sum(ys) / len(ys)
     denominator = sum((x - xm) ** 2 for x in xs)
     slope = sum((x - xm) * (y - ym) for x, y in zip(xs, ys)) / denominator if denominator else 0
-    return {"initial": values[0], "peak": max(values), "final": values[-1],
+    tx = [s["seconds"] for s in tail]
+    tm = sum(tx) / len(tx)
+    td = sum((x - tm) ** 2 for x in tx)
+    time_slope = sum((x - tm) * (y - ym) for x, y in zip(tx, ys)) / td if td else 0
+    return {"tail_slope_per_second": round(time_slope, 3), "initial": values[0], "peak": max(values), "final": values[-1],
             "tail_min": min(ys), "tail_max": max(ys), "tail_slope_per_cycle": round(slope, 3)}
 
 
@@ -110,6 +119,10 @@ def main():
     args = parser.parse_args()
     assert args.seconds >= 10, "at least ten seconds of work required"
     assert Path("/proc/self/status").exists(), "Linux /proc required"
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps({"status": "FAIL", "phase": "startup not completed",
+                                          "requested_seconds": args.seconds}) + "\n")
     binary = args.binary.resolve()
     with tempfile.TemporaryDirectory(prefix="deve-sub-soak-") as directory:
         root = Path(directory)
@@ -128,6 +141,7 @@ def main():
         with log_path.open("w") as log:
             child = subprocess.Popen([str(binary), "serve", "--config", str(config_path)], stdout=log, stderr=log,
                                      env={**os.environ, "RUST_LOG": "info", "NO_COLOR": "1"})
+            samples, report = [], {"status": "FAIL", "requested_seconds": args.seconds}
             try:
                 deadline = time.monotonic() + 30
                 while time.monotonic() < deadline:
@@ -203,7 +217,7 @@ def main():
                     listener.close()
                 assert cycles >= 20, "insufficient representative work"
                 # Read-only state invariants complement filesystem trend observations.
-                with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
+                with closing(sqlite3.connect(f"file:{database}?mode=ro", uri=True)) as db:
                     unfinished = db.execute("SELECT count(*) FROM probe_runs WHERE status IN ('P','R')").fetchone()[0]
                     assert unfinished == 0
                     history = {table: db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
@@ -222,15 +236,15 @@ def main():
                     assert telemetry["tracked_jobs"]["peak"] <= 64
                     assert telemetry["rate_limiter_entries"]["peak"] <= 10_000
                     assert telemetry["task_panics"]["final"] == 0
-                report = {"mode": "soak" if args.seconds >= 90 else "smoke",
+                report.update({"mode": "soak" if args.seconds >= 90 else "smoke",
                           "checkpoint_samples": len(re.findall(r"sqlite checkpoint\b.*\bbusy=", text)),
                           "seconds": samples[-1]["seconds"], "cycles": cycles,
                           "requests": api.requests, "failures": api.failures,
                           "request_failure_rate": api.failures / api.requests,
                           "statuses": api.statuses, "error_logs": len(re.findall(r"\bERROR\b", text)),
-                          "resources": {key: summary(samples, key) for key in ("rss_bytes", "fds", "database_bytes", "wal_bytes")},
+                          "resources": {key: summary(samples, key) for key in ("rss_bytes", "fds", "database_bytes", "wal_bytes", "page_count", "freelist_count")},
                           "telemetry": telemetry, "history_rows": history, "samples": samples,
-                          "source_refresh": "real application SSRF failure path; successful reconciliation measured separately"}
+                          "source_refresh": "real application SSRF failure path; successful reconciliation measured separately"})
                 rss, fds = report["resources"]["rss_bytes"], report["resources"]["fds"]
                 assert rss["final"] <= rss["tail_min"] + max(32 * 1024 * 1024, rss["tail_min"] // 2), "RSS exceeds generous tail envelope"
                 assert fds["tail_max"] <= fds["tail_min"] + 8, "FD count does not stabilize"
@@ -239,14 +253,28 @@ def main():
                     wal = report["resources"]["wal_bytes"]
                     assert wal["tail_max"] <= wal["tail_min"] + 16 * 1024 * 1024, "WAL exceeds normal unpinned envelope"
                 assert report["error_logs"] == 0, "unexpected server error logs"
-                if args.output:
-                    args.output.parent.mkdir(parents=True, exist_ok=True)
-                    args.output.write_text(json.dumps(report, indent=2) + "\n")
+                report["status"] = "PASS"
                 print(json.dumps({k: v for k, v in report.items() if k != "samples"}, indent=2))
+            except BaseException as error:
+                report.update(status="FAIL", failure_type=type(error).__name__, failure=str(error))
+                raise
             finally:
-                if child.poll() is None:
-                    child.kill()
-                    child.wait(timeout=5)
+                try:
+                    if child.poll() is None:
+                        child.kill()
+                        child.wait(timeout=5)
+                finally:
+                    # Preserve partial numeric evidence even when an assertion
+                    # aborts before the temporary DB/log directory is removed.
+                    # Never export the database, keys, cookies or raw request log.
+                    report.setdefault("samples", samples)
+                    if samples:
+                        report.setdefault("resources", {key: summary(samples, key) for key in
+                            ("rss_bytes", "fds", "database_bytes", "wal_bytes", "page_count", "freelist_count")})
+                    if args.output:
+                        args.output.parent.mkdir(parents=True, exist_ok=True)
+                        args.output.write_text(json.dumps(report, indent=2) + "\n")
+
 
 
 if __name__ == "__main__":

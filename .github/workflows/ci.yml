@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 jobs:
-  plan:
-    name: ci-inventory-and-shadow-plan
+  inventory:
+    name: ci-static-inventory
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -32,16 +32,8 @@ jobs:
           components: rustfmt, clippy
       - run: pip install pyyaml==6.0.3
       - run: python3 -m unittest discover -s scripts/ci/tests
-      - name: Validate full inventory and record shadow selection
-        env:
-          CI_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: python3 scripts/ci/plan.py --base "$CI_BASE" --event "$GITHUB_EVENT_NAME" --ref "$GITHUB_REF" --output "$RUNNER_TEMP/ci-plan.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ci-plan
-          path: ${{ runner.temp }}/ci-plan.json
-          if-no-files-found: error
-          retention-days: 7
+      - run: python3 scripts/tests/test_soak.py
+      - run: python3 scripts/ci/inventory.py
 
   # WHY (ADR-0008): independent checks and complete package shards run in
   # parallel, retaining the locked/all-targets/all-features test baseline.
@@ -71,7 +63,7 @@ jobs:
           key: clippy
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
-  # WHY: finish every shard even on failure, and retain each command receipt.
+  # WHY: finish every shard even on failure.
   # Grouping small crates keeps the static matrix within runner capacity.
   test:
     name: test:${{ matrix.shard }}
@@ -106,18 +98,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: test-${{ matrix.shard }}
-      - name: Run Rust shard with execution receipt
+      - name: Run full Rust shard
         env:
-          CI_SHARD: ${{ matrix.shard }}
           CI_PACKAGES: ${{ matrix.crates }}
-        run: python3 scripts/ci/run_shard.py --shard "$CI_SHARD" --packages="$CI_PACKAGES" --output "$RUNNER_TEMP/rust-execution/receipt.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: always()
-        with:
-          name: rust-execution-${{ matrix.shard }}
-          path: ${{ runner.temp }}/rust-execution/receipt.json
-          if-no-files-found: error
-          retention-days: 7
+        run: cargo test --locked --all-targets --all-features $CI_PACKAGES
 
   test-doc:
     name: test-doc
@@ -148,7 +132,7 @@ jobs:
           diff -u /tmp/openapi.json docs/openapi/openapi.json
 
   # WHY: one Rust fan-in blocks downstream consumers on any failed shard.
-  # The final acceptance gate independently validates every shard receipt.
+  # The final acceptance gate checks every required job result.
   rust-gate:
     name: rust-gate
     runs-on: ubuntu-latest
@@ -201,8 +185,20 @@ jobs:
           toolchain: 1.97.1
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --locked --version 0.7.10
+      - id: tool-image
+        run: echo "image-os=${ImageOS:?missing runner image generation}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/deve-sub/dioxus
+          key: dx-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.tool-image.outputs.image-os }}-rust-1.97.1-dioxus-0.7.10
+      - name: Install or verify Dioxus CLI
+        run: |
+          tool_root="$HOME/.cache/deve-sub/dioxus"
+          if [ ! -x "$tool_root/bin/dx" ] || ! timeout 10 "$tool_root/bin/dx" --version | grep -Eq '^dioxus 0[.]7[.]10([[:space:]]|$)'; then
+            cargo install dioxus-cli --locked --version 0.7.10 --root "$tool_root" --force
+          fi
+          timeout 10 "$tool_root/bin/dx" --version | grep -Eq '^dioxus 0[.]7[.]10([[:space:]]|$)'
+          echo "$tool_root/bin" >> "$GITHUB_PATH"
       - name: Build and verify WASM frontend
         run: bash scripts/build-web-release.sh
       - id: provenance
@@ -473,21 +469,15 @@ jobs:
     name: acceptance-gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [plan, fmt-check, clippy, test, test-doc, openapi-diff, rust-gate, compatibility, docs, web-wasm, build-release, resource-soak, supply-chain, browser-e2e, docker, multiarch]
+    needs: [inventory, fmt-check, clippy, test, test-doc, openapi-diff, rust-gate, compatibility, docs, web-wasm, build-release, resource-soak, supply-chain, browser-e2e, docker, multiarch]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: pip install pyyaml==6.0.3
-      - name: Download Rust shard receipts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: rust-execution-*
-          path: ${{ runner.temp }}/rust-receipts
-          merge-multiple: false
       - name: Require complete full-baseline job results
         if: always()
         env:
           CI_NEEDS: ${{ toJSON(needs) }}
-        run: python3 scripts/ci/gate.py --receipts "$RUNNER_TEMP/rust-receipts" --output "$RUNNER_TEMP/ci-result.json"
+        run: python3 scripts/ci/gate.py --output "$RUNNER_TEMP/ci-result.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:

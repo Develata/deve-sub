@@ -167,13 +167,22 @@ later-milestone action:
 
 The in-memory adapter keeps at most 10,000 combined username/IP records.
 Keys are domain-separated SHA-256 digests, so both key count and key size are
-bounded. At capacity, unknown keys fail closed; active lockouts are never
-evicted to admit new identities. Pressure eviction removes expired lockouts
-or unlocked records idle for twice the lockout duration, at most once per
-second. Below capacity, failure counts remain sticky until successful login;
-expiry permits one retry without clearing that count. Successful login clears
-only the username. Saturation may temporarily reject legitimate new users;
-this explicit availability tradeoff prevents cardinality-based brute-force
-bypass and memory exhaustion. Resident count is available as unlabeled
-operational telemetry. Tests cover 100,000 distinct identities and namespace
-separation, expiry and the existing retry policy.
+bounded. Admission pressure is measured against the one or two slots needed
+by this request, including the 9,999-entry boundary. Reclaim expired records
+first, then a bounded batch of the oldest unlocked probation records. Active
+lockouts are never evicted. Existing identities are protected within each
+limiter call, preventing that call from evicting its own IP before recording
+a failure. Between check and record_failure, another call may evict probation;
+this does not weaken active-lockout protection.
+When lockouts dominate, scans reclaiming fewer than one batch are throttled
+to once per second; available slots remain usable during that cooldown, while
+at-capacity unknown identities fail closed temporarily. A full successful batch
+amortizes the O(10,000) scan over subsequent admissions rather than imposing
+a time-based global rejection window while probation remains evictable.
+
+Below pressure, failure counts remain sticky until successful login; expiry
+permits one retry without clearing that count. Successful login clears only
+the username, never shared IP state. Resident count and bounded-cardinality
+pressure/eviction events provide operational evidence. Tests cover 100,000
+rotating identities, active lockouts, near-full expiry, probation admission,
+namespace separation and the existing retry policy.

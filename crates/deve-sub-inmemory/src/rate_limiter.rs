@@ -1,9 +1,8 @@
 //! Process-local login failure tracking with a hard resident-key bound.
 //!
-//! Full capacity fails closed for unknown keys instead of evicting active
-//! lockouts. Pressure cleanup only removes expired entries, at most once per
-//! second. Fixed-size, domain-separated digests bound memory even for long
-//! attacker-controlled usernames. State is intentionally lost on restart.
+//! Pressure evicts old probation records, never active lockouts or identities
+//! within the current limiter call. Fixed-size, domain-separated digests bound
+//! memory even for long usernames. State is intentionally lost on restart.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -14,6 +13,7 @@ use sha2::{Digest, Sha256};
 
 /// Maximum combined number of username and IP failure records.
 const MAX_ENTRIES: usize = 10_000;
+const EVICTION_BATCH: usize = 256;
 
 /// Bounded in-memory implementation of [`LoginRateLimiter`].
 pub struct InMemoryLoginRateLimiter {
@@ -54,25 +54,69 @@ impl InMemoryLoginRateLimiter {
         hash.finalize().into()
     }
 
-    fn keys(username: &str, ip: Option<&str>) -> impl Iterator<Item = [u8; 32]> {
+    fn keys(username: &str, ip: Option<&str>) -> [Option<[u8; 32]>; 2] {
         [Some(Self::key(0, username)), ip.map(|ip| Self::key(1, ip))]
-            .into_iter()
-            .flatten()
     }
 
-    fn sweep_at_capacity(&self, state: &mut State, now: Instant) {
-        if state.entries.len() < MAX_ENTRIES || now < state.next_sweep {
+    fn make_room(&self, state: &mut State, keys: &[Option<[u8; 32]>; 2], now: Instant) {
+        let missing = keys
+            .iter()
+            .flatten()
+            .filter(|key| !state.entries.contains_key(*key))
+            .count();
+        if missing <= MAX_ENTRIES - state.entries.len() || now < state.next_sweep {
             return;
         }
-        // WHY: preserve the existing pressure-eviction semantics, including
-        // sticky failure counts below capacity. Never evict an active lockout;
-        // otherwise rotating usernames would buy fresh brute-force budgets.
+        // Preserve this attempt's existing IP/username counters: username
+        // rotation must not evict an IP immediately before it reaches lockout.
+        let before = state.entries.len();
         let max_age = self.lockout_duration.saturating_mul(2);
-        state.entries.retain(|_, entry| match entry.locked_until {
-            Some(until) => until > now,
-            None => now.duration_since(entry.last_failure) < max_age,
+        state.entries.retain(|key, entry| {
+            keys.contains(&Some(*key))
+                || match entry.locked_until {
+                    Some(until) => until > now,
+                    None => now.duration_since(entry.last_failure) < max_age,
+                }
         });
-        state.next_sweep = now + Duration::from_secs(1);
+        if missing <= MAX_ENTRIES - state.entries.len() {
+            if before - state.entries.len() < EVICTION_BATCH {
+                state.next_sweep = now + Duration::from_secs(1);
+            }
+            return;
+        }
+        // At most 10k candidates; selection is linear and a batch amortizes
+        // the scan over 256 freed key slots. A full batch needs no time-based
+        // denial window; low-yield scans are throttled below.
+        let mut candidates: Vec<_> = state
+            .entries
+            .iter()
+            .filter(|(key, entry)| {
+                !keys.contains(&Some(**key)) && entry.locked_until.is_none_or(|until| until <= now)
+            })
+            .map(|(key, entry)| (entry.last_failure, *key))
+            .collect();
+        let evicted = candidates.len().min(EVICTION_BATCH);
+        if evicted < candidates.len() {
+            candidates.select_nth_unstable(evicted);
+        }
+        for (_, key) in candidates.into_iter().take(evicted) {
+            state.entries.remove(&key);
+        }
+        if before - state.entries.len() < EVICTION_BATCH {
+            // An almost entirely locked table must not scan 10k entries for
+            // every single probation eviction. Existing free slots remain
+            // usable; reclamation is reconsidered within one second.
+            state.next_sweep = now + Duration::from_secs(1);
+            tracing::warn!(
+                entries = state.entries.len(),
+                "login capacity dominated by lockouts"
+            );
+        }
+        tracing::debug!(
+            evicted,
+            entries = state.entries.len(),
+            "login capacity reclaimed"
+        );
     }
 }
 
@@ -80,9 +124,9 @@ impl LoginRateLimiter for InMemoryLoginRateLimiter {
     fn check(&self, username: &str, ip: Option<&str>) -> Result<(), AuthError> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
-        self.sweep_at_capacity(&mut state, now);
+        let keys = Self::keys(username, ip);
         let mut missing = 0;
-        for key in Self::keys(username, ip) {
+        for key in keys.into_iter().flatten() {
             match state.entries.get_mut(&key) {
                 Some(entry) => {
                     if let Some(until) = entry.locked_until {
@@ -96,6 +140,7 @@ impl LoginRateLimiter for InMemoryLoginRateLimiter {
                 None => missing += 1,
             }
         }
+        self.make_room(&mut state, &keys, now);
         if missing > MAX_ENTRIES - state.entries.len() {
             return Err(AuthError::RateLimited);
         }
@@ -105,8 +150,9 @@ impl LoginRateLimiter for InMemoryLoginRateLimiter {
     fn record_failure(&self, username: &str, ip: Option<&str>) {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
-        self.sweep_at_capacity(&mut state, now);
-        for key in Self::keys(username, ip) {
+        let keys = Self::keys(username, ip);
+        self.make_room(&mut state, &keys, now);
+        for key in keys.into_iter().flatten() {
             // Concurrent checks do not reserve slots. Recheck under the same
             // mutex as insertion so racing failures cannot exceed the bound.
             if !state.entries.contains_key(&key) && state.entries.len() == MAX_ENTRIES {
@@ -145,6 +191,81 @@ impl LoginRateLimiter for InMemoryLoginRateLimiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn probation_pressure_allows_new_identity_without_flushing_active_lockouts() {
+        let limiter = InMemoryLoginRateLimiter::new(5, Duration::from_secs(3600));
+        for _ in 0..5 {
+            limiter.record_failure("victim", Some("192.0.2.1"));
+        }
+        for i in 0..100_000 {
+            let username = format!("rotating-{i}");
+            let ip = format!("synthetic-ip-{i}");
+            assert!(limiter.check(&username, Some(&ip)).is_ok(), "admission {i}");
+            limiter.record_failure(&username, Some(&ip));
+            assert!(limiter.resident_entries().expect("count") <= MAX_ENTRIES);
+        }
+        assert!(limiter.check("clean-user", Some("192.0.2.2")).is_ok());
+        assert!(limiter.check("victim", None).is_err());
+        assert!(limiter.check("other-user", Some("192.0.2.1")).is_err());
+    }
+
+    #[test]
+    fn two_new_keys_reclaim_expired_entries_with_one_slot_remaining() {
+        let limiter = InMemoryLoginRateLimiter::new(5, Duration::from_secs(60));
+        for i in 0..MAX_ENTRIES - 1 {
+            limiter.record_failure(&format!("expired-{i}"), None);
+        }
+        {
+            let mut state = limiter.state.lock().expect("lock");
+            let expired = Instant::now() - Duration::from_secs(121);
+            for entry in state.entries.values_mut() {
+                entry.last_failure = expired;
+            }
+        }
+        assert_eq!(limiter.resident_entries(), Some(MAX_ENTRIES - 1));
+        assert!(limiter.check("new", Some("192.0.2.3")).is_ok());
+        assert_eq!(limiter.resident_entries(), Some(0));
+    }
+
+    #[test]
+    fn pressure_preserves_current_ip_probation_until_it_locks() {
+        let limiter = InMemoryLoginRateLimiter::new(5, Duration::from_secs(3600));
+        limiter.record_failure("initial", Some("192.0.2.4"));
+        for i in 0..MAX_ENTRIES - 2 {
+            limiter.record_failure(&format!("filler-{i}"), None);
+        }
+        for i in 0..4 {
+            let user = format!("same-ip-{i}");
+            assert!(limiter.check(&user, Some("192.0.2.4")).is_ok());
+            limiter.record_failure(&user, Some("192.0.2.4"));
+        }
+        assert!(limiter.check("new", Some("192.0.2.4")).is_err());
+        limiter.record_success("same-ip-3", Some("192.0.2.4"));
+        assert!(limiter.check("new", Some("192.0.2.4")).is_err());
+        assert!(limiter.check("same-ip-3", Some("192.0.2.5")).is_ok());
+    }
+
+    #[test]
+    fn nearly_all_locked_pressure_does_not_rescan_for_each_probation() {
+        let limiter = InMemoryLoginRateLimiter::new(2, Duration::from_secs(3600));
+        for i in 0..MAX_ENTRIES - 1 {
+            let user = format!("locked-{i}");
+            limiter.record_failure(&user, None);
+            limiter.record_failure(&user, None);
+        }
+        limiter.record_failure("probation", None);
+        assert!(limiter.check("first", None).is_ok());
+        let deadline = limiter.state.lock().expect("lock").next_sweep;
+        assert!(deadline > Instant::now());
+        limiter.record_failure("first", None);
+        assert_eq!(limiter.state.lock().expect("lock").next_sweep, deadline);
+        assert!(limiter.check("second", None).is_err());
+        assert!(limiter.check("locked-0", None).is_err());
+        // Advance the maintenance state rather than asserting wall time.
+        limiter.state.lock().expect("lock").next_sweep = Instant::now();
+        assert!(limiter.check("second", None).is_ok());
+    }
 
     #[test]
     fn high_cardinality_is_hard_bounded_and_does_not_evict_lockouts() {

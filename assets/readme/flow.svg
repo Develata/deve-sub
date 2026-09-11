@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
+  <title id="title">Many sources. One place.</title>
+  <desc id="desc">Deve Sub brings subscriptions and configuration files into one node pool, then generates client profiles and subscription URLs.</desc>
+  <rect width="1280" height="320" rx="20" fill="#faf7f2"/>
+  <path d="M520 0V320M840 0V320M1160 0V320M0 80H1280M0 240H1280" stroke="#eee8df" stroke-width="1"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <rect x="48" y="39" width="258" height="27" rx="13.5" fill="#ede7dc"/>
+    <text x="64" y="57" fill="#736755" font-size="11" font-weight="600" letter-spacing="2">SELF-HOSTED · RUST · SQLITE</text>
+    <text x="48" y="135" fill="#292620" font-size="56" font-weight="700" letter-spacing="-2">Many sources.</text>
+    <text x="48" y="198" fill="#ad6637" font-size="56" font-weight="700" letter-spacing="-2">One place.</text>
+    <text x="51" y="264" fill="#857969" font-size="13" letter-spacing="2">COLLECT / ORGANIZE / DELIVER</text>
+    <g fill="none" stroke="#cec1af" stroke-width="2">
+      <path d="M698 99H736Q750 99 750 113V146Q750 160 764 160H784"/>
+      <path d="M698 217H736Q750 217 750 203V174Q750 160 764 160"/>
+      <path d="M970 160H998Q1012 160 1012 146V113Q1012 99 1026 99H1044"/>
+      <path d="M998 160Q1012 160 1012 174V203Q1012 217 1026 217H1044"/>
+    </g>
+    <rect x="538" y="65" width="160" height="68" rx="13" fill="#fffdf9" stroke="#e3dacd"/>
+    <circle cx="560" cy="89" r="4" fill="#b88459"/>
+    <text x="573" y="93" fill="#453d31" font-size="13" font-weight="600">Subscriptions</text>
+    <text x="557" y="115" fill="#8e8271" font-size="11">HTTP / share links</text>
+    <rect x="538" y="183" width="160" height="68" rx="13" fill="#fffdf9" stroke="#e3dacd"/>
+    <circle cx="560" cy="207" r="4" fill="#869d88"/>
+    <text x="573" y="211" fill="#453d31" font-size="13" font-weight="600">Config files</text>
+    <text x="557" y="233" fill="#8e8271" font-size="11">YAML / JSON / URI</text>
+    <rect x="784" y="107" width="186" height="106" rx="16" fill="#343b31"/>
+    <text x="807" y="138" fill="#c4cfbc" font-size="10" font-weight="600" letter-spacing="2">YOUR NODE POOL</text>
+    <text x="807" y="168" fill="#faf7f2" font-size="20" font-weight="600">One clear model</text>
+    <text x="807" y="191" fill="#c4cfbc" font-size="11">Filter · Probe · Templates</text>
+    <rect x="1044" y="65" width="188" height="68" rx="13" fill="#fffdf9" stroke="#e3dacd"/>
+    <text x="1063" y="94" fill="#453d31" font-size="13" font-weight="600">Client profiles</text>
+    <text x="1063" y="115" fill="#8e8271" font-size="11">Mihomo / sing-box / …</text>
+    <rect x="1044" y="183" width="188" height="68" rx="13" fill="#fffdf9" stroke="#e3dacd"/>
+    <text x="1063" y="212" fill="#453d31" font-size="13" font-weight="600">Subscription URLs</text>
+    <text x="1063" y="233" fill="#8e8271" font-size="11">Tokens · Expiry · Quotas</text>
+  </g>
+</svg>

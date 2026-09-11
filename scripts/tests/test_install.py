@@ -38,6 +38,10 @@ if name == 'curl':
             shutil.copyfile('/fixture/assets/' + asset, args[args.index('-o') + 1])
         else:
             raise SystemExit('unexpected release URL')
+    elif pathlib.Path('/state/restored.json').exists() and url.endswith(('/health/ready', '/health/live')):
+        if os.environ.get('INSTALL_SMOKE_FAIL_ROLLBACK_READY') == '1':
+            raise SystemExit(22)
+        print('{"version":"0.0.9"}' if url.endswith('/health/live') else '{}')
     elif os.environ.get('INSTALL_SMOKE_MISSING_VERSION') == '1' and url.endswith('/health/live'):
         print('{}')
     else:
@@ -126,7 +130,7 @@ class InstallerTests(unittest.TestCase):
             lines.append(hashlib.sha256((assets / name).read_bytes()).hexdigest() + '  ' + name)
         (assets / 'checksums.txt').write_text('\n'.join(lines) + '\n')
 
-    def run_installer(self, fail_restart=False, latest=False, missing_version=False, fail_enable=False):
+    def run_installer(self, fail_restart=False, latest=False, missing_version=False, fail_enable=False, fail_rollback_ready=False):
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]
@@ -134,6 +138,7 @@ class InstallerTests(unittest.TestCase):
                    DEVE_SUB_DATA_DIR='/var/lib/deve-sub', INSTALL_SMOKE_FAIL_RESTART='1' if fail_restart else '0',
                    INSTALL_SMOKE_MISSING_VERSION='1' if missing_version else '0',
                    INSTALL_SMOKE_FAIL_ENABLE='1' if fail_enable else '0',
+                   INSTALL_SMOKE_FAIL_ROLLBACK_READY='1' if fail_rollback_ready else '0',
                    NO_PROXY='localhost,127.0.0.1,::1', no_proxy='localhost,127.0.0.1,::1')
         command = ['bwrap', '--unshare-user', '--uid', '0', '--gid', '0',
                    '--unshare-pid', '--die-with-parent', '--new-session', '--proc', '/proc', '--dev', '/dev',
@@ -141,7 +146,7 @@ class InstallerTests(unittest.TestCase):
                    '--ro-bind', '/lib64', '/lib64', '--ro-bind', '/bin', '/bin',
                    '--ro-bind', '/sbin', '/sbin', '--ro-bind', '/etc', '/etc',
                    '--ro-bind', str(ROOT), '/repo', '--ro-bind', str(self.root), '/fixture',
-                   '--tmpfs', '/tmp', '--tmpfs', '/run', '--tmpfs', '/var/lib',
+                   '--tmpfs', '/tmp', '--tmpfs', '/var/tmp', '--tmpfs', '/run', '--tmpfs', '/var/lib',
                    '--bind', str(self.root / 'local'), '/usr/local',
                    '--bind', str(self.root / 'data'), '/var/lib/deve-sub',
                    '--bind', str(self.root / 'state'), '/state',
@@ -186,11 +191,17 @@ class InstallerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assert_untouched()
         actions = (self.root / 'state/systemctl').read_text().splitlines()
-        self.assertEqual(actions[-3:], ['stop deve-sub', 'daemon-reload', 'start deve-sub'])
+        self.assertEqual(actions[-4:], ['stop deve-sub', 'daemon-reload', 'start deve-sub', 'is-active --quiet deve-sub'])
         restored = json.loads((self.root / 'state/restored.json').read_text())
         self.assertEqual(restored, {'binary': hashlib.sha256(self.old_binary).hexdigest(),
                                     'web': 'previous frontend', 'unit': 'previous service unit'})
         self.assertFalse((self.root / 'state/server.pid').exists())
+
+    def test_started_but_unhealthy_previous_service_retains_backups(self):
+        result = self.run_installer(fail_restart=True, fail_rollback_ready=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assert_untouched()
+        self.assertIn('rollback incomplete; recovery backups retained', result.stdout)
 
     def test_first_install_does_not_require_a_previous_service(self):
         (self.root / 'systemd/deve-sub.service').unlink()

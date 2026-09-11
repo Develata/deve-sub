@@ -44,9 +44,13 @@ bootstraps trust through HTTPS; its checksum is integrity evidence only.
 assets are absent, `--allow-unsigned` permits a manually trusted development
 source's `checksums.txt`; a missing flag, partial signature, invalid signature,
 version mismatch, hash mismatch or size mismatch aborts before swapping the
-binary. `--force` only bypasses the version comparison, never authentication.
-The updater replaces the binary only; use the installer to update native Web
-assets or update the complete Docker image.
+binary. `--force` permits a same-version reinstall; downgrades require the separate
+`--allow-downgrade` operator override. Neither bypasses authentication.
+The updater replaces the binary only. With `server.serve_web=true` (the default),
+it refuses before fetching or writing unless `--binary-only` explicitly accepts
+version skew. An unreadable/invalid explicit config is an error. Use the installer
+to update native Web assets or update the complete Docker image. No atomic
+binary-plus-Web self-update or database rollback is claimed.
 
 ## Failure and verification
 

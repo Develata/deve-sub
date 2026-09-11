@@ -137,7 +137,7 @@ install.sh:
   6. generate /etc/systemd/system/deve-sub.service
   7. systemctl daemon-reload && systemctl restart deve-sub
   8. poll readiness and verify the running version, then enable the service
-     (60s timeout)
+     (60 bounded attempts, up to 180 seconds)
 ```
 
 The installer resolves `latest` to one release tag before downloading assets.
@@ -147,6 +147,17 @@ backups are restored on installation failure, together with the prior unit
 and running service state. Failed rollback retains backups for repair. The unit uses `Restart=on-failure`
 and `After=network.target`. The installer still authenticates its initial
 download through HTTPS; its checksum file alone is not a publisher signature.
+
+The installer shares the binary updater's nonblocking filesystem lock. Recovery
+backups live in a private persistent `/var/tmp` directory; a pending marker makes
+an interrupted attempt fail clearly on the next invocation. Successful recovery
+removes its own marker/backups; failed recovery retains both. This is not a
+power-loss-atomic layout. Existing databases are not automatically migrated
+on reinstall/upgrade: an incompatible schema must follow explicit backed-up
+operator migration, rather than pretending binary rollback also rolls back SQL.
+External downloads, archive processing and systemctl waits have fixed limits.
+Unsupported whitespace/control characters and paths hidden by ProtectHome are
+rejected before mutation; the unit specifies start/stop timeout and private umask.
 
 ### Self-update
 
@@ -176,10 +187,23 @@ production release, provision a dedicated signing key and replace the embedded
 development verification key. Key provisioning is verified separately from
 ordinary tests and never inferred from a successful build.
 
-`deve-sub update` updates the native binary only. Native installations that need
-the version-matched Web UI must rerun the installer, which updates both assets;
-Docker deployments update the complete image. This release does not claim a
-transactional binary-plus-frontend self-update command.
+`deve-sub update` updates the native binary only. If the effective config has
+`server.serve_web=true` (including the default), it refuses before network or
+filesystem mutation unless `--binary-only` explicitly accepts frontend skew.
+Invalid/missing explicit configuration fails closed. Headless configurations
+may update without that override. Native Web installations should update both
+assets through the installer; Docker deployments update the complete image.
+`--force` permits reinstalling the current version; a downgrade additionally
+requires `--allow-downgrade`. Neither flag bypasses publisher authentication.
+
+Convergence decision: retain the existing installation layout for this round.
+A versioned-directory transaction would also require adoption of existing
+custom units/config, a durable recovery record, and a separate database upgrade
+policy (the previous installer automatically migrated existing databases).
+A pointer swap alone does not make those operations reversible. The explicit refusal closes the default
+version-skew failure without introducing another deployment state machine.
+A complete crash-recoverable binary-plus-Web update remains unimplemented;
+installer rollback does not imply database migration rollback.
 
 ### Performance benchmarks
 

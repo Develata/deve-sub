@@ -1624,8 +1624,9 @@ cases:
     assertions: ["systemd 正常运行"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "scripts/tests/native_vm.py"
+      status: pass
   - id: DEPLOY-003
     title: amd64 镜像
     priority: P1
@@ -1681,7 +1682,7 @@ cases:
         - "apps/cli/src/update_manifest.rs::embedded_key_verifies_fixture_signature"
         - "apps/cli/tests/update.rs::update001_unsigned_release_rejected_by_default"
         - "apps/cli/tests/update.rs::update001_unsigned_opt_in_never_bypasses_invalid_signature"
-      status: pass
+      status: not-run
   - id: UPDATE-002
     title: 更新失败
     priority: P1
@@ -1694,7 +1695,7 @@ cases:
     evidence:
       tests:
         - "apps/cli/tests/update.rs::update002_bad_binary_rejected_before_swap"
-      status: pass
+      status: not-run
   - id: SEC-001
     title: localhost SSRF
     priority: P0

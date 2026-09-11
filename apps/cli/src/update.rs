@@ -48,7 +48,15 @@ pub struct UpdateArgs {
     #[arg(long)]
     binary_path: Option<PathBuf>,
 
-    /// Skip version comparison; always download and swap.
+    /// Explicitly accept a binary-only update, including possible frontend skew.
+    #[arg(long)]
+    binary_only: bool,
+
+    /// Explicitly allow an older release (never bypasses authentication).
+    #[arg(long)]
+    allow_downgrade: bool,
+
+    /// Reinstall the current version (downgrades require --allow-downgrade).
     #[arg(long)]
     force: bool,
 
@@ -79,6 +87,12 @@ const MAX_BINARY_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 
 pub async fn update(args: UpdateArgs) -> Result<()> {
+    let config = load_config(&args.config)?;
+    if config.server.serve_web && !args.binary_only {
+        bail!(
+            "Native installation includes versioned frontend assets. Use the complete installer update, or pass --binary-only explicitly to accept binary/frontend version skew. No files have changed."
+        );
+    }
     let current_version = env!("CARGO_PKG_VERSION");
     let binary_path = match &args.binary_path {
         Some(p) => p.clone(),
@@ -91,7 +105,7 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
     // health URL matches the actual serve bind. If the operator passed an
     // explicit --health-url, use it as-is.
     let health_url = if args.health_url == "http://127.0.0.1:8080/health/live" {
-        let bind = load_bind_from_config(&args.config);
+        let bind = config.server.bind;
         format!("http://{bind}/health/live")
     } else {
         args.health_url.clone()
@@ -107,7 +121,13 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
     let latest_version = manifest.tag_name.trim_start_matches('v');
     println!("  latest version:  {latest_version}");
 
-    if !args.force && !is_newer(latest_version, current_version)? {
+    let older = is_newer(current_version, latest_version)?;
+    if older && !args.allow_downgrade {
+        bail!(
+            "release {latest_version} is older than {current_version}; downgrade requires --allow-downgrade (even with --force)"
+        );
+    }
+    if !older && !args.force && !is_newer(latest_version, current_version)? {
         println!("already up to date.");
         return Ok(());
     }
@@ -123,13 +143,6 @@ pub async fn update(args: UpdateArgs) -> Result<()> {
     // don't clobber each other's temp/backup files.
     let lock_path = update_lock_path(&binary_path);
     let lock_file = acquire_update_lock(&lock_path)?;
-
-    // P0-05: best-effort cleanup of orphaned temp files left in /tmp by
-    // previous failed updates (the old download_streaming wrote there).
-    // These are harmless but accumulate over time on systems that update
-    // frequently. Only removes files matching the old naming pattern;
-    // never touches the new same-dir temp files.
-    cleanup_legacy_tmp_files();
 
     // First-party releases require publisher authentication. The development
     // opt-in below cannot turn a partial or invalid signature into a fallback.
@@ -418,7 +431,7 @@ async fn download_streaming(
     url: &str,
     max_bytes: u64,
     target_dir: &Path,
-) -> Result<(PathBuf, String, u64)> {
+) -> Result<(tempfile::TempPath, String, u64)> {
     let client = reqwest::Client::builder()
         .user_agent(format!("deve-sub/{}", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(300))
@@ -428,18 +441,11 @@ async fn download_streaming(
         bail!("download from {url} returned {}", resp.status());
     }
 
-    let tmp = target_dir.join(format!(".deve-sub-update-{}.tmp", std::process::id()));
-    let mut file = std::fs::File::create(&tmp)
-        .with_context(|| format!("failed to create temp file {}", tmp.display()))?;
-
-    // WHY (review): on any error from download_body the temp file is
-    // removed — stream error, write failure, fsync failure, or size limit.
-    // Without this, a failed download leaves a partial file on disk in the
-    // target binary's directory.
-    let result = download_body(resp, &mut file, max_bytes).await;
-    if result.is_err() {
-        let _ = std::fs::remove_file(&tmp);
-    }
+    let mut file = tempfile::Builder::new()
+        .prefix(".deve-sub-update-")
+        .tempfile_in(target_dir)?;
+    let result = download_body(resp, file.as_file_mut(), max_bytes).await;
+    let tmp = file.into_temp_path();
     let (hex, total) = result?;
     Ok((tmp, hex, total))
 }
@@ -520,25 +526,6 @@ fn update_lock_path(binary: &Path) -> PathBuf {
     p
 }
 
-/// P0-05: best-effort removal of orphaned temp files left in `/tmp` by
-/// previous failed updates. The old `download_streaming` wrote to
-/// `/tmp/deve-sub-update-{pid}.bin`; if the process was killed before
-/// cleanup, those files linger. This sweeps them on the next update run.
-/// Errors are silently ignored — cleanup is best-effort, not a gate.
-fn cleanup_legacy_tmp_files() {
-    let tmp_dir = std::env::temp_dir();
-    let Ok(entries) = std::fs::read_dir(&tmp_dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with("deve-sub-update-") && name.ends_with(".bin") {
-            let _ = std::fs::remove_file(entry.path());
-        }
-    }
-}
-
 /// DS-AUD-B09: acquire an exclusive sidecar lock so two concurrent updates
 /// don't clobber each other's temp/backup files. The lock is held until the
 /// returned `File` is dropped (same pattern as `DbLock`).
@@ -558,11 +545,8 @@ fn acquire_update_lock(lock_path: &Path) -> Result<std::fs::File> {
     Ok(file)
 }
 
-/// DS-AUD-B09: write the new binary via a temp file with fsync, then atomic
-/// rename + file fsync. Parent-directory fsync is omitted because
-/// `unsafe_code = "forbid"` blocks the raw-fd `fsync(dir_fd)` syscall; on
-/// ext4/xfs with default ordered journal mode, the file fsync implies the
-/// rename is durable. (Same constraint documented in B-01.)
+/// Persist the rename as well as the downloaded contents. Opening a directory
+/// and calling sync_all is safe Rust on the supported Linux platforms.
 fn atomic_write_fsync(target: &Path, tmp: &Path) -> Result<()> {
     std::fs::rename(tmp, target)
         .with_context(|| format!("failed to rename {tmp:?} to {target:?}"))?;
@@ -570,6 +554,7 @@ fn atomic_write_fsync(target: &Path, tmp: &Path) -> Result<()> {
         .with_context(|| format!("failed to reopen {target:?} for fsync"))?;
     f.sync_all()
         .with_context(|| format!("failed to fsync {target:?}"))?;
+    std::fs::File::open(target.parent().unwrap_or(Path::new(".")))?.sync_all()?;
     Ok(())
 }
 
@@ -681,7 +666,7 @@ async fn wait_healthy_version(url: &str, expected: &str, timeout_secs: u64) -> b
             // WHY: reqwest's `json()` needs the `json` feature, which the
             // workspace dep does not enable (default-features = false). Parse
             // the body with serde_json directly — already a dependency.
-            if let Ok(body) = resp.bytes().await
+            if let Ok(body) = read_body_bounded(resp, 4096).await
                 && let Ok(view) = serde_json::from_slice::<HealthLiveResponse>(&body)
                 && view.version == expected
             {
@@ -691,16 +676,6 @@ async fn wait_healthy_version(url: &str, expected: &str, timeout_secs: u64) -> b
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
     false
-}
-
-/// DS-AUD-B09: read the bind address from the config file so the default
-/// health URL matches the actual serve bind. Previously dead code; now
-/// called from the update entry point.
-fn load_bind_from_config(config_path: &Option<PathBuf>) -> String {
-    match load_config(config_path) {
-        Ok(config) => config.server.bind,
-        Err(_) => "127.0.0.1:8080".to_owned(),
-    }
 }
 
 #[cfg(test)]

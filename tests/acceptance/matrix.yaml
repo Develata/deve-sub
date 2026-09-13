@@ -1092,6 +1092,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-ROUNDTRIP"
+        - "tests/e2e/functional/templates.ui.spec.ts::FUNC-CLASH-EDITOR"
         - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
         - "apps/server/tests/template_management.rs::gen001_template_crud_roundtrip"
       status: pass
@@ -1106,6 +1108,11 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/src/template/clash_tests.rs::native_clash_rejects_invalid_routing_without_silent_drops"
+        - "crates/deve-sub-application/src/template/bounded_yaml.rs::scalar_alias_expansion_is_bounded_during_parse"
+        - "crates/deve-sub-application/src/template/clash_tests.rs::native_clash_merge_groups_and_escaped_regexes_are_supported"
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-VALIDATION"
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-FIDELITY"
         - "apps/server/tests/template_management.rs::gen002_invalid_template_rejected"
       status: pass
   - id: GEN-003
@@ -1119,6 +1126,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-TEMPLATE-CONCURRENT"
+        - "tests/e2e/functional/templates.ui.spec.ts::FUNC-TEMPLATE-HISTORY"
         - "tests/e2e/functional/ordering.ui.spec.ts::FUNC-TEMPLATE-ORDER"
         - "apps/server/tests/template_management.rs::gen003_edit_creates_new_version"
       status: pass
@@ -1133,6 +1142,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-TEMPLATE-VERSION"
+        - "crates/deve-sub-storage-sqlite/tests/template_lifecycle.rs::rollback_waiting_for_delete_cannot_report_a_ghost_version"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TEMPLATE-ROLLBACK"
         - "apps/server/tests/template_management.rs::gen004_rollback_restores_prior_version"
         - "apps/server/tests/template_management.rs::gen004b_rollback_rejects_version_owned_by_other_template"
@@ -1278,6 +1289,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-TEMPLATE-PIN"
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-VALIDATION"
         - "apps/server/tests/template_management.rs::gen015_failed_generation_preserves_old_active"
         - "apps/server/tests/template_management.rs::gen015b_empty_pool_preserves_active"
       status: pass
@@ -1292,6 +1305,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.ui.spec.ts::FUNC-TEMPLATE-DIALOG"
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-ROUNDTRIP"
         - "apps/server/tests/template_management.rs::gen016_preview_matches_published_output"
       status: pass
   - id: OUT-001
@@ -1305,6 +1320,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_native_routing_templates_pass_mihomo"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_passes"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_rejects_garbage"
       status: pass

@@ -106,6 +106,8 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         profile: &str,
         selection_mode: &str,
         selection_payload: &str,
+        version_pin: Option<u64>,
+        mode: &str,
     ) -> Result<Option<GenerationCacheEntry>, TemplateError> {
         // WHY: order by id, not pool_revision — ULID ids are monotonic by
         // creation time, so this is the newest stored entry for the
@@ -115,13 +117,16 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
              selection_payload, pool_revision, cache_key, content, is_active \
              FROM generation_cache \
              WHERE template_id = ? AND profile = ? AND selection_mode = ? \
-             AND selection_payload = ? \
+             AND selection_payload = ? AND (? IS NULL OR template_version = ?) AND mode = ? \
              ORDER BY id DESC LIMIT 1",
         )
         .bind(template_id.to_string())
         .bind(profile)
         .bind(selection_mode)
         .bind(selection_payload)
+        .bind(version_pin.map(|v| v as i64))
+        .bind(version_pin.map(|v| v as i64))
+        .bind(mode)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| TemplateError::Storage(e.to_string()))?;

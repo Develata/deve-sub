@@ -113,6 +113,14 @@ per-case evidence authority and run `python3 scripts/check_docs.py` for its
 current summary. This roadmap deliberately does not duplicate pass/not-run
 counts or lists, which previously drifted from the executable evidence.
 
+## M5 template maintenance
+
+Native Clash routing input and template lifecycle repairs are owned by the
+M5 blueprint and GEN-001–004/015–016, with pinned-delivery fallback owned by M6.
+The implementation and concurrency scenarios are described in
+`features/subscription-templates.md` and `acceptance/functional-matrix.md`;
+current execution evidence belongs to `acceptance/gates.md`.
+
 ## M5 review follow-ups (M6 backlog)
 
 The per-module M5 review surfaced four non-blocking findings deferred to M6.

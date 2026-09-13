@@ -30,7 +30,7 @@ UI 乱序用受控响应释放顺序，不依赖固定 sleep。
 ## 场景
 
 API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运行一次，
-共 36 项（8 API + 14 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
+共 48 项（14 API + 17 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
 不能只把 HTTP 请求发出当成通过。
 
 | 场景标识 | 绑定 | 维度/操作 | 必须成立的结果 |
@@ -83,3 +83,29 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 回执插入故障回滚、锁等待取消后重试、排他时间边界、0禁用、索引查询计划和迁移备份恢复。
 CLI回归注入审计回执故障，确认过期outbox仍回收。Docker实测以独立标签标记容器，
 无网络/端口/磁盘挂载，镜像声明卷替换为tmpfs防止匿名卷遗留，写入45000条合成记录验证轮转，最后只删除本次容器。
+
+
+## 订阅模板补充（M5/M6）
+
+| 场景标识 | 绑定 | 并发与边界 | 必须成立的结果 |
+|---|---|---|---|
+| FUNC-CLASH-ROUNDTRIP | GEN-001/002/015/016 | 原生配置保存、预览、生成、错误编辑 | 原文保留，预览等于生成，错误不增加版本、不替换产物 |
+| FUNC-CLASH-FIDELITY | GEN-002/016 | DNS policy顺序、规则集、逻辑规则、节点重名 | 映射顺序保留，输出名称唯一且稳定 |
+| FUNC-CLASH-VALIDATION | GEN-002/015 | 并发提交非法规则、生成时节点失效 | 无部分模板或错误产物，报告不可用成员 |
+| FUNC-TEMPLATE-VERSION | GEN-003/004 | v2→v1→再次保存 | 新编号为v3，历史保留 |
+| FUNC-TEMPLATE-CONCURRENT | GEN-003/004 | 12次并发保存，8次保存/回滚交错 | 每次成功保存独立编号，活动指针和唯一活动行一致 |
+| FUNC-TEMPLATE-PIN | GEN-015/OUT-014 | pin1与跟随v2交替生成、节点全部失效 | 回退各自成功内容；引用删除返回409 |
+| FUNC-CLASH-EDITOR | GEN-001/016 | Web默认示例、新建、预览、重开、改profile | 无V3外壳也能生成；失败后不保留旧结果 |
+| FUNC-TEMPLATE-HISTORY | GEN-003/004 | 并发创建101版、回滚v1、分页、再编辑 | 老版本可达，保存为v102 |
+| FUNC-TEMPLATE-DIALOG | GEN-003/016 | A请求延迟→关闭→打开B→释放A | 历史与预览不串模板，B可正常继续操作 |
+
+Rust另覆盖 YAML 解码预算、重复键、custom tag、merge保序，以及持有删除写锁
+时发起回滚的受控交错。真实客户端检查运行：
+
+```sh
+PATH=/path/to/validators:$PATH cargo test --locked -p deve-sub-emitter \
+  --test out001_mihomo_check out001_native_routing_templates_pass_mihomo -- --ignored
+```
+
+该检查使用默认示例和本地file规则集fixture，不访问外部规则提供方。只证明
+仓库固定Mihomo版本对这些配置的接受，不覆盖所有新版本选项和实际代理连通性。

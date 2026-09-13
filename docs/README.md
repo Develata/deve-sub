@@ -47,4 +47,5 @@ tracked revisions.
 ## Current management journeys
 
 - [Node organization and management](features/node-organization.md)
+- [订阅模板与 Clash 分流规则](features/subscription-templates.md)
 - [Concurrent functional acceptance](acceptance/functional-matrix.md)

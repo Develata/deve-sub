@@ -196,6 +196,9 @@ SubscriptionToken {
 current active version (`None`) or is pinned to a specific version (`Some(n)`).
 This is the Subscription-independent-aggregate decision: the Subscription owns
 its selection and version pin; Template updates never silently mutate it.
+Last-successful-generation fallback must match the selection and generation
+mode; when pinned, it must also match that exact template version. An unpinned
+subscription may retain an earlier successful version after regeneration fails.
 
 ### Token and short-code security model
 

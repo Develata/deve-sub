@@ -20,6 +20,25 @@ same-origin CSRF protection. Cleanup scope is independent of viewer filters.
 List time filters are inclusive `since` and exclusive `before`, RFC3339 timestamps
 at whole-second precision. Configuration is server-owned and read-only in Web.
 
+### Template input and history boundary (M5)
+
+`spec_yaml` on template create/update accepts the original V3 document or
+Clash/Mihomo routing YAML (`rules`, `proxy-groups`, `rule-providers`, `dns`,
+`tun`), including a bare YAML rule list. Original text is preserved. Native
+templates generate for `mihomo` only. No UI parsing or client conversion is
+permitted. The optional internal `TemplateSpec.clash` stores validated native
+sections as YAML text with mapping order preserved; absent means existing V3 behavior.
+
+`TemplateRepository::update_with_version` allocates and returns the committed
+history number atomically; it must exceed every existing version, including
+after rollback. `GET /templates/{id}/versions/active` returns the active
+version. History accepts an exclusive `before_version` cursor and returns
+`next_before_version`; an absent cursor retains the first-page behavior.
+Each page is bounded to 100 versions. Native validation errors return 400;
+generation errors never replace the last successful output. Deleting a referenced
+template returns 409 `template_in_use`. Pinned subscription cache fallback must
+match both the requested version and generation mode.
+
 ## Hexagonal layering
 
 ```text

@@ -12,6 +12,8 @@ pub struct TemplateVersionsProps {
     lang: Signal<Language>,
     modal: Signal<Modal>,
     versions: Signal<Vec<TemplateVersionDto>>,
+    next_version: Signal<Option<u64>>,
+    on_load_more: EventHandler<()>,
     loading: Signal<bool>,
     error: Signal<String>,
     form_error: Signal<String>,
@@ -37,7 +39,7 @@ pub fn TemplateVersions(props: TemplateVersionsProps) -> Element {
                 class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
                 onclick: move |_| props.on_close.call(()),
                 div {
-                    class: "w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                    class: "node-dialog-panel w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
                     onclick: move |e| e.stop_propagation(),
                     h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "tpl.versions_title")} }
 
@@ -96,6 +98,9 @@ pub fn TemplateVersions(props: TemplateVersionsProps) -> Element {
                         }
                     }
 
+                    if props.next_version.read().is_some() {
+                        button { class: "node-control mt-3", disabled: *props.loading.read(), onclick: move |_| props.on_load_more.call(()), {t(l, "nodes.load_more")} }
+                    }
                     div { class: "mt-6 flex justify-end",
                         button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.close")} }
                     }
@@ -108,7 +113,7 @@ pub fn TemplateVersions(props: TemplateVersionsProps) -> Element {
                 class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
                 onclick: move |_| props.on_close.call(()),
                 div {
-                    class: "w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                    class: "node-dialog-panel w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
                     onclick: move |e| e.stop_propagation(),
                     h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "tpl.rollback_title")} }
                     p { class: "mt-3 text-sm text-stone-600 dark:text-stone-400",
@@ -135,5 +140,41 @@ pub fn TemplateVersions(props: TemplateVersionsProps) -> Element {
                 }
             }
         }
+    }
+}
+
+/// Shared history request state; the dialog revision also guards loading/errors.
+#[derive(Clone, Copy)]
+pub struct HistoryRequest {
+    pub revision: Signal<u64>,
+    pub versions: Signal<Vec<TemplateVersionDto>>,
+    pub next: Signal<Option<u64>>,
+    pub loading: Signal<bool>,
+    pub error: Signal<String>,
+}
+
+impl HistoryRequest {
+    pub fn load(mut self, tid: String, before: Option<u64>) {
+        let revision = *self.revision.read();
+        self.loading.set(true);
+        self.error.set(String::new());
+        spawn(async move {
+            let path = match before {
+                Some(v) => format!("/templates/{tid}/versions?before_version={v}"),
+                None => format!("/templates/{tid}/versions"),
+            };
+            let result = crate::api::get::<deve_sub_contract::ListVersionsResponse>(&path).await;
+            if revision != *self.revision.read() {
+                return;
+            }
+            match result {
+                Ok(resp) => {
+                    self.next.set(resp.next_before_version);
+                    self.versions.write().extend(resp.versions);
+                }
+                Err(e) => self.error.set(e.message),
+            }
+            self.loading.set(false);
+        });
     }
 }

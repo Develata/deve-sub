@@ -1,0 +1,28 @@
+proxy-groups:
+  - name: PROXY
+    type: select
+    include-all-proxies: true
+    proxies: [DIRECT]
+rule-providers:
+  z-specific:
+    type: file
+    behavior: domain
+    path: ./z-specific.yaml
+  a-general:
+    type: file
+    behavior: domain
+    path: ./a-general.yaml
+rules:
+  - RULE-SET,z-specific,DIRECT
+  - AND,((DOMAIN-SUFFIX,example.com),(NETWORK,UDP)),REJECT
+  - 'DOMAIN-REGEX,\(,DIRECT'
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - MATCH,PROXY
+dns:
+  enable: true
+  nameserver: ["192.0.2.1"]
+  nameserver-policy:
+    rule-set:z-specific: ["192.0.2.2"]
+    rule-set:a-general: ["192.0.2.3"]
+tun:
+  enable: false

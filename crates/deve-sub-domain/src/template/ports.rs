@@ -25,6 +25,8 @@ pub trait TemplateRepository: Send + Sync {
         version: &TemplateVersion,
     ) -> Result<(), TemplateError>;
 
+    /// Allocate MAX(history version) + 1 under the write transaction and return
+    /// that committed number. Caller-provided version numbers are ignored.
     /// Atomically update a template's metadata and create a new active
     /// version in a single transaction. Deactivates the previous active
     /// version, inserts the new one, and updates the template aggregate.
@@ -35,7 +37,7 @@ pub trait TemplateRepository: Send + Sync {
         &self,
         template: &SubscriptionTemplate,
         version: &TemplateVersion,
-    ) -> Result<(), TemplateError>;
+    ) -> Result<u64, TemplateError>;
 
     /// Find a template by ID.
     async fn find_by_id(
@@ -92,11 +94,12 @@ pub trait TemplateVersionRepository: Send + Sync {
         version: u64,
     ) -> Result<Option<TemplateVersion>, TemplateError>;
 
-    /// List versions for a template, newest first.
+    /// List versions newest first, exclusively below `before_version` if supplied.
     async fn list_for_template(
         &self,
         template_id: TemplateId,
         limit: u32,
+        before_version: Option<u64>,
     ) -> Result<Vec<TemplateVersion>, TemplateError>;
 
     /// Activate a specific version, deactivating the currently active one.

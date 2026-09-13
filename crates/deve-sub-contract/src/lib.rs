@@ -60,12 +60,12 @@ pub use subscription::{
     UpdateSubscriptionRequest,
 };
 pub use template::{
-    ActiveGenerationQuery, ActiveGenerationResponse, ChainEdgeDto, CompatibilityQuery,
-    CompatibilityReportDto, CreateTemplateRequest, ExcludedNodeDto, GenerateQuery,
-    GenerationResultDto, GetTemplateResponse, GroupResolutionDto, ListTemplatesQuery,
-    ListTemplatesResponse, ListVersionsResponse, MissingNodeRefDto, ResolveTemplateResponse,
-    RollbackRequest, RollbackTemplateResponse, TemplateDto, TemplateResponse, TemplateVersionDto,
-    UpdateTemplateRequest,
+    ActiveGenerationQuery, ActiveGenerationResponse, ActiveTemplateVersionResponse, ChainEdgeDto,
+    CompatibilityQuery, CompatibilityReportDto, CreateTemplateRequest, ExcludedNodeDto,
+    GenerateQuery, GenerationResultDto, GetTemplateResponse, GroupResolutionDto,
+    ListTemplatesQuery, ListTemplatesResponse, ListVersionsQuery, ListVersionsResponse,
+    MissingNodeRefDto, ResolveTemplateResponse, RollbackRequest, RollbackTemplateResponse,
+    TemplateDto, TemplateResponse, TemplateVersionDto, UpdateTemplateRequest,
 };
 pub use traffic::{
     ManualCorrectionRequest, ManualCorrectionResponse, TrafficSourceBreakdownDto,

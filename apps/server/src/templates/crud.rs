@@ -9,8 +9,8 @@ use deve_sub_application::{
 };
 use deve_sub_contract::{
     CreateTemplateRequest, ErrorResponse, GetTemplateResponse, ListTemplatesQuery,
-    ListTemplatesResponse, ListVersionsResponse, RollbackRequest, RollbackTemplateResponse,
-    TemplateResponse, UpdateTemplateRequest,
+    ListTemplatesResponse, ListVersionsQuery, ListVersionsResponse, RollbackRequest,
+    RollbackTemplateResponse, TemplateResponse, UpdateTemplateRequest,
 };
 use deve_sub_kernel::{TemplateId, TemplateVersionId};
 
@@ -247,6 +247,7 @@ pub(super) async fn update_template(
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "Template not found", body = ErrorResponse),
+        (status = 409, description = "Template is referenced by a subscription", body = ErrorResponse),
         (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
@@ -280,7 +281,7 @@ pub(super) async fn delete_template(
     get,
     path = "/api/v1/templates/{id}/versions",
     security(("cookie_auth" = [])),
-    params(("id" = String, Path, description = "Template ULID")),
+    params(("id" = String, Path, description = "Template ULID"), ListVersionsQuery),
     responses(
         (status = 200, description = "Version history", body = ListVersionsResponse),
         (status = 400, description = "Invalid template id", body = ErrorResponse),
@@ -293,6 +294,7 @@ pub(super) async fn list_versions(
     State(state): State<TemplateState>,
     _admin: AdminUser,
     Path(id): Path<String>,
+    Query(query): Query<ListVersionsQuery>,
 ) -> Result<Json<ListVersionsResponse>, (StatusCode, Json<ErrorResponse>)> {
     let template_id = TemplateId::parse(&id).map_err(|_| {
         err(
@@ -302,19 +304,20 @@ pub(super) async fn list_versions(
         )
     })?;
 
-    let versions = template::list_versions(state.version_repo.as_ref(), template_id, Some(100))
-        .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "list_versions failed");
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                "failed to list versions",
-            )
-        })?;
+    let versions = template::list_versions_before(
+        state.version_repo.as_ref(),
+        template_id,
+        query.before_version,
+    )
+    .await
+    .map_err(|e| map_template_app_error(e, "list_versions"))?;
 
     let version_dtos: Vec<_> = versions.iter().map(version_to_dto).collect();
+    let next_before_version = (versions.len() == 100)
+        .then(|| versions.last().map(|v| v.version))
+        .flatten();
     Ok(Json(ListVersionsResponse {
+        next_before_version,
         versions: version_dtos,
     }))
 }

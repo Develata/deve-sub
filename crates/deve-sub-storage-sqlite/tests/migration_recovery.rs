@@ -1856,18 +1856,10 @@ async fn migration_0020_unique_constraints_reject_duplicates() {
     let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
 }
 
-/// Fault-injection test for B-13: if the token INSERT inside
-/// `create_with_token` fails (UNIQUE(token_digest) conflict with a different
-/// subscription's token), the subscription INSERT must be rolled back so no
-/// orphaned subscription remains.
-///
-/// A pre-existing token row for the *target* subscription_id is impossible
-/// because `subscription_tokens.subscription_id` has a FK to `subscriptions`
-/// and the subscription does not exist yet. Instead we trigger step-2 failure
-/// via `UNIQUE(token_digest)`: a different subscription already owns a token
-/// with the same digest. Step 1 (subscription INSERT) succeeds, step 2 (token
-/// INSERT) fails on UNIQUE(token_digest), and the transaction must roll back
-/// step 1.
+/// Fault injection: a duplicate version ID makes the INSERT fail after old
+/// versions are deactivated. The transaction must restore the active pointer
+/// and metadata. History numbers are now allocated inside the write transaction,
+/// so a caller-supplied duplicate number is no longer a valid failure injection.
 #[tokio::test]
 async fn b13_create_with_token_rolls_back_on_token_digest_conflict() {
     use deve_sub_domain::subscription::{Subscription, SubscriptionToken};
@@ -2062,16 +2054,17 @@ async fn b13_update_with_version_rolls_back_on_version_conflict() {
         id: template_id,
         name: "fault-tmpl".to_string(),
         description: "updated".to_string(),
-        active_version_id: Some(TemplateVersionId::new()),
+        active_version_id: Some(inactive_v2_id),
         active_version: 2,
         created_at: Timestamp::now(),
         updated_at: Timestamp::now(),
     };
     let version = TemplateVersion {
-        id: TemplateVersionId::new(),
+        id: inactive_v2_id,
         template_id,
         version: 2,
         spec: TemplateSpec {
+            clash: None,
             target_profiles: Vec::new(),
             variables: serde_json::Value::Object(serde_json::Map::new()),
             node_selector: NodeSelector::default(),
@@ -2089,7 +2082,7 @@ async fn b13_update_with_version_rolls_back_on_version_conflict() {
     let result = repo.update_with_version(&template, &version).await;
     assert!(
         result.is_err(),
-        "update_with_version must fail when (template_id, version) already exists"
+        "update_with_version must fail when the version ID already exists"
     );
 
     // WHY: step 1 (deactivate v1) must roll back, so v1 is active again.

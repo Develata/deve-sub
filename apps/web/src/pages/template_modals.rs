@@ -49,7 +49,12 @@ pub fn TemplateModals(mut props: TemplateModalsProps) -> Element {
                         }
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "tpl.spec_yaml")} }
+                            p { class: "mt-1 text-xs text-stone-500 dark:text-stone-400",
+                                {t(l, "tpl.spec_help")}
+                            }
                             textarea {
+                                aria_label: "Clash routing YAML",
+                                spellcheck: "false",
                                 class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 font-mono text-xs dark:border-stone-700 dark:bg-stone-800",
                                 rows: "20",
                                 disabled: *props.saving.read() || !*props.edit_ready.read(),
@@ -93,4 +98,32 @@ pub fn TemplateModals(mut props: TemplateModalsProps) -> Element {
             }
         }
     }
+}
+
+/// Load the editable snapshot independently of history pagination.
+pub fn load_active_spec(
+    tid: String,
+    revision: Signal<u64>,
+    mut spec: Signal<String>,
+    mut ready: Signal<bool>,
+    mut error: Signal<String>,
+) {
+    let expected = *revision.read();
+    spawn(async move {
+        let result =
+            crate::api::get::<crate::pages::template_types::ActiveTemplateVersionResponse>(
+                &format!("/templates/{tid}/versions/active"),
+            )
+            .await;
+        if expected != *revision.read() {
+            return;
+        }
+        match result {
+            Ok(response) => {
+                spec.set(response.version.spec_yaml);
+                ready.set(true);
+            }
+            Err(e) => error.set(e.message),
+        }
+    });
 }

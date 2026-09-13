@@ -24,10 +24,7 @@ pub struct TemplateGenModalProps {
 
 pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
     let l = *props.lang.read();
-    let show = matches!(
-        *props.modal.read(),
-        Modal::Generate(_) | Modal::Preview(_)
-    );
+    let show = matches!(*props.modal.read(), Modal::Generate(_) | Modal::Preview(_));
     let title = if props.is_generate {
         t(l, "tpl.generate_title")
     } else {
@@ -45,7 +42,7 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                 class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
                 onclick: move |_| props.on_close.call(()),
                 div {
-                    class: "w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                    class: "node-dialog-panel w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
                     onclick: move |e| e.stop_propagation(),
                     h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", "{title}" }
 
@@ -55,7 +52,8 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                             select {
                                 class: "mt-1 block rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
                                 value: "{props.gen_profile}",
-                                onchange: move |e| props.gen_profile.set(e.value()),
+                                disabled: *props.gen_loading.read(),
+                                onchange: move |e| { props.gen_profile.set(e.value()); props.gen_result.set(None); props.gen_error.set(String::new()); },
                                 for p in PROFILES.iter().copied() {
                                     option { value: "{p}", "{p}" }
                                 }
@@ -66,7 +64,8 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                             select {
                                 class: "mt-1 block rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
                                 value: "{props.gen_mode}",
-                                onchange: move |e| props.gen_mode.set(e.value()),
+                                disabled: *props.gen_loading.read(),
+                                onchange: move |e| { props.gen_mode.set(e.value()); props.gen_result.set(None); props.gen_error.set(String::new()); },
                                 option { value: "lenient", "lenient" }
                                 option { value: "strict", "strict" }
                             }
@@ -98,6 +97,7 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                                 }
                             }
                             div { class: "flex flex-wrap gap-4 text-xs",
+                                span { "{result.profile}" }
                                 span { class: "text-stone-500 dark:text-stone-400",
                                     "{t(l, \"tpl.included\")}: {result.included_node_ids.len()}"
                                 }

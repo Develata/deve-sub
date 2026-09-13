@@ -25,6 +25,50 @@ fn mihomo_available() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
+/// Native routing fixtures must pass the pinned real client, including DNS
+/// policy order, rule providers, logical rules and regex parentheses.
+#[test]
+#[ignore = "requires mihomo binary on PATH; run with cargo test -- --ignored"]
+fn out001_native_routing_templates_pass_mihomo() {
+    for yaml in [
+        include_str!("../../../examples/templates/clash-routing.yaml"),
+        include_str!("../../../tests/fixtures/clash-routing.yaml"),
+    ] {
+        let nodes = common::sample_nodes()
+            .into_iter()
+            .filter(|n| n.protocol == deve_sub_domain::ProtocolKind::Trojan)
+            .collect();
+        let mut ir = deve_sub_emitter::AssembledTemplate::from_nodes(nodes);
+        ir.clash = Some(yaml.into());
+        let content = deve_sub_emitter::emit_mihomo_full(&ir).expect("emit native template");
+        let directory = tempfile::tempdir().expect("client directory");
+        for name in ["z-specific", "a-general"] {
+            std::fs::write(
+                directory.path().join(format!("{name}.yaml")),
+                "payload: ['+.example.com']",
+            )
+            .expect("local provider fixture");
+        }
+        let config = directory.path().join("config.yaml");
+        std::fs::write(&config, content).expect("write config");
+        // The outer timeout bounds client startup/provider validation even if
+        // a future fixture accidentally introduces a blocking remote provider.
+        let output = Command::new("timeout")
+            .args(["15s", "mihomo", "-t", "-d"])
+            .arg(directory.path())
+            .arg("-f")
+            .arg(config)
+            .output()
+            .expect("mihomo check");
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
 /// OUT-001: emitted Mihomo YAML passes `mihomo -t` for every supported
 /// protocol.
 #[test]

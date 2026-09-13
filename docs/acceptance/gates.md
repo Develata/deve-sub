@@ -365,3 +365,43 @@ restored the existing assertion. These were rerun successfully, not skipped.
 No production audit data or shared system journal was cleaned. Native systemd
 journal retention remains host-owned. This verification does not publish a new
 image, change an existing container, or run a release workflow.
+
+
+## Template maintenance verification (2026-09-13)
+
+Scope: M5 native Clash input and lifecycle, M6 pinned cache fallback. Owner:
+main implementation lane; three read-only review lanes covered storage/cache,
+UI/acceptance and native parsing/security. All accepted findings were verified
+and closed. No database migration, production-state mutation or image release
+is part of this slice.
+
+- `cargo fmt --all -- --check`, all-target/all-feature `cargo check` and
+  `cargo clippy -- -D warnings`: pass. Doc tests: 14 suites, zero examples.
+- Full `cargo test --locked --all-targets --all-features`: 90 suites,
+  1,025 passed, zero failed, 8 ignored. This includes the revised insert-conflict
+  fault injection (version numbers are now allocated transactionally) and
+  controlled deletion/rollback serialization. Proxy variables were unset for
+  direct loopback tests; TMPDIR used ignored repository scratch storage.
+- Native Mihomo routing check: pass with checksum-pinned Mihomo v1.19.0,
+  default example and advanced file-rule-provider/DNS/logical-rule/regex fixture.
+  This explicitly runs one of the normally ignored tests. Other external
+  clients, full protocol validator suites and long soak are not run for this
+  slice; these results do not claim end-to-end proxy connectivity.
+- Functional matrix: 48 passed, 4 workers, no retries, real isolated servers,
+  SQLite and production WASM. Stronger existing-key/order and same-parameter
+  failure assertions: 3 affected cases passed. After removing template compiler
+  warnings, rebuilt WASM and reran 10 affected desktop/mobile template and
+  ordering cases: all passed. Screenshots verified editor/preview sizing,
+  scrolling and reachable controls; no browser page errors were reported.
+- Existing Playwright suite: 16 passed. Fixture lifecycle: 3 passed.
+- Docs/acceptance: 157 cases, 412 verified proof references; architecture gate:
+  15 crates passed; CI tooling: 17 unit tests passed. OpenAPI regenerated from
+  the current binary and byte-compared with a second export.
+- Dependency audit: advisories/bans/licenses/sources pass. The first advisory
+  fetch had a TLS interruption; retry without proxy variables succeeded.
+
+Transient command logs are `/tmp/deve-sub-templates-*.log`; functional test
+artifacts are under ignored `tests/e2e/test-results/functional-*`. Those local
+paths are execution receipts, not durable CI artifact links. Authoritative
+repeatable commands and proof entrypoints are retained in the functional
+matrix and `tests/acceptance/matrix.yaml`.

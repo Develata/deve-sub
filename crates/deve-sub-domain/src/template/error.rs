@@ -9,6 +9,10 @@ pub enum TemplateError {
     #[error("template not found")]
     TemplateNotFound,
 
+    /// A subscription still references the template.
+    #[error("template is in use by a subscription; unlink it before deleting")]
+    InUse,
+
     /// A template name is already taken.
     #[error("template name already exists")]
     NameExists,

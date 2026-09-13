@@ -45,7 +45,20 @@ Back up both before upgrading, edit the explicit image version, then run
 Keep the project name and volume mapping unchanged when switching an existing
 source-built deployment to the published image. `docker compose down` preserves
 the volume; `down --volumes` deletes it. An older image cannot reverse database
-migrations. Published image tags include the leading `v`; there is no `latest`.
+migrations. Versioned image tags include the leading `v`.
+
+To follow stable releases, set `DEVE_SUB_IMAGE_TAG=latest` in the Compose
+directory's `.env`, then run `docker compose pull` and `docker compose up -d`.
+The persisted setting applies to both commands; changing only the environment
+of `pull` would leave a later `up` using the default version. Use a specific
+tag in `.env` to pin again. `docker pull ghcr.io/develata/deve-sub:latest` also
+works independently of Compose but does not replace running containers.
+The alias advances only after the current stable release's versioned image
+has been published; prereleases and old-release reruns do not advance it.
+Initial rollout: the existing `v0.1.0` image has not yet received this alias.
+It becomes available after the first stable tag release using the new workflow
+or an authorized registry backfill. A source push, merge or manual preflight
+alone does not publish it; keep the default fixed version until then.
 
 For a source build, clone the desired release tag, replace the Compose service's
 `image: ...` line with `build: .` (older tags may already use `build: .`), then run

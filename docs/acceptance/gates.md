@@ -118,6 +118,17 @@ its own containers/network/volume afterward. This proves fresh deployment and
 same-version recreation; it does not prove a cross-version schema upgrade,
 browser interaction or arm64 runtime behavior.
 
+The optional `latest` channel is checked by
+`python3 -m unittest discover -s scripts/ci/tests`: the actual promotion shell
+step is executed with isolated API/registry doubles for current stable,
+prerelease, old release, API failure, missing digest and registry failure.
+Compose configuration checks cover the default pinned image, a custom version
+and a persisted `.env` selecting `latest`. The existing release index also
+passed `imagetools create --dry-run` as a single-source alias, preserving both
+architectures. Remote `latest` publication and a pull by that alias are not-run:
+the current registry has no such tag, and this environment has no GHCR write
+credential. The fixed-version smoke above remains the executed runtime proof.
+
 ## Disposable native VM evidence (DEPLOY-002)
 
 On 2026-09-11, `scripts/tests/native_vm.py` passed in a fresh Debian 13.6 amd64

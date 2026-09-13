@@ -5,6 +5,7 @@
 #   docker compose up -d          # start in background
 #   docker compose logs -f        # follow logs
 #   docker compose down           # stop and remove
+# Set DEVE_SUB_IMAGE_TAG=latest in .env to opt into the stable release alias.
 #
 # The image entrypoint runs migrations before starting the server, so no
 # separate migrate step is needed here. Data is persisted in a named volume.
@@ -13,7 +14,7 @@
 
 services:
   deve-sub:
-    image: ghcr.io/develata/deve-sub:v0.1.0
+    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
     ports:
       - "8080:8080"
     volumes:

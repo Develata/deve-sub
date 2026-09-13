@@ -92,7 +92,7 @@ ssh -L 8080:127.0.0.1:8080 user@your-server
 对外提供服务前配置 HTTPS 反向代理、Secure Cookie 和可信代理边界。完整行为见[部署与更新](docs/features/deployment.md)。
 
 <details>
-<summary><strong>Docker Compose · 拉取固定版本镜像</strong></summary>
+<summary><strong>Docker Compose · 拉取发布镜像</strong></summary>
 
 需要 Docker 和 Compose 插件。GitHub Actions 已发布包含 binary 与 Web 的
 `ghcr.io/develata/deve-sub:v0.1.0`，支持 Linux `amd64` / `arm64`，无需克隆源码或本地编译。
@@ -101,7 +101,7 @@ ssh -L 8080:127.0.0.1:8080 user@your-server
 ```yaml
 services:
   deve-sub:
-    image: ghcr.io/develata/deve-sub:v0.1.0
+    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
     ports:
       - "8080:8080"
     volumes:
@@ -128,8 +128,19 @@ docker compose logs -f deve-sub
 Compose 使用 named volume 保存 `/app/data` 中的数据库与主密钥，入口会迁移数据库后启动服务。
 默认映射宿主机 `8080` 端口；只供本机访问时，把 `ports` 改成 `127.0.0.1:8080:8080`。
 启动后打开 **http://127.0.0.1:8080** 完成初始化；远程访问与 HTTPS 配置同上。
-升级前先备份数据库与主密钥，再修改 `image` 中的版本并重新执行 `pull` 和 `up -d`；
-保留原目录及 Compose 项目名，以继续使用原数据卷。项目不发布 `latest` 镜像标签。
+默认固定 `v0.1.0`。如需跟随最新稳定版，在同目录的 `.env` 中设置：
+
+> `latest` 将在首次包含此发布流程的稳定版本发布后生成；现有 `v0.1.0` 尚未补发该别名。
+> 仅推送此配置不会创建镜像标签，首次发布完成前请继续使用 `v0.1.0`。
+
+```dotenv
+DEVE_SUB_IMAGE_TAG=latest
+```
+
+然后执行 `docker compose pull && docker compose up -d`。也可以直接
+`docker pull ghcr.io/develata/deve-sub:latest`；这只下载镜像，不会替换运行中的容器。
+`latest` 随稳定 release 更新；需要固定版本时，把 `.env` 中的值改为具体 tag（如 `v0.1.0`）。
+升级前先备份数据库与主密钥，保留原目录及 Compose 项目名，以继续使用原数据卷。
 停止容器可用 `docker compose down`；不要为普通升级附加 `--volumes`，它会删除持久化数据卷。
 需要自行编译时，见[源码构建方式](docs/features/deployment.md#docker-compose)。
 

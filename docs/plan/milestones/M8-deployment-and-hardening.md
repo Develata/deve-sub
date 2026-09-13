@@ -105,7 +105,7 @@ M8 is delivered in five slices:
 ```yaml
 services:
   deve-sub:
-    image: ghcr.io/develata/deve-sub:v0.1.0
+    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
     ports: ["8080:8080"]
     volumes: ["deve-sub-data:/app/data"]
     healthcheck:
@@ -130,6 +130,12 @@ For zero-config startup, the image entrypoint runs `migrate` then `serve`;
 Before an upgrade, back up the database and master key, change the image's
 version, then pull and recreate the service in the same Compose project while
 retaining its named volume. Reverting an image does not undo schema migrations.
+Operators can persist `DEVE_SUB_IMAGE_TAG=latest` in the Compose directory's
+`.env` to follow the current stable release, then explicitly pull and recreate.
+The release job publishes the versioned multi-platform image first, then
+promotes that exact digest to `latest` only if its stable tag is still the
+GitHub latest release. Image publishing is serialized to prevent concurrent
+alias writes. Prereleases and old-release reruns cannot promote the alias.
 
 ### Install script
 
@@ -258,7 +264,7 @@ real encrypted persistence pipeline.
 - Docker base image and healthcheck: ADR-0006
 - CLI subcommand names: AGENTS.md naming section (`update`)
 - Release artifacts (SBOM, checksums, signatures): Constraint #15
-- No `latest` image tag: Constraint #11
+- No `latest` build dependency; opt-in stable-release alias: Constraint #11
 - Forward-only migration: Constraint #13
 - Acceptance: DEPLOY-001..005, UPDATE-001/002, PERF-001..006
 

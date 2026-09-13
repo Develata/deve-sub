@@ -47,8 +47,10 @@ Project-level rules override the global file on conflict.
   the conceptual entity model.
 - OpenAPI spec is generated from code via utoipa and exported to
   `docs/openapi/openapi.json`; hand-maintaining the spec is forbidden.
-- `Cargo.lock` pins all dependency versions. Production images must not use
-  unpinned Git dependencies or `latest` tags.
+- `Cargo.lock` pins all dependency versions. Production image builds must not
+  use unpinned Git dependencies or `latest` base-image tags. The published
+  Deve Sub `latest` alias is an opt-in deployment channel; see
+  `docs/contracts/release-artifacts.md`.
 - Treat code that disagrees with a current plan invariant as implementation
   drift. Align code to plan, or record explicit drift evidence; do not weaken
   the plan merely because code already exists.
@@ -133,7 +135,7 @@ The full list of twenty execution constraints lives in
 8. No auto-changing certificate verification security semantics.
 9. No real node credentials in repo fixtures.
 10. No template executing arbitrary scripts.
-11. No `latest` image as a production release dependency.
+11. No `latest` build dependency; the opt-in release alias follows the artifact contract.
 12. Each milestone provides a runnable vertical slice.
 13. Each database change has a migration and a recovery test.
 14. Each P0 feature maps to an acceptance case ID.

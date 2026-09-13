@@ -29,10 +29,20 @@ publication.
 
 Docker publishes the same version as a lowercase GHCR reference containing
 both `linux/amd64` and `linux/arm64`: `ghcr.io/develata/deve-sub:<release-tag>`
-(for example, `ghcr.io/develata/deve-sub:v0.1.0`). It never publishes a `latest`
-alias. The default Compose deployment consumes an explicit release tag and
+(for example, `ghcr.io/develata/deve-sub:v0.1.0`). The optional
+`ghcr.io/develata/deve-sub:latest` alias points to the same multi-platform
+digest as the current stable GitHub release. After publishing the versioned
+image, the serialized Docker release job checks that its tag is stable
+(`vMAJOR.MINOR.PATCH`) and still matches GitHub's `/releases/latest`; only then
+does it promote the digest. Prereleases, old-release reruns, and manual
+preflight builds do not move `latest`. Promotion failure fails the job while
+leaving the versioned image available; rerunning the job retries promotion.
+
+The default Compose deployment consumes an explicit release tag and
 requires no local build; its named volume persists the database and master key
-across container replacements.
+across container replacements. `DEVE_SUB_IMAGE_TAG=latest` explicitly selects
+the moving alias; pulling it may select a newer version and does not itself
+replace a running container. Operators still back up before `up -d`.
 
 ## Installation and update
 

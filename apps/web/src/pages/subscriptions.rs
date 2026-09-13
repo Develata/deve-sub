@@ -27,6 +27,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     let mut loading = use_signal(|| true);
     let mut error = use_signal(|| String::new());
     let mut copied_id = use_signal(|| String::new());
+    let mut action_error = use_signal(String::new);
     let mut modal = use_signal(|| Modal::None);
     let mut form_error = use_signal(|| String::new());
     let mut saving = use_signal(|| false);
@@ -61,14 +62,24 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         let _ = crate::api::get::<ListTemplatesResponse>("/templates").await.map(|r| templates.set(r.templates));
     });
 
-    let copy_link = move |id: String, slug: String| {
-        let origin = web_sys::window()
-            .and_then(|w| w.location().origin().ok())
-            .unwrap_or_default();
-        let link = format!("{origin}/sub/{slug}");
+    let mut copy_link = move |id: String| {
+        action_error.set(String::new());
+        copied_id.set(String::new());
         spawn(async move {
-            let _ = copy_to_clipboard(&link).await;
-            copied_id.set(id);
+            let path = format!("/subscriptions/{id}");
+            match crate::api::get::<GetSubscriptionResponse>(&path).await {
+                Ok(resp) => match resp.subscription.short_code {
+                    Some(code) => {
+                        let link = crate::pages::subscription_types::delivery_url("s", &code, &resp.subscription.profile);
+                        match copy_to_clipboard(&link).await {
+                            Ok(()) => copied_id.set(id),
+                            Err(_) => action_error.set(t(l, "subs.copy_failed").to_string()),
+                        }
+                    }
+                    None => action_error.set(t(l, "subs.generate_code_first").to_string()),
+                },
+                Err(e) => action_error.set(e.message),
+            }
         });
     };
 
@@ -113,19 +124,9 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         modal.set(Modal::None);
     };
 
-    let mut do_rotate = move |id: String| {
-        info_msg.set(String::new());
-        spawn(async move {
-            let path = format!("/subscriptions/{id}/rotate-token");
-            match crate::api::send::<TokenRotationResponse, RotateTokenRequest>(
-                "POST", &path, Some(&RotateTokenRequest { grace_seconds: None }),
-            )
-            .await
-            {
-                Ok(resp) => modal.set(Modal::TokenDisplay(resp.token_plaintext)),
-                Err(e) => error.set(e.message),
-            }
-        });
+    let mut do_rotate = move |sub: SubscriptionDto| {
+        form_error.set(String::new());
+        modal.set(Modal::Rotate(sub));
     };
 
     let mut do_regen_short_code = move |id: String| {
@@ -172,7 +173,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                     .await
                     {
                         Ok(resp) => {
-                            modal.set(Modal::TokenDisplay(resp.token_plaintext));
+                            modal.set(Modal::TokenDisplay(crate::pages::subscription_types::delivery_url("sub", &resp.token_plaintext, &resp.subscription.profile)));
                             fetch_subs();
                         }
                         Err(e) => form_error.set(e.message),
@@ -215,6 +216,20 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                     saving.set(false);
                 });
             }
+            Modal::Rotate(s) => {
+                if *saving.read() { return; }
+                saving.set(true);
+                spawn(async move {
+                    let path = format!("/subscriptions/{}/rotate-token", s.id);
+                    match crate::api::send::<TokenRotationResponse, RotateTokenRequest>(
+                        "POST", &path, Some(&RotateTokenRequest { grace_seconds: Some(0) }),
+                    ).await {
+                        Ok(resp) => modal.set(Modal::TokenDisplay(crate::pages::subscription_types::delivery_url("sub", &resp.token_plaintext, &s.profile))),
+                        Err(e) => form_error.set(e.message),
+                    }
+                    saving.set(false);
+                });
+            }
             Modal::Delete(s) => {
                 let id = s.id.clone();
                 saving.set(true);
@@ -246,7 +261,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                     )
                     .await
                     {
-                        Ok(resp) => modal.set(Modal::TokenDisplay(resp.token_plaintext)),
+                        Ok(resp) => modal.set(Modal::TokenDisplay(crate::pages::subscription_types::delivery_url("sub", &resp.token_plaintext, &s.profile))),
                         Err(e) => form_error.set(e.message),
                     }
                     saving.set(false);
@@ -267,6 +282,9 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 }
             }
 
+            if !action_error.read().is_empty() {
+                div { class: "rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", role: "alert", "{action_error}" }
+            }
             if !info_msg.read().is_empty() {
                 div { class: "rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400", "{info_msg}" }
             }
@@ -298,12 +316,12 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                             for sub in subs.read().iter() {
                                 {
                                     let id = sub.id.clone();
-                                    let slug = sub.slug.clone();
+
                                     let is_copied = *copied_id.read() == id;
                                     let edit_sub = sub.clone();
                                     let del_sub = sub.clone();
                                     let temp_sub = sub.clone();
-                                    let rot_id = id.clone();
+                                    let rot_sub = sub.clone();
                                     let regen_id = id.clone();
                                     rsx! {
                                         tr {
@@ -330,7 +348,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                                                 div { class: "flex flex-wrap justify-end gap-1",
                                                     button {
                                                         class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                                                        onclick: move |_| copy_link(id.clone(), slug.clone()),
+                                                        onclick: move |_| copy_link(id.clone()),
                                                         if is_copied { "✓" } else { {t(l, "common.copy")} }
                                                     }
                                                     button {
@@ -340,7 +358,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                                                     }
                                                     button {
                                                         class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                                                        onclick: move |_| do_rotate(rot_id.clone()),
+                                                        onclick: move |_| do_rotate(rot_sub.clone()),
                                                         {t(l, "subs.rotate_token")}
                                                     }
                                                     button {

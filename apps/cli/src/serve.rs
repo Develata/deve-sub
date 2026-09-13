@@ -262,6 +262,10 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         fetcher: fetcher.clone(),
         geoip: geoip.clone(),
         rate_limiter: Arc::clone(&rate_limiter),
+        short_code_rate_limiter: Arc::new(deve_sub_inmemory::InMemoryLoginRateLimiter::new(
+            60,
+            std::time::Duration::from_secs(60),
+        )),
         db_health,
     };
 

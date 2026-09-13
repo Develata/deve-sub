@@ -161,6 +161,8 @@ DEVE_SUB_IMAGE_TAG=latest
 
 </details>
 
+登录与链接安全配置、Token 轮换及泄漏后的处理方式，见[认证与订阅链接](docs/features/authentication-and-links.md)。
+
 ### 第一次使用
 
 1. **添加节点**：创建订阅源并刷新，或在节点管理中粘贴分享链接。

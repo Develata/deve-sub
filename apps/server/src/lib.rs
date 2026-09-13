@@ -40,6 +40,7 @@ use deve_sub_security::MasterKey;
 
 pub mod audit;
 pub mod auth;
+mod client_ip;
 pub mod csrf;
 pub mod dashboard;
 pub mod delivery;
@@ -47,7 +48,9 @@ pub mod logging;
 pub mod node_overrides;
 pub mod nodes;
 pub mod probes;
+mod response_security;
 pub mod routes;
+mod short_code_guard;
 pub mod source_refresh;
 pub mod sources;
 pub mod state;
@@ -108,6 +111,8 @@ pub struct AppState {
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,
+    /// Independent failed short-code lookup budget; never shares login counters.
+    pub short_code_rate_limiter: Arc<dyn LoginRateLimiter>,
     pub db_health: Arc<dyn DbHealthPort>,
 }
 
@@ -126,8 +131,15 @@ pub struct AppState {
 pub fn build_router(state: AppState) -> Router {
     let (api_router, openapi) = routes::build_api_router(state.clone());
 
-    let delivery_router =
-        crate::delivery::register_delivery_routes(Router::new()).with_state(state.clone());
+    let delivery_router = crate::delivery::register_delivery_routes(Router::new())
+        .with_state(state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            crate::short_code_guard::GuardState {
+                limiter: state.short_code_rate_limiter.clone(),
+                trust_proxy_headers: state.config.security.trust_proxy_headers,
+            },
+            crate::short_code_guard::guard,
+        ));
 
     let dist_path = std::path::PathBuf::from(&state.config.server.web_dist_dir);
     let serve_web = state.config.server.serve_web;
@@ -159,6 +171,7 @@ pub fn build_router(state: AppState) -> Router {
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(crate::logging::redacting_trace_layer())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(axum::middleware::from_fn(crate::response_security::protect))
 }
 
 /// Build a restrictive CORS layer from the configured origin allowlist.

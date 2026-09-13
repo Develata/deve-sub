@@ -35,6 +35,7 @@ pub fn LoginPage(props: LoginProps) -> Element {
     let mut challenge_token = use_signal(String::new);
 
     let mut do_login = move || {
+        if *loading.read() { return; }
         error.set(String::new());
         loading.set(true);
         let u = username.read().clone();
@@ -43,6 +44,7 @@ pub fn LoginPage(props: LoginProps) -> Element {
             match crate::api::auth::login(&u, &p).await {
                 Ok(resp) if resp.requires_2fa => {
                     if let Some(token) = resp.challenge_token {
+                        password.set(String::new());
                         challenge_token.set(token);
                         stage.set(Stage::TwoFactorChallenge);
                         code.set(String::new());
@@ -71,6 +73,7 @@ pub fn LoginPage(props: LoginProps) -> Element {
     };
 
     let mut do_2fa = move || {
+        if *loading.read() { return; }
         error.set(String::new());
         loading.set(true);
         let token = challenge_token.read().clone();
@@ -96,6 +99,7 @@ pub fn LoginPage(props: LoginProps) -> Element {
     };
 
     let mut back_to_credentials = move || {
+        if *loading.read() { return; }
         stage.set(Stage::Credentials);
         challenge_token.set(String::new());
         code.set(String::new());

@@ -449,7 +449,7 @@ pub async fn rotate_token(
 }
 
 /// Maximum retry attempts for short code UNIQUE conflict (OUT-013). After this
-/// many collisions (astronomically unlikely with 47 bits of entropy), return
+/// many collisions (astronomically unlikely with over 128 bits of entropy), return
 /// a storage error.
 const SHORT_CODE_MAX_RETRIES: u32 = 8;
 

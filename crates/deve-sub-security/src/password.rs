@@ -4,12 +4,31 @@
 //! The resulting PHC string is stored in the database. See
 //! `docs/plan/00-engineering-constitution.md` §"Data and security".
 
+use std::sync::{Arc, LazyLock};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+
 use argon2::Argon2;
 use argon2::password_hash::{
     PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng,
 };
 
 use crate::SecurityError;
+
+// Bound Argon2 memory/CPU even when concurrent attempts pass the failure
+// counters together. The blocking closure retains admission after cancellation.
+static PASSWORD_WORK: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(8)));
+
+async fn run_password_work<T: Send + 'static>(
+    permit: OwnedSemaphorePermit,
+    work: impl FnOnce() -> Result<T, SecurityError> + Send + 'static,
+) -> Result<T, SecurityError> {
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        work()
+    })
+    .await
+    .map_err(|e| SecurityError::Crypto(format!("argon2 task join failed: {e}")))?
+}
 
 /// Hash a plaintext password using argon2id with a random salt.
 ///
@@ -54,9 +73,12 @@ pub fn verify_password(plain: &str, phc_hash: &str) -> Result<bool, SecurityErro
 /// Returns [`SecurityError::PasswordHash`] if hashing fails (propagated from
 /// [`hash_password`]).
 pub async fn hash_password_async(plain: String) -> Result<String, SecurityError> {
-    tokio::task::spawn_blocking(move || hash_password(&plain))
+    let permit = PASSWORD_WORK
+        .clone()
+        .acquire_owned()
         .await
-        .map_err(|e| SecurityError::Crypto(format!("argon2 task join failed: {e}")))?
+        .map_err(|_| SecurityError::PasswordWorkBusy)?;
+    run_password_work(permit, move || hash_password(&plain)).await
 }
 
 /// Async wrapper for [`verify_password`] that runs Argon2 on a blocking pool.
@@ -69,9 +91,11 @@ pub async fn hash_password_async(plain: String) -> Result<String, SecurityError>
 /// (propagated from [`verify_password`]). Returns
 /// [`SecurityError::Crypto`] if the blocking task panics or is cancelled.
 pub async fn verify_password_async(plain: String, phc_hash: String) -> Result<bool, SecurityError> {
-    tokio::task::spawn_blocking(move || verify_password(&plain, &phc_hash))
-        .await
-        .map_err(|e| SecurityError::Crypto(format!("argon2 task join failed: {e}")))?
+    let permit = PASSWORD_WORK
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| SecurityError::PasswordWorkBusy)?;
+    run_password_work(permit, move || verify_password(&plain, &phc_hash)).await
 }
 
 #[cfg(test)]
@@ -93,5 +117,47 @@ mod tests {
     #[test]
     fn verify_malformed_hash() {
         assert!(verify_password("anything", "not-a-valid-phc-hash").is_err());
+    }
+}
+
+#[cfg(test)]
+mod admission_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn password_verification_rejects_saturated_budget() {
+        let _all_workers = PASSWORD_WORK
+            .clone()
+            .acquire_many_owned(8)
+            .await
+            .expect("budget");
+        assert!(matches!(
+            verify_password_async("fixture-password".into(), "invalid-hash".into()).await,
+            Err(SecurityError::PasswordWorkBusy)
+        ));
+    }
+
+    #[tokio::test]
+    async fn cancelled_caller_keeps_worker_permit_until_blocking_job_finishes() {
+        let budget = Arc::new(Semaphore::new(1));
+        let permit = budget.clone().try_acquire_owned().expect("permit");
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (finish_tx, finish_rx) = std::sync::mpsc::channel();
+        let task = tokio::spawn(run_password_work(permit, move || {
+            let _ = entered_tx.send(());
+            finish_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("bounded work");
+            Ok(())
+        }));
+        entered_rx.await.expect("entered");
+        task.abort();
+        assert!(task.await.expect_err("cancelled").is_cancelled());
+        assert!(budget.clone().try_acquire_owned().is_err());
+        finish_tx.send(()).expect("finish");
+        let _next = tokio::time::timeout(std::time::Duration::from_secs(5), budget.acquire())
+            .await
+            .expect("released")
+            .expect("permit");
     }
 }

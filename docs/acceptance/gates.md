@@ -161,6 +161,46 @@ The published `v0.1.0` image does not contain bootstrap support. This evidence
 does not establish a new published image, arm64 execution or browser UI
 interaction; login/setup were exercised through the real HTTP endpoints.
 
+## Login and subscription credential hardening (AUTH-004/009, SEC-007/009/010, OUT-013)
+
+On 2026-09-13, the final source passed `cargo fmt --all -- --check`,
+`cargo check --locked --all-targets --all-features`, Clippy with the same
+target/feature selection and `-D warnings`, and the full Rust test command
+above: 1004 passed, zero failed, seven ignored. The ignored tests are the
+explicit real-process soak and six external client-validator tests; they were
+not rerun for this authentication slice. Doc tests passed with zero examples.
+The production Web build (`scripts/build-web-release.sh`) and current
+all-features CLI build also passed. OpenAPI was regenerated from that binary.
+
+Before implementation, targeted regressions reproduced the missing direct-peer
+IP limit, missing no-store policy and malformed-path credential logging.
+The final tests cover rotating usernames with forged forwarding headers,
+canonical proxy/peer fallback, saturated Argon2 work and cancellation retaining
+its permit, isolated short-code probe limits, sensitive response headers and
+path redaction. Delivery tests prove new 22-character short codes work and
+existing eight-character codes remain valid. Existing ETag and token-grace
+tests still pass. Read-only review findings were resolved and verified.
+
+Browser plugin not available; the existing Playwright 1.62.1 workflow used
+Chromium 151 with the rebuilt CLI and production WASM, isolated fresh/seeded
+databases and desktop/Pixel 5 viewports. Seven selected tests passed using
+`--project=real-auth --project=ui-009-mobile --project=ui-authenticated`
+and `--grep 'Real browser auth|pending login|UI-009'`. They exercise real login,
+wrong-password feedback, reload persistence, repeated Enter suppression and
+the mocked 2FA page transition. The desktop/mobile subscription flow checks
+missing-code guidance without hiding actions, exact copied short-link delivery,
+explicit zero-grace rotation, old-token rejection and continued independent
+short-link access. Backend Rust tests cover actual 2FA verification.
+
+A separate 1280x800 Chromium smoke on an ephemeral loopback server verified
+page identity, nonblank login/dashboard, no framework overlay, successful login
+and HTML no-store. Screenshots were inspected and kept outside tracked files.
+There were no JavaScript exceptions or unexpected console warnings/errors;
+the sole 401 was the expected initial `/api/v1/auth/me` session probe.
+This is local source-build evidence, not a new published image. Docker/arm64,
+other browser engines, production HTTPS and long-soak execution were not
+repeated for this slice.
+
 ## Disposable native VM evidence (DEPLOY-002)
 
 On 2026-09-11, `scripts/tests/native_vm.py` passed in a fresh Debian 13.6 amd64

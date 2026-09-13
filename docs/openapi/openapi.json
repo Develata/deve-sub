@@ -3788,7 +3788,7 @@
     },
     "/api/v1/subscriptions/{id}/regenerate-short-code": {
       "post": {
-        "summary": "`POST /api/v1/subscriptions/{id}/regenerate-short-code` — (re)generate the\nshort code for a subscription (admin). If a short code already exists, it is\nreplaced. The short code is a public lookup key, not a secret.",
+        "summary": "`POST /api/v1/subscriptions/{id}/regenerate-short-code` — (re)generate the\nshort code for a subscription (admin). If a short code already exists, it is\nreplaced. The short code is a bearer credential and must be kept private.",
         "operationId": "regenerate_short_code",
         "parameters": [
           {
@@ -8091,7 +8091,7 @@
       },
       "ShortCodeResponse": {
         "type": "object",
-        "description": "Response body for `POST /api/v1/subscriptions/{id}/regenerate-short-code`.\n\nThe short code is a CSPRNG-generated base62 string (8 chars). Unlike the\ndelivery token, it is not a secret — it is a public lookup key for\n`GET /s/{code}`. If a short code already exists, it is replaced.",
+        "description": "Response body for `POST /api/v1/subscriptions/{id}/regenerate-short-code`.\n\nThe short code is a CSPRNG-generated 22-character base62 bearer credential\n(>128 bits of entropy) for `GET /s/{code}`. It is stored in plaintext for\nauthenticated retrieval. If a short code already exists, it is replaced.",
         "required": [
           "short_code_id",
           "code"
@@ -8099,7 +8099,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "description": "The public base62 short code string (e.g. `\"aB3xK9mQ\"`)."
+            "description": "The sensitive base62 short code string."
           },
           "short_code_id": {
             "type": "string",

@@ -127,3 +127,13 @@ OpenAPI derives are enabled by the `openapi` feature only in API delivery.
 revision, persist its new counter/status, insert the traffic delta batch and
 its lifetime/daily projections. Delivery dispatches `sync_probe_traffic` and
 cannot assemble this transaction. Revision conflict maps to HTTP 409.
+
+### Authentication and credential response boundary
+
+Login and 2FA use the canonical transport peer IP unless explicitly configured
+to trust validated proxy headers. Saturated password verification returns 429.
+All /api/v1 responses and HTML are no-store; responses also set nosniff,
+X-Frame-Options: DENY, frame-ancestors 'none', and no-referrer. Public delivery
+keeps private/no-cache and ETag support. Subscription short-code probe counters
+are separate from login counters; malformed secret paths are redacted before
+tracing. Exact operational limits belong to the M2 and M6 blueprints.

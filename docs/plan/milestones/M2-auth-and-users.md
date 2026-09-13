@@ -191,3 +191,24 @@ the username, never shared IP state. Resident count and bounded-cardinality
 pressure/eviction events provide operational evidence. Tests cover 100,000
 rotating identities, active lockouts, near-full expiry, probation admission,
 namespace separation and the existing retry policy.
+
+## Login boundary hardening (AUTH-004, SEC-007, SEC-010)
+
+The HTTP peer address is the default IP identity, including 2FA login.
+Forwarded addresses are used only under the explicit proxy-trust setting;
+parse and canonicalize them as IP addresses, with the peer as fallback. The
+last X-Forwarded-For hop remains the trusted appended address. Operators must
+restrict backend access and make their proxy overwrite X-Real-IP when enabling
+trust. IPv4-mapped IPv6 addresses share the IPv4 limiter identity.
+
+At most eight async Argon2 jobs run per process. Password verification rejects
+excess work without queueing (HTTP 429 for login); the blocking job owns its
+permit until completion even if its async caller is cancelled. This is an
+additional CPU/memory bound, not a replacement for account/IP failure tracking.
+Authorized password creation waits for the same bounded worker budget.
+
+All admin API responses, including auth errors, use Cache-Control: no-store.
+HTML is also no-store; all responses prohibit framing and MIME sniffing and
+send Referrer-Policy: no-referrer. Public subscription responses retain their
+existing private/no-cache ETag semantics. Login UI suppresses repeated submits
+while a request is pending and clears the password upon entering 2FA.

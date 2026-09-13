@@ -209,6 +209,10 @@ cases:
         - "crates/deve-sub-inmemory/src/rate_limiter.rs::two_new_keys_reclaim_expired_entries_with_one_slot_remaining"
         - "crates/deve-sub-inmemory/src/rate_limiter.rs::pressure_preserves_current_ip_probation_until_it_locks"
         - "crates/deve-sub-inmemory/src/rate_limiter.rs::nearly_all_locked_pressure_does_not_rescan_for_each_probation"
+        - "apps/server/tests/security/hardening.rs::direct_peer_ip_limits_rotating_usernames_and_ignores_spoofed_headers"
+        - "crates/deve-sub-security/src/password.rs::password_verification_rejects_saturated_budget"
+        - "crates/deve-sub-security/src/password.rs::cancelled_caller_keeps_worker_permit_until_blocking_job_finishes"
+        - "tests/e2e/specs/real-auth.spec.ts::AUTH-004"
       status: pass
   - id: AUTH-005
     title: 2FA
@@ -285,6 +289,7 @@ cases:
       tests:
         - "apps/server/tests/subscription_management.rs::sub002_rotate_token_returns_new_plaintext"
         - "apps/server/tests/subscription_delivery.rs::del019_no_grace_old_token_immediately_invalid"
+        - "tests/e2e/specs/ui-009-mobile.spec.ts::UI-009"
       status: pass
   - id: AUTH-010
     title: 强制注销
@@ -1450,6 +1455,8 @@ cases:
       tests:
         - "apps/server/tests/subscription_delivery.rs::del013_short_code_delivery"
         - "apps/server/tests/subscription_delivery.rs::del015_regenerate_short_code_replaces_old"
+        - "apps/server/tests/security/hardening.rs::short_code_probes_have_an_independent_ip_budget"
+        - "crates/deve-sub-security/src/token.rs::short_code_has_at_least_128_bits"
       status: pass
   - id: OUT-014
     title: 并发生成
@@ -1799,6 +1806,7 @@ cases:
     evidence:
       tests:
         - "apps/server/tests/security.rs::sec007_untrusted_proxy_headers_ignored"
+        - "apps/server/src/client_ip.rs::proxy_ip_validation_canonicalization_and_peer_fallback"
       status: pass
   - id: SEC-008
     title: SPA 路由
@@ -1827,6 +1835,8 @@ cases:
         - "apps/server/tests/subscription_management.rs::sec009_token_not_in_get_or_list_responses"
         - "apps/server/src/logging.rs::redacts_sub_token"
         - "apps/server/src/logging.rs::redacts_s_short_code"
+        - "apps/server/src/logging.rs::malformed_delivery_paths_do_not_leak_credentials"
+        - "apps/server/tests/security/hardening.rs::sensitive_responses_are_not_cached_or_framed"
       status: pass
   - id: SEC-010
     title: CSRF

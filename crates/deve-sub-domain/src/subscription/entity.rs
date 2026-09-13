@@ -177,9 +177,9 @@ impl SubscriptionToken {
 
 /// A short code row for `GET /s/{code}` delivery.
 ///
-/// The short code is a CSPRNG-generated base62 string (8–12 chars, ≥47 bits of
-/// entropy at 8). Unlike the delivery token, it is stored in the clear: it is
-/// a public lookup key, not a secret — the `GET /s/{code}` endpoint resolves
+/// The short code is a CSPRNG-generated base62 bearer credential (new codes
+/// have >128 bits of entropy). It is stored in the clear for authenticated
+/// administrator retrieval. The `GET /s/{code}` endpoint resolves
 /// the code to the subscription and serves content directly (it cannot redirect
 /// to `/sub/{token}` because only the digest is persisted, never the plaintext
 /// token). The `code` column has a UNIQUE constraint so concurrent inserts are

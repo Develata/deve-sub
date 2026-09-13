@@ -200,26 +200,16 @@ pub async fn login(params: LoginParams<'_>) -> Result<LoginOutcome, AuthError> {
 
     let user = user_repo.find_by_username(username).await?;
 
-    // Timing side-channel mitigation: always run verify_password, even when
-    // the user does not exist, so both branches take similar time.
+    // Use the same bounded verification path for unknown and disabled users.
+    // In particular, saturation must not disclose whether an account exists.
+    let hash = user
+        .as_ref()
+        .map(|u| u.password_hash.as_str())
+        .unwrap_or(DUMMY_PASSWORD_HASH);
+    let verified = verify_password_async(password.to_owned(), hash.to_owned()).await?;
     let user = match user {
-        Some(u) => {
-            if !u.is_active_at(deve_sub_kernel::Timestamp::now()) {
-                // WHY: still verify against the real hash to keep timing
-                // uniform across disabled vs wrong-password vs unknown-user.
-                let _ = verify_password_async(password.to_owned(), u.password_hash.clone()).await;
-                rate_limiter.record_failure(username, ip);
-                return Err(AuthError::InvalidCredentials);
-            }
-            if !verify_password_async(password.to_owned(), u.password_hash.clone()).await? {
-                rate_limiter.record_failure(username, ip);
-                return Err(AuthError::InvalidCredentials);
-            }
-            u
-        }
-        None => {
-            let _ =
-                verify_password_async(password.to_owned(), DUMMY_PASSWORD_HASH.to_owned()).await;
+        Some(user) if verified && user.is_active_at(Timestamp::now()) => user,
+        _ => {
             rate_limiter.record_failure(username, ip);
             return Err(AuthError::InvalidCredentials);
         }

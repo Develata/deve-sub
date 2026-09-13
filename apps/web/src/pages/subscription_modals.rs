@@ -31,7 +31,8 @@ pub struct SubscriptionModalsProps {
 pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
     let l = *props.lang.read();
     let is_form_modal = matches!(*props.modal.read(), Modal::Create | Modal::Edit(_));
-    let is_delete_modal = matches!(*props.modal.read(), Modal::Delete(_));
+    let is_rotate_modal = matches!(*props.modal.read(), Modal::Rotate(_));
+    let is_delete_modal = matches!(*props.modal.read(), Modal::Delete(_)) || is_rotate_modal;
     let is_token_modal = matches!(*props.modal.read(), Modal::TokenDisplay(_));
     let is_temp_link_modal = matches!(*props.modal.read(), Modal::TempLink(_));
     let is_edit = matches!(*props.modal.read(), Modal::Edit(_));
@@ -140,7 +141,7 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                 div {
                     class: "w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
                     onclick: move |e| e.stop_propagation(),
-                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", "Token" }
+                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "subs.delivery_link")} }
                     p { class: "mt-2 text-sm font-medium text-red-600 dark:text-red-400", {t(l, "subs.token_warning")} }
                     div { class: "mt-4 flex items-center gap-2",
                         input {
@@ -203,15 +204,15 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                 div {
                     class: "w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
                     onclick: move |e| e.stop_propagation(),
-                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "common.delete")} }
-                    p { class: "mt-3 text-sm text-stone-600 dark:text-stone-400", {t(l, "subs.delete_confirm")} }
+                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", if is_rotate_modal { {t(l, "subs.rotate_token")} } else { {t(l, "common.delete")} } }
+                    p { class: "mt-3 text-sm text-stone-600 dark:text-stone-400", if is_rotate_modal { {t(l, "subs.rotate_confirm")} } else { {t(l, "subs.delete_confirm")} } }
                     if !props.form_error.read().is_empty() {
                         div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
                         button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
                         button { class: "rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50", disabled: *props.saving.read(), onclick: move |_| props.on_submit.call(()),
-                            if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "common.delete")} }
+                            if *props.saving.read() { {t(l, "common.loading")} } else if is_rotate_modal { {t(l, "subs.rotate_token")} } else { {t(l, "common.delete")} }
                         }
                     }
                 }

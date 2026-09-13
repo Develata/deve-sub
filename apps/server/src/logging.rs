@@ -26,23 +26,37 @@ const REDACTED: &str = "***";
 /// - `/s/{code}` → `/s/***`
 /// - `/s/{code}/{profile}` → `/s/***/{profile}`
 ///
-/// The `profile` segment is not secret (it selects the output format) and
-/// is preserved. All other paths pass through unchanged.
+/// Recognized profile names are preserved. Unknown suffixes, including
+/// extra path segments on 404 requests, are hidden with the credential.
 pub fn redacted_uri<B>(request: &Request<B>) -> String {
     let uri = request.uri();
     let path = uri.path();
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
     let redacted_segments: Vec<String> = match segments.as_slice() {
-        [first, token] if matches!(*first, "sub" | "s") => {
-            vec![first.to_string(), REDACTED.to_string()]
-        }
-        [first, token, profile] if matches!(*first, "sub" | "s") => {
-            vec![
-                first.to_string(),
-                REDACTED.to_string(),
-                (*profile).to_string(),
-            ]
+        [first, _, rest @ ..] if matches!(*first, "sub" | "s") => {
+            let mut result = vec![first.to_string(), REDACTED.to_string()];
+            if let [profile] = rest {
+                // A malformed profile may itself contain a copied credential.
+                if matches!(
+                    *profile,
+                    "mihomo"
+                        | "clash"
+                        | "sing-box"
+                        | "xray"
+                        | "v2ray"
+                        | "shadowrocket"
+                        | "uri_list"
+                        | "json"
+                ) {
+                    result.push((*profile).to_string());
+                } else {
+                    result.push(REDACTED.to_string());
+                }
+            } else if !rest.is_empty() {
+                result.push(REDACTED.to_string());
+            }
+            result
         }
         _ => return path.to_owned(),
     };
@@ -133,6 +147,18 @@ mod tests {
     fn preserves_root() {
         let req = req_uri("/");
         assert_eq!(redacted_uri(&req), "/");
+    }
+
+    #[test]
+    fn malformed_delivery_paths_do_not_leak_credentials() {
+        for path in [
+            "/sub/fixture-secret/mihomo/extra",
+            "/s/fixture-secret/sing-box/extra",
+            "//sub//fixture-secret///mihomo/extra",
+            "/sub/fixture-secret/fixture-secret",
+        ] {
+            assert!(!redacted_uri(&req_uri(path)).contains("fixture-secret"));
+        }
     }
 
     #[test]

@@ -108,7 +108,7 @@ web-sys = { version = "0.3", features = [
     "Storage", "EventSource", "MessageEvent", "AddEventListenerOptions",
     "HtmlInputElement", "HtmlFormElement", "Clipboard", "Navigator",
     "CssStyleDeclaration", "MediaQueryList",
-    "Request", "RequestInit", "RequestCredentials", "Response", "Headers",
+    "AbortSignal", "Request", "RequestInit", "RequestCredentials", "Response", "Headers",
     "HtmlSelectElement", "HtmlTextAreaElement", "HtmlButtonElement",
     "KeyboardEvent", "MouseEvent", "DragEvent", "DataTransfer",
     "ScrollToOptions", "History", "Location",

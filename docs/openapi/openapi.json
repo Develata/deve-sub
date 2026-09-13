@@ -1069,6 +1069,16 @@
               }
             }
           },
+          "404": {
+            "description": "Node or tag not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal error",
             "content": {
@@ -1127,6 +1137,16 @@
           },
           "403": {
             "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Node or tag not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1501,6 +1521,88 @@
       }
     },
     "/api/v1/nodes/{id}/override": {
+      "get": {
+        "summary": "`GET /api/v1/nodes/{id}/override` — complete editable override, nulls inherit.",
+        "operationId": "get_override",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Node ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Editable override",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeOverrideResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid node id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Node not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      },
       "delete": {
         "summary": "`DELETE /api/v1/nodes/{id}/override` — delete a node's override (admin only).",
         "operationId": "delete_override",
@@ -1804,6 +1906,16 @@
           },
           "403": {
             "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Node or tag not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -4511,6 +4623,108 @@
             "cookie_auth": []
           }
         ]
+      },
+      "patch": {
+        "summary": "`PATCH /api/v1/tags/{id}` — rename/recolor while preserving membership.",
+        "operationId": "update_tag",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Tag ULID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Tag updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tag not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
       }
     },
     "/api/v1/templates": {
@@ -6144,6 +6358,10 @@
             "items": {
               "$ref": "#/components/schemas/NodeTagAssignmentDto"
             }
+          },
+          "mode": {
+            "$ref": "#/components/schemas/TagUpdateModeDto",
+            "description": "Set operation; omitted for legacy replacement requests."
           }
         },
         "additionalProperties": false
@@ -8536,6 +8754,15 @@
             "$ref": "#/components/schemas/TagDto"
           }
         }
+      },
+      "TagUpdateModeDto": {
+        "type": "string",
+        "description": "Set operation for batch tag editing.",
+        "enum": [
+          "replace",
+          "add",
+          "remove"
+        ]
       },
       "TemplateDto": {
         "type": "object",

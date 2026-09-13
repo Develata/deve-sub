@@ -11,10 +11,6 @@
     "max_lines": 847,
     "reason": "Existing archive/restore lifecycle with integrity and rollback guards; no growth beyond reviewed baseline."
   },
-  "apps/web/src/pages/sources.rs": {
-    "max_lines": 505,
-    "reason": "Source page state and Dioxus rendering share tightly coupled reactive state; modals already separated."
-  },
   "apps/server/src/subscriptions.rs": {
     "max_lines": 620,
     "reason": "Existing subscription delivery configuration REST surface; scope does not change its route topology."

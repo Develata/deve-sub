@@ -1104,3 +1104,6 @@ async fn refresh_all_filtered_preserves_active_snapshot() {
     assert_eq!(active.version, 1, "active snapshot must stay at v1");
     assert_eq!(active.node_count, 2, "active snapshot nodes must be intact");
 }
+
+#[path = "refresh_source/hardening.rs"]
+mod hardening;

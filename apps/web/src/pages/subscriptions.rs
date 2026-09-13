@@ -24,6 +24,10 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     let l = *props.lang.read();
     let mut subs = use_signal(Vec::<SubscriptionDto>::new);
     let mut templates = use_signal(Vec::<TemplateDto>::new);
+    let mut next_cursor = use_signal(|| None::<String>);
+    let mut page_busy = use_signal(|| false);
+    let mut list_revision = use_signal(|| 0_u64);
+    let mut page_error = use_signal(String::new);
     let mut loading = use_signal(|| true);
     let mut error = use_signal(|| String::new());
     let mut copied_id = use_signal(|| String::new());
@@ -40,14 +44,19 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     let mut f_traffic = use_signal(|| Option::<u64>::None);
     let mut f_expires = use_signal(|| Option::<String>::None);
     let mut f_enabled = use_signal(|| true);
-    let mut f_node_sel = use_signal(|| serde_json::json!({"mode": "all"}));
+    let mut f_node_sel = use_signal(|| serde_json::json!({"mode": "dynamic"}));
     let mut f_temp_expiry = use_signal(String::new);
 
-    let fetch_subs = move || {
+    let mut fetch_subs = move || {
+        *list_revision.write() += 1;
+        let revision = *list_revision.read();
         spawn(async move {
             loading.set(true);
-            match crate::api::get::<ListSubscriptionsResponse>("/subscriptions").await {
+            let result = crate::api::get::<ListSubscriptionsResponse>("/subscriptions").await;
+            if revision != *list_revision.read() { return; }
+            match result {
                 Ok(resp) => {
+                    next_cursor.set(resp.next_cursor);
                     subs.set(resp.subscriptions);
                     error.set(String::new());
                 }
@@ -57,9 +66,42 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         });
     };
 
+    let load_more = move |_| {
+        if *page_busy.read() || *loading.read() { return; }
+        let Some(cursor) = next_cursor.read().clone() else { return; };
+        let revision = *list_revision.read();
+        page_busy.set(true); page_error.set(String::new());
+        spawn(async move {
+            match crate::api::get::<ListSubscriptionsResponse>(&format!("/subscriptions?cursor={cursor}")).await {
+                Ok(resp) if revision == *list_revision.read() => {
+                    next_cursor.set(resp.next_cursor); subs.write().extend(resp.subscriptions);
+                }
+                Ok(_) => {}
+                Err(e) if revision == *list_revision.read() => page_error.set(e.message),
+                Err(_) => {}
+            }
+            page_busy.set(false);
+        });
+    };
+
     use_future(move || async move {
         fetch_subs();
-        let _ = crate::api::get::<ListTemplatesResponse>("/templates").await.map(|r| templates.set(r.templates));
+        let mut path = "/templates?limit=100".to_string();
+        let deadline = js_sys::Date::now() + 30_000.0;
+        let mut seen = std::collections::HashSet::new();
+        loop {
+            if js_sys::Date::now() >= deadline || !seen.insert(path.clone()) {
+                action_error.set("Template list did not complete; reload to retry".into());
+                break;
+            }
+            match crate::api::get::<ListTemplatesResponse>(&path).await {
+                Ok(resp) => {
+                    templates.write().extend(resp.templates);
+                    match resp.next_cursor { Some(cursor) => path = format!("/templates?limit=100&cursor={cursor}"), None => break }
+                }
+                Err(e) => { action_error.set(e.message); break; }
+            }
+        }
     });
 
     let mut copy_link = move |id: String| {
@@ -91,7 +133,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         f_traffic.set(None);
         f_expires.set(None);
         f_enabled.set(true);
-        f_node_sel.set(serde_json::json!({"mode": "all"}));
+        f_node_sel.set(serde_json::json!({"mode": "dynamic"}));
         form_error.set(String::new());
         modal.set(Modal::Create);
     };
@@ -386,6 +428,8 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                     }
                 }
             }
+            if !page_error.read().is_empty() { p { role: "alert", class: "text-sm text-red-600", "{page_error}" } }
+            if next_cursor.read().is_some() { button { class: "node-control", disabled: *page_busy.read() || *loading.read(), onclick: load_more, {t(l, "nodes.load_more")} } }
         }
 
         SubscriptionModals {

@@ -37,7 +37,7 @@ pub use node::{
     ImportNodesResponse, ImportOutcomeDto, ListNodesResponse, ListTagsResponse, NodeChainResponse,
     NodeDto, NodeOverrideDto, NodeOverrideResponse, NodeResponse, NodeTagAssignmentDto,
     RegionMethodDto, RegionResponse, SetNodeChainRequest, SetNodeTagsRequest, SetRegionRequest,
-    TagDto, TagResponse, UpdateOverrideRequest,
+    TagDto, TagResponse, TagUpdateModeDto, UpdateOverrideRequest,
 };
 pub use probe::{
     CreateProbeRunRequest, CreateProbeSourceRequest, ErrorClassDto, LatencyRecordDto,

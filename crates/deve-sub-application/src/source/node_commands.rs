@@ -9,8 +9,8 @@
 use std::collections::HashSet;
 
 use deve_sub_domain::{
-    NodeChain, NodeChainError, NodeChainGraph, NodeOverride, NodeOverrideRepository, NodePoolEntry,
-    NodePoolRepository, RegionAssignment, RegionMethod, SourceError, Tag,
+    NodeOverride, NodeOverrideRepository, NodePoolEntry, NodePoolRepository, RegionAssignment,
+    RegionMethod, SourceError, Tag,
 };
 use deve_sub_kernel::{NodeId, NodeOverrideId, TagId};
 
@@ -146,58 +146,27 @@ pub async fn set_node_chain(
     node_id: NodeId,
     chain: Option<Vec<NodeId>>,
 ) -> Result<Option<Vec<NodeId>>, SourceAppError> {
-    // WHY: fetch only to verify existence before writing.
+    // WHY: the port checks target existence before structural validation, then
+    // validates and writes one protected snapshot. This also preserves 404 for
+    // a missing target even when the proposed chain is invalid.
     pool_repo
-        .get_node(node_id)
+        .set_node_chain(node_id, chain.as_deref())
+        .await
+        .map_err(map_source_error)?;
+    Ok(chain)
+}
+
+/// Load persisted override values for a complete editor, including inherit states.
+pub async fn get_override(
+    repo: &dyn NodeOverrideRepository,
+    pool: &dyn NodePoolRepository,
+    id: NodeId,
+) -> Result<Option<NodeOverride>, SourceAppError> {
+    pool.get_node(id)
         .await
         .map_err(map_source_error)?
         .ok_or(SourceAppError::NodeNotFound)?;
-
-    let chain = match chain {
-        None => {
-            pool_repo
-                .set_node_chain(node_id, None)
-                .await
-                .map_err(map_source_error)?;
-            return Ok(None);
-        }
-        Some(nodes) => {
-            let node_chain = NodeChain::new(nodes)?;
-            node_chain.validate_structure(node_id)?;
-            node_chain
-        }
-    };
-
-    let existing: HashSet<NodeId> = pool_repo
-        .existing_node_ids(chain.nodes())
-        .await
-        .map_err(map_source_error)?
-        .into_iter()
-        .collect();
-    let missing: Vec<NodeId> = chain
-        .nodes()
-        .iter()
-        .copied()
-        .filter(|id| !existing.contains(id))
-        .collect();
-    if !missing.is_empty() {
-        return Err(NodeChainError::NodeNotFound(missing).into());
-    }
-
-    let all_chains = pool_repo
-        .list_node_chains()
-        .await
-        .map_err(map_source_error)?;
-    if let Some(cycle) = NodeChainGraph::validate_update(&all_chains, node_id, chain.nodes()) {
-        return Err(NodeChainError::Cycle(cycle).into());
-    }
-
-    pool_repo
-        .set_node_chain(node_id, Some(chain.nodes()))
-        .await
-        .map_err(map_source_error)?;
-
-    Ok(Some(chain.nodes().to_vec()))
+    repo.get_override(id).await.map_err(map_source_error)
 }
 
 /// Batch set the `enabled` flag for multiple nodes (NODE-004).
@@ -240,10 +209,12 @@ pub async fn batch_set_tags(
     override_repo: &dyn NodeOverrideRepository,
     assignments: Vec<(NodeId, Vec<TagId>)>,
 ) -> Result<(), SourceAppError> {
-    override_repo
-        .batch_set_tags(&assignments)
-        .await
-        .map_err(map_source_error)
+    batch_modify_tags(
+        override_repo,
+        assignments,
+        deve_sub_domain::TagUpdateMode::Replace,
+    )
+    .await
 }
 
 /// List all tags, ordered by name.
@@ -270,11 +241,56 @@ pub async fn create_tag(
     name: &str,
     color: Option<&str>,
 ) -> Result<Tag, SourceAppError> {
+    let name = name.trim();
     validate_tag_name(name)?;
+    validate_tag_color(color)?;
     override_repo
         .create_tag(name, color)
         .await
         .map_err(map_source_error)
+}
+
+/// Update a tag's presentation while preserving assignments.
+pub async fn update_tag(
+    repo: &dyn NodeOverrideRepository,
+    tag_id: TagId,
+    name: &str,
+    color: Option<&str>,
+) -> Result<Tag, SourceAppError> {
+    let name = name.trim();
+    validate_tag_name(name)?;
+    validate_tag_color(color)?;
+    repo.update_tag(tag_id, name, color)
+        .await
+        .map_err(map_source_error)
+}
+
+/// Apply an atomic batch set operation; duplicate targets are ambiguous.
+pub async fn batch_modify_tags(
+    repo: &dyn NodeOverrideRepository,
+    assignments: Vec<(NodeId, Vec<TagId>)>,
+    mode: deve_sub_domain::TagUpdateMode,
+) -> Result<(), SourceAppError> {
+    let mut seen = HashSet::new();
+    if assignments.iter().any(|(id, _)| !seen.insert(*id)) {
+        return Err(SourceAppError::InvalidInput(
+            "duplicate node in tag assignments",
+        ));
+    }
+    repo.batch_modify_tags(&assignments, mode)
+        .await
+        .map_err(map_source_error)
+}
+
+fn validate_tag_color(color: Option<&str>) -> Result<(), SourceAppError> {
+    if let Some(color) = color
+        && (color.len() != 7
+            || !color.starts_with('#')
+            || !color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit))
+    {
+        return Err(SourceAppError::InvalidInput("tag color must be #RRGGBB"));
+    }
+    Ok(())
 }
 
 /// Delete a tag by ID. Cascades to `node_tags` via FK.
@@ -296,7 +312,7 @@ fn validate_tag_name(name: &str) -> Result<(), SourceAppError> {
     if name.is_empty() {
         return Err(SourceAppError::InvalidInput("tag name must not be empty"));
     }
-    if name.len() > MAX_TAG_NAME_LEN {
+    if name.chars().count() > MAX_TAG_NAME_LEN {
         return Err(SourceAppError::InvalidInput(
             "tag name must not exceed 128 characters",
         ));
@@ -332,6 +348,7 @@ fn effective_region(entry: &NodePoolEntry) -> RegionAssignment {
 fn map_source_error(e: SourceError) -> SourceAppError {
     match e {
         SourceError::NameExists => SourceAppError::NameExists,
+        SourceError::NodeChain(error) => SourceAppError::NodeChain(error),
         other => SourceAppError::Source(other),
     }
 }

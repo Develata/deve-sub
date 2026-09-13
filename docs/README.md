@@ -41,3 +41,8 @@ personal infrastructure/backup procedures or empty speculative registry/report
 directories. Useful accepted semantics are carried by the current plans,
 features, contracts, acceptance rows and ADRs; Git history preserves prior
 tracked revisions.
+
+## Current management journeys
+
+- [Node organization and management](features/node-organization.md)
+- [Concurrent functional acceptance](acceptance/functional-matrix.md)

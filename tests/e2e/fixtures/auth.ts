@@ -6,6 +6,7 @@ const ADMIN_PASS = 'TestPassword12345';
 async function loginViaApi(port: number): Promise<string> {
   const res = await fetch(`http://127.0.0.1:${port}/api/v1/auth/login`, {
     method: 'POST',
+    signal: AbortSignal.timeout(10_000),
     headers: {
       'Content-Type': 'application/json',
       'Origin': `http://127.0.0.1:${port}`,

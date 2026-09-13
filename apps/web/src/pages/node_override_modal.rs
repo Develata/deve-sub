@@ -9,7 +9,7 @@
 
 use dioxus::prelude::*;
 
-use crate::api::send;
+use crate::api::{get, send};
 use crate::i18n::{Language, t};
 use crate::pages::node_types::{SetRegionRequest, UpdateOverrideRequest};
 
@@ -67,12 +67,32 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
     let mut saving = use_signal(|| false);
     let mut error = use_signal(String::new);
 
+    let mut loaded = use_signal(|| false);
+    let load_id = props.node_id.clone();
+    use_future(move || { let load_id = load_id.clone(); async move {
+        match get::<deve_sub_contract::NodeOverrideResponse>(&format!("/nodes/{load_id}/override")).await {
+            Ok(resp) => {
+                let ov = resp.override_;
+                f_name.set(ov.display_name.unwrap_or_default());
+                f_region.set(ov.region.unwrap_or_default());
+                f_sni.set(ov.sni.unwrap_or_default());
+                f_fingerprint.set(ov.fingerprint.unwrap_or_default());
+                f_sort.set(ov.sort_order);
+                f_enabled.set(match ov.enabled { Some(true) => TriBool::True, Some(false) => TriBool::False, None => TriBool::Inherit });
+                f_skip_verify.set(match ov.skip_cert_verify { Some(true) => TriBool::True, Some(false) => TriBool::False, None => TriBool::Inherit });
+                loaded.set(true);
+            }
+            Err(e) => error.set(e.message),
+        }
+    }});
+
     // WHY: clone node_id before closures so both `submit` and
     // `delete_override` can own a copy without re-borrowing `props.node_id`,
     // which RFC 2229 disjoint-capture would move into the first closure.
     let delete_nid = props.node_id.clone();
 
     let submit = move |_| {
+        if !*loaded.read() || *saving.read() { return; }
         saving.set(true);
         error.set(String::new());
         let req = UpdateOverrideRequest {
@@ -126,7 +146,7 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
             class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
             onclick: move |_| props.on_close.call(()),
             div {
-                class: "w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                class: "node-dialog-panel w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
                 onclick: move |e| e.stop_propagation(),
                 h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
                     {t(l, "nodes.override_title")}
@@ -206,7 +226,7 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
                 div { class: "mt-6 flex justify-between",
                     button {
                         class: "rounded-md border border-red-300 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20",
-                        disabled: *saving.read(),
+                        disabled: *saving.read() || !*loaded.read(),
                         onclick: delete_override,
                         {t(l, "nodes.override_delete")}
                     }
@@ -218,7 +238,7 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
                         }
                         button {
                             class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
-                            disabled: *saving.read(),
+                            disabled: *saving.read() || !*loaded.read(),
                             onclick: submit,
                             if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
                         }
@@ -243,7 +263,16 @@ pub fn RegionModal(props: RegionModalProps) -> Element {
     let mut saving = use_signal(|| false);
     let mut error = use_signal(String::new);
 
+    let mut loaded = use_signal(|| false);
+    let load_id = props.node_id.clone();
+    use_future(move || { let load_id = load_id.clone(); async move {
+        match get::<deve_sub_contract::NodeOverrideResponse>(&format!("/nodes/{load_id}/override")).await {
+            Ok(resp) => { region.set(resp.override_.region.unwrap_or_default()); loaded.set(true); }
+            Err(e) => error.set(e.message),
+        }
+    }});
     let submit = move |_| {
+        if !*loaded.read() || *saving.read() { return; }
         saving.set(true);
         error.set(String::new());
         let req = SetRegionRequest {
@@ -271,7 +300,7 @@ pub fn RegionModal(props: RegionModalProps) -> Element {
             class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
             onclick: move |_| props.on_close.call(()),
             div {
-                class: "w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                class: "node-dialog-panel w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
                 onclick: move |e| e.stop_propagation(),
                 h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
                     {t(l, "nodes.region_title")}
@@ -300,7 +329,7 @@ pub fn RegionModal(props: RegionModalProps) -> Element {
                     }
                     button {
                         class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
-                        disabled: *saving.read(),
+                        disabled: *saving.read() || !*loaded.read(),
                         onclick: submit,
                         if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
                     }

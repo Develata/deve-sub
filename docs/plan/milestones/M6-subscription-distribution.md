@@ -407,3 +407,10 @@ to generate one. Creation, rotation and temporary-link dialogs display full
 explaining immediate invalidation and sends grace_seconds=0. The API's
 explicit null/-1 permanent-grace option remains compatible. Rotation affects
 full tokens only; short codes and temporary links retain their own lifecycles.
+
+## Web management acceptance
+
+OUT-016 owns Web subscription creation and management pagination. The default
+node selection is dynamic; created links must return subscription content.
+Records beyond the first list page and all template choices remain reachable.
+This management proof is distinct from OUT-008 conditional ETag delivery.

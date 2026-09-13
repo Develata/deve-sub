@@ -26,6 +26,53 @@ const CONFLICT: StatusCode = StatusCode::CONFLICT;
 const INTERNAL_SERVER_ERROR: StatusCode = StatusCode::INTERNAL_SERVER_ERROR;
 const NOT_FOUND: StatusCode = StatusCode::NOT_FOUND;
 
+/// `GET /api/v1/nodes/{id}/override` — complete editable override, nulls inherit.
+#[utoipa::path(get, path = "/api/v1/nodes/{id}/override", security(("cookie_auth" = [])),
+    params(("id" = String, Path, description = "Node ULID")),
+    responses((status = 200, description = "Editable override", body = NodeOverrideResponse), (status = 404, description = "Node not found", body = ErrorResponse), (status = 400, description = "Invalid node id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
+async fn get_override(
+    State(state): State<NodeState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> Result<Json<NodeOverrideResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let value = source::get_override(
+        state.override_repo.as_ref(),
+        state.pool_repo.as_ref(),
+        parse_node_id(&id)?,
+    )
+    .await
+    .map_err(map_error)?;
+    Ok(Json(NodeOverrideResponse {
+        override_: value.as_ref().map(override_to_dto).unwrap_or_default(),
+    }))
+}
+
+/// `PATCH /api/v1/tags/{id}` — rename/recolor while preserving membership.
+#[utoipa::path(patch, path = "/api/v1/tags/{id}", security(("cookie_auth" = [])),
+    params(("id" = String, Path, description = "Tag ULID")), request_body = CreateTagRequest,
+    responses((status = 200, description = "Tag updated", body = TagResponse), (status = 400, description = "Invalid input", body = ErrorResponse), (status = 404, description = "Tag not found", body = ErrorResponse), (status = 409, description = "Name exists", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
+async fn update_tag(
+    State(state): State<NodeState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+    Json(req): Json<CreateTagRequest>,
+) -> Result<Json<TagResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let id = id
+        .parse::<TagId>()
+        .map_err(|_| err(BAD_REQUEST, "invalid_id", "invalid tag id"))?;
+    let tag = source::update_tag(
+        state.override_repo.as_ref(),
+        id,
+        &req.name,
+        req.color.as_deref(),
+    )
+    .await
+    .map_err(map_error)?;
+    Ok(Json(TagResponse {
+        tag: tag_to_dto(&tag),
+    }))
+}
+
 /// `PATCH /api/v1/nodes/{id}/override` — create or replace a node's manual
 /// override (NODE-010, admin only).
 #[utoipa::path(patch, path = "/api/v1/nodes/{id}/override", security(("cookie_auth" = [])),
@@ -131,7 +178,7 @@ async fn set_node_chain(
 /// `POST /api/v1/nodes/batch-enabled` — batch set enabled flag (NODE-004).
 #[utoipa::path(post, path = "/api/v1/nodes/batch-enabled", security(("cookie_auth" = [])),
     request_body = BatchEnabledRequest,
-    responses((status = 200, description = "Batch applied", body = BatchResultDto), (status = 400, description = "Invalid node ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
+    responses((status = 200, description = "Batch applied", body = BatchResultDto), (status = 400, description = "Invalid node ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse), (status = 404, description = "Node or tag not found", body = ErrorResponse)))]
 async fn batch_set_enabled(
     State(state): State<NodeState>,
     _admin: AdminUser,
@@ -147,7 +194,7 @@ async fn batch_set_enabled(
 /// `PUT /api/v1/nodes/{id}/tags` — replace tags for a single node (NODE-005).
 #[utoipa::path(put, path = "/api/v1/nodes/{id}/tags", security(("cookie_auth" = [])),
     params(("id" = String, Path, description = "Node ULID")), request_body = SetNodeTagsRequest,
-    responses((status = 204, description = "Tags updated"), (status = 400, description = "Invalid ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
+    responses((status = 204, description = "Tags updated"), (status = 400, description = "Invalid ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse), (status = 404, description = "Node or tag not found", body = ErrorResponse)))]
 async fn set_node_tags(
     State(state): State<NodeState>,
     _admin: AdminUser,
@@ -165,7 +212,7 @@ async fn set_node_tags(
 /// `POST /api/v1/nodes/batch-tags` — batch replace tags (NODE-005).
 #[utoipa::path(post, path = "/api/v1/nodes/batch-tags", security(("cookie_auth" = [])),
     request_body = BatchTagsRequest,
-    responses((status = 204, description = "Batch tags applied"), (status = 400, description = "Invalid ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
+    responses((status = 204, description = "Batch tags applied"), (status = 400, description = "Invalid ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse), (status = 404, description = "Node or tag not found", body = ErrorResponse)))]
 async fn batch_set_tags(
     State(state): State<NodeState>,
     _admin: AdminUser,
@@ -177,7 +224,12 @@ async fn batch_set_tags(
         let tag_ids: Vec<TagId> = parse_ids(&a.tag_ids)?;
         assignments.push((node_id, tag_ids));
     }
-    source::batch_set_tags(state.override_repo.as_ref(), assignments)
+    let mode = match req.mode {
+        deve_sub_contract::TagUpdateModeDto::Replace => deve_sub_domain::TagUpdateMode::Replace,
+        deve_sub_contract::TagUpdateModeDto::Add => deve_sub_domain::TagUpdateMode::Add,
+        deve_sub_contract::TagUpdateModeDto::Remove => deve_sub_domain::TagUpdateMode::Remove,
+    };
+    source::batch_modify_tags(state.override_repo.as_ref(), assignments, mode)
         .await
         .map_err(map_error)?;
     Ok(StatusCode::NO_CONTENT)
@@ -331,6 +383,8 @@ pub fn register(
 ) -> utoipa_axum::router::OpenApiRouter<AppState> {
     use utoipa_axum::routes;
     router
+        .routes(routes!(get_override))
+        .routes(routes!(update_tag))
         .routes(routes!(update_override))
         .routes(routes!(delete_override))
         .routes(routes!(set_region))

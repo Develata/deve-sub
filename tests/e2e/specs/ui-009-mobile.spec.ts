@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/auth';
 
-test('UI-009 (mobile): can view subscriptions, refresh sources, and copy links', async ({ authedPage: page }) => {
+test('UI-009 (mobile): can view subscriptions, refresh sources, and copy links', async ({ authedPage: page }, testInfo) => {
   await expect(page.locator('main')).toBeVisible({ timeout: 10000 });
 
   const hamburger = page.locator('button[aria-label="Menu"]');
@@ -57,7 +57,7 @@ test('UI-009 (mobile): can view subscriptions, refresh sources, and copy links',
   expect((await page.request.get(copied)).status()).toBe(200);
   await page.locator('div.fixed').getByRole('button', { name: 'OK', exact: true }).click();
 
-  await page.screenshot({ path: 'screenshots/ui-009-mobile-subscriptions.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-009-mobile-subscriptions.png') });
 
   if (mobile) await hamburger.click();
   await page.locator('aside button').filter({ hasText: /订阅源|Sources/ }).click();
@@ -70,5 +70,5 @@ test('UI-009 (mobile): can view subscriptions, refresh sources, and copy links',
   const refreshBtn = page.locator('button').filter({ hasText: /刷新|Refresh/ }).first();
   await expect(refreshBtn).toBeVisible();
 
-  await page.screenshot({ path: 'screenshots/ui-009-mobile-sources.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-009-mobile-sources.png') });
 });

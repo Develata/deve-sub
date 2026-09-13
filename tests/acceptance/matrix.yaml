@@ -126,6 +126,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-REQUEST-TIMEOUT"
         - "tests/e2e/specs/ui-009-mobile.spec.ts::UI-009"
       status: pass
   - id: UI-010
@@ -316,6 +318,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
         - "apps/server/tests/source_management.rs::admin_can_create_source"
         - "apps/server/tests/source_management.rs::admin_can_get_source_by_id"
         - "apps/server/tests/source_management.rs::admin_can_list_sources"
@@ -379,6 +382,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/tests/refresh_source/hardening.rs::refresh_failure_preserves_concurrent_source_edits_and_current_policy"
         - "apps/server/tests/source_refresh.rs::refresh_fetch_failure_marks_job_failed"
         - "crates/deve-sub-application/tests/refresh_source.rs::fetch_failure_disables_source_when_keep_on_fail_false"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::failed_reconcile_preserves_old_snapshot"
@@ -500,6 +504,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-SOURCE-JOBS"
+        - "tests/e2e/functional/ordering.ui.spec.ts::FUNC-LIST-ORDER"
         - "apps/server/tests/source_refresh.rs::concurrent_refresh_returns_409"
         - "crates/deve-sub-application/tests/refresh_source.rs::concurrent_refreshes_do_not_cross_pollute"
       status: pass
@@ -821,6 +827,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-IMPORT-RACE"
         - "apps/server/tests/node_pool.rs::admin_can_import_nodes"
         - "apps/server/tests/node_pool.rs::import_duplicate_is_counted_not_overwritten"
         - "apps/server/tests/node_pool.rs::import_empty_content_returns_400"
@@ -867,6 +874,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-NODE-FILTER"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_004_batch_enable_disable"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::batch_set_enabled_preserves_other_fields"
       status: pass
@@ -874,13 +882,19 @@ cases:
     title: 批量标签
     priority: P0
     layer: E2E
-    dimensions: []
-    preconditions: []
-    steps: []
-    assertions: ["标签查询即时更新"]
+    dimensions: [single, batch, add, remove, replace, concurrent, desktop, mobile]
+    preconditions: ["每例独立数据库、管理员会话与合成节点"]
+    steps: ["创建及重命名标签", "批量增删/替换与并发赋值", "筛选、重开编辑和删除"]
+    assertions: ["标签查询即时更新", "成员使用集合语义", "缺失引用整批回滚", "稳定标签ID与可见色标"]
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-TAG-INPUT"
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-TAG-RACE"
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-TAG-IDENTITY"
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MODES"
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-EDIT"
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_005_batch_tags"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::batch_set_tags_for_multiple_nodes"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::set_node_tags_replaces_tags"
@@ -896,6 +910,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-NODE-FILTER"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_006_manual_region_survives_auto_detection"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::patch_override_region_preserves_other_fields"
       status: pass
@@ -949,6 +964,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-OVERRIDE"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_010_override_survives_refresh"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::override_crud_round_trip"
       status: pass
@@ -1060,6 +1076,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-CHAIN-RACE"
         - "apps/server/tests/node_pool.rs::node_chain_cycle_rejected"
         - "apps/server/tests/node_pool.rs::node_chain_self_reference_rejected"
         - "apps/server/tests/node_pool.rs::node_chain_duplicate_rejected"
@@ -1075,6 +1092,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
         - "apps/server/tests/template_management.rs::gen001_template_crud_roundtrip"
       status: pass
   - id: GEN-002
@@ -1101,6 +1119,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/ordering.ui.spec.ts::FUNC-TEMPLATE-ORDER"
         - "apps/server/tests/template_management.rs::gen003_edit_creates_new_version"
       status: pass
   - id: GEN-004
@@ -1114,6 +1133,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TEMPLATE-ROLLBACK"
         - "apps/server/tests/template_management.rs::gen004_rollback_restores_prior_version"
         - "apps/server/tests/template_management.rs::gen004b_rollback_rejects_version_owned_by_other_template"
       status: pass
@@ -2223,4 +2243,19 @@ cases:
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
         - "apps/cli/tests/backup_restore.rs::backup004_old_traffic_and_pruned_totals_round_trip"
         - "crates/deve-sub-storage-sqlite/tests/node_lookup_index.rs::forward_index_removes_scan_and_backup_can_reupgrade"
+      status: pass
+
+  - id: OUT-016
+    title: Web订阅创建与管理分页
+    priority: P0
+    layer: E2E
+    dimensions: [desktop, mobile, pagination]
+    preconditions: ["隔离数据库、管理员、合成节点与模板"]
+    steps: ["Web表单使用默认选择创建订阅", "获取生成链接", "加载第51条订阅及模板选项"]
+    assertions: ["创建成功且返回内容可获取", "后续订阅记录与模板选择可达"]
+    fixtures: ["tests/e2e/functional/fixture.ts"]
+    evidence:
+      tests:
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-SUB-CREATE"
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
       status: pass

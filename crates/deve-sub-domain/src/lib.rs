@@ -33,7 +33,7 @@ pub use identity::{
 };
 pub use node::{Authentication, Node, NodeChain, NodeSource, RegionAssignment, RegionMethod};
 pub use node_chain::{NodeChainEntry, NodeChainError, NodeChainGraph, NodeCyclePath};
-pub use node_override::{NodeOverride, NodeOverrideRepository, Tag};
+pub use node_override::{NodeOverride, NodeOverrideRepository, Tag, TagUpdateMode};
 pub use probe::{
     ErrorClass, LatencyProbe, LatencyRecord, LatencyRecordRepository, LatencyResult, ProbeError,
     ProbeRun, ProbeRunRepository, ProbeRunResult, ProbeRunStatus, ProbeSource, ProbeSourceAdapter,

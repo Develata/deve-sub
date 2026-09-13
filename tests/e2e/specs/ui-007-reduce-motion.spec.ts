@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/auth';
 
-test('UI-007: reduce motion — non-essential animations disabled after system setting', async ({ authedPage: page }) => {
+test('UI-007: reduce motion — non-essential animations disabled after system setting', async ({ authedPage: page }, testInfo) => {
   await page.locator('aside button').filter({ hasText: /设置|Settings/ }).click();
   await page.waitForLoadState('networkidle');
 
@@ -27,5 +27,5 @@ test('UI-007: reduce motion — non-essential animations disabled after system s
 
   await page.locator('aside button').filter({ hasText: /仪表盘|Dashboard/ }).click();
   await page.waitForLoadState('networkidle');
-  await page.screenshot({ path: 'screenshots/ui-007-reduce-motion.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-007-reduce-motion.png') });
 });

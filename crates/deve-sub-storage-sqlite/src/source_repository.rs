@@ -167,6 +167,15 @@ impl SourceRow {
 
 #[async_trait]
 impl SourceRepository for SqliteSourceRepository {
+    async fn disable_after_failure(&self, id: SourceId) -> Result<(), SourceError> {
+        sqlx::query("UPDATE sources SET enabled = 0 WHERE id = ? AND keep_on_fail = 0")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        Ok(())
+    }
+
     async fn create(&self, source: &Source) -> Result<(), SourceError> {
         let created_at = format_ts(source.created_at).map_err(SourceError::Storage)?;
         let url_encrypted = self.seal(CTX_URL, &source.url)?;

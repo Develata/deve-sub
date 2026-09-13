@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/auth';
 
-test('UI-010: keyboard navigation — sidebar, table and dialog usable via keyboard', async ({ authedPage: page }) => {
+test('UI-010: keyboard navigation — sidebar, table and dialog usable via keyboard', async ({ authedPage: page }, testInfo) => {
   await expect(page.locator('aside')).toBeVisible({ timeout: 10000 });
 
   const firstNavBtn = page.locator('aside nav button').first();
@@ -44,5 +44,5 @@ test('UI-010: keyboard navigation — sidebar, table and dialog usable via keybo
   await page.keyboard.press('Enter');
   await page.waitForTimeout(500);
 
-  await page.screenshot({ path: 'screenshots/ui-010-keyboard-nav.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-010-keyboard-nav.png') });
 });

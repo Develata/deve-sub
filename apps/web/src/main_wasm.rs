@@ -157,7 +157,7 @@ fn app() -> Element {
                     }
 
                     // Sidebar.
-                    aside { class: "{sidebar_class}",
+                    aside { class: "{sidebar_class}", style: "flex-shrink: 0;",
                         div { class: "flex h-16 items-center px-6",
                             span { class: "text-lg font-bold text-amber-600 dark:text-amber-500", "Deve Sub" }
                         }
@@ -208,7 +208,7 @@ fn app() -> Element {
                     }
 
                     // Main content area.
-                    div { class: "flex flex-1 flex-col",
+                    div { class: "flex min-w-0 flex-1 flex-col",
                         header {
                             class: "flex h-16 items-center justify-between border-b border-stone-200 bg-white px-4 dark:border-stone-800 dark:bg-stone-900",
                             button {

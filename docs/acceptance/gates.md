@@ -201,6 +201,58 @@ This is local source-build evidence, not a new published image. Docker/arm64,
 other browser engines, production HTTPS and long-soak execution were not
 repeated for this slice.
 
+## Management functional regression (NODE-001/004/005/006/010/018, SRC-005/013, GEN-003/004, OUT-016)
+
+On 2026-09-13, the new isolated functional matrix passed **28/28**, with four
+workers, zero retries, zero skipped tests and zero JavaScript exceptions. The
+JSON run identifier was `6a908f3c-9ea9-43c4-ae45-fc3204f2eff4`, duration 60.28
+seconds. It used the current all-features debug CLI and production WASM with
+Playwright 1.62.1 / Chromium 151, desktop and Pixel 5 viewports. Console reports
+contained only the two deliberate HTTP 500 responses in the stale-list tests.
+Desktop/mobile tag screenshots were inspected; controls and labels remained
+readable, the selected color appeared, and tables stayed inside the page width.
+
+Before fixes, real HTTP/browser checks reproduced duplicate-tag 500 responses,
+missing-reference acceptance, invalid names, missing preselection, invalid
+subscription defaults and concurrently committed chain cycles. The initial
+post-fix API matrix additionally caught SQLite 517 during concurrent import;
+acquiring the write transaction before reading dedup identities fixed it.
+UI runs exposed missing generated CSS and mobile content expansion. The final
+matrix includes page reload, all three batch tag modes, source job interleaving,
+request timeout, stale-list failure and cross-template response ordering.
+
+The existing browser suite passed **16/16**, including real authentication,
+themes, keyboard access, mobile flows and 10,000-node virtualization. The
+lifecycle suite passed **3/3**. Source failure with concurrent admin edits passed
+the controlled Notify regression for both current keep_on_fail policies.
+The details, commands and transport-double boundaries are in
+[functional-matrix.md](functional-matrix.md). Subscription output was fetched;
+no real proxy-client import was performed for these management tests.
+
+Final `cargo fmt --all -- --check`, `cargo check --locked --all-targets
+--all-features`, Clippy with the same targets/features and `-D warnings`, and
+`cargo test --locked --all-targets --all-features` passed: **1005 passed,
+zero failed, 7 ignored**. Doc tests passed with zero examples. Docs and
+acceptance gates checked 154 cases and 377 proof symbols; architecture checked
+15 crates; CI helper tests passed 17/17 and inventory covered all 15 packages.
+The full Rust run removed proxy variables only for the test subprocess and
+used `TMPDIR=$PWD/tmp/functional-acceptance`: system proxy forwarding of ::1 and
+the 3.9 GiB /tmp tmpfs otherwise caused environment failures. The subsequent
+complete run passed without skipping those tests. The current CSS regenerated identically with Tailwind
+4.3.3 and the pinned npm lockfile; its SHA-256 is
+`838bd76d95e857bf1c6e8b2ee1c1c115f124abbd135af579b25f91526f1f928d`.
+OpenAPI was exported from the current CLI and includes the new endpoints and
+reference-error responses. The final node API regression passed 15/15 after
+preserving target-not-found precedence; the six concurrent API cases were
+rerun successfully after that correction. `cargo deny --locked check` passed advisory, license, ban and source policies;
+`npm audit --prefix apps/web --audit-level=high` reported zero known advisories.
+The two read-only review lanes closed all accepted
+implementation findings and corrected the OUT-016 proof binding.
+
+These are local source-build results. Existing ignored real-process soak and
+external compatibility validators, Docker/arm64 execution, other browser engines,
+production HTTPS and registry publication were not repeated for this slice.
+
 ## Disposable native VM evidence (DEPLOY-002)
 
 On 2026-09-11, `scripts/tests/native_vm.py` passed in a fresh Debian 13.6 amd64

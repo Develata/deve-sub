@@ -3,7 +3,7 @@
 #![cfg(target_family = "wasm")]
 
 pub use deve_sub_contract::{
-    CreateTemplateRequest, GenerationResultDto, GetTemplateResponse, ListTemplatesResponse,
+    CreateTemplateRequest, GenerationResultDto, ListTemplatesResponse,
     ListVersionsResponse, RollbackRequest, RollbackTemplateResponse, TemplateDto, TemplateResponse,
     TemplateVersionDto, UpdateTemplateRequest,
 };

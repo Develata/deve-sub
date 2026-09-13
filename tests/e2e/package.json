@@ -4,6 +4,7 @@
   "description": "Playwright E2E tests for Deve Sub UI acceptance cases UI-001..010",
   "scripts": {
     "test": "npx playwright test",
+    "test:functional": "playwright test --config functional.config.ts",
     "test:headed": "npx playwright test --headed",
     "report": "npx playwright show-report"
   },

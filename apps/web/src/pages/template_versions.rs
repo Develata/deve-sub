@@ -18,6 +18,7 @@ pub struct TemplateVersionsProps {
     saving: Signal<bool>,
     on_close: EventHandler<()>,
     on_rollback: EventHandler<TemplateVersionDto>,
+    on_confirm_rollback: EventHandler<TemplateVersionDto>,
 }
 
 pub fn TemplateVersions(props: TemplateVersionsProps) -> Element {
@@ -125,7 +126,7 @@ pub fn TemplateVersions(props: TemplateVersionsProps) -> Element {
                             disabled: *props.saving.read(),
                             onclick: move |_| {
                                 if let Some(v) = &rollback_version {
-                                    props.on_rollback.call(v.clone());
+                                    props.on_confirm_rollback.call(v.clone());
                                 }
                             },
                             if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "tpl.rollback")} }

@@ -13,7 +13,7 @@ use utoipa::ToSchema;
 /// Pool metadata (`missing_from_source`, `is_active`, `revision`) is
 /// included alongside the canonical node fields. Sensitive fields
 /// (raw URI with embedded credentials) are never serialized.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NodeDto {
     /// ULID identifier.
@@ -117,7 +117,7 @@ pub enum ImportOutcomeDto {
 }
 
 /// How a node's region was assigned.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum RegionMethodDto {
@@ -128,7 +128,7 @@ pub enum RegionMethodDto {
 }
 
 /// A user-defined tag.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TagDto {
     /// ULID identifier.
@@ -140,7 +140,7 @@ pub struct TagDto {
 }
 
 /// Manual override applied to a node, as seen in API responses.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NodeOverrideDto {
     /// Override display name; `None` keeps the parsed name.
@@ -227,7 +227,24 @@ pub struct NodeTagAssignmentDto {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct BatchTagsRequest {
+    /// Set operation; omitted for legacy replacement requests.
+    #[serde(default)]
+    pub mode: TagUpdateModeDto,
     pub assignments: Vec<NodeTagAssignmentDto>,
+}
+
+/// Set operation for batch tag editing.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum TagUpdateModeDto {
+    /// Replace the full membership set.
+    #[default]
+    Replace,
+    /// Preserve existing tags and add selected tags.
+    Add,
+    /// Remove only selected tags.
+    Remove,
 }
 
 /// Request body for `PATCH /api/v1/nodes/{id}/region` (NODE-006).

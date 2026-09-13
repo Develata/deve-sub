@@ -11,14 +11,7 @@ use crate::pages::source_types::{
     UpdateSourceRequest,
 };
 use crate::pages::util::sleep_ms;
-
-#[derive(Clone, PartialEq)]
-enum Modal {
-    None,
-    Create,
-    Edit(SourceDto),
-    Delete(SourceDto),
-}
+use super::source_modals::{Modal, SourceModals};
 
 #[derive(Props, Clone, PartialEq)]
 pub struct SourcesProps {
@@ -28,9 +21,14 @@ pub struct SourcesProps {
 pub fn SourcesPage(props: SourcesProps) -> Element {
     let l = *props.lang.read();
     let mut sources = use_signal(Vec::<SourceDto>::new);
+    let mut next_cursor = use_signal(|| None::<String>);
+    let mut page_busy = use_signal(|| false);
+    let mut list_revision = use_signal(|| 0_u64);
+    let mut page_error = use_signal(String::new);
     let mut loading = use_signal(|| true);
     let mut error = use_signal(|| String::new());
-    let mut refreshing_id = use_signal(|| String::new());
+    let mut refreshing_ids = use_signal(std::collections::HashSet::<String>::new);
+    let mut refresh_failed = use_signal(|| false);
     let mut refresh_msg = use_signal(|| String::new());
     let mut modal = use_signal(|| Modal::None);
     let mut form_error = use_signal(|| String::new());
@@ -45,17 +43,40 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
     let mut f_enabled = use_signal(|| true);
     let mut f_filter_rules = use_signal(|| Option::<_>::None);
 
-    let fetch_sources = move || {
+    let mut fetch_sources = move || {
+        *list_revision.write() += 1;
+        let revision = *list_revision.read();
         spawn(async move {
             loading.set(true);
-            match crate::api::get::<ListSourcesResponse>("/sources").await {
+            let result = crate::api::get::<ListSourcesResponse>("/sources").await;
+            if revision != *list_revision.read() { return; }
+            match result {
                 Ok(resp) => {
+                    next_cursor.set(resp.next_cursor);
                     sources.set(resp.sources);
                     error.set(String::new());
                 }
                 Err(e) => error.set(e.message),
             }
             loading.set(false);
+        });
+    };
+
+    let load_more = move |_| {
+        if *page_busy.read() || *loading.read() { return; }
+        let Some(cursor) = next_cursor.read().clone() else { return; };
+        let revision = *list_revision.read();
+        page_busy.set(true); page_error.set(String::new());
+        spawn(async move {
+            match crate::api::get::<ListSourcesResponse>(&format!("/sources?cursor={cursor}")).await {
+                Ok(resp) if revision == *list_revision.read() => {
+                    next_cursor.set(resp.next_cursor); sources.write().extend(resp.sources);
+                }
+                Ok(_) => {}
+                Err(e) if revision == *list_revision.read() => page_error.set(e.message),
+                Err(_) => {}
+            }
+            page_busy.set(false);
         });
     };
 
@@ -99,7 +120,8 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
     };
 
     let mut do_refresh = move |id: String| {
-        refreshing_id.set(id.clone());
+        if !refreshing_ids.write().insert(id.clone()) { return; }
+        refresh_failed.set(false);
         refresh_msg.set(String::new());
         spawn(async move {
             let path = format!("/sources/{id}/refresh");
@@ -110,20 +132,23 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
             {
                 Ok(a) => a,
                 Err(e) => {
-                    error.set(e.message);
-                    refreshing_id.set(String::new());
+                    refresh_msg.set(format!("{id}: {}", e.message));
+                    refresh_failed.set(true);
+                    refreshing_ids.write().remove(&id);
                     return;
                 }
             };
 
             let job_path = format!("/sources/refresh-jobs/{}", accepted.job_id);
+            let deadline = js_sys::Date::now() + 30_000.0;
             let mut polls = 0u32;
             let job = loop {
                 polls += 1;
-                if polls > 30 {
+                if polls > 30 || js_sys::Date::now() > deadline {
                     let msg = t(l, "sources.refresh_timeout");
-                    refresh_msg.set(msg.to_string());
-                    refreshing_id.set(String::new());
+                    refresh_failed.set(true);
+                    refresh_msg.set(format!("{id}: {msg}"));
+                    refreshing_ids.write().remove(&id);
                     return;
                 }
                 match crate::api::get::<SourceRefreshJobDto>(&job_path).await {
@@ -132,8 +157,9 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                     }
                     Ok(_) => sleep_ms(1000).await,
                     Err(e) => {
-                        error.set(e.message);
-                        refreshing_id.set(String::new());
+                        refresh_msg.set(format!("{id}: {}", e.message));
+                    refresh_failed.set(true);
+                        refreshing_ids.write().remove(&id);
                         return;
                     }
                 }
@@ -159,9 +185,10 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                     .error_message
                     .unwrap_or_else(|| t(l, "common.error").to_string()),
             };
-            refresh_msg.set(msg);
+            refresh_failed.set(job.status != "completed");
+            refresh_msg.set(format!("{id}: {msg}"));
             fetch_sources();
-            refreshing_id.set(String::new());
+            refreshing_ids.write().remove(&id);
         });
     };
 
@@ -258,10 +285,6 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         }
     };
 
-    let is_form_modal = matches!(*modal.read(), Modal::Create | Modal::Edit(_));
-    let is_delete_modal = matches!(*modal.read(), Modal::Delete(_));
-    let is_edit = matches!(*modal.read(), Modal::Edit(_));
-
     rsx! {
         div { class: "space-y-4",
             div { class: "flex items-center justify-between",
@@ -281,7 +304,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
             }
 
             if !refresh_msg.read().is_empty() {
-                div { class: "rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400",
+                div { role: "status", class: if *refresh_failed.read() { "rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400" } else { "rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400" },
                     "{refresh_msg}"
                 }
             }
@@ -312,7 +335,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                             for source in sources.read().iter() {
                                 {
                                     let id = source.id.clone();
-                                    let is_refreshing = *refreshing_id.read() == id;
+                                    let is_refreshing = refreshing_ids.read().contains(&id);
                                     let edit_src = source.clone();
                                     let del_src = source.clone();
                                     rsx! {
@@ -361,142 +384,11 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                     }
                 }
             }
+            if !page_error.read().is_empty() { p { role: "alert", class: "text-sm text-red-600", "{page_error}" } }
+            if next_cursor.read().is_some() { button { class: "node-control", disabled: *page_busy.read() || *loading.read(), onclick: load_more, {t(l, "nodes.load_more")} } }
         }
 
-        if is_form_modal {
-            div {
-                class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
-                onclick: close_modal,
-                div {
-                    class: "w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
-                    onclick: move |e| e.stop_propagation(),
-                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
-                        if is_edit { {t(l, "sources.edit_title")} } else { {t(l, "sources.add")} }
-                    }
-                    div { class: "mt-4 space-y-4",
-                        div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "sources.name")} }
-                            input {
-                                class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
-                                r#type: "text",
-                                value: "{f_name}",
-                                oninput: move |e| f_name.set(e.value()),
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "sources.url")} }
-                            input {
-                                class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
-                                r#type: "url",
-                                value: "{f_url}",
-                                oninput: move |e| f_url.set(e.value()),
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "sources.source_type")} }
-                            select {
-                                class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
-                                value: "{f_type.read().as_str()}",
-                                onchange: move |e| f_type.set(SourceTypeDto::from_str(&e.value())),
-                                for st in SourceTypeDto::ALL.iter().copied() {
-                                    option { value: "{st.as_str()}", {st.label(l)} }
-                                }
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "sources.update_interval")} }
-                            input {
-                                class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
-                                r#type: "number",
-                                value: "{f_interval}",
-                                oninput: move |e| {
-                                    let v = e.value().parse::<u64>().unwrap_or(3600);
-                                    f_interval.set(v);
-                                },
-                            }
-                        }
-                        div { class: "flex items-center gap-4",
-                            label { class: "flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300",
-                                input {
-                                    r#type: "checkbox",
-                                    checked: *f_auto.read(),
-                                    onchange: move |e| f_auto.set(e.checked()),
-                                }
-                                {t(l, "sources.auto_update")}
-                            }
-                            label { class: "flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300",
-                                input {
-                                    r#type: "checkbox",
-                                    checked: *f_keep.read(),
-                                    onchange: move |e| f_keep.set(e.checked()),
-                                }
-                                {t(l, "sources.keep_on_fail")}
-                            }
-                        }
-                        if is_edit {
-                            label { class: "flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300",
-                                input {
-                                    r#type: "checkbox",
-                                    checked: *f_enabled.read(),
-                                    onchange: move |e| f_enabled.set(e.checked()),
-                                }
-                                {t(l, "nodes.enabled")}
-                            }
-                        }
-                    }
-
-                    if !form_error.read().is_empty() {
-                        div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400",
-                            "{form_error}"
-                        }
-                    }
-
-                    div { class: "mt-6 flex justify-end gap-2",
-                        button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                            onclick: close_modal,
-                            {t(l, "common.cancel")}
-                        }
-                        button {
-                            class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
-                            disabled: *saving.read(),
-                            onclick: do_submit,
-                            if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
-                        }
-                    }
-                }
-            }
-        }
-
-        if is_delete_modal {
-            div {
-                class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
-                onclick: close_modal,
-                div {
-                    class: "w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
-                    onclick: move |e| e.stop_propagation(),
-                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "common.delete")} }
-                    p { class: "mt-3 text-sm text-stone-600 dark:text-stone-400", {t(l, "sources.delete_confirm")} }
-                    if !form_error.read().is_empty() {
-                        div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400",
-                            "{form_error}"
-                        }
-                    }
-                    div { class: "mt-6 flex justify-end gap-2",
-                        button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                            onclick: close_modal,
-                            {t(l, "common.cancel")}
-                        }
-                        button {
-                            class: "rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50",
-                            disabled: *saving.read(),
-                            onclick: do_submit,
-                            if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.delete")} }
-                        }
-                    }
-                }
-            }
-        }
+        SourceModals { lang: props.lang, modal, f_name, f_url, f_type, f_auto, f_interval, f_keep, f_enabled,
+            form_error, saving, on_close: close_modal, on_submit: do_submit }
     }
 }

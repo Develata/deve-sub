@@ -137,3 +137,13 @@ X-Frame-Options: DENY, frame-ancestors 'none', and no-referrer. Public delivery
 keeps private/no-cache and ETag support. Subscription short-code probe counters
 are separate from login counters; malformed secret paths are redacted before
 tracing. Exact operational limits belong to the M2 and M6 blueprints.
+
+### Node organization boundary
+
+`GET /nodes/{id}/override` returns the complete editable override state.
+`PATCH /tags/{id}` replaces the tag's name/color while retaining its identity.
+`POST /nodes/batch-tags` accepts `mode: replace | add | remove` (default replace).
+Mutation modes are evaluated against current stored memberships atomically;
+Delivery never reads and rewrites sets to emulate add/remove. Domain graph
+validation uses the same protected snapshot as chain persistence. Invalid or
+missing references leave the whole batch unchanged.

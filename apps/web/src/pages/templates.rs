@@ -9,7 +9,7 @@ use crate::i18n::{Language, t};
 use crate::pages::template_gen_modal::{TemplateGenModal, TemplateGenModalProps};
 use crate::pages::template_modals::{TemplateModals, TemplateModalsProps};
 use crate::pages::template_types::{
-    CreateTemplateRequest, GenerationResultDto, GetTemplateResponse, ListTemplatesResponse,
+    CreateTemplateRequest, GenerationResultDto, ListTemplatesResponse,
     ListVersionsResponse, Modal, RollbackRequest, RollbackTemplateResponse, TemplateDto,
     TemplateResponse, TemplateVersionDto, UpdateTemplateRequest,
 };
@@ -23,11 +23,17 @@ pub struct TemplatesProps {
 pub fn TemplatesPage(props: TemplatesProps) -> Element {
     let l = *props.lang.read();
     let mut templates = use_signal(Vec::<TemplateDto>::new);
+    let mut next_cursor = use_signal(|| None::<String>);
+    let mut page_busy = use_signal(|| false);
+    let mut list_revision = use_signal(|| 0_u64);
+    let mut page_error = use_signal(String::new);
     let mut loading = use_signal(|| true);
     let mut error = use_signal(|| String::new());
     let mut modal = use_signal(|| Modal::None);
     let mut form_error = use_signal(|| String::new());
     let mut saving = use_signal(|| false);
+    let mut edit_revision = use_signal(|| 0_u64);
+    let mut edit_ready = use_signal(|| false);
 
     let mut f_name = use_signal(String::new);
     let mut f_desc = use_signal(String::new);
@@ -44,11 +50,16 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     let mut gen_error = use_signal(|| String::new());
     let mut is_generate = use_signal(|| true);
 
-    let fetch_templates = move || {
+    let mut fetch_templates = move || {
+        *list_revision.write() += 1;
+        let revision = *list_revision.read();
         spawn(async move {
             loading.set(true);
-            match crate::api::get::<ListTemplatesResponse>("/templates").await {
+            let result = crate::api::get::<ListTemplatesResponse>("/templates").await;
+            if revision != *list_revision.read() { return; }
+            match result {
                 Ok(resp) => {
+                    next_cursor.set(resp.next_cursor);
                     templates.set(resp.templates);
                     error.set(String::new());
                 }
@@ -58,11 +69,31 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         });
     };
 
+    let load_more = move |_| {
+        if *page_busy.read() || *loading.read() { return; }
+        let Some(cursor) = next_cursor.read().clone() else { return; };
+        let revision = *list_revision.read();
+        page_busy.set(true); page_error.set(String::new());
+        spawn(async move {
+            match crate::api::get::<ListTemplatesResponse>(&format!("/templates?cursor={cursor}")).await {
+                Ok(resp) if revision == *list_revision.read() => {
+                    next_cursor.set(resp.next_cursor); templates.write().extend(resp.templates);
+                }
+                Ok(_) => {}
+                Err(e) if revision == *list_revision.read() => page_error.set(e.message),
+                Err(_) => {}
+            }
+            page_busy.set(false);
+        });
+    };
+
     use_future(move || async move {
         fetch_templates();
     });
 
     let open_create = move |_| {
+        *edit_revision.write() += 1;
+        edit_ready.set(true);
         f_name.set(String::new());
         f_desc.set(String::new());
         f_spec.set(String::new());
@@ -75,19 +106,20 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         f_desc.set(t.description.clone());
         f_spec.set(String::new());
         form_error.set(String::new());
+        *edit_revision.write() += 1;
+        let revision = *edit_revision.read();
+        edit_ready.set(false);
         let tid = t.id.clone();
         spawn(async move {
-            match crate::api::get::<GetTemplateResponse>(&format!("/templates/{tid}")).await {
-                Ok(_) => {}
-                Err(e) => form_error.set(e.message),
-            }
-        });
-        let tid2 = t.id.clone();
-        spawn(async move {
-            match crate::api::get::<ListVersionsResponse>(&format!("/templates/{tid2}/versions")).await {
+            let result = crate::api::get::<ListVersionsResponse>(&format!("/templates/{tid}/versions")).await;
+            if revision != *edit_revision.read() { return; }
+            match result {
                 Ok(resp) => {
                     if let Some(v) = resp.versions.into_iter().find(|v| v.is_active) {
                         f_spec.set(v.spec_yaml);
+                        edit_ready.set(true);
+                    } else {
+                        form_error.set("Active template version is missing".to_string());
                     }
                 }
                 Err(e) => form_error.set(e.message),
@@ -146,10 +178,14 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     };
 
     let close_modal = move |_| {
+        if *saving.read() { return; }
+        *edit_revision.write() += 1;
         modal.set(Modal::None);
     };
 
     let do_submit = move |_| {
+        if *saving.read() { return; }
+        if matches!(*modal.read(), Modal::Edit(_)) && !*edit_ready.read() { return; }
         let state = (*modal.read()).clone();
         match state {
             Modal::Create => {
@@ -228,6 +264,7 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     };
 
     let do_rollback = move |v: TemplateVersionDto| {
+        if *saving.read() { return; }
         let state = (*modal.read()).clone();
         let tid = match state {
             Modal::Rollback { template, .. } => template.id.clone(),
@@ -365,9 +402,12 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
                     }
                 }
             }
+            if !page_error.read().is_empty() { p { role: "alert", class: "text-sm text-red-600", "{page_error}" } }
+            if next_cursor.read().is_some() { button { class: "node-control", disabled: *page_busy.read() || *loading.read(), onclick: load_more, {t(l, "nodes.load_more")} } }
         }
 
         TemplateModals {
+            edit_ready,
             lang: props.lang,
             modal,
             f_name,
@@ -389,6 +429,7 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
             saving,
             on_close: close_modal,
             on_rollback: open_rollback,
+            on_confirm_rollback: do_rollback,
         }
 
         TemplateGenModal {

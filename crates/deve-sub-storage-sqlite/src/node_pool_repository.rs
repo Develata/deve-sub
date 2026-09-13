@@ -12,6 +12,7 @@
 //! for the first source label. [`import_nodes`] inserts manually-parsed
 //! nodes with dedup but no source binding.
 
+mod chain;
 mod reconcile;
 mod write;
 use write::insert_node;
@@ -64,7 +65,7 @@ impl SqliteNodePoolRepository {
 }
 
 /// Serialize a value to a JSON string, mapping serde errors to [`SourceError`].
-fn to_json<T: serde::Serialize>(value: &T) -> Result<String, SourceError> {
+fn to_json<T: serde::Serialize + ?Sized>(value: &T) -> Result<String, SourceError> {
     serde_json::to_string(value).map_err(|e| SourceError::Storage(e.to_string()))
 }
 
@@ -157,13 +158,13 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             sql.push_str(" AND n.protocol_kind = ?");
         }
         if filter.region.is_some() {
-            sql.push_str(" AND n.region = ?");
+            sql.push_str(" AND COALESCE(o.region, n.region) = ?");
         }
         if !filter.include_missing {
             sql.push_str(" AND n.missing_from_source = 0");
         }
         if !filter.include_inactive {
-            sql.push_str(" AND n.status = 'active'");
+            sql.push_str(" AND COALESCE(o.enabled, n.status = 'active') = 1");
         }
         if cursor.is_some() {
             sql.push_str(" AND n.id > ?");
@@ -238,10 +239,11 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         Ok(entries)
     }
 
+    // Import dedup reads and writes share write admission, just like refresh.
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError> {
         let mut tx = self
             .pool
-            .begin()
+            .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
 
@@ -414,33 +416,6 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         node_id: NodeId,
         chain: Option<&[NodeId]>,
     ) -> Result<(), SourceError> {
-        let chain_json = match chain {
-            // WHY: NodeChain is #[serde(transparent)], so serializing the
-            // raw node IDs produces the same JSON as to_json(&NodeChain).
-            // Avoids constructing the domain entity (whose `nodes` field is
-            // pub(crate)) in the storage adapter.
-            Some(nodes) => Some(to_json(&nodes.to_vec())?),
-            None => None,
-        };
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        let result = sqlx::query("UPDATE nodes SET chain_json = ? WHERE id = ?")
-            .bind(&chain_json)
-            .bind(node_id.to_string())
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        if result.rows_affected() == 0 {
-            return Err(SourceError::NodeNotFound(node_id.to_string()));
-        }
-        // Chain changes alter emitted output (NODE-017) — invalidate cache.
-        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
-        tx.commit()
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        Ok(())
+        self.set_chain_checked(node_id, chain).await
     }
 }

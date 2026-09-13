@@ -18,6 +18,7 @@ async function apiCall(port: number, method: string, path: string, body?: unknow
 
   const res = await fetch(`http://127.0.0.1:${port}/api/v1${path}`, {
     method,
+    signal: AbortSignal.timeout(30_000),
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });

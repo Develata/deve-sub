@@ -10,6 +10,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never', outputFolder: `playwright-report/${RUN_ID}` }]],
   outputDir: `test-results/${RUN_ID}`,
   timeout: 60_000,
+  globalTimeout: 600_000,
   expect: { timeout: 15_000 },
   globalSetup: './global-setup.ts',
   use: {

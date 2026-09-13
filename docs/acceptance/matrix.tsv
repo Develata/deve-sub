@@ -152,3 +152,4 @@ BACKUP-001	备份创建	P2	CLI	pass
 BACKUP-002	备份内容验证	P2	Integration	pass
 BACKUP-003	恢复+验证	P2	CLI	pass
 BACKUP-004	恢复时前向迁移	P2	Integration	pass
+OUT-016	Web订阅创建与管理分页	P0	E2E	pass

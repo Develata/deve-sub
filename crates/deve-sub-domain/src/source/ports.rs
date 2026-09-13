@@ -14,6 +14,10 @@ use crate::{Node, ProtocolKind};
 /// Storage boundary for source aggregates.
 #[async_trait]
 pub trait SourceRepository: Send + Sync {
+    /// Disable after failure only if the current persisted keep-on-fail policy
+    /// requires it. Never overwrite concurrently updated source configuration.
+    async fn disable_after_failure(&self, id: SourceId) -> Result<(), SourceError>;
+
     /// Create a new source. Returns [`SourceError::NameExists`] if the name
     /// is already taken.
     async fn create(&self, source: &Source) -> Result<(), SourceError>;
@@ -310,8 +314,9 @@ pub trait NodePoolRepository: Send + Sync {
 
     /// Set or clear a single node's chain (NODE-017). `chain = None` clears
     /// the column (direct connection); `Some(vec)` persists the ordered
-    /// node IDs as a JSON array. The caller is responsible for structural
-    /// validation and cycle detection before calling.
+    /// node IDs as a JSON array. Implementations must check references and
+    /// invoke domain structure/cycle validation in the same protected snapshot
+    /// as the write; earlier caller validation cannot replace this guarantee.
     async fn set_node_chain(
         &self,
         node_id: NodeId,

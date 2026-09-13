@@ -10,7 +10,7 @@ use axum::response::Json;
 use deve_sub_application::audit;
 use deve_sub_contract::{AuditLogDto, ErrorResponse, ListAuditLogsResponse};
 use deve_sub_domain::AuditLogFilter;
-use deve_sub_kernel::{AuditLogId, UserId};
+use deve_sub_kernel::{AuditLogId, Timestamp, UserId};
 
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
@@ -33,6 +33,10 @@ pub struct ListAuditLogsQuery {
     pub target_type: Option<String>,
     /// Filter by target ID.
     pub target_id: Option<String>,
+    /// Inclusive RFC3339 timestamp at whole-second precision.
+    pub since: Option<String>,
+    /// Exclusive RFC3339 timestamp at whole-second precision.
+    pub before: Option<String>,
 }
 
 fn default_page_size() -> u32 {
@@ -64,6 +68,8 @@ fn entry_to_dto(entry: &deve_sub_domain::AuditLog) -> AuditLogDto {
         ("action" = Option<String>, Query, description = "Filter by action (e.g. \"auth.login\")"),
         ("target_type" = Option<String>, Query, description = "Filter by target type (e.g. \"user\")"),
         ("target_id" = Option<String>, Query, description = "Filter by target ID"),
+        ("since" = Option<String>, Query, description = "Inclusive RFC3339 timestamp (whole seconds)"),
+        ("before" = Option<String>, Query, description = "Exclusive RFC3339 timestamp (whole seconds)"),
     ),
     responses(
         (status = 200, description = "Audit log entries", body = ListAuditLogsResponse),
@@ -111,18 +117,13 @@ async fn list_audit_logs(
         action: q.action,
         target_type: q.target_type,
         target_id: q.target_id,
+        since: parse_time(q.since.as_deref())?,
+        before: parse_time(q.before.as_deref())?,
     };
 
     let entries = audit::list_audit_logs(state.audit_log_repo.as_ref(), &filter, cursor, limit)
         .await
-        .map_err(|e| {
-            tracing::warn!(error = %e, "list_audit_logs failed");
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                "failed to list audit logs",
-            )
-        })?;
+        .map_err(crate::audit_cleanup::map_error)?;
 
     let next_cursor = if entries.len() as u32 >= limit {
         entries.last().map(|e| e.id.to_string())
@@ -142,5 +143,23 @@ pub fn register(
     router: utoipa_axum::router::OpenApiRouter<AppState>,
 ) -> utoipa_axum::router::OpenApiRouter<AppState> {
     use utoipa_axum::routes;
-    router.routes(routes!(list_audit_logs))
+    crate::audit_cleanup::register(router.routes(routes!(list_audit_logs)))
+}
+
+fn parse_time(value: Option<&str>) -> Result<Option<Timestamp>, (StatusCode, Json<ErrorResponse>)> {
+    value
+        .map(|value| {
+            let parsed =
+                time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+                    .ok()
+                    .filter(|ts| ts.nanosecond() == 0);
+            parsed.map(Timestamp::from_offset_date_time).ok_or_else(|| {
+                err(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_time",
+                    "use an RFC3339 timestamp at whole-second precision",
+                )
+            })
+        })
+        .transpose()
 }

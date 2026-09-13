@@ -16,6 +16,10 @@ restore the previous unit/binary/Web before clearing it. An old process must
 pass readiness and version checks before automatic rollback removes backups.
 Docker upgrades replace the complete versioned image.
 
+Runtime rotation and audit retention/manual cleanup are documented in
+[日志管理](logging.md). Compose bounds its own runtime logs; database audit history
+defaults to 90 days in builds containing the M10 lifecycle extension (0 disables).
+
 `deve-sub update` replaces the native binary and checks a signed manifest by
 default. With Web serving enabled (including default configuration), it refuses
 before downloading unless `--binary-only` explicitly accepts frontend version

@@ -6,6 +6,7 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
+use deve_sub_application::audit::record_node_action;
 use deve_sub_application::source::{self, UpdateOverrideParams};
 use deve_sub_contract::{
     BatchEnabledRequest, BatchResultDto, BatchTagsRequest, CreateTagRequest, ErrorResponse,
@@ -53,7 +54,7 @@ async fn get_override(
     responses((status = 200, description = "Tag updated", body = TagResponse), (status = 400, description = "Invalid input", body = ErrorResponse), (status = 404, description = "Tag not found", body = ErrorResponse), (status = 409, description = "Name exists", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn update_tag(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<CreateTagRequest>,
 ) -> Result<Json<TagResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -68,6 +69,15 @@ async fn update_tag(
     )
     .await
     .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "tag.update",
+        "tag",
+        Some(tag.id.to_string()),
+        1,
+    )
+    .await;
     Ok(Json(TagResponse {
         tag: tag_to_dto(&tag),
     }))
@@ -80,7 +90,7 @@ async fn update_tag(
     responses((status = 200, description = "Override applied", body = NodeOverrideResponse), (status = 400, description = "Invalid node id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Node not found", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn update_override(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateOverrideRequest>,
 ) -> Result<Json<NodeOverrideResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -102,6 +112,15 @@ async fn update_override(
     )
     .await
     .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "node.override.update",
+        "node",
+        Some(node_id.to_string()),
+        1,
+    )
+    .await;
     Ok(Json(NodeOverrideResponse {
         override_: override_to_dto(&ov),
     }))
@@ -113,13 +132,22 @@ async fn update_override(
     responses((status = 204, description = "Override deleted"), (status = 400, description = "Invalid node id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn delete_override(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let node_id = parse_node_id(&id)?;
     source::delete_override(state.override_repo.as_ref(), node_id)
         .await
         .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "node.override.delete",
+        "node",
+        Some(node_id.to_string()),
+        1,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -129,7 +157,7 @@ async fn delete_override(
     responses((status = 200, description = "Region updated", body = RegionResponse), (status = 400, description = "Invalid node id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Node not found", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn set_region(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<SetRegionRequest>,
 ) -> Result<Json<RegionResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -142,6 +170,15 @@ async fn set_region(
     )
     .await
     .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "node.region.update",
+        "node",
+        Some(node_id.to_string()),
+        1,
+    )
+    .await;
     Ok(Json(region_to_response(&assignment)))
 }
 
@@ -152,7 +189,7 @@ async fn set_region(
     responses((status = 200, description = "Chain updated", body = NodeChainResponse), (status = 400, description = "Invalid node id or chain structure", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Node not found", body = ErrorResponse), (status = 409, description = "Chain would create a cycle", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn set_node_chain(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<SetNodeChainRequest>,
 ) -> Result<Json<NodeChainResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -166,6 +203,15 @@ async fn set_node_chain(
     let result = source::set_node_chain(state.pool_repo.as_ref(), node_id, chain_nodes)
         .await
         .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "node.chain.update",
+        "node",
+        Some(node_id.to_string()),
+        1,
+    )
+    .await;
     Ok(Json(NodeChainResponse {
         nodes: result
             .unwrap_or_default()
@@ -181,13 +227,22 @@ async fn set_node_chain(
     responses((status = 200, description = "Batch applied", body = BatchResultDto), (status = 400, description = "Invalid node ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse), (status = 404, description = "Node or tag not found", body = ErrorResponse)))]
 async fn batch_set_enabled(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<BatchEnabledRequest>,
 ) -> Result<Json<BatchResultDto>, (StatusCode, Json<ErrorResponse>)> {
     let node_ids: Vec<NodeId> = parse_ids(&req.node_ids)?;
     let updated = source::batch_set_enabled(state.override_repo.as_ref(), node_ids, req.enabled)
         .await
         .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "node.enabled.batch",
+        "node",
+        None,
+        updated,
+    )
+    .await;
     Ok(Json(BatchResultDto { updated }))
 }
 
@@ -197,7 +252,7 @@ async fn batch_set_enabled(
     responses((status = 204, description = "Tags updated"), (status = 400, description = "Invalid ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse), (status = 404, description = "Node or tag not found", body = ErrorResponse)))]
 async fn set_node_tags(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
     Json(req): Json<SetNodeTagsRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -206,6 +261,15 @@ async fn set_node_tags(
     source::set_node_tags(state.override_repo.as_ref(), node_id, tag_ids)
         .await
         .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "node.tags.update",
+        "node",
+        Some(node_id.to_string()),
+        1,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -215,9 +279,15 @@ async fn set_node_tags(
     responses((status = 204, description = "Batch tags applied"), (status = 400, description = "Invalid ids", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse), (status = 404, description = "Node or tag not found", body = ErrorResponse)))]
 async fn batch_set_tags(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<BatchTagsRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let affected = req
+        .assignments
+        .iter()
+        .map(|a| &a.node_id)
+        .collect::<std::collections::HashSet<_>>()
+        .len() as u64;
     let mut assignments = Vec::with_capacity(req.assignments.len());
     for a in &req.assignments {
         let node_id = parse_node_id(&a.node_id)?;
@@ -232,6 +302,15 @@ async fn batch_set_tags(
     source::batch_modify_tags(state.override_repo.as_ref(), assignments, mode)
         .await
         .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "node.tags.batch",
+        "node",
+        None,
+        affected,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -256,7 +335,7 @@ async fn list_tags(
     responses((status = 201, description = "Tag created", body = TagResponse), (status = 400, description = "Invalid input", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 409, description = "Tag name already exists", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn create_tag(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<CreateTagRequest>,
 ) -> Result<(StatusCode, Json<TagResponse>), (StatusCode, Json<ErrorResponse>)> {
     let tag = source::create_tag(
@@ -266,6 +345,15 @@ async fn create_tag(
     )
     .await
     .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "tag.create",
+        "tag",
+        Some(tag.id.to_string()),
+        1,
+    )
+    .await;
     Ok((
         StatusCode::CREATED,
         Json(TagResponse {
@@ -280,7 +368,7 @@ async fn create_tag(
     responses((status = 204, description = "Tag deleted"), (status = 400, description = "Invalid tag id", body = ErrorResponse), (status = 401, description = "Not authenticated", body = ErrorResponse), (status = 403, description = "Not an admin", body = ErrorResponse), (status = 404, description = "Tag not found", body = ErrorResponse), (status = 500, description = "Internal error", body = ErrorResponse)))]
 async fn delete_tag(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let tag_id = id
@@ -289,6 +377,15 @@ async fn delete_tag(
     source::delete_tag(state.override_repo.as_ref(), tag_id)
         .await
         .map_err(map_error)?;
+    record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "tag.delete",
+        "tag",
+        Some(tag_id.to_string()),
+        1,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -24,7 +24,10 @@ pub mod template;
 pub mod tls;
 pub mod transport;
 
-pub use audit::{AuditError, AuditLog, AuditLogFilter, AuditLogRepository};
+pub use audit::{
+    AUDIT_CLEANUP_BATCH, AuditCleanupPreview, AuditError, AuditLog, AuditLogFilter,
+    AuditLogRepository,
+};
 pub use endpoint::{DomainName, Endpoint, Host};
 pub use error::DomainError;
 pub use identity::{

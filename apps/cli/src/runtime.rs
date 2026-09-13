@@ -3,6 +3,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use deve_sub_domain::AuditLogRepository;
+
 use deve_sub_application::{JobSupervisor, LoginRateLimiter};
 use deve_sub_storage_sqlite::SqliteMaintenance;
 
@@ -10,6 +12,8 @@ use deve_sub_storage_sqlite::SqliteMaintenance;
 /// SQL details remain entirely in the SQLite adapter.
 pub async fn maintain(
     maintenance: Arc<SqliteMaintenance>,
+    audit: Arc<dyn AuditLogRepository>,
+    audit_retention_days: u32,
     jobs: Arc<JobSupervisor>,
     limiter: Arc<dyn LoginRateLimiter>,
     mut shutdown: tokio::sync::broadcast::Receiver<()>,
@@ -30,15 +34,20 @@ pub async fn maintain(
                     rate_limiter_entries = limiter.resident_entries(),
                     "runtime resources"
                 );
-                match tokio::time::timeout(Duration::from_secs(10), async {
+                let pruning = tokio::time::timeout(Duration::from_secs(10), async {
                     for _ in 0..10 {
-                        if maintenance.prune_history().await? == 0 { break; }
+                        if prune_round(&maintenance, audit.as_ref(), audit_retention_days).await == 0 { break; }
                     }
-                    Ok::<(), deve_sub_storage_sqlite::StorageError>(())
-                }).await {
-                    Ok(Ok(_)) => {}
-                    Ok(Err(error)) => tracing::warn!(%error, "sqlite retention failed"),
-                    Err(_) => tracing::warn!("sqlite retention timed out"),
+
+                });
+                let result = tokio::select! {
+                    biased;
+                    _ = shutdown.recv() => return,
+                    result = pruning => result,
+                };
+                match result {
+                    Ok(()) => {}
+                    Err(_) => tracing::warn!("history retention timed out"),
                 }
                 checkpoint(&maintenance).await;
             }
@@ -55,3 +64,31 @@ pub async fn checkpoint(maintenance: &SqliteMaintenance) {
         Err(_) => tracing::warn!("sqlite checkpoint timed out"),
     }
 }
+
+// Each history family gets an attempt even if the other is corrupt. Otherwise
+// an audit receipt failure would indefinitely disable session/outbox retention.
+async fn prune_round(
+    maintenance: &SqliteMaintenance,
+    audit: &dyn AuditLogRepository,
+    days: u32,
+) -> u64 {
+    let history = match maintenance.prune_history().await {
+        Ok(deleted) => deleted,
+        Err(error) => {
+            tracing::warn!(%error, "sqlite retention failed");
+            0
+        }
+    };
+    let audit = match deve_sub_application::audit::prune_audit_logs(audit, days).await {
+        Ok(deleted) => deleted,
+        Err(error) => {
+            tracing::warn!(%error, "audit retention failed");
+            0
+        }
+    };
+    history + audit
+}
+
+#[cfg(test)]
+#[path = "runtime_tests.rs"]
+mod tests;

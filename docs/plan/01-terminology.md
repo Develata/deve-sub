@@ -195,9 +195,11 @@ An append-only record of actor actions on targets. The `audit_log` table
 (schema migration 0002) stores: `actor_id` (the user who performed the
 action, `NULL` for system/anonymous), `action` (e.g. `"auth.login"`,
 `"source.create"`), `target_type` and `target_id` (the entity affected),
-`details_json` (non-sensitive metadata), and `created_at`. No updates, no
-deletes. Audit log writes are best-effort (non-blocking); losing an entry is
-preferable to failing a user-facing operation.
+`details_json` (non-sensitive metadata), and `created_at`. Events are immutable;
+bounded manual cleanup and retention are the only deletion paths (M10).
+Ordinary audit writes are best-effort; losing an entry is preferable to failing
+a user-facing operation. Cleanup is the exception: its deletion and accountability
+receipt commit atomically, or neither commits.
 
 ## Architecture
 

@@ -1,25 +1,36 @@
 import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { createServer } from 'net';
+import { randomInt } from 'crypto';
 import { resolve } from 'path';
 import { Servers } from '../server-lifecycle';
 
 const root = resolve(__dirname, '../../..');
-type Fixtures = { server: string; api: APIRequestContext };
+type Fixtures = { server: string; api: APIRequestContext; auditRetentionDays: number; auditRetentionEnv: number | undefined; oldAuditCount: number };
 
 /** Every case owns its database/process/session; only race requests share state. */
 export const test = base.extend<Fixtures>({
-  server: async ({}, use, info) => {
+  auditRetentionDays: [90, { option: true }],
+  auditRetentionEnv: [undefined, { option: true }],
+  oldAuditCount: [0, { option: true }],
+  server: async ({ auditRetentionDays, auditRetentionEnv, oldAuditCount }, use, info) => {
     const port = await new Promise<number>((resolve, reject) => {
       const socket = createServer();
-      socket.once('error', reject);
-      socket.listen(0, '127.0.0.1', () => {
+      let attempts = 0;
+      socket.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EADDRINUSE' && ++attempts < 20) socket.listen(randomInt(20000, 30000), '127.0.0.1');
+        else reject(error);
+      });
+      // Linux client ephemeral ports can claim a listen(0) allocation during
+      // migration. Use a checked port below that range for test servers.
+      socket.once('listening', () => {
         const port = (socket.address() as { port: number }).port;
         socket.close(error => error ? reject(error) : resolve(port));
       });
+      socket.listen(randomInt(20000, 30000), '127.0.0.1');
     });
     const servers = new Servers(process.env.DEVE_SUB_BINARY ?? resolve(root, 'target/release/deve-sub'),
       process.env.DEVE_SUB_WEB_DIST ?? resolve(root, 'apps/web/dist'), info.outputPath('server-logs'));
-    try { await servers.start(port); await use(`http://127.0.0.1:${port}`); }
+    try { await servers.start(port, { auditRetentionDays, auditRetentionEnv, oldAuditCount }); await use(`http://127.0.0.1:${port}`); }
     finally { await servers.stop(); }
   },
   baseURL: async ({ server }, use) => use(server),

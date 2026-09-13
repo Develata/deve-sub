@@ -45,12 +45,14 @@ pub(crate) async fn prune(pool: &SqlitePool) -> Result<u64, StorageError> {
         ))
         .execute(pool).await?;
         total += result.rows_affected();
-        tracing::info!(
-            table,
-            pruned = result.rows_affected(),
-            batch_limit = 500,
-            "sqlite retention"
-        );
+        if result.rows_affected() > 0 {
+            tracing::info!(
+                table,
+                pruned = result.rows_affected(),
+                batch_limit = 500,
+                "sqlite retention"
+            );
+        }
     }
     Ok(total)
 }

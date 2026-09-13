@@ -238,7 +238,7 @@ async fn get_node(
 )]
 async fn import_nodes(
     State(state): State<NodeState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(req): Json<ImportNodesRequest>,
 ) -> Result<Json<ImportNodesResponse>, (StatusCode, Json<ErrorResponse>)> {
     if req.content.is_empty() {
@@ -287,6 +287,15 @@ async fn import_nodes(
     // We add them here so the response reports the true failure count.
     let total_failed = result.failed + failed_count;
 
+    deve_sub_application::audit::record_node_action(
+        state.audit_log_repo.as_ref(),
+        admin.user.id,
+        "node.import",
+        "node",
+        None,
+        result.new_nodes,
+    )
+    .await;
     Ok(Json(ImportNodesResponse {
         new_nodes: result.new_nodes,
         duplicate_nodes: result.duplicate_nodes,

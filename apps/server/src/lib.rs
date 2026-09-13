@@ -32,13 +32,13 @@ use deve_sub_domain::{
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
-use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use utoipa_scalar::{Scalar, Servable};
 
 use deve_sub_security::MasterKey;
 
 pub mod audit;
+mod audit_cleanup;
 pub mod auth;
 mod client_ip;
 pub mod csrf;
@@ -119,12 +119,11 @@ pub struct AppState {
 /// Build the complete Axum router with all routes and middleware.
 ///
 /// Middleware stack (outermost to innermost):
-/// 1. `SetRequestIdLayer` — assign `x-request-id` before tracing
-/// 2. `TraceLayer` — structured per-request logs
-/// 3. `PropagateRequestIdLayer` — copy `x-request-id` to response
-/// 4. `CorsLayer` — only when `server.allowed_origins` is non-empty (the
+/// 1. Response security headers and no-store policy
+/// 2. Request tracing — server-owned ID, redacted completion log, response ID
+/// 3. `CorsLayer` — only when `server.allowed_origins` is non-empty (the
 ///    default same-origin deployment needs no CORS headers)
-/// 5. `CompressionLayer` — gzip compression
+/// 4. `CompressionLayer` — gzip compression
 ///
 /// CSRF protection (`Origin` header validation) is applied to the API router
 /// only, not to the Scalar docs endpoint.
@@ -168,9 +167,7 @@ pub fn build_router(state: AppState) -> Router {
         None => router,
     };
     router
-        .layer(PropagateRequestIdLayer::x_request_id())
-        .layer(crate::logging::redacting_trace_layer())
-        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(axum::middleware::from_fn(crate::logging::trace_request))
         .layer(axum::middleware::from_fn(crate::response_security::protect))
 }
 

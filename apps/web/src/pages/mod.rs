@@ -3,6 +3,8 @@
 #![cfg(target_family = "wasm")]
 
 pub mod audit;
+pub mod audit_cleanup;
+pub mod audit_table;
 pub mod audit_types;
 pub mod dashboard;
 pub mod login;

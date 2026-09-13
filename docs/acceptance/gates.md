@@ -325,3 +325,43 @@ these settings. Operator action remains: prohibit main force-push/deletion,
 require `acceptance-gate`, protect immutable `v*` tags and configure the intended
 release environment. No additional reviewer quota or commit-signing ritual is
 required by this round; publisher authentication remains the signed manifest.
+
+
+## M10 log lifecycle verification (2026-09-13)
+
+Owner: primary agent; storage/concurrency and API/UI review lanes closed without
+remaining accepted blockers. Scope: AUDIT-001/003/004/005, LOG-001.
+
+- `cargo check --locked --all-targets --all-features` and Clippy with `-D warnings`: pass.
+- Full Rust baseline: 89 suites, **1017 passed, 0 failed, 7 ignored**. The existing
+  six external client validators and real long-soak test remain not-run; the
+  separate 90-second smoke does not promote those to pass. Doc tests: pass.
+- `functional.config.ts`: **36 passed**, four workers, zero retries (8 API cases
+  plus 14 browser cases at desktop and mobile). Existing browser suite: **16 passed**;
+  lifecycle harness: **3 passed**. New cases use isolated old audit fixtures;
+  environment retention 90 overrides configuration 0 in the real serve process.
+- Storage proves bounded deletion, concurrent confirmation/writing, rollback on
+  receipt failure, cancellation while waiting for the write lock, cutoff boundary,
+  disabled retention, index selection and pre-migration backup recovery. CLI
+  fault injection proves audit failure cannot disable other historical retention.
+- Docker rotation against the existing application smoke image (including its
+  declared `/app/data` volume): **45000 records written, 26567322 bytes retained**,
+  first surviving record 19030, latest marker preserved, **0 anonymous volumes**.
+  Declared image volumes are replaced with tmpfs. Only the uniquely labeled test
+  container is removed. The same script is registered in the Docker CI job.
+- Real 90-second resource smoke: **8039 requests, 0 request failures, 0 error logs,
+  3 checkpoint samples**; status PASS. The smoke process explicitly enables the
+  maintenance module's debug events so normal application logging can stay quiet.
+- Web/WASM build and regenerated pinned Tailwind CSS: pass. Formatting, architecture,
+  docs/acceptance gates: pass. Matrix: **157 cases, 150 pass, 7 not-run**, with
+  **396 verified proof symbols**. CI helper tests: **17 passed**.
+
+The first browser attempt exposed a test port allocation race with Linux client
+ports and an overly exact implicit-label locator; checked ports below the client
+range and a role/name locator resolved them. The first resource smoke retained
+only info logs and could not see debug checkpoint events; module-level logging
+restored the existing assertion. These were rerun successfully, not skipped.
+
+No production audit data or shared system journal was cleaned. Native systemd
+journal retention remains host-owned. This verification does not publish a new
+image, change an existing container, or run a release workflow.

@@ -1,20 +1,19 @@
-//! HTTP request tracing with secret-path redaction (DS-AUD-029).
+//! HTTP completion tracing with server-owned correlation IDs and path redaction.
 //!
-//! The global `TraceLayer` logs the request URI for every request. Public
-//! subscription delivery routes (`/sub/{token}`, `/sub/{token}/{profile}`,
-//! `/s/{code}`, `/s/{code}/{profile}`) carry the raw delivery token or short
-//! code in the path — a secret that must not appear in logs. This module
-//! provides a custom span builder that replaces those path segments with
-//! `***` before they enter the tracing span.
-//!
-//! See ADR-0007 §"Redaction boundary" and the constitution §"Data and
-//! security": sensitive fields are redacted in logs.
+//! Public delivery paths carry secret tokens or short codes. Only recognized
+//! client profile suffixes survive redaction; queries, headers and bodies are
+//! excluded. See ADR-0007 and M10's log lifecycle (LOG-001).
 
-use std::fmt::Debug;
+use std::time::Instant;
 
-use axum::http::Request;
-use tower_http::trace::{MakeSpan, TraceLayer};
-use tracing::Span;
+use axum::{
+    body::Body,
+    http::{HeaderValue, Request},
+    middleware::Next,
+    response::Response,
+};
+use deve_sub_kernel::AuditLogId;
+use tracing::Instrument;
 
 const REDACTED: &str = "***";
 
@@ -72,32 +71,41 @@ pub fn redacted_uri<B>(request: &Request<B>) -> String {
     result
 }
 
-/// A `MakeSpan` implementation that records the redacted URI and HTTP method.
-#[derive(Debug, Clone)]
-pub struct RedactingMakeSpan;
-
-impl<B> MakeSpan<B> for RedactingMakeSpan {
-    fn make_span(&mut self, request: &Request<B>) -> Span {
-        let method = request.method().as_str();
-        let uri = redacted_uri(request);
-        tracing::debug_span!(
-            "http.request",
-            method = %method,
-            uri = %uri,
-        )
+/// Record a completion event and correlate handler events without accepting
+/// attacker-controlled request IDs, headers, query strings or request bodies.
+pub async fn trace_request(mut request: Request<Body>, next: Next) -> Response {
+    let request_id = AuditLogId::new().to_string();
+    if let Ok(value) = HeaderValue::from_str(&request_id) {
+        request.headers_mut().insert("x-request-id", value);
     }
-}
-
-/// Build a `TraceLayer` that redacts secret path segments before logging.
-///
-/// The returned layer is a `TraceLayer` configured for HTTP tracing with a
-/// custom span builder ([`RedactingMakeSpan`]) that replaces `/sub/{token}`
-/// and `/s/{code}` path segments with `***` (DS-AUD-029).
-pub fn redacting_trace_layer() -> TraceLayer<
-    tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>,
-    RedactingMakeSpan,
-> {
-    TraceLayer::new_for_http().make_span_with(RedactingMakeSpan)
+    let uri = redacted_uri(&request);
+    let method = request.method().clone();
+    let quiet = (uri.starts_with("/health/")
+        || (!uri.starts_with("/api/") && !uri.starts_with("/sub/") && !uri.starts_with("/s/")))
+        && method == axum::http::Method::GET;
+    let span = tracing::info_span!("http.request", %request_id, method = %method, uri = %uri);
+    async move {
+        let start = Instant::now();
+        let mut response = next.run(request).await;
+        let status = response.status().as_u16();
+        let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
+        if status >= 500 {
+            tracing::error!(status, duration_ms, "http request completed");
+        } else if status >= 400 {
+            tracing::warn!(status, duration_ms, "http request completed");
+        } else if quiet {
+            tracing::debug!(status, duration_ms, "http request completed");
+        } else {
+            tracing::info!(status, duration_ms, "http request completed");
+        }
+        // ULIDs contain only ASCII letters and digits, always valid in a header.
+        if let Ok(value) = HeaderValue::from_str(&request_id) {
+            response.headers_mut().insert("x-request-id", value);
+        }
+        response
+    }
+    .instrument(span)
+    .await
 }
 
 #[cfg(test)]

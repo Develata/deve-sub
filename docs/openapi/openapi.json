@@ -66,6 +66,24 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Inclusive RFC3339 timestamp (whole seconds)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Exclusive RFC3339 timestamp (whole seconds)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -111,6 +129,222 @@
           },
           "500": {
             "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/audit-logs/cleanup": {
+      "post": {
+        "operationId": "cleanup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditCleanupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditCleanupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/audit-logs/cleanup/preview": {
+      "post": {
+        "operationId": "preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditCleanupPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditCleanupPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/audit-logs/policy": {
+      "get": {
+        "operationId": "policy",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -6245,6 +6479,84 @@
           }
         }
       },
+      "AuditCleanupPreviewRequest": {
+        "type": "object",
+        "description": "Select a cleanup cutoff using the server clock.",
+        "required": [
+          "keep_days"
+        ],
+        "properties": {
+          "keep_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Whole days to keep, between 1 and 3650.",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditCleanupPreviewResponse": {
+        "type": "object",
+        "description": "Exact bounded snapshot that must be confirmed before deletion.",
+        "required": [
+          "before_unix_ms",
+          "entry_ids",
+          "has_more"
+        ],
+        "properties": {
+          "before_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "entry_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "has_more": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AuditCleanupRequest": {
+        "type": "object",
+        "description": "Confirm exactly the IDs and cutoff returned by preview.",
+        "required": [
+          "before_unix_ms",
+          "entry_ids"
+        ],
+        "properties": {
+          "before_unix_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "entry_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditCleanupResponse": {
+        "type": "object",
+        "description": "Committed cleanup result; the receipt is queryable in the audit log.",
+        "required": [
+          "deleted",
+          "receipt_id"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "receipt_id": {
+            "type": "string"
+          }
+        }
+      },
       "AuditLogDto": {
         "type": "object",
         "description": "A single audit log entry.",
@@ -6293,6 +6605,25 @@
               "null"
             ],
             "description": "Target entity type (e.g. `\"user\"`, `\"source\"`)."
+          }
+        }
+      },
+      "AuditPolicyResponse": {
+        "type": "object",
+        "description": "Effective server-owned retention policy; zero disables automatic expiry.",
+        "required": [
+          "retention_days",
+          "batch_limit"
+        ],
+        "properties": {
+          "batch_limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retention_days": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },

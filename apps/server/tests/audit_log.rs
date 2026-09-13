@@ -7,6 +7,9 @@
 
 use std::sync::Arc;
 
+#[path = "audit_log/cleanup.rs"]
+mod cleanup_tests;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;

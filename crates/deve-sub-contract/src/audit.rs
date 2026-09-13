@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 /// A single audit log entry.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct AuditLogDto {
     /// ULID identifier.
@@ -36,4 +36,47 @@ pub struct ListAuditLogsResponse {
     /// Cursor for the next page (`None` if no more results). The cursor is
     /// the oldest entry's ULID in the current page.
     pub next_cursor: Option<String>,
+}
+
+/// Effective server-owned retention policy; zero disables automatic expiry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct AuditPolicyResponse {
+    pub retention_days: u32,
+    pub batch_limit: usize,
+}
+
+/// Select a cleanup cutoff using the server clock.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct AuditCleanupPreviewRequest {
+    /// Whole days to keep, between 1 and 3650.
+    pub keep_days: u32,
+}
+
+/// Exact bounded snapshot that must be confirmed before deletion.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct AuditCleanupPreviewResponse {
+    pub before_unix_ms: i64,
+    pub entry_ids: Vec<String>,
+    pub has_more: bool,
+}
+
+/// Confirm exactly the IDs and cutoff returned by preview.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct AuditCleanupRequest {
+    pub before_unix_ms: i64,
+    pub entry_ids: Vec<String>,
+}
+
+/// Committed cleanup result; the receipt is queryable in the audit log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct AuditCleanupResponse {
+    pub deleted: usize,
+    pub receipt_id: String,
 }

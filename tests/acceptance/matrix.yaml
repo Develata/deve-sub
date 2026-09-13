@@ -2116,6 +2116,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/audit_log/cleanup.rs::audit_001_time_range_and_invalid_cleanup_inputs"
+        - "tests/e2e/functional/logging-ui.spec.ts::audit001_ui_old_response_cannot_replace_new_filter"
         - "apps/server/tests/audit_log.rs::audit_log_query_returns_entries"
         - "apps/server/tests/audit_log.rs::audit_log_query_filter_by_action"
         - "apps/server/tests/audit_log.rs::audit_log_query_filter_by_actor"
@@ -2147,12 +2149,71 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/logging-api.spec.ts::log001_default_logs_correlate_results_and_redact_secrets"
         - "apps/server/tests/audit_crud.rs::source_crud_audited"
         - "apps/server/tests/audit_crud.rs::template_crud_audited"
         - "apps/server/tests/audit_crud.rs::subscription_crud_audited"
         - "apps/server/tests/audit_crud.rs::probe_source_crud_audited"
         - "apps/server/tests/audit_crud.rs::source_create_audit_has_correct_target"
         - "apps/server/tests/audit_log.rs::user_management_audited"
+      status: pass
+  - id: AUDIT-004
+    title: 审计日志手动清理
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions:
+      - "先预览最多500条，明确截止时间后确认；变更冲突409，重复确认不重复删除"
+      - "并发写入保留近期事件；删除和回执同事务，失败或取消后可恢复；管理员与CSRF保护"
+    fixtures: []
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_preview_is_read_only_and_cleanup_is_bounded"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_concurrent_confirmations_and_writes_preserve_new_events"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_receipt_failure_rolls_back_deletion"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_invalid_scope_and_changed_preview_do_not_delete"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_cancelled_lock_wait_can_retry_without_partial_deletion"
+        - "apps/server/tests/audit_log/cleanup.rs::audit_004_api_preview_confirm_receipt_and_replay"
+        - "apps/server/tests/audit_log/cleanup.rs::audit_004_cleanup_requires_admin_and_same_origin"
+        - "tests/e2e/functional/logging-ui.spec.ts::audit004_ui_preview_cancel_confirm_and_receipt"
+        - "tests/e2e/functional/logging-ui.spec.ts::audit004_ui_concurrent_cleanup_requires_new_preview"
+      status: pass
+  - id: AUDIT-005
+    title: 审计日志自动回收
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions:
+      - "默认90天，0禁用，范围校验与env覆盖生效；每分钟有限批次回收"
+      - "迁移与备份恢复保留事件，清理错误不阻止其他历史回收"
+    fixtures: []
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_005_retention_disable_cutoff_and_unrelated_state"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_005_migration_index_and_backup_recovery"
+        - "crates/deve-sub-application/src/config/tests.rs::audit_005_retention_defaults_disable_and_validation"
+        - "apps/cli/src/runtime_tests.rs::audit_005_receipt_failure_does_not_block_other_retention"
+        - "tests/e2e/functional/logging-api.spec.ts::audit005_runtime_retention_reclaims_only_expired_events"
+      status: pass
+  - id: LOG-001
+    title: 运行日志清晰记录与容量轮转
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions:
+      - "默认级别记录脱敏路径、状态、耗时、服务端request_id；公开200/304/404均可追踪"
+      - "Docker local 10m×3轮转保留最新日志，独立临时容器验证，不触及用户数据"
+    fixtures: []
+    evidence:
+      tests:
+        - "tests/e2e/functional/logging-api.spec.ts::log001_default_logs_correlate_results_and_redact_secrets"
+        - "scripts/tests/test_docker_logging.py::main"
       status: pass
   - id: TRAFFIC-001
     title: 每日流量快照

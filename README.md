@@ -105,6 +105,14 @@ services:
     environment:
       DEVE_SUB_ADMIN_USERNAME: ${DEVE_SUB_ADMIN_USERNAME:-}
       DEVE_SUB_ADMIN_PASSWORD: ${DEVE_SUB_ADMIN_PASSWORD:-}
+      DEVE_SUB_AUDIT_RETENTION_DAYS: ${DEVE_SUB_AUDIT_RETENTION_DAYS:-90}
+      RUST_LOG: ${RUST_LOG:-info}
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
     ports:
       - "8080:8080"
     volumes:
@@ -160,6 +168,8 @@ DEVE_SUB_IMAGE_TAG=latest
 需要自行编译时，见[源码构建方式](docs/features/deployment.md#docker-compose)。
 
 </details>
+
+日志查询、手动清理、自动保留和 Docker 日志轮转，见[日志管理](docs/features/logging.md)。
 
 登录与链接安全配置、Token 轮换及泄漏后的处理方式，见[认证与订阅链接](docs/features/authentication-and-links.md)。
 

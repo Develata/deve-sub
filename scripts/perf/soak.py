@@ -140,7 +140,7 @@ def main():
         log_path = root / "serve.log"
         with log_path.open("w") as log:
             child = subprocess.Popen([str(binary), "serve", "--config", str(config_path)], stdout=log, stderr=log,
-                                     env={**os.environ, "RUST_LOG": "info", "NO_COLOR": "1"})
+                                     env={**os.environ, "RUST_LOG": "info,deve_sub_storage_sqlite::maintenance=debug", "NO_COLOR": "1"})
             samples, report = [], {"status": "FAIL", "requested_seconds": args.seconds}
             try:
                 deadline = time.monotonic() + 30

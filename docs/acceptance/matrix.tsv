@@ -146,6 +146,9 @@ OUT-015	JSON profile	P1	Compatibility	pass
 AUDIT-001	审计日志查询	P1	Integration	pass
 AUDIT-002	Auth 操作审计	P1	Integration	pass
 AUDIT-003	CRUD 操作审计	P1	Integration	pass
+AUDIT-004	审计日志手动清理	P1	Integration	pass
+AUDIT-005	审计日志自动回收	P1	Integration	pass
+LOG-001	运行日志清晰记录与容量轮转	P1	Integration	pass
 TRAFFIC-001	每日流量快照	P1	Integration	pass
 TRAFFIC-002	流量历史查询	P1	E2E	pass
 BACKUP-001	备份创建	P2	CLI	pass

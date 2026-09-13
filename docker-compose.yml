@@ -18,6 +18,14 @@ services:
     environment:
       DEVE_SUB_ADMIN_USERNAME: ${DEVE_SUB_ADMIN_USERNAME:-}
       DEVE_SUB_ADMIN_PASSWORD: ${DEVE_SUB_ADMIN_PASSWORD:-}
+      DEVE_SUB_AUDIT_RETENTION_DAYS: ${DEVE_SUB_AUDIT_RETENTION_DAYS:-90}
+      RUST_LOG: ${RUST_LOG:-info}
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
     ports:
       - "8080:8080"
     volumes:

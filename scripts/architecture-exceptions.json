@@ -1,8 +1,4 @@
 {
-  "apps/cli/src/commands.rs": {
-    "max_lines": 531,
-    "reason": "Clap subcommand/argument schema remains in one declarative owner; split on independent command-family change."
-  },
   "apps/cli/src/update.rs": {
     "max_lines": 765,
     "reason": "Existing verified update state machine and its helpers; preserving the rollback sequence together for review."
@@ -14,10 +10,6 @@
   "apps/server/src/subscriptions.rs": {
     "max_lines": 620,
     "reason": "Existing subscription delivery configuration REST surface; scope does not change its route topology."
-  },
-  "crates/deve-sub-application/src/config.rs": {
-    "max_lines": 568,
-    "reason": "Single configuration schema, validation and adjacent configuration tests."
   },
   "crates/deve-sub-application/src/subscription/delivery.rs": {
     "max_lines": 758,

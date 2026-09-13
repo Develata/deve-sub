@@ -17,7 +17,10 @@ pub mod subscription;
 pub mod template;
 pub mod traffic;
 
-pub use audit::{AuditLogDto, ListAuditLogsResponse};
+pub use audit::{
+    AuditCleanupPreviewRequest, AuditCleanupPreviewResponse, AuditCleanupRequest,
+    AuditCleanupResponse, AuditLogDto, AuditPolicyResponse, ListAuditLogsResponse,
+};
 pub use auth::{
     AuthStatusResponse, CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse,
     ListUsersResponse, LoginRequest, LoginResponse, LoginTwoFactorRequest,

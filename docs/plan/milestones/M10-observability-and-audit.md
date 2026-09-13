@@ -113,10 +113,49 @@ AuditLog {
 }
 ```
 
-The `audit_log` table is append-only. No updates, no deletes (except via
-retention policy, if added later). The `actor_id` foreign key has
+Audit events are immutable. Deletion is allowed only through the bounded
+manual cleanup and automatic retention command described below. The `actor_id` foreign key has
 `ON DELETE SET NULL` — deleting a user preserves audit history with the actor
 anonymized.
+
+### Log lifecycle (AUDIT-004, AUDIT-005, LOG-001)
+
+Owner: primary implementation agent; reviewer: separate read-only review lanes
+for storage/concurrency and API/UI. This slice extends the existing audit Port,
+application commands, REST delivery, CLI maintenance, and thin Web page; it does
+not introduce another logging service or alter live business data.
+
+- `logging.audit_retention_days` defaults to 90 (including upgrades); 0 disables
+  automatic audit expiry. Valid enabled range is 1–3650 days. CLI/environment
+  overrides configuration; the read-only policy API reports the effective value.
+- An administrator previews a cutoff computed by the server from days to keep
+  (1–3650). The preview returns at most 500 oldest candidate IDs, an exclusive
+  UTC cutoff, and whether more candidates remain. Confirmation submits exactly
+  that batch. The application rejects future cutoffs and cutoffs within the
+  last day, empty/duplicate/oversized batches, and invalid IDs.
+- Storage rechecks the candidate list under `BEGIN IMMEDIATE`; a changed batch
+  produces a conflict without deletion. Delete and `audit.cleanup` receipt
+  (actor, manual/automatic reason, cutoff, count) commit atomically. Receipt
+  failure rolls back deletion. Current events and non-audit tables are protected.
+  Repeated/concurrent confirmations can delete a candidate batch only once.
+- Automatic cleanup shares the existing minute maintenance loop, 500-row batches,
+  ten rounds and a ten-second budget. It records receipts only when deleting;
+  failure, conflict, timeout and cancellation leave committed batches valid.
+- The UI separates viewing filters from cleanup scope, shows cutoff and count
+  before explicit confirmation, invalidates stale previews, and refreshes after
+  cleanup. The API is admin-only and uses the existing CSRF guard.
+- HTTP completion logs at the default level include a server-generated request
+  ID, method, redacted path, status and elapsed milliseconds. The same ID is
+  returned in `x-request-id`; client-supplied IDs are replaced. Query strings,
+  cookies, bodies and subscription credentials are excluded. Successful health
+  and static requests and empty maintenance rounds use debug to limit noise.
+- Runtime output remains on stderr, owned by Docker/systemd. Compose uses the
+  Docker `local` driver with 10 MiB × 3 rotation and compression. Manual runtime
+  cleanup replaces only this service's container after optional log export;
+  named volumes are retained. Shared system journals are never vacuumed by the
+  application. SQLite deletion makes pages reusable; automatic VACUUM is excluded.
+- Migration 0027 adds `(created_at, id)` for bounded indexed candidate selection;
+  upgrade, repeated migration and pre-migration backup recovery are tested.
 
 ### Audit log write-side wiring
 

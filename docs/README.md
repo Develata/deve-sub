@@ -15,6 +15,8 @@ blueprint, typed contracts, product behavior, proof, and historical rationale.
 8. [`coverage-matrix.md`](coverage-matrix.md)
 9. the matching milestone plan/feature/contract/acceptance documents
 
+Operational logging: [日志查询、清理与回收](features/logging.md).
+
 ## Structure
 
 | Path | Answers |

@@ -5,6 +5,21 @@
 This contract defines the typed module boundaries, dependency direction, and
 inter-module communication rules for Deve Sub.
 
+### Audit lifecycle boundary (M10)
+
+`AuditLogRepository` owns bounded candidate selection and atomic delete plus
+receipt; application audit commands own retention validation and receipt
+construction. Delivery never performs SQL. `GET /api/v1/audit-logs/policy`
+reports effective retention days (0 disables automatic expiry) and batch size.
+`POST /api/v1/audit-logs/cleanup/preview` accepts `keep_days` (1–3650), returns
+`before_unix_ms`, ordered `entry_ids` (at most 500), and `has_more`.
+`POST /api/v1/audit-logs/cleanup` accepts that cutoff and exact ID list, returns
+`deleted` and `receipt_id`. Invalid scope is 400; changed candidates are 409;
+timeout is 503. All three routes require an administrator and mutations use
+same-origin CSRF protection. Cleanup scope is independent of viewer filters.
+List time filters are inclusive `since` and exclusive `before`, RFC3339 timestamps
+at whole-second precision. Configuration is server-owned and read-only in Web.
+
 ## Hexagonal layering
 
 ```text

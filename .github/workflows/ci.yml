@@ -362,6 +362,8 @@ jobs:
           cache-to: type=gha,scope=docker-ci,mode=max
       - name: Verify environment administrator bootstrap
         run: python3 scripts/tests/test_docker_bootstrap.py --image deve-sub:ci
+      - name: Verify bounded container log rotation
+        run: python3 scripts/tests/test_docker_logging.py --image deve-sub:ci
       - name: Run container and verify health
         run: |
           docker volume create deve-sub-ci-data

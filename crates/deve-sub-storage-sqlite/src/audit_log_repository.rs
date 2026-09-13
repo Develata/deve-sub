@@ -6,7 +6,9 @@
 
 use async_trait::async_trait;
 use deve_sub_domain::{AuditError, AuditLog, AuditLogFilter, AuditLogRepository};
-use deve_sub_kernel::{AuditLogId, UserId};
+use deve_sub_kernel::{AuditLogId, Timestamp, UserId};
+
+mod cleanup;
 use sqlx::sqlite::SqlitePool;
 
 use crate::timestamp::{format_ts, parse_ts};
@@ -57,24 +59,33 @@ impl AuditLogRow {
 #[async_trait]
 impl AuditLogRepository for SqliteAuditLogRepository {
     async fn insert(&self, entry: &AuditLog) -> Result<(), AuditError> {
-        let actor_id = entry.actor_id.as_ref().map(|id| id.to_string());
-        let created_at = format_ts(entry.created_at).map_err(AuditError::Storage)?;
+        let mut connection = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|e| AuditError::Storage(e.to_string()))?;
+        cleanup::insert(&mut connection, entry).await
+    }
 
-        sqlx::query(
-            "INSERT INTO audit_log (id, actor_id, action, target_type, target_id, details_json, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(entry.id.to_string())
-        .bind(actor_id)
-        .bind(&entry.action)
-        .bind(&entry.target_type)
-        .bind(&entry.target_id)
-        .bind(&entry.details_json)
-        .bind(created_at)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| AuditError::Storage(e.to_string()))?;
-        Ok(())
+    async fn preview_cleanup(
+        &self,
+        before: Timestamp,
+    ) -> Result<deve_sub_domain::AuditCleanupPreview, AuditError> {
+        let mut connection = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|e| AuditError::Storage(e.to_string()))?;
+        cleanup::preview(&mut connection, before).await
+    }
+
+    async fn cleanup(
+        &self,
+        before: Timestamp,
+        entry_ids: &[AuditLogId],
+        receipt: &AuditLog,
+    ) -> Result<(), AuditError> {
+        cleanup::execute(&self.pool, before, entry_ids, receipt).await
     }
 
     async fn list(
@@ -106,6 +117,12 @@ impl AuditLogRepository for SqliteAuditLogRepository {
         if filter.target_id.is_some() {
             conditions.push("target_id = ?".to_owned());
         }
+        if filter.since.is_some() {
+            conditions.push("created_at >= ?".into());
+        }
+        if filter.before.is_some() {
+            conditions.push("created_at < ?".into());
+        }
         if cursor.is_some() {
             conditions.push("id < ?".to_owned());
         }
@@ -129,6 +146,12 @@ impl AuditLogRepository for SqliteAuditLogRepository {
         }
         if let Some(ref target_id) = filter.target_id {
             q = q.bind(target_id);
+        }
+        if let Some(ts) = filter.since {
+            q = q.bind(format_ts(ts).map_err(AuditError::Storage)?);
+        }
+        if let Some(ts) = filter.before {
+            q = q.bind(format_ts(ts).map_err(AuditError::Storage)?);
         }
         if let Some(c) = cursor {
             q = q.bind(c.to_string());

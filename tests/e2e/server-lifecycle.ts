@@ -12,7 +12,7 @@ export class Servers {
 
   constructor(private binary: string, private webDist: string, private logDirectory: string) {}
 
-  async start(port: number): Promise<void> {
+  async start(port: number, options: { auditRetentionDays?: number; auditRetentionEnv?: number; oldAuditCount?: number } = {}): Promise<void> {
     // Port allocation and child bind cannot be atomic without changing the
     // server API. Reject an occupied port and require our child's startup log
     // plus liveness; never accept an unrelated healthy server as our fixture.
@@ -36,6 +36,7 @@ export class Servers {
           lockout_duration_secs: 1, trust_proxy_headers: false,
         },
         geoip: { mmdb_path: null },
+        logging: { audit_retention_days: options.auditRetentionDays ?? 90 },
       }));
       mkdirSync(this.logDirectory, { recursive: true });
       log = openSync(join(this.logDirectory, `server-${port}.log`), 'wx', 0o600);
@@ -44,8 +45,17 @@ export class Servers {
         stdio: ['ignore', log, log], timeout: 30000,
       });
       if (migration.status !== 0) throw new Error(`migration failed for E2E port ${port}`);
+      if (options.oldAuditCount) {
+        if (!Number.isInteger(options.oldAuditCount) || options.oldAuditCount < 0 || options.oldAuditCount > 1000) throw new Error('invalid audit fixture count');
+        const seed = spawnSync('python3', ['-c', `
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.executemany("INSERT INTO audit_log (id, action, created_at) VALUES (?, 'fixture.old', strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-100 days'))", [(f'{i:026d}',) for i in range(int(sys.argv[2]))])
+`, join(directory, 'deve-sub.db'), String(options.oldAuditCount)], { timeout: 10000 });
+        if (seed.status !== 0) throw new Error('audit fixture seed failed');
+      }
       child = spawn(this.binary, ['serve', '--config', config], {
-        stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, RUST_LOG: 'info' },
+        stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, RUST_LOG: 'info', DEVE_SUB_AUDIT_RETENTION_DAYS: String(options.auditRetentionEnv ?? options.auditRetentionDays ?? 90) },
       });
       const stopped = new Promise<void>(resolve => child!.once('close', () => resolve()));
       this.handles.push({ proc: child, directory, stopped });

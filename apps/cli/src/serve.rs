@@ -326,8 +326,15 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         db.clone(),
         &config.database.path,
     ));
+    tracing::info!(
+        audit_retention_days = config.logging.audit_retention_days,
+        batch_limit = 500,
+        "audit retention policy (0 disables expiry)"
+    );
     let maintenance_handle = tokio::spawn(crate::runtime::maintain(
         Arc::clone(&maintenance),
+        Arc::clone(&state.audit_log_repo),
+        config.logging.audit_retention_days,
         Arc::clone(&job_supervisor),
         Arc::clone(&rate_limiter),
         shutdown_tx.subscribe(),

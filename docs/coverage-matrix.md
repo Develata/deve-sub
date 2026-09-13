@@ -35,6 +35,7 @@ This matrix keeps the live documentation layers aligned:
 | `milestones/M6-subscription-distribution` | `contracts/module-boundaries.md` | — | `OUT-008`–`OUT-014`, `OUT-016`, `AUTH-009`, `SEC-009` |
 | `milestones/M7-probes-and-detection` | `contracts/module-boundaries.md` | — | `PROBE-001`–`PROBE-005`, `NODE-012`–`NODE-018` |
 | `milestones/M8-deployment-and-hardening` | `contracts/release-artifacts.md` | `features/deployment.md` | `DEPLOY-*`, `UPDATE-001`, `UPDATE-002` |
+| `milestones/M10-observability-and-audit` | `contracts/module-boundaries.md` | `features/logging.md` | `AUDIT-001`–`AUDIT-005`, `LOG-001` |
 
 ## Test coverage notes
 

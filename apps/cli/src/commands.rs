@@ -8,58 +8,7 @@ use clap::{Args, Subcommand};
 
 use deve_sub_application::AppConfig;
 
-/// Start the HTTP server.
-#[derive(Args)]
-pub struct ServeArgs {
-    /// Path to configuration file.
-    #[arg(long, env = "DEVE_SUB_CONFIG")]
-    pub(crate) config: Option<PathBuf>,
-
-    /// Bind address.
-    #[arg(long, env = "DEVE_SUB_BIND")]
-    pub(crate) bind: Option<String>,
-
-    /// Run without web UI (API and subscription only).
-    #[arg(long)]
-    pub(crate) headless: bool,
-
-    /// Database path.
-    #[arg(long, env = "DEVE_SUB_DB_PATH")]
-    pub(crate) db_path: Option<String>,
-
-    /// Path to the master key file (overrides `security.master_key_path`).
-    ///
-    /// DS-AUD-B01: explicit key path removes the relative-path resolution
-    /// footgun where systemd `WorkingDirectory=$DATA_DIR` made the default
-    /// `data/master.key` resolve to `$DATA_DIR/data/master.key`.
-    #[arg(long, env = "DEVE_SUB_KEY_PATH")]
-    pub(crate) key_path: Option<String>,
-
-    /// Path to the compiled web frontend dist directory.
-    #[arg(long, env = "DEVE_SUB_WEB_DIST_DIR")]
-    pub(crate) web_dist_dir: Option<String>,
-}
-
-impl ServeArgs {
-    /// Apply CLI overrides to the loaded configuration in one place.
-    pub(crate) fn apply_overrides(&self, config: &mut AppConfig) {
-        if let Some(bind) = &self.bind {
-            config.server.bind = bind.clone();
-        }
-        if self.headless {
-            config.server.serve_web = false;
-        }
-        if let Some(db_path) = &self.db_path {
-            config.database.path = db_path.clone();
-        }
-        if let Some(key_path) = &self.key_path {
-            config.security.master_key_path = key_path.clone();
-        }
-        if let Some(web_dist_dir) = &self.web_dist_dir {
-            config.server.web_dist_dir = web_dist_dir.clone();
-        }
-    }
-}
+pub use crate::serve_args::ServeArgs;
 
 /// Migrate command arguments.
 #[derive(Args)]

@@ -17,6 +17,7 @@ mod health;
 mod node_cmds;
 mod runtime;
 mod serve;
+mod serve_args;
 mod subscription_cmds;
 mod template_cmds;
 mod update;

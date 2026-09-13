@@ -32,6 +32,23 @@ that every deployment platform has been exercised.
 
 ## Docker Compose
 
+Optional administrator bootstrap: set `DEVE_SUB_ADMIN_USERNAME` and
+`DEVE_SUB_ADMIN_PASSWORD` in the Compose directory's `.env`; the Compose file
+passes them to the container. Use single quotes around passwords containing
+`$` to prevent Compose interpolation. The entrypoint creates the first admin
+before serving HTTP and removes both variables from the server's environment.
+Use the configured credentials to log in directly. Keep `.env` private and
+remove the bootstrap settings after creation if no longer needed.
+
+Both variables unset/empty preserve Web setup. Partial/invalid credentials
+prevent startup on an empty database. Any existing user makes initialization a
+no-op, including changed credentials on container recreation; this cannot
+reset passwords or re-enable disabled accounts. The shared application command
+hashes the password with Argon2id and atomically permits only the first user.
+The [artifact contract](../contracts/release-artifacts.md#container-administrator-bootstrap)
+owns exact CLI and environment semantics. Existing `v0.1.0` images do not
+implement this feature; use a source build until a containing release ships.
+
 The [repository Compose file](../../docker-compose.yml) pulls
 `ghcr.io/develata/deve-sub:v0.1.0`, including the binary and Web UI. Save it in a
 `deve-sub` directory and run `docker compose pull` followed by
@@ -60,8 +77,11 @@ It becomes available after the first stable tag release using the new workflow
 or an authorized registry backfill. A source push, merge or manual preflight
 alone does not publish it; keep the default fixed version until then.
 
-For a source build, clone the desired release tag, replace the Compose service's
-`image: ...` line with `build: .` (older tags may already use `build: .`), then run
+For a source build, check out the desired release tag, or a branch/commit that
+contains the administrator bootstrap changes while they are unreleased
+(`fix/compose-published-image` currently contains them; `v0.1.0` does not).
+Replace the Compose service's `image: ...` line with `build: .`
+(older tags may already use `build: .`), then run
 `docker compose up -d --build`. This compiles Rust and Web assets locally and
 requires the full checkout. Release-tag Compose files are historical snapshots;
 the standalone image example in [README](../../README.md#quick-start) also works

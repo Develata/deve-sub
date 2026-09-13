@@ -137,6 +137,17 @@ promotes that exact digest to `latest` only if its stable tag is still the
 GitHub latest release. Image publishing is serialized to prevent concurrent
 alias writes. Prereleases and old-release reruns cannot promote the alias.
 
+Optional container bootstrap reads `DEVE_SUB_ADMIN_USERNAME` and
+`DEVE_SUB_ADMIN_PASSWORD`. After migration and before `serve`, the entrypoint
+dispatches `user init-admin --if-needed` with the password supplied by
+`--password-env`, then unsets both bootstrap variables before executing the
+server. The existing application setup command owns validation, hashing and
+atomic first-user creation. Empty/unset values for both preserve Web setup;
+partial or invalid credentials fail startup on an empty database. Any existing
+user, including a disabled account, prevents bootstrap replacement. The flag
+is not password reset. See the release artifact contract; AUTH-001/DEPLOY-001
+cover creation, restart, rejection, concurrent initialization and redaction.
+
 ### Install script
 
 ```text

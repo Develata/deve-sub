@@ -21,6 +21,7 @@ mod subscription_cmds;
 mod template_cmds;
 mod update;
 mod update_manifest;
+mod user_cmds;
 
 /// Deve Sub — self-hosted proxy subscription infrastructure manager.
 #[derive(Parser)]
@@ -45,7 +46,7 @@ enum Commands {
     /// Export OpenAPI specification to stdout.
     Openapi(commands::OpenapiArgs),
     /// User management commands.
-    User(commands::UserArgs),
+    User(user_cmds::UserArgs),
     /// Source management commands.
     Source(commands::SourceArgs),
     /// Node pool commands.
@@ -89,7 +90,7 @@ fn main() -> ExitCode {
             },
             Commands::Openapi(args) => commands::openapi(args).await,
             Commands::User(args) => match args.command {
-                commands::UserSubCommand::InitAdmin(sub) => commands::user_init_admin(sub).await,
+                user_cmds::UserSubCommand::InitAdmin(sub) => user_cmds::user_init_admin(sub).await,
             },
             Commands::Source(args) => match args.command {
                 commands::SourceSubCommand::Add(sub) => commands::source_add(sub).await,

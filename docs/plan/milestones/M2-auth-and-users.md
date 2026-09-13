@@ -99,6 +99,11 @@ AUTH-009 (Token 重置 — "旧订阅 Token 失效") depends on subscription tok
 ## Verification
 
 - `deve-sub user init-admin` creates the first admin and refuses a second.
+- `user init-admin --if-needed` succeeds without changing existing users or
+  reading a password source once initialized. On an empty database it applies
+  the same validation and atomic `create_if_empty` as Web setup; a concurrent
+  initializer winning the race is also a successful no-op. Without the flag,
+  the existing refusal behavior remains. Acceptance: AUTH-001.
 - `POST /api/v1/auth/login` with correct credentials returns a session cookie.
 - `POST /api/v1/auth/login` with wrong credentials returns 401 without
   leaking whether the username exists.

@@ -148,13 +148,19 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["成功创建且只能执行一次"]
+    assertions: ["成功创建且只能执行一次", "容器环境变量可初始化管理员，已有用户保持不变", "无配置保留 Web 初始化，非法配置阻止空数据库启动", "并发初始化仅创建一个用户，密码不进入日志或服务进程环境"]
     fixtures: []
     evidence:
       tests:
         - "apps/server/tests/auth_flow.rs::setup_admin_succeeds_once"
         - "crates/deve-sub-application/src/auth/commands.rs::setup_admin_rejects_when_initialized"
         - "apps/server/tests/auth_flow.rs::auth_status_reports_initialized_flag"
+        - "apps/cli/tests/admin_bootstrap.rs::env_admin_creates_once_and_preserves_credentials"
+        - "apps/cli/tests/admin_bootstrap.rs::existing_disabled_user_skips_missing_password_source"
+        - "apps/cli/tests/admin_bootstrap.rs::invalid_or_partial_credentials_leave_no_user"
+        - "apps/cli/tests/admin_bootstrap.rs::concurrent_bootstrap_processes_create_only_one_user"
+        - "apps/cli/tests/admin_bootstrap.rs::non_utf8_password_error_is_redacted"
+        - "scripts/tests/test_docker_bootstrap.py"
       status: pass
   - id: AUTH-002
     title: 正确登录
@@ -1607,13 +1613,14 @@ cases:
     priority: P1
     layer: Smoke
     dimensions: []
-    preconditions: ["Docker 与 Compose 可用，可匿名访问固定版本 GHCR 镜像"]
-    steps: ["拉取镜像并启动 Compose", "检查健康与 Web 资源", "重建容器并验证数据卷保留"]
-    assertions: ["无需源码构建即可启动并健康", "重建后保留数据库、主密钥与原命名卷"]
+    preconditions: ["Docker 与 Compose 可用，可匿名访问固定版本 GHCR 镜像", "环境变量初始化需要包含该功能的新构建镜像"]
+    steps: ["拉取镜像并启动 Compose", "检查健康与 Web 资源", "重建容器并验证数据卷保留", "以含新功能的镜像验证环境变量初始化与登录"]
+    assertions: ["无需源码构建即可启动并健康", "重建后保留数据库、主密钥与原命名卷", "环境变量创建首个管理员，重建不覆盖账号密码，错误配置启动失败"]
     fixtures: []
     evidence:
       tests:
         - "docs/acceptance/gates.md (Published-image Compose smoke)"
+        - "scripts/tests/test_docker_bootstrap.py"
       status: pass
   - id: DEPLOY-002
     title: Linux 安装

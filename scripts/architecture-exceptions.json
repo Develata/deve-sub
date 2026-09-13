@@ -1,6 +1,6 @@
 {
   "apps/cli/src/commands.rs": {
-    "max_lines": 862,
+    "max_lines": 531,
     "reason": "Clap subcommand/argument schema remains in one declarative owner; split on independent command-family change."
   },
   "apps/cli/src/update.rs": {

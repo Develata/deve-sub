@@ -102,6 +102,9 @@ ssh -L 8080:127.0.0.1:8080 user@your-server
 services:
   deve-sub:
     image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
+    environment:
+      DEVE_SUB_ADMIN_USERNAME: ${DEVE_SUB_ADMIN_USERNAME:-}
+      DEVE_SUB_ADMIN_PASSWORD: ${DEVE_SUB_ADMIN_PASSWORD:-}
     ports:
       - "8080:8080"
     volumes:
@@ -127,7 +130,19 @@ docker compose logs -f deve-sub
 
 Compose 使用 named volume 保存 `/app/data` 中的数据库与主密钥，入口会迁移数据库后启动服务。
 默认映射宿主机 `8080` 端口；只供本机访问时，把 `ports` 改成 `127.0.0.1:8080:8080`。
-启动后打开 **http://127.0.0.1:8080** 完成初始化；远程访问与 HTTPS 配置同上。
+可在同目录 `.env` 中预设管理员，容器首次启动时自动创建，随后打开
+**http://127.0.0.1:8080** 直接登录；远程访问与 HTTPS 配置同上：
+
+```dotenv
+DEVE_SUB_ADMIN_USERNAME=admin
+DEVE_SUB_ADMIN_PASSWORD='replace-with-your-own-strong-password'
+```
+
+请替换示例密码，长度至少 8 字节；`.env` 中含 `$` 的密码使用单引号包裹，避免变量展开。
+两项均不设置时保留网页初始化。已有用户时不会覆盖账号、密码或启用状态；
+空数据库只设置一项或凭据不合法会启动失败。初始化成功后可以移除这两项配置。
+此功能需要包含本次改动的新版镜像，已发布的 `v0.1.0` 不支持；发布前可按下述源码构建方式使用。
+
 默认固定 `v0.1.0`。如需跟随最新稳定版，在同目录的 `.env` 中设置：
 
 > `latest` 将在首次包含此发布流程的稳定版本发布后生成；现有 `v0.1.0` 尚未补发该别名。

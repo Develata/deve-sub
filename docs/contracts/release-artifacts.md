@@ -46,6 +46,28 @@ replace a running container. Operators still back up before `up -d`.
 
 ## Installation and update
 
+### Container administrator bootstrap
+
+The container entrypoint accepts two optional environment variables:
+`DEVE_SUB_ADMIN_USERNAME` and `DEVE_SUB_ADMIN_PASSWORD`. Both absent/empty leave
+the Web setup wizard available. If either is nonempty, it invokes
+`deve-sub user init-admin --if-needed --username ... --password-env
+DEVE_SUB_ADMIN_PASSWORD` against the migrated database before starting HTTP.
+The password is not passed on argv, logged, or stored in application config;
+both variables are unset before executing the long-running server.
+
+`--if-needed` queries existing users before resolving a password source. If
+any user exists, it succeeds without creating, modifying or re-enabling users.
+Otherwise normal setup validation applies: nonempty username up to 64 bytes,
+password from 8 through 1024 bytes, and Argon2id hashing. A missing/invalid
+source aborts startup instead of silently exposing Web setup. Non-UTF-8
+environment values are rejected without including their contents in errors.
+The atomic repository operation decides concurrent winners; an already
+initialized result is a no-op only with this flag. Without it, the manual CLI
+keeps rejecting repeated initialization. No database migration is added.
+
+### Native installation and updates
+
 The installer resolves a release tag once, verifies both downloaded payloads,
 installs the binary and frontend, and passes the absolute frontend directory to
 systemd. Success requires readiness plus the expected running version. An

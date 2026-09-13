@@ -129,6 +129,38 @@ architectures. Remote `latest` publication and a pull by that alias are not-run:
 the current registry has no such tag, and this environment has no GHCR write
 credential. The fixed-version smoke above remains the executed runtime proof.
 
+## Container administrator bootstrap smoke (AUTH-001, DEPLOY-001)
+
+On 2026-09-13, `python3 scripts/tests/test_docker_bootstrap.py --image
+deve-sub:bootstrap-smoke-26rb09cv` passed all five scenarios on Linux amd64
+with Docker Engine 29.7.2 and Compose 5.5.0. The local validation image used
+the published `v0.1.0` runtime/Web above, overlaid with the current
+`cargo build --locked -p deve-sub-cli --all-features --bin deve-sub` binary and
+`docker-entrypoint.sh`. This exercises the changed CLI and entrypoint in a
+real container; it is not a full production-image rebuild or registry release.
+CI runs the same script against its freshly built `deve-sub:ci` image.
+
+The script uses the repository Compose file with isolated UUID project names,
+ephemeral loopback ports and test-only restart policy `no`. Single-quoted
+`.env` credentials containing `$`, and a username beginning with `-`, created
+an administrator before HTTP startup. Auth status reported initialized and
+login returned 200. Neither bootstrap variable remained in `/proc/1/environ`,
+and container logs did not contain the password. Recreating with changed
+credentials preserved the original login; the new password/account returned
+401. With no configuration, Web setup returned 201 and login returned 200.
+Missing username, missing password and a short password each made startup
+exit nonzero. Only the script's own containers/network/volumes were removed.
+
+`apps/cli/tests/admin_bootstrap.rs` additionally passed five real subprocess
+tests for Argon2id persistence, unchanged disabled users, invalid input leaving
+no user, concurrent initialization yielding exactly one user, and non-UTF-8
+password errors without secret contents. Manual initialization without
+`--if-needed` still rejects a second administrator.
+
+The published `v0.1.0` image does not contain bootstrap support. This evidence
+does not establish a new published image, arm64 execution or browser UI
+interaction; login/setup were exercised through the real HTTP endpoints.
+
 ## Disposable native VM evidence (DEPLOY-002)
 
 On 2026-09-11, `scripts/tests/native_vm.py` passed in a fresh Debian 13.6 amd64

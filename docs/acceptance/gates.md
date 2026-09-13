@@ -92,6 +92,32 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
   workload and RSS/FD/WAL/task envelopes. CI uses 90 seconds; short runs are
   accelerated regression evidence and do not establish years-long reliability.
 
+## Published-image Compose smoke (DEPLOY-001)
+
+On 2026-09-13, the published `ghcr.io/develata/deve-sub:v0.1.0` image passed
+on Linux amd64 with Docker Engine 29.7.2 and Compose 5.5.0. Anonymous manifest
+inspection and `docker compose pull` used an empty Docker config directory.
+The registry index digest was
+`sha256:1c0f9d4186307cf323e728a42a2557c630767f00aca5b1bb9f917bbc052bf8c9`;
+it contains both amd64 and arm64 manifests. Arm64 execution was not tested here.
+
+The repository Compose input SHA-256 was
+`0cabbf7d58b51d22f7c0347ceee32b388f6ea7b7b0ef10b0be0dfdfe458b5365`.
+The isolated copy changed only the port mapping to `127.0.0.1:0:8080` and used
+a fresh random project name and named volume. Reproduction: pull, run
+`up -d --no-build --wait --wait-timeout 60`, execute
+`exec -T deve-sub /app/deve-sub health ready`, and request `/` plus the emitted
+JS, WASM and CSS under `/assets/`. All returned successfully; Web files were
+nonempty. Dioxus links JS from HTML and loads WASM/CSS through the application,
+so asset discovery must also inspect the dist asset directory.
+
+After `up -d --no-build --force-recreate --wait --wait-timeout 60`, the new
+container was healthy and ready, mounted the same named volume, and retained
+the master-key hash and a synthetic persistence marker. The test removed only
+its own containers/network/volume afterward. This proves fresh deployment and
+same-version recreation; it does not prove a cross-version schema upgrade,
+browser interaction or arm64 runtime behavior.
+
 ## Disposable native VM evidence (DEPLOY-002)
 
 On 2026-09-11, `scripts/tests/native_vm.py` passed in a fresh Debian 13.6 amd64

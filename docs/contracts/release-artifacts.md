@@ -28,7 +28,11 @@ a tag, Release or image publication. Tag pushes repeat those gates before
 publication.
 
 Docker publishes the same version as a lowercase GHCR reference containing
-both `linux/amd64` and `linux/arm64`; it never publishes a `latest` alias.
+both `linux/amd64` and `linux/arm64`: `ghcr.io/develata/deve-sub:<release-tag>`
+(for example, `ghcr.io/develata/deve-sub:v0.1.0`). It never publishes a `latest`
+alias. The default Compose deployment consumes an explicit release tag and
+requires no local build; its named volume persists the database and master key
+across container replacements.
 
 ## Installation and update
 

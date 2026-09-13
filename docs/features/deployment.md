@@ -29,3 +29,27 @@ are not replaced by this command.
 Acceptance: DEPLOY-001 through DEPLOY-005 and UPDATE-001/002. Check the acceptance
 matrix for executed evidence; implemented deployment files alone do not prove
 that every deployment platform has been exercised.
+
+## Docker Compose
+
+The [repository Compose file](../../docker-compose.yml) pulls
+`ghcr.io/develata/deve-sub:v0.1.0`, including the binary and Web UI. Save it in a
+`deve-sub` directory and run `docker compose pull` followed by
+`docker compose up -d` there. No source checkout or local build is required.
+Compose selects `linux/amd64` or `linux/arm64` for the host. The image entrypoint
+initializes the key on first boot, runs migrations and starts the server.
+
+The named volume at `/app/data` contains both the database and master key.
+Back up both before upgrading, edit the explicit image version, then run
+`docker compose pull` and `docker compose up -d` in the same directory/project.
+Keep the project name and volume mapping unchanged when switching an existing
+source-built deployment to the published image. `docker compose down` preserves
+the volume; `down --volumes` deletes it. An older image cannot reverse database
+migrations. Published image tags include the leading `v`; there is no `latest`.
+
+For a source build, clone the desired release tag, replace the Compose service's
+`image: ...` line with `build: .` (older tags may already use `build: .`), then run
+`docker compose up -d --build`. This compiles Rust and Web assets locally and
+requires the full checkout. Release-tag Compose files are historical snapshots;
+the standalone image example in [README](../../README.md#quick-start) also works
+when an older tag's Compose file still defaults to a build.

@@ -92,20 +92,46 @@ ssh -L 8080:127.0.0.1:8080 user@your-server
 对外提供服务前配置 HTTPS 反向代理、Secure Cookie 和可信代理边界。完整行为见[部署与更新](docs/features/deployment.md)。
 
 <details>
-<summary><strong>Docker Compose · 从固定版本源码构建</strong></summary>
+<summary><strong>Docker Compose · 拉取固定版本镜像</strong></summary>
 
-需要 Docker 和 Compose 插件。首次运行会编译 Rust binary 与 Web，耗时长于下载预编译产物。
+需要 Docker 和 Compose 插件。GitHub Actions 已发布包含 binary 与 Web 的
+`ghcr.io/develata/deve-sub:v0.1.0`，支持 Linux `amd64` / `arm64`，无需克隆源码或本地编译。
+创建 `deve-sub` 目录，将以下内容保存为 `deve-sub/docker-compose.yml`（与[仓库 Compose](docker-compose.yml)一致）：
+
+```yaml
+services:
+  deve-sub:
+    image: ghcr.io/develata/deve-sub:v0.1.0
+    ports:
+      - "8080:8080"
+    volumes:
+      - deve-sub-data:/app/data
+    healthcheck:
+      test: ["CMD", "/app/deve-sub", "health", "live"]
+      interval: 30s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  deve-sub-data:
+```
 
 ```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/Develata/deve-sub.git
 cd deve-sub
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose logs -f deve-sub
 ```
 
-[仓库 Compose](docker-compose.yml) 使用 named volume 保存 `/app/data`，入口会迁移数据库后启动服务。
+Compose 使用 named volume 保存 `/app/data` 中的数据库与主密钥，入口会迁移数据库后启动服务。
 默认映射宿主机 `8080` 端口；只供本机访问时，把 `ports` 改成 `127.0.0.1:8080:8080`。
+启动后打开 **http://127.0.0.1:8080** 完成初始化；远程访问与 HTTPS 配置同上。
+升级前先备份数据库与主密钥，再修改 `image` 中的版本并重新执行 `pull` 和 `up -d`；
+保留原目录及 Compose 项目名，以继续使用原数据卷。项目不发布 `latest` 镜像标签。
 停止容器可用 `docker compose down`；不要为普通升级附加 `--volumes`，它会删除持久化数据卷。
+需要自行编译时，见[源码构建方式](docs/features/deployment.md#docker-compose)。
 
 </details>
 

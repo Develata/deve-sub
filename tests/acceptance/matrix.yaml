@@ -1607,13 +1607,14 @@ cases:
     priority: P1
     layer: Smoke
     dimensions: []
-    preconditions: []
-    steps: []
-    assertions: ["一条命令启动并健康"]
+    preconditions: ["Docker 与 Compose 可用，可匿名访问固定版本 GHCR 镜像"]
+    steps: ["拉取镜像并启动 Compose", "检查健康与 Web 资源", "重建容器并验证数据卷保留"]
+    assertions: ["无需源码构建即可启动并健康", "重建后保留数据库、主密钥与原命名卷"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "docs/acceptance/gates.md (Published-image Compose smoke)"
+      status: pass
   - id: DEPLOY-002
     title: Linux 安装
     priority: P1

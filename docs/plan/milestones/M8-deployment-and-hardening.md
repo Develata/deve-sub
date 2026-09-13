@@ -26,7 +26,7 @@ uses the backup/restore infrastructure for data safety.
 
 ```text
 docker compose up
-    → builds (or pulls) the deve-sub image
+    → pulls the pinned release image from GHCR (or uses its local cache)
     → runs migrations
     → starts the server
     → healthcheck passes within 60s
@@ -105,7 +105,7 @@ M8 is delivered in five slices:
 ```yaml
 services:
   deve-sub:
-    build: .            # or image: ghcr.io/develata/deve-sub:${TAG}
+    image: ghcr.io/develata/deve-sub:v0.1.0
     ports: ["8080:8080"]
     volumes: ["deve-sub-data:/app/data"]
     healthcheck:
@@ -120,10 +120,16 @@ volumes:
   deve-sub-data:
 ```
 
-The compose file uses the existing Dockerfile. The `serve` command runs
-migrations on startup if needed (via `verify_schema` which exits if schema is
-stale — the operator runs `deve-sub migrate` first, or the entrypoint script
-handles it). For zero-config startup, the entrypoint runs `migrate` then `serve`.
+The default Compose file uses a published, explicitly versioned GHCR image;
+no source checkout or local Rust/Web build is required. The release contains
+both `linux/amd64` and `linux/arm64`, and Compose selects the host platform.
+Source builds remain opt-in: in a checkout, replace `image` with `build: .`
+and run `docker compose up -d --build` using the existing Dockerfile.
+For zero-config startup, the image entrypoint runs `migrate` then `serve`;
+`serve` itself verifies the schema and refuses a stale database.
+Before an upgrade, back up the database and master key, change the image's
+version, then pull and recreate the service in the same Compose project while
+retaining its named volume. Reverting an image does not undo schema migrations.
 
 ### Install script
 

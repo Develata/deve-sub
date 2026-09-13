@@ -1,6 +1,7 @@
 # Docker Compose for Deve Sub — one-command startup (DEPLOY-001).
 #
 # Usage:
+#   docker compose pull           # download the pinned release image
 #   docker compose up -d          # start in background
 #   docker compose logs -f        # follow logs
 #   docker compose down           # stop and remove
@@ -12,7 +13,7 @@
 
 services:
   deve-sub:
-    build: .
+    image: ghcr.io/develata/deve-sub:v0.1.0
     ports:
       - "8080:8080"
     volumes:

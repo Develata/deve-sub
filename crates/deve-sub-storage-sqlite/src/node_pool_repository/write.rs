@@ -11,6 +11,7 @@ pub(super) async fn insert_node(
     proto_str: &str,
     host_str: &str,
     fingerprint: &str,
+    source_label: &str,
     key: Option<&MasterKey>,
 ) -> Result<Option<String>, SourceError> {
     let node_id = node.id.to_string();
@@ -68,7 +69,7 @@ pub(super) async fn insert_node(
     .bind(&node.region.value)
     .bind(&extras_json_encrypted)
     .bind(imported_at)
-    .bind(&node.source.source_label)
+    .bind(source_label)
     .bind(fingerprint)
     .execute(&mut **tx)
     .await
@@ -78,4 +79,26 @@ pub(super) async fn insert_node(
         return Ok(None);
     }
     Ok(Some(node_id))
+}
+
+/// Record manual provenance without replacing identity, overrides or credentials.
+pub(super) async fn retain_manual_contribution(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    node_id: &str,
+    source_label: &str,
+) -> Result<(), SourceError> {
+    // WHY: even a duplicate import establishes an independent contribution.
+    // Preserve an existing independent label; the remote name is derived from
+    // bindings and is never stored in this column (migration 0005).
+    sqlx::query(
+        "UPDATE nodes SET source_label = CASE WHEN source_label = '' THEN ? ELSE source_label END, \
+         missing_from_source = 0, revision = revision + 1 \
+         WHERE id = ? AND (source_label = '' OR missing_from_source = 1)",
+    )
+    .bind(source_label)
+    .bind(node_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| SourceError::Storage(e.to_string()))?;
+    Ok(())
 }

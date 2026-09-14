@@ -15,7 +15,7 @@
 mod chain;
 mod reconcile;
 mod write;
-use write::insert_node;
+use write::{insert_node, retain_manual_contribution};
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -250,6 +250,11 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         let mut result = ImportResult::default();
 
         for node in nodes {
+            let independent_label = if node.source.source_label.is_empty() {
+                "manual"
+            } else {
+                node.source.source_label.as_str()
+            };
             let proto_str = to_json(&node.protocol)?;
             let host_str = node.endpoint.host.uri_host();
             let fingerprint = node_fingerprint(&node, self.master_key.as_deref())?;
@@ -272,6 +277,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             .map_err(|e| SourceError::Storage(e.to_string()))?;
 
             if let Some((existing_id,)) = existing {
+                retain_manual_contribution(&mut tx, &existing_id, independent_label).await?;
                 let nid =
                     NodeId::parse(&existing_id).map_err(|e| SourceError::Storage(e.to_string()))?;
                 result.duplicate_nodes += 1;
@@ -293,16 +299,9 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                     // identity fingerprint rather than creating a duplicate
                     // row. The dedup partial unique index would otherwise
                     // reject the insert. We keep the existing node's
-                    // credentials/config (NODE-003) and only flip
-                    // missing_from_source back to 0.
-                    sqlx::query(
-                        "UPDATE nodes SET missing_from_source = 0, revision = revision + 1 \
-                         WHERE id = ?",
-                    )
-                    .bind(&missing_id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(|e| SourceError::Storage(e.to_string()))?;
+                    // credentials/config (NODE-003) and record independent
+                    // provenance so a later remote removal cannot undo it.
+                    retain_manual_contribution(&mut tx, &missing_id, independent_label).await?;
                     let nid = NodeId::parse(&missing_id)
                         .map_err(|e| SourceError::Storage(e.to_string()))?;
                     result.new_nodes += 1;
@@ -314,6 +313,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                         &proto_str,
                         &host_str,
                         &fingerprint,
+                        independent_label,
                         self.master_key.as_deref(),
                     )
                     .await?;
@@ -339,6 +339,8 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                             .await
                             .map_err(|e| SourceError::Storage(e.to_string()))?;
                             if let Some((winner_id,)) = winner {
+                                retain_manual_contribution(&mut tx, &winner_id, independent_label)
+                                    .await?;
                                 let nid = NodeId::parse(&winner_id)
                                     .map_err(|e| SourceError::Storage(e.to_string()))?;
                                 result.duplicate_nodes += 1;

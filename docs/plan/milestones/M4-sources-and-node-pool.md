@@ -240,6 +240,20 @@ activation, revision bump and pruning stay in the same transaction.
 Migration 0026 adds a complete fingerprint lookup index: the earlier partial
 active dedup index cannot serve queries over both active and missing nodes.
 
+Manual import establishes an independent contribution even when deduplicating
+against an existing remote node or reactivating a missing one. It preserves the
+node ID, credentials, overrides and tags. The existing persisted nonempty
+`nodes.source_label` records this independent provenance (migration 0005);
+remote reconciliation stores an empty label and derives display provenance
+from live bindings. A remote source named `manual` is not an independent import.
+Only nodes without independent provenance or another binding become missing
+when a refresh removes them. Manual import and refresh serialize their reads
+and writes, so either commit order preserves a completed manual import.
+Historically discarded duplicate-import provenance cannot be inferred from
+remote bindings; reimport those nodes to establish independent membership.
+Previously misclassified missing manual nodes also require reimport to recover;
+upgrading does not automatically rewrite their historical missing flags.
+
 ## Node organization workflow (NODE-004/005/006/010/018)
 
 Tags are sets of stable IDs. Names are trimmed, nonempty, at most 128 Unicode

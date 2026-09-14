@@ -86,6 +86,14 @@ deleted nodes remain diagnostic run results. Other storage failures propagate:
 the runner records Failed with collected results unless another terminal state
 has already committed. Completed means eligible latency history was persisted.
 
+### Independent source provenance (M4)
+
+`NodePoolRepository::import_nodes` records independent provenance for inserts,
+active duplicates and reactivations in its write transaction. Remote reconcile
+cannot withdraw that contribution or replace manual overrides/tags. The storage
+adapter uses the existing persisted node label for independent provenance and
+live bindings for remote labels.
+
 ## Hexagonal layering
 
 ```text

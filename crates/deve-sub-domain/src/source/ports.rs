@@ -143,7 +143,7 @@ pub struct ReconcileResult {
 pub struct NodePoolEntry {
     /// The canonical node aggregate.
     pub node: Node,
-    /// Whether the node was marked missing after its last source removed it.
+    /// Whether the last remote source removed a node with no independent import.
     /// Missing nodes stay in the pool for diagnostics; they are excluded
     /// from generation. See NODE-011.
     pub missing_from_source: bool,
@@ -299,6 +299,8 @@ pub trait NodePoolRepository: Send + Sync {
     /// No source binding is created; manual nodes exist in the pool without
     /// a `node_source_bindings` row. The entire batch is committed
     /// atomically.
+    /// Inserts, duplicates and reactivations all establish independent manual
+    /// provenance, retained when remote sources later withdraw the same node.
     async fn import_nodes(&self, nodes: Vec<Node>) -> Result<ImportResult, SourceError>;
 
     /// List all node chains in the pool. Returns one [`NodeChainEntry`] per

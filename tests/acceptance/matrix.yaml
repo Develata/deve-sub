@@ -995,13 +995,18 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["节点标记缺失，不直接消失"]
+    assertions: ["仅远程来源全部撤销且无独立手动导入时标记缺失，不直接删除", "重复、再次导入及并发刷新保留手动节点的ID、标签和覆盖"]
     fixtures: []
     evidence:
       tests:
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::missing_nodes_marked_on_subsequent_refresh"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::missing_node_reactivated_on_reappearance"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_queries.rs::list_nodes_active_only_excludes_missing"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_manual_first_survives_remote_removal"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_source_first_manual_duplicate_survives_remote_removal"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_missing_reimport_survives_later_remote_removal"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_concurrent_import_and_refresh_preserve_manual_membership"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_remote_named_manual_still_becomes_missing"
       status: pass
   - id: NODE-012
     title: TCP 延迟

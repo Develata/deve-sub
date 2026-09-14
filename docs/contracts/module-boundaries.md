@@ -55,6 +55,21 @@ job without a registered signal returns 503 `cancel_unavailable`, leaving the
 job and source lease intact. Only the runner records cancellation after observing
 it before publication; a refresh past that boundary completes normally.
 
+The source scheduler observes shutdown within a tick, stops new admission and
+drains already admitted workers. A lease acquisition that overlaps shutdown
+finishes its durable transition and cancels before fetch. The CLI's bounded
+grace/abort fallback still applies to workers that cannot finish normally.
+
+### Probe history boundary (M7)
+
+Probe results mark nodes absent at initial lookup as `skipped=true` with no RTT
+or fabricated network error. `LatencyRecordRepository::batch_create` atomically
+stores measurements for nodes still present at the write boundary, omitting
+deleted nodes without losing other records. Measurements of subsequently
+deleted nodes remain diagnostic run results. Other storage failures propagate:
+the runner records Failed with collected results unless another terminal state
+has already committed. Completed means eligible latency history was persisted.
+
 ## Hexagonal layering
 
 ```text

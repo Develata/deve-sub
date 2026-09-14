@@ -351,13 +351,16 @@ cases:
     dimensions: []
     preconditions: ["source.auto_update=true，update_interval_secs 已过"]
     steps: ["启动 RefreshScheduler", "等待至少一个 tick"]
-    assertions: ["按间隔执行且不重复并发"]
+    assertions: ["按间隔执行且不重复并发", "批次中关闭后停止排队源的启动，等待已启动任务退出并清理注册和租约"]
     fixtures: ["crates/deve-sub-application/tests/scheduler.rs"]
     evidence:
       tests:
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_refreshes_due_source_on_tick"
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_skips_not_due_source"
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_stops_on_shutdown"
+        - "crates/deve-sub-application/tests/scheduler/shutdown.rs::src003_shutdown_drains_active_group_without_starting_queued_sources"
+        - "crates/deve-sub-application/tests/scheduler/shutdown.rs::src003_shutdown_cancel_does_not_escape_to_queued_sources"
+        - "crates/deve-sub-application/tests/scheduler/start_shutdown.rs::src003_shutdown_during_durable_start_cancels_before_fetch"
       status: pass
   - id: SRC-004
     title: ETag
@@ -1006,12 +1009,15 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["记录连接 RTT 和错误分类"]
+    assertions: ["记录连接 RTT 和错误分类", "缺失节点明确跳过；测量中删除节点不丢失其他节点历史", "历史持久化失败时任务Failed且保留诊断结果，批次不部分写入"]
     fixtures: []
     evidence:
       tests:
         - "apps/server/tests/probes.rs::tcp_probe_records_rtt_for_live_endpoint"
         - "apps/server/tests/probes.rs::tcp_probe_closed_port_classified_as_refused"
+        - "apps/server/tests/probes/history.rs::node012_missing_node_is_skipped_without_losing_valid_history"
+        - "apps/server/tests/probes/history.rs::node012_delete_during_measurement_preserves_other_history"
+        - "apps/server/tests/probes/history.rs::node012_history_write_failure_marks_failed_and_retains_diagnostics"
       status: pass
   - id: NODE-013
     title: QUIC 延迟

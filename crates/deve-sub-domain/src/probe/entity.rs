@@ -176,7 +176,7 @@ pub struct ProbeRunResult {
     pub rtt_ms: Option<u32>,
     /// Error classification.
     pub error_class: ErrorClass,
-    /// Whether this node's probe was skipped (run cancelled before it started).
+    /// Whether probing was skipped because the run was cancelled or the node was missing.
     pub skipped: bool,
 }
 

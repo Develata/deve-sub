@@ -102,6 +102,15 @@ M4 is delivered in five slices:
    status or releasing its lease. Acceptance: SRC-002,
    SRC-003, SRC-005, SRC-006, SRC-007, SRC-008, SRC-009, SRC-012, SRC-014,
    SEC-001 through SEC-005.
+
+   Scheduler shutdown is observed while a tick is running, with shutdown taking
+   priority over ready queued work. Stop scanning/admitting new sources and
+   drain only the admitted refreshes. If shutdown arrives while a job acquires
+   its lease, finish that transition and mark it cancelled before fetching;
+   never drop a partially started durable job as the normal shutdown path.
+   Completion logs are emitted as each refresh finishes, rather than waiting
+   for the slowest source in the batch. The CLI retains its bounded grace and
+   crash recovery for unresponsive workers (constraint #20; SRC-003/009).
 3. **Node pool + dedup + diff**: Node pool queries with protocol/region
    filters, dedup by endpoint+protocol, diff (new/unchanged/missing),
    `missing_from_source` flag. Manual node import (paste batch, file

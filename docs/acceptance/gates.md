@@ -546,3 +546,48 @@ functional regression. Real power-loss durability, large-scale retention latency
 external proxy clients, other browser engines and long-running soak were not
 tested locally. This bounded audit does not assert that the entire project is
 defect-free. PR CI owns the subsequent Docker/build integration checks.
+
+## M4/M7 background job lifecycle fixes — 2026-09-13
+
+Owner: main agent; the same independent read-only reviewer audited and reviewed
+the fixes against main `371da6af318b1b1e7161b955f19fa193b9076250`.
+Scope: source scheduler shutdown, probe history persistence, their tests and
+governing documentation. No schema migration, dependency or API shape change,
+real-data maintenance, release or deployment is part of this slice.
+
+Two findings were accepted after independent baseline reproduction:
+
+- SRC-003/SRC-009: shutdown cancelled the active source refreshes but still
+  admitted queued sources with fresh cancellation flags. The scheduler now
+  stops admission during a tick and drains its bounded active group. An already
+  pending durable start finishes and observes cancellation before fetching.
+  Three new regression cases failed on the baseline and passed after the fix;
+  the scheduler suite passed all seven cases. A real CLI SIGTERM reproduction
+  with nine due sources changed from nine fetches, five new snapshots and five
+  completed/four cancelled jobs to four fetches, zero new snapshots and four
+  cancelled jobs, with zero unfinished jobs.
+- NODE-012: a missing or concurrently deleted node rolled back valid peers'
+  latency history, while the run still reported Completed. Missing nodes now
+  report skipped; a node deleted after measurement only loses its own history.
+  Eligible records commit atomically, and other persistence errors produce
+  Failed while retaining measurement diagnostics. Three new real API/SQLite
+  tests failed before the fix and passed afterward, covering missing nodes,
+  deletion during concurrent measurement and an injected second-insert failure.
+  The original real API reproduction now retains the valid node's one history
+  record instead of zero and marks the missing node skipped.
+
+Final local verification: fmt, check, strict Clippy, all-targets/all-features Rust
+tests (92 suites, 1,037 passed, 8 ignored), doc tests and dependency audit passed.
+Docs/acceptance passed 157 cases and 440 proof references; architecture passed
+15 crates including untracked files; CI tooling passed 17 tests. OpenAPI was
+generated from the final binary. The independent reviewer closed both findings
+without a remaining blocker and verified all six before/after regressions.
+
+Transient reproduction and test logs use `/tmp/deve-sub-lifecycle-*.log`;
+the final read-only review is
+`/tmp/deve-sub-background-job-lifecycle-rereview.md`. No frontend source changed;
+browser/WASM/Docker integration is delegated to the subsequent PR CI. Real
+power-loss, permanently unwritable storage and long-running soak were not
+exercised locally. If storage cannot persist any status, terminal recording
+remains best effort and relies on the existing startup recovery path. The
+bounded concurrent tests do not exhaust all possible interleavings.

@@ -276,7 +276,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
         refresh_job_repo,
         fetcher,
         geoip,
-    );
+    )
+    .cancel_flags(Arc::clone(&refresh_cancel_flags));
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
 
     // Crash recovery (constraint #20): mark any probe runs left in Running or

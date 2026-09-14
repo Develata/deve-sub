@@ -45,6 +45,16 @@ template/profile. Subscription edits/deletion release old protection on the
 next store. Storage owns this retention transaction; no new delivery operation
 or cross-repository application transaction is introduced.
 
+### Source refresh cancellation boundary (M4)
+
+Manual and scheduled refreshes share the application cancellation registry.
+The runner owns each registration until completion or drop. The cancel endpoint
+returns 200 with `cancelled=true` when it signals the worker; clients continue
+polling for its final outcome. Terminal jobs return `cancelled=false`. A live
+job without a registered signal returns 503 `cancel_unavailable`, leaving the
+job and source lease intact. Only the runner records cancellation after observing
+it before publication; a refresh past that boundary completes normally.
+
 ## Hexagonal layering
 
 ```text

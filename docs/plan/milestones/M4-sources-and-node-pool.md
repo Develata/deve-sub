@@ -93,8 +93,14 @@ M4 is delivered in five slices:
 2. **Source refresh job**: HTTP fetcher adapter with SSRF guard, ETag,
    timeout, size limit, gzip. `refresh_source` command: fetch → parse →
    snapshot → node pool insert → diff. Background job infrastructure
-   (observable, cancellable — constraint #20). Acceptance: SRC-002,
-   SRC-003, SRC-005, SRC-006, SRC-007, SRC-008, SRC-012, SRC-014,
+   (observable, cancellable — constraint #20). Manual and scheduled jobs share
+   one cancellation registry, with registrations scoped to the running future.
+   A cancel response acknowledges a signal, not a terminal state: the runner
+   records cancellation only when observed before publication. Already committed
+   work completes normally. If a live job has no registered signal (including
+   the start/registration window), return retryable 503 without changing its
+   status or releasing its lease. Acceptance: SRC-002,
+   SRC-003, SRC-005, SRC-006, SRC-007, SRC-008, SRC-009, SRC-012, SRC-014,
    SEC-001 through SEC-005.
 3. **Node pool + dedup + diff**: Node pool queries with protocol/region
    filters, dedup by endpoint+protocol, diff (new/unchanged/missing),

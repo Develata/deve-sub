@@ -438,12 +438,13 @@ cases:
     dimensions: []
     preconditions: ["source 已创建，refresh job 处于 Running"]
     steps: ["POST /api/v1/sources/refresh-jobs/{job_id}/cancel", "确认 phase 停在当前阶段"]
-    assertions: ["取消后不发布半成品"]
+    assertions: ["手动和自动刷新取消信号由实际执行者确认；发布前取消不写入快照", "取消注册缺失返回503，保留Running租约；结束后清理注册并允许新任务"]
     fixtures: ["apps/server/tests/source_refresh.rs", "crates/deve-sub-application/src/source/refresh.rs"]
     evidence:
       tests:
         - "apps/server/tests/source_refresh.rs::concurrent_refresh_returns_409"
-        - "crates/deve-sub-application/src/source/refresh.rs (cancel checks at each phase boundary)"
+        - "apps/server/tests/source_refresh/cancellation.rs::src009_scheduled_cancel_prevents_publish_and_releases_registration"
+        - "apps/server/tests/source_refresh/cancellation.rs::src009_unregistered_cancel_preserves_running_lease"
       status: pass
   - id: SRC-010
     title: 条件过滤

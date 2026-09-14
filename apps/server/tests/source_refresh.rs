@@ -518,3 +518,6 @@ async fn concurrent_refresh_returns_409() {
 
 #[path = "resource_admission/source.rs"]
 mod resource_admission;
+
+#[path = "source_refresh/cancellation.rs"]
+mod cancellation;

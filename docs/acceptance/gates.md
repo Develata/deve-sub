@@ -493,3 +493,56 @@ the image, verify environment bootstrap, bounded log rotation and health.
 This correction changes build inputs only; the M8 release contract and Rust
 behavior remain unchanged. The PR's subsequent CI result is the acceptance
 receipt; no image publication or production deployment is asserted here.
+
+## M4/M6/M11 independent durability audit fixes — 2026-09-13
+
+Owner: main agent; one independent read-only reviewer audited main
+`c3a32c5663b5e3aa36c0347f3ddab6cf6bcae030` and reviewed the resulting fixes.
+Scope: CLI restore, source scheduler/cancel API, SQLite generation retention,
+their tests and governing documentation. No schema migration, dependency change,
+real-data maintenance, release or production deployment is part of this slice.
+
+Three P1 findings were accepted after the main agent independently reran each
+baseline binary reproduction:
+
+- BACKUP-003: a previous restore's same-named WAL replaced archived contents
+  even though row counts and integrity passed. Each attempt now uses a private,
+  unique staging directory on the target filesystem. The final real CLI restores
+  `BACKUP_EXPECTED`, preserves the old crash WAL and removes its own staging;
+  failed verification preserves the original target. The two new Rust regression
+  cases failed before the fix; the complete focused backup suite passed 13 cases.
+- OUT-014: nine distinct subscriptions sharing a template caused the first
+  selector's sole last-good cache to be evicted; an outage then returned 503.
+  Retention now protects matching lenient results for persisted subscriptions,
+  including pins and disabled subscriptions, plus active output and eight extra
+  candidates. The final real HTTP reproduction retains all nine results and
+  returns 200 after the outage. Two storage regressions failed before the fix;
+  tests cover repeated generations, shared/changed selectors, disable/delete,
+  pins and strict-mode separation. The new API case concurrently generates twelve
+  distinct typed selectors and verifies each exact fallback after disabling nodes.
+- SRC-009: cancelling an automatic refresh reported success and released its
+  lease while its unsignalled runner still published. Scheduled and manual jobs
+  now share cancellation registration; missing registration returns retryable 503
+  without changing status or lease. The two regression cases failed before the
+  fix. The final default scheduler reproduction cancels during blocked Fetching,
+  then releases the upstream response: final state is Cancelled with zero new
+  snapshots. Tests also cover registration cleanup and a successful replacement.
+
+Final local verification: fmt, check, strict Clippy, all-targets/all-features Rust
+tests (92 suites, 1,031 passed, 8 ignored), doc tests and dependency audit passed.
+After adding explicit worker-exit synchronization to a test, fmt/Clippy and all
+10 source-refresh API tests passed again. The functional matrix passed 73 cases
+with 4 workers and zero retries using the final binary and unchanged production
+WASM. Docs/acceptance passed 157 cases and 434 proof references; architecture
+passed 15 crates including untracked files; CI tooling passed 17 tests. OpenAPI
+was generated from the final binary and contains the new cancel 503 response.
+The same independent reviewer closed all findings without a new blocker and
+checked the cache query plan against the migrated schema.
+
+Transient reproduction and test logs use `/tmp/deve-sub-strict-*.log`; the
+original reviewer report and re-review are `/tmp/deve-sub-strict-audit-*.md`.
+Browser plugin is unavailable; the existing Playwright runner supplied the
+functional regression. Real power-loss durability, large-scale retention latency,
+external proxy clients, other browser engines and long-running soak were not
+tested locally. This bounded audit does not assert that the entire project is
+defect-free. PR CI owns the subsequent Docker/build integration checks.

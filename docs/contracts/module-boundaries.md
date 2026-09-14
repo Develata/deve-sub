@@ -38,6 +38,12 @@ Each page is bounded to 100 versions. Native validation errors return 400;
 generation errors never replace the last successful output. Deleting a referenced
 template returns 409 `template_in_use`. Pinned subscription cache fallback must
 match both the requested version and generation mode.
+`GenerationCacheRepository::store` atomically protects the newest matching
+lenient result for each persisted subscription's selection/version pin, plus
+the active result, while keeping at most eight additional inactive entries per
+template/profile. Subscription edits/deletion release old protection on the
+next store. Storage owns this retention transaction; no new delivery operation
+or cross-repository application transaction is introduced.
 
 ## Hexagonal layering
 

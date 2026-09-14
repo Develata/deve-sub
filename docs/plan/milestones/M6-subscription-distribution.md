@@ -199,6 +199,13 @@ its selection and version pin; Template updates never silently mutate it.
 Last-successful-generation fallback must match the selection and generation
 mode; when pinned, it must also match that exact template version. An unpinned
 subscription may retain an earlier successful version after regeneration fails.
+Cache retention must protect that result for every existing subscription,
+including disabled subscriptions that can later be enabled. A different
+subscription's selector, strict generation or version pin cannot evict it.
+Within each template/profile, keep the active result and at most one matching
+lenient fallback per subscription, plus eight unprotected inactive entries.
+Repeated refreshes therefore remain bounded by subscription count; deleted or
+reconfigured subscriptions release obsolete protection at the next cache store.
 
 ### Token and short-code security model
 

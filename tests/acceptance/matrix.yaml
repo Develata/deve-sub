@@ -1516,10 +1516,13 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["所有客户端只看到完整版本"]
+    assertions: ["所有客户端只看到完整版本", "共用模板的每个订阅保留匹配选择和版本固定的最后成功结果；重复生成有界且孤立缓存可回收"]
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-storage-sqlite/tests/generation_retention.rs::out014_retention_preserves_each_live_selection_and_reclaims_orphans"
+        - "crates/deve-sub-storage-sqlite/tests/generation_retention.rs::out014_retention_preserves_pins_and_lenient_fallback_separately"
+        - "tests/e2e/functional/delivery-cache.api.spec.ts::FUNC-DELIVERY-RETENTION"
         - "apps/server/tests/subscription_delivery.rs::del012_concurrent_delivery_all_complete"
       status: pass
   - id: PROBE-001

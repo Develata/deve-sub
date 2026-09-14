@@ -99,7 +99,7 @@ PERF-006's normal-envelope and recovery behavior.
 | Expired sessions and temporary links | Remove after expiry | SQLite maintenance |
 | Processed outbox events | 30 days; unprocessed events never pruned | SQLite maintenance |
 | Source snapshots | Existing last 10 versions per source | Source publication |
-| Generation cache | Existing active version plus 8 inactive entries per template/profile | Generation publication |
+| Generation cache | Active result, latest matching lenient result for each existing subscription's selection/version pin, plus 8 unprotected inactive entries per template/profile | Generation publication |
 | Audit log | 90 days by default; 0 disables expiry; explicit preview/confirmation for manual cleanup | Application audit commands via the audit Port; atomic cleanup receipt; see M10 |
 | Template versions, missing nodes, live entities | Intentional user-owned state; no automatic destructive expiry | Explicit entity commands |
 

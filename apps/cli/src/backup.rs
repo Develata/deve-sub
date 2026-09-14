@@ -404,16 +404,14 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let staging_path = restore_parent.join(format!(
-        ".{}.restore-staging",
-        restore_target
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("deve-sub.db")
-    ));
-
-    // Clean up any stale staging file from a previous failed restore.
-    let _ = fs::remove_file(&staging_path);
+    // WHY: SQLite replays a same-named WAL even after the main file is replaced.
+    // A private per-attempt directory isolates crashed restores and removes our
+    // own DB/WAL/SHM on ordinary errors. Sibling placement keeps rename atomic.
+    let staging_dir = tempfile::Builder::new()
+        .prefix(".deve-sub-restore-")
+        .tempdir_in(restore_parent)
+        .context("failed to create private restore staging directory")?;
+    let staging_path = staging_dir.path().join("database.sqlite");
 
     fs::copy(&snapshot_path, &staging_path).with_context(|| {
         format!(

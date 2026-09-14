@@ -2313,10 +2313,12 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check"]
+    assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check", "旧 staging WAL 不得混入新备份；验证失败保留目标并清理本次 staging"]
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/restore_staging.rs::backup003_restore_ignores_previous_staging_wal"
+        - "apps/cli/tests/restore_staging.rs::backup003_failed_verification_cleans_own_staging"
         - "apps/cli/tests/backup_concurrency.rs::backup002_concurrent_writes_preserve_manifest_and_restore"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"

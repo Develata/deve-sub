@@ -62,6 +62,10 @@ The CLI verifies key continuity and the archived row counts before applying
 forward migrations to a staging database. It checks integrity before the atomic
 replacement. A failed check leaves the existing database intact. Stop `serve`
 first; the guard uses a sidecar flock, not the mere existence of WAL/SHM files.
+Each restore uses a private, unique staging directory beside the target; a
+previous crash's staging WAL/SHM cannot enter the restored snapshot. Normal
+completion and errors clean up the current staging directory. Crash remnants
+remain isolated for inspection and are not automatically deleted by retries.
 
 ### Restoring from an older schema
 

@@ -211,6 +211,10 @@ override reverts to the parsed value.
   Acceptance: SRC-001.
 - Source refresh: fetch → parse → snapshot → node pool. Acceptance:
   SRC-002, SRC-005, SRC-006.
+- Scheduler tests observe durable completion before shutdown, with bounded
+  waits and checked task exits. Negative eligibility cases include a due source
+  as a positive control so an unexecuted tick cannot masquerade as a pass.
+  Fixed sleeps are not evidence that a refresh completed (SRC-003).
 - SSRF: localhost rejected, private network rejected, DNS rebinding
   rejected, redirect-to-internal rejected, YAML bomb rejected.
   Acceptance: SEC-001 through SEC-005.

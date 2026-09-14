@@ -254,6 +254,12 @@ remote bindings; reimport those nodes to establish independent membership.
 Previously misclassified missing manual nodes also require reimport to recover;
 upgrading does not automatically rewrite their historical missing flags.
 
+Source edits and deletion invalidate the pool revision in the same transaction
+as the source mutation: names and cascading binding changes affect the effective
+node view and source-label filters. A failed revision write rolls back the source
+mutation too. Generation semantics versioning rebuilds pre-fix cached output;
+old cache rows remain subject to ordinary retention.
+
 ## Node organization workflow (NODE-004/005/006/010/018)
 
 Tags are sets of stable IDs. Names are trimmed, nonempty, at most 128 Unicode

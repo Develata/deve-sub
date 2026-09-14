@@ -642,3 +642,60 @@ is `/tmp/deve-sub-link-review-rereview.md`. No frontend source changed; browser,
 WASM and Docker integration remain checks for the subsequent PR CI. Real power
 loss, long-running soak and every output-profile client were not tested locally.
 The bounded concurrent scenarios do not exhaust all possible interleavings.
+
+## M4/M5 independent imports and source cache invalidation — 2026-09-14
+
+Owner: main agent; one independent read-only reviewer audited and reviewed the
+fixes against main `f2ef4f6d738a9c639f30a4bfc0e42646cc0960a7`.
+Scope: SRC-003, NODE-001/NODE-011 and GEN-015, with their plans, contracts and
+regression matrix. No schema migration, dependency, API shape, frontend source,
+real-data maintenance, release or deployment change is part of this slice.
+
+- P1 / NODE-011: a remote refresh withdrew an independently imported manual
+  node, making fixed-node generation fail. Inserts, active duplicates and
+  missing reimports now retain independent provenance in the existing stored
+  label. Remote-only labels still derive from bindings; a remote source named
+  `manual` does not acquire independent membership. Repeated removal and a
+  concurrent import/refresh preserve the ID, credentials, tags and overrides.
+- P2 / GEN-015: source rename/deletion changed live filter resolution without
+  changing the cache key, so generation returned stale output. Source mutation
+  and pool-revision invalidation now commit together; an injected revision
+  failure rolls back source metadata and cascading bindings. The source filter
+  retains its existing effective-label semantics. Generation semantics v3
+  rejects v2 cached output, including active and fallback lookups, while current
+  valid output remains available as explicit failure fallback.
+- P2 / SRC-003: main CI run `34804296116` exposed a scheduler test that stopped
+  the task after a fixed 150ms before it necessarily refreshed anything. A
+  controlled 350ms SQLite writer reproduced the failure; waiting for durable
+  completion passes under the same contention. Negative eligibility tests now
+  include an eligible control; completion and shutdown waits are bounded and
+  task exits checked. Production scheduler behavior is unchanged.
+
+Eight new regression cases failed before their respective fixes; the remote
+source named `manual` control already passed. Real API reproduction now keeps
+manual nodes usable in all three import orders, with identity and user edits
+intact. Renaming/deleting a source advances revision and fresh generation
+rejects the empty selection instead of returning the old cache. Same-database
+upgrade testing rejects stale v2 active output and regenerates under current
+rules. Historical missing flags and discarded manual provenance are not
+automatically repaired: explicit reimport restores the fixture's original ID.
+
+Final local verification passed: fmt, check, strict Clippy, all-targets and
+all-features Rust tests (92 suites, 1,054 passed, 0 failed, 8 ignored), doc tests,
+dependency audit and 17 CI-tooling tests. Docs/acceptance passed 157 cases and
+458 proof references; architecture passed 15 crates including all three new
+test modules. Generated OpenAPI has no diff. The same independent reviewer
+closed both production findings without a remaining blocker; its documentation
+suggestion about historical missing nodes was applied.
+
+The Browser plugin was unavailable, so the existing Playwright harness ran
+against the rebuilt binary and existing Web assets: all 73 functional cases
+passed with four workers and no retries, including desktop/mobile flows.
+Category screenshots at desktop, tablet and mobile widths were also captured
+in the earlier 36-case targeted pass; desktop and mobile images were inspected.
+Raw evidence uses `/tmp/deve-sub-node-review-*.log`; final review is
+`/tmp/deve-sub-node-review-rereview.md`. Docker/WASM integration and published
+branch checks belong to the subsequent PR CI. Real power loss, long-running
+soak, every concurrency interleaving and every external client were not tested
+locally; this bounded review does not establish that the whole project is free
+of defects.

@@ -11,6 +11,8 @@ use deve_sub_domain::{
 use deve_sub_kernel::{GenerationCacheId, NodeId};
 use serde_json::{Value, json};
 
+mod source_mutation;
+
 fn document(selector: Value, groups: Value) -> String {
     json!({"apiVersion":"deve-sub.io/v1", "kind":"SubscriptionTemplate",
         "metadata":{"name":"safety", "version":1},
@@ -162,9 +164,13 @@ async fn gen015_mihomo_unsupported_groups_never_replace_last_good() {
 }
 
 // Reproduce the exact pre-fix key encoding, independent of the new key builder.
-fn legacy_key(entry: &GenerationCacheEntry) -> String {
+fn legacy_key(entry: &GenerationCacheEntry, semantics: Option<&str>) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
+    if let Some(semantics) = semantics {
+        hasher.update((semantics.len() as u64).to_le_bytes());
+        hasher.update(semantics.as_bytes());
+    }
     for value in [
         entry.template_id.to_string(),
         entry.template_version.to_string(),
@@ -185,6 +191,10 @@ fn legacy_key(entry: &GenerationCacheEntry) -> String {
 }
 
 async fn legacy_cache(db: &TestDb) {
+    seed_legacy_cache(db, None).await;
+}
+
+async fn seed_legacy_cache(db: &TestDb, semantics: Option<&str>) {
     let selector: NodeSelector =
         serde_json::from_value(json!({"mode":"dynamic"})).expect("selector");
     let mut entry = GenerationCacheEntry {
@@ -204,7 +214,7 @@ async fn legacy_cache(db: &TestDb) {
         content: "legacy-invalid-or-unselected-output".into(),
         is_active: false,
     };
-    entry.cache_key = legacy_key(&entry);
+    entry.cache_key = legacy_key(&entry, semantics);
     let repo = SqliteGenerationCacheRepository::new(db.pool.clone());
     repo.store(&entry).await.expect("legacy cache");
     repo.activate(db.template_id, "mihomo", entry.id)

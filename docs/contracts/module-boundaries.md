@@ -94,6 +94,12 @@ cannot withdraw that contribution or replace manual overrides/tags. The storage
 adapter uses the existing persisted node label for independent provenance and
 live bindings for remote labels.
 
+### Source cache invalidation (M4/M5)
+
+`SourceRepository::update` and `delete` commit their pool-revision invalidation
+atomically with the source mutation. Prior
+generation semantics are not trusted as direct hits or last-good fallback.
+
 ## Hexagonal layering
 
 ```text

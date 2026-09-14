@@ -266,6 +266,11 @@ impl SourceRepository for SqliteSourceRepository {
             Some(h) if !h.is_empty() => self.seal(CTX_HEADERS, h)?,
             _ => None,
         };
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         let result = sqlx::query(
             "UPDATE sources SET \
                name = ?, \
@@ -298,7 +303,7 @@ impl SourceRepository for SqliteSourceRepository {
                 .map_err(|e| SourceError::Storage(e.to_string()))?,
         )
         .bind(source.id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| {
             if crate::error_classify::is_unique_violation(&e) {
@@ -310,20 +315,36 @@ impl SourceRepository for SqliteSourceRepository {
         if result.rows_affected() == 0 {
             return Err(SourceError::SourceNotFound);
         }
+        // WHY: source names contribute to the effective node view and filters.
+        // The mutation cannot become visible before its cache invalidation.
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+        tx.commit()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
     }
 
     async fn delete(&self, id: SourceId) -> Result<(), SourceError> {
         // WHY: ON DELETE CASCADE in migration 0004 removes snapshots, items,
         // and node_source_bindings automatically. No manual cascade needed.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         let result = sqlx::query("DELETE FROM sources WHERE id = ?")
             .bind(id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
         if result.rows_affected() == 0 {
             return Err(SourceError::SourceNotFound);
         }
+        // Cascaded bindings alter the effective source label used by generation.
+        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+        tx.commit()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
     }
 }

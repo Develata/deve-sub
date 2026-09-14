@@ -103,6 +103,7 @@ pub trait GenerationCacheRepository: Send + Sync {
         profile: &str,
     ) -> Result<Option<GenerationCacheEntry>, TemplateError>;
 
+    /// A version pin restricts fallback to that exact version; mode must match.
     /// Find the most recent entry for a selection shape — same
     /// `(template_id, profile, selection_mode, selection_payload)` —
     /// regardless of pool revision or active flag.
@@ -118,6 +119,8 @@ pub trait GenerationCacheRepository: Send + Sync {
         profile: &str,
         selection_mode: &str,
         selection_payload: &str,
+        version_pin: Option<u64>,
+        mode: &str,
     ) -> Result<Option<GenerationCacheEntry>, TemplateError>;
 
     /// Store a new cache entry as inactive (content only; no publish). The

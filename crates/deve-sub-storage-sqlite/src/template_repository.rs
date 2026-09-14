@@ -161,7 +161,7 @@ impl TemplateRepository for SqliteTemplateRepository {
         &self,
         template: &SubscriptionTemplate,
         version: &TemplateVersion,
-    ) -> Result<(), TemplateError> {
+    ) -> Result<u64, TemplateError> {
         // WHY: deactivate-old-version + insert-new-version + update-template
         // must be one transaction so a failure between any two steps cannot
         // leave the template pointing to a non-existent active version, or a
@@ -177,9 +177,20 @@ impl TemplateRepository for SqliteTemplateRepository {
 
         let mut tx = self
             .pool
-            .begin()
+            .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|e| TemplateError::Storage(e.to_string()))?;
+
+        // The allocator must use all history, not the active (possibly rolled
+        // back) version. Holding the write lock also serializes concurrent saves.
+        let next_version: i64 = sqlx::query_scalar(
+            "SELECT (SELECT COALESCE(MAX(version), 0) + 1 FROM template_versions WHERE template_id = templates.id) FROM templates WHERE id = ?",
+        )
+        .bind(template.id.to_string())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| TemplateError::Storage(e.to_string()))?
+        .ok_or(TemplateError::TemplateNotFound)?;
 
         sqlx::query(
             "UPDATE template_versions SET is_active = 0 WHERE template_id = ? AND is_active = 1",
@@ -195,7 +206,7 @@ impl TemplateRepository for SqliteTemplateRepository {
         )
         .bind(version.id.to_string())
         .bind(version.template_id.to_string())
-        .bind(version.version as i64)
+        .bind(next_version)
         .bind(&spec_json)
         .bind(&version.spec_yaml)
         .bind(version.is_active as i64)
@@ -216,7 +227,7 @@ impl TemplateRepository for SqliteTemplateRepository {
         .bind(&template.name)
         .bind(&template.description)
         .bind(&active_version_id)
-        .bind(template.active_version as i64)
+        .bind(next_version)
         .bind(&template_updated_at)
         .bind(template.id.to_string())
         .execute(&mut *tx)
@@ -235,7 +246,8 @@ impl TemplateRepository for SqliteTemplateRepository {
         tx.commit()
             .await
             .map_err(|e| TemplateError::Storage(e.to_string()))?;
-        Ok(())
+        u64::try_from(next_version)
+            .map_err(|_| TemplateError::Storage("invalid allocated version".into()))
     }
 
     async fn find_by_id(
@@ -344,7 +356,15 @@ impl TemplateRepository for SqliteTemplateRepository {
             .bind(id.to_string())
             .execute(&self.pool)
             .await
-            .map_err(|e| TemplateError::Storage(e.to_string()))?;
+            .map_err(|e| {
+                if e.as_database_error()
+                    .is_some_and(|db| db.is_foreign_key_violation())
+                {
+                    TemplateError::InUse
+                } else {
+                    TemplateError::Storage(e.to_string())
+                }
+            })?;
         if result.rows_affected() == 0 {
             return Err(TemplateError::TemplateNotFound);
         }

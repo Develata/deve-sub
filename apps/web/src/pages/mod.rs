@@ -3,12 +3,16 @@
 #![cfg(target_family = "wasm")]
 
 pub mod audit;
+pub mod audit_cleanup;
+pub mod audit_table;
 pub mod audit_types;
 pub mod dashboard;
 pub mod login;
+pub mod node_categories;
 pub mod node_chain_modal;
 pub mod node_import_modal;
 pub mod node_override_modal;
+pub mod node_selection;
 pub mod node_tag_modal;
 pub mod node_types;
 pub mod nodes;
@@ -29,3 +33,8 @@ pub mod user_modals;
 pub mod user_types;
 pub mod users;
 pub mod util;
+
+pub mod node_list;
+pub mod node_tag_manager;
+
+pub mod source_modals;

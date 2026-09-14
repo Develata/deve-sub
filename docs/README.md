@@ -15,6 +15,8 @@ blueprint, typed contracts, product behavior, proof, and historical rationale.
 8. [`coverage-matrix.md`](coverage-matrix.md)
 9. the matching milestone plan/feature/contract/acceptance documents
 
+Operational logging: [日志查询、清理与回收](features/logging.md).
+
 ## Structure
 
 | Path | Answers |
@@ -41,3 +43,9 @@ personal infrastructure/backup procedures or empty speculative registry/report
 directories. Useful accepted semantics are carried by the current plans,
 features, contracts, acceptance rows and ADRs; Git history preserves prior
 tracked revisions.
+
+## Current management journeys
+
+- [Node organization and management](features/node-organization.md)
+- [订阅模板与 Clash 分流规则](features/subscription-templates.md)
+- [Concurrent functional acceptance](acceptance/functional-matrix.md)

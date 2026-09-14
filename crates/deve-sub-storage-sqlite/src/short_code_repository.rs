@@ -1,7 +1,7 @@
 //! SQLite implementation of [`ShortCodeRepository`].
 //!
 //! Short codes are CSPRNG-generated base62 strings stored in the clear (they
-//! are public lookup keys, not secrets). The `code` column has a UNIQUE
+//! are bearer credentials retained for authenticated retrieval). The `code` column has a UNIQUE
 //! constraint for atomic conflict rejection (OUT-013). See
 //! `docs/plan/milestones/M6-subscription-distribution.md` §"Token and
 //! short-code security model".

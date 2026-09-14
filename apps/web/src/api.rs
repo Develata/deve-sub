@@ -163,6 +163,8 @@ pub mod auth {
 
 async fn js_fetch(url: &str, init: &RequestInit) -> Result<Response, ApiError> {
     let window = web_sys::window().ok_or(fetch_err("no global window"))?;
+    // The same signal remains attached while the response body is consumed.
+    init.set_signal(Some(&web_sys::AbortSignal::timeout_with_u32(30_000)));
     let request = web_sys::Request::new_with_str_and_init(url, init)
         .map_err(|_| fetch_err("failed to construct request"))?;
     let promise = window.fetch_with_request(&request);

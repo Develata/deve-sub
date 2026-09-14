@@ -171,7 +171,7 @@ override reverts to the parsed value.
 
 - Source fetch failure (timeout, HTTP error, parse error): the last
   successful snapshot remains active. If `keep_on_fail` is false, the
-  source is marked as errored. The job records the error in the `jobs`
+  source is disabled according to its current stored policy. The job records the error in the `jobs`
   table. No partial node pool mutation occurs — the refresh is
   transactional: either the new snapshot is committed and the old one
   deactivated, or nothing changes (constraint #19: on failure, preserve
@@ -220,3 +220,60 @@ inserts remain simple per-new-node operations. Missing detection, snapshot
 activation, revision bump and pruning stay in the same transaction.
 Migration 0026 adds a complete fingerprint lookup index: the earlier partial
 active dedup index cannot serve queries over both active and missing nodes.
+
+## Node organization workflow (NODE-004/005/006/010/018)
+
+Tags are sets of stable IDs. Names are trimmed, nonempty, at most 128 Unicode
+characters; colors are optional #RRGGBB values. Rename preserves the ID and
+memberships; deletion removes memberships atomically and invalidates generated
+selection caches. Duplicate IDs are idempotent. Missing node/tag references
+return 404 without partial mutation, including empty replacements.
+
+Batch tag requests default to replacement for API compatibility. Explicit add
+and remove modes mutate the stored sets in one write transaction; concurrent
+adds must preserve both additions. Repeated nodes in one assignment request
+are rejected as ambiguous. Enable batches count distinct existing nodes.
+Graph validation and chain persistence share a SQLite write transaction so
+concurrent individually valid requests cannot introduce a cycle.
+
+The node UI displays tags and supports tag/region/status filters, selection of
+the current filtered set, and explicit selection clearing. A tag manager owns
+create/rename/delete; assignment forms load existing membership and permit
+empty replacement. Batch forms default to add and explain replace/remove.
+Override and region editors load persisted values before enabling save.
+Background refresh must not overwrite a newer list request or selection.
+
+Manual tags are also the node page's visible categories. The complete `/tags`
+catalog owns category identity, including empty categories; loaded node
+memberships must never decide whether a category exists. A wrapping category
+bar exposes all nodes, untagged nodes and each named tag with its color and a
+count over loaded nodes before other filters. Counts may overlap for multi-tag
+nodes and are explicitly not whole-database totals when pagination remains.
+Selecting a different category clears node selection and resets virtual scroll;
+search/protocol/region/status remain intersecting filters. Rename retains the
+active category by ID; removing its last member retains the empty category;
+only a successful catalog read confirming deletion resets it to all nodes.
+Catalog refresh errors retain the last catalog and provide retry. Every catalog
+response is guarded against newer refreshes, including inline tag creation even
+when the user cancels assignment. No new category entity or API is introduced.
+
+On an accepted node refresh, selection is intersected with loaded node IDs that
+still belong to the current category. A node moved out of that category or no
+longer loaded cannot remain an implicit batch target. Selection carries a local
+revision advanced by each user selection intent, even a deselect/reselect of the
+same IDs. Batch enable/disable completion clears selection only if that revision is unchanged;
+later choices are preserved. Node-page and refresh failures retain the last
+loaded rows, selection and cursor, show an error, and allow a bounded retry.
+
+Design reference: miaomiaowu v0.8.5 node management uses visible tag badges,
+filter groups and grouped actions. Deve Sub retains its own brand and virtual
+list, with a compact toolbar, visible selection count, responsive dialogs and
+complete loading/error/empty states. No external UI code or assets are copied.
+Verification: real-browser organization workflows plus concurrent HTTP cases
+in the functional acceptance matrix; backend tests retain rollback proof.
+
+Import deduplication acquires the write transaction before reading existing node
+identity; concurrent imports cannot upgrade a stale read snapshot into a write.
+Refresh failure must not write a copied Source over newer configuration: its
+port performs only a conditional enabled update using the current keep_on_fail.
+The controlled refresh regression binds SRC-005; concurrent import binds NODE-001.

@@ -62,7 +62,15 @@ cache keys alone.
 Browser invocations own their ports, temporary databases/keys, identities,
 fixtures, child processes and logs. Setup and teardown use the same run-local
 configuration; partial setup failure stops the children already started.
-Workers within one invocation remain serial while they share seeded state.
+Legacy UI workers within one invocation remain serial while they share seeded
+state. The functional matrix uses a separate fully-parallel Playwright config:
+each test owns a server, database, key, session and fixtures. Four workers are
+the default bound. Same-database race scenarios issue simultaneous requests
+inside one test and assert committed invariants, not response status alone.
+Every request, startup, test and teardown has a finite deadline. Failure
+artifacts include the stable case ID and isolated server log. Retries are off;
+failures cannot be hidden by automatic reruns. The case-to-feature mapping
+lives in docs/acceptance/functional-matrix.md and binds existing acceptance IDs.
 Failure reports preserve logs and browser diagnostics without uploading DBs,
 master keys or persisted storageState files. Browser traces can contain this
 invocation's disposable synthetic login/session metadata; the fixture database
@@ -93,3 +101,9 @@ never substitute for WASM build, artifact verification or runtime acceptance.
 Long application soak is a separate optional manual/weekly workflow. The main
 baseline keeps its 90-second regression soak. Long-run reports retain time and
 work-normalized slopes and SQLite free/page counts; no full VACUUM is automatic.
+
+The Web job also regenerates the committed Tailwind CSS using the pinned
+`apps/web/package-lock.json` and requires an empty generated diff. CSS remains
+a committed build input so native/Docker release builds do not require Node.
+After Rust class names or input.css change, run `npm ci --prefix apps/web` and
+`npm run --prefix apps/web build:css` before building WASM.

@@ -110,3 +110,28 @@ test.describe('Real browser auth (DS-AUD-049)', () => {
     await expect(page.locator('button').filter({ hasText: /^验证$|^Verify$/ })).toBeVisible();
   });
 });
+
+
+test('AUTH-004: pending login cannot be submitted repeatedly with Enter', async ({ page }) => {
+  let requests = 0;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/v1/auth/login', async route => {
+    requests++;
+    await pending;
+    await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'invalid_credentials', message: 'invalid username or password' }) });
+  });
+  await page.goto('/');
+  const password = page.locator('input[type="password"]');
+  await password.fill('FixtureWrongPassword');
+  await page.locator('input[type="text"]').first().fill('fixture-user');
+  try {
+    await password.press('Enter');
+    await expect.poll(() => requests).toBe(1);
+    await password.press('Enter');
+    await password.press('Enter');
+    await expect(page.getByRole('button', { name: /Loading|加载/ })).toBeDisabled();
+    expect(requests).toBe(1);
+  } finally { release(); }
+  await expect(page.locator('p').filter({ hasText: /用户名或密码错误|Invalid username or password/ })).toBeVisible();
+});

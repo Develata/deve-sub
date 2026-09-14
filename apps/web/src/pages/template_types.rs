@@ -3,10 +3,15 @@
 #![cfg(target_family = "wasm")]
 
 pub use deve_sub_contract::{
-    CreateTemplateRequest, GenerationResultDto, GetTemplateResponse, ListTemplatesResponse,
-    ListVersionsResponse, RollbackRequest, RollbackTemplateResponse, TemplateDto, TemplateResponse,
-    TemplateVersionDto, UpdateTemplateRequest,
+    ActiveTemplateVersionResponse, CreateTemplateRequest, GenerationResultDto,
+    ListTemplatesResponse, ListVersionsResponse, RollbackRequest, RollbackTemplateResponse,
+    TemplateDto, TemplateResponse, TemplateVersionDto, UpdateTemplateRequest,
 };
+
+pub const DEFAULT_CLASH_YAML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../examples/templates/clash-routing.yaml"
+));
 
 pub const PROFILES: &[&str] = &[
     "mihomo",

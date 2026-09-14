@@ -527,6 +527,7 @@ async fn set_node_chain_bumps_pool_revision() {
     let node_a = trojan_node(TROJAN_A);
     let node_b = trojan_node(TROJAN_B);
     let id_a = node_a.id;
+    let id_b = node_b.id;
     pool_repo
         .import_nodes(vec![node_a, node_b])
         .await
@@ -534,7 +535,7 @@ async fn set_node_chain_bumps_pool_revision() {
 
     let before = meta_repo.get_revision().await.expect("revision before");
     pool_repo
-        .set_node_chain(id_a, Some(&[trojan_node(TROJAN_B).id]))
+        .set_node_chain(id_a, Some(&[id_b]))
         .await
         .expect("set chain");
     let after = meta_repo.get_revision().await.expect("revision after");

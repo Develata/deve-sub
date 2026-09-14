@@ -37,6 +37,13 @@ pub async fn list_audit_logs(
     cursor: Option<AuditLogId>,
     limit: u32,
 ) -> Result<Vec<AuditLog>, AuditError> {
+    if let (Some(since), Some(before)) = (filter.since, filter.before)
+        && since >= before
+    {
+        return Err(AuditError::Invalid(
+            "since must be earlier than before".into(),
+        ));
+    }
     repo.list(filter, cursor, limit).await
 }
 

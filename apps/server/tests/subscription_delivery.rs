@@ -153,6 +153,12 @@ impl TestApp {
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,
                 rate_limiter,
+                short_code_rate_limiter: Arc::new(
+                    deve_sub_inmemory::InMemoryLoginRateLimiter::new(
+                        60,
+                        std::time::Duration::from_secs(60),
+                    ),
+                ),
                 db_health,
             },
             _dir: dir,
@@ -879,7 +885,11 @@ async fn del013_short_code_delivery() {
     assert_eq!(res.status(), StatusCode::OK);
     let sc = body_to_json(res).await;
     let code = sc["code"].as_str().expect("code").to_owned();
-    assert_eq!(code.len(), 8, "short code is 8 base62 chars");
+    assert_eq!(
+        code.len(),
+        22,
+        "new short codes have over 128 bits of entropy"
+    );
 
     // Deliver via the short code.
     let res = router
@@ -910,6 +920,26 @@ async fn del013_short_code_delivery() {
     assert_eq!(res.status(), StatusCode::OK);
     let v = body_to_json(res).await;
     assert_eq!(v["subscription"]["short_code"], code);
+
+    // Existing eight-character credentials remain valid after an upgrade.
+    let pool = sqlx::SqlitePool::connect(&format!(
+        "sqlite://{}",
+        app._dir.path().join("test.db").display()
+    ))
+    .await
+    .expect("legacy DB");
+    sqlx::query("UPDATE subscription_short_codes SET code = ? WHERE code = ?")
+        .bind("Ab12Cd34")
+        .bind(&code)
+        .execute(&pool)
+        .await
+        .expect("legacy fixture");
+    let legacy = router
+        .oneshot(get("/s/Ab12Cd34/mihomo"))
+        .await
+        .expect("legacy delivery");
+    assert_eq!(legacy.status(), StatusCode::OK);
+    pool.close().await;
 }
 
 /// DEL-014: A bad short code returns 404 with no existence leak.

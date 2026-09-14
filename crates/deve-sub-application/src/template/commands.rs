@@ -6,13 +6,12 @@
 //! `docs/plan/03-architecture.md` §"Lightweight CQRS".
 
 use deve_sub_domain::{
-    SubscriptionTemplate, TemplateDocument, TemplateRepository, TemplateVersion,
-    TemplateVersionRepository,
+    SubscriptionTemplate, TemplateRepository, TemplateVersion, TemplateVersionRepository,
 };
 use deve_sub_kernel::{TemplateId, TemplateVersionId, Timestamp};
 
 use super::error::TemplateAppError;
-use super::validation::{map_template_error, validate_document};
+use super::validation::{map_template_error, parse_template_document, validate_document};
 
 /// Maximum template name length.
 const MAX_NAME_LEN: usize = 128;
@@ -25,7 +24,7 @@ const DEFAULT_LIST_LIMIT: u32 = 50;
 
 /// Validate a template name at the application boundary.
 fn validate_name(name: &str) -> Result<(), TemplateAppError> {
-    if name.is_empty() {
+    if name.trim().is_empty() {
         return Err(TemplateAppError::InvalidInput(
             "name must not be empty".to_owned(),
         ));
@@ -54,7 +53,7 @@ pub struct CreateTemplateParams {
     pub name: String,
     /// Optional description.
     pub description: String,
-    /// The full V3 template YAML document.
+    /// Native Clash routing YAML or a full V3 document.
     pub spec_yaml: String,
 }
 
@@ -67,7 +66,7 @@ pub struct CreateTemplateResult {
     pub version: TemplateVersion,
 }
 
-/// Create a new V3 subscription template.
+/// Create a subscription template from native Clash or V3 YAML.
 ///
 /// Validates the name, parses and validates the spec YAML against the M5
 /// schema constraints, persists the template aggregate, and commits the first
@@ -86,8 +85,7 @@ pub async fn create_template(
     validate_name(&params.name)?;
     validate_description(&params.description)?;
 
-    let doc: TemplateDocument = serde_yaml::from_str(&params.spec_yaml)
-        .map_err(|e| TemplateAppError::SpecYamlParse(e.to_string()))?;
+    let doc = parse_template_document(&params.spec_yaml)?;
     validate_document(&doc, &params.spec_yaml)?;
 
     let mut template = SubscriptionTemplate::new(&params.name, &params.description);
@@ -121,7 +119,7 @@ pub struct UpdateTemplateParams {
     pub name: String,
     /// New description.
     pub description: String,
-    /// New full V3 template YAML document.
+    /// New native Clash routing YAML or a full V3 document.
     pub spec_yaml: String,
 }
 
@@ -136,10 +134,9 @@ pub struct UpdateTemplateResult {
 
 /// Update an existing template, creating a new version.
 ///
-/// Loads the template, validates the new name and spec YAML, determines the
-/// next version number, commits the new version as active, and updates the
-/// aggregate's metadata. The previous version is deactivated atomically by
-/// the version repository's `create` transaction (GEN-003).
+/// Validates the new name and YAML, then asks the template repository to
+/// allocate a history number, insert the active snapshot and update metadata
+/// in one write transaction (GEN-003). Rollback cannot rewind the allocator.
 ///
 /// # Errors
 /// - [`TemplateAppError::TemplateNotFound`] — template does not exist.
@@ -153,8 +150,7 @@ pub async fn update_template(
     validate_name(&params.name)?;
     validate_description(&params.description)?;
 
-    let doc: TemplateDocument = serde_yaml::from_str(&params.spec_yaml)
-        .map_err(|e| TemplateAppError::SpecYamlParse(e.to_string()))?;
+    let doc = parse_template_document(&params.spec_yaml)?;
     validate_document(&doc, &params.spec_yaml)?;
 
     let mut template = template_repo
@@ -167,8 +163,9 @@ pub async fn update_template(
     template.description = params.description;
     template.updated_at = Timestamp::now();
 
-    let next_version = template.active_version + 1;
-    let version = TemplateVersion {
+    // Storage allocates the history number atomically, independently of rollback.
+    let next_version = 0;
+    let mut version = TemplateVersion {
         id: TemplateVersionId::new(),
         template_id: template.id,
         version: next_version,
@@ -181,11 +178,13 @@ pub async fn update_template(
     template.active_version_id = Some(version.id);
     template.active_version = next_version;
 
-    template_repo
+    let committed_version = template_repo
         .update_with_version(&template, &version)
         .await
         .map_err(map_template_error)?;
 
+    template.active_version = committed_version;
+    version.version = committed_version;
     Ok(UpdateTemplateResult { template, version })
 }
 
@@ -268,7 +267,23 @@ pub async fn list_versions(
     limit: Option<u32>,
 ) -> Result<Vec<TemplateVersion>, TemplateAppError> {
     let limit = limit.unwrap_or(DEFAULT_LIST_LIMIT);
-    repo.list_for_template(template_id, limit)
+    repo.list_for_template(template_id, limit, None)
+        .await
+        .map_err(map_template_error)
+}
+
+/// Read a bounded history page with an exclusive descending version cursor.
+pub async fn list_versions_before(
+    repo: &dyn TemplateVersionRepository,
+    template_id: TemplateId,
+    before_version: Option<u64>,
+) -> Result<Vec<TemplateVersion>, TemplateAppError> {
+    if before_version.is_some_and(|v| v == 0 || v > i64::MAX as u64) {
+        return Err(TemplateAppError::InvalidInput(
+            "before_version must be a positive 64-bit database version".into(),
+        ));
+    }
+    repo.list_for_template(template_id, 100, before_version)
         .await
         .map_err(map_template_error)
 }
@@ -318,7 +333,7 @@ pub async fn rollback_template(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use deve_sub_domain::MAX_SPEC_BYTES;
+    use deve_sub_domain::{MAX_SPEC_BYTES, TemplateDocument};
 
     const VALID_YAML: &str = "\
 apiVersion: deve-sub.io/v1

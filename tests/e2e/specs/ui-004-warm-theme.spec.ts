@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/auth';
 
-test('UI-004: Minimal Warm theme — layout and design tokens correct', async ({ authedPage: page }) => {
+test('UI-004: Minimal Warm theme — layout and design tokens correct', async ({ authedPage: page }, testInfo) => {
   await page.locator('aside button').filter({ hasText: /设置|Settings/ }).click();
   await page.waitForLoadState('networkidle');
 
@@ -13,15 +13,15 @@ test('UI-004: Minimal Warm theme — layout and design tokens correct', async ({
 
   await page.locator('aside button').filter({ hasText: /仪表盘|Dashboard/ }).click();
   await page.waitForLoadState('networkidle');
-  await page.screenshot({ path: 'screenshots/ui-004-warm-dashboard.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-004-warm-dashboard.png') });
 
   await page.locator('aside button').filter({ hasText: /节点管理|Nodes/ }).click();
   await page.waitForLoadState('networkidle');
-  await page.screenshot({ path: 'screenshots/ui-004-warm-nodes.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-004-warm-nodes.png') });
 
   await page.locator('aside button').filter({ hasText: /设置|Settings/ }).click();
   await page.waitForLoadState('networkidle');
-  await page.screenshot({ path: 'screenshots/ui-004-warm-settings.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-004-warm-settings.png') });
 
   const warmToken = await page.evaluate(() => {
     const el = document.documentElement;

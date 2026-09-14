@@ -1,9 +1,11 @@
 # Docker Compose for Deve Sub — one-command startup (DEPLOY-001).
 #
 # Usage:
+#   docker compose pull           # download the pinned release image
 #   docker compose up -d          # start in background
 #   docker compose logs -f        # follow logs
 #   docker compose down           # stop and remove
+# Set DEVE_SUB_IMAGE_TAG=latest in .env to opt into the stable release alias.
 #
 # The image entrypoint runs migrations before starting the server, so no
 # separate migrate step is needed here. Data is persisted in a named volume.
@@ -12,7 +14,18 @@
 
 services:
   deve-sub:
-    build: .
+    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
+    environment:
+      DEVE_SUB_ADMIN_USERNAME: ${DEVE_SUB_ADMIN_USERNAME:-}
+      DEVE_SUB_ADMIN_PASSWORD: ${DEVE_SUB_ADMIN_PASSWORD:-}
+      DEVE_SUB_AUDIT_RETENTION_DAYS: ${DEVE_SUB_AUDIT_RETENTION_DAYS:-90}
+      RUST_LOG: ${RUST_LOG:-info}
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
     ports:
       - "8080:8080"
     volumes:

@@ -11,6 +11,7 @@
 //! resolution/compatibility, [`mappers`] for DTO conversion, [`error`] for
 //! application-error mapping.
 
+mod active_version;
 mod crud;
 mod error;
 mod mappers;
@@ -28,6 +29,7 @@ pub fn register(
         .routes(routes!(crud::update_template))
         .routes(routes!(crud::delete_template))
         .routes(routes!(crud::list_versions))
+        .routes(routes!(active_version::get_active_version))
         .routes(routes!(crud::rollback_template))
         .routes(routes!(resolve::resolve_template_route))
         .routes(routes!(resolve::check_compatibility_route))

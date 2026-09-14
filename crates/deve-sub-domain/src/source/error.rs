@@ -13,6 +13,10 @@ pub enum SourceError {
     #[error("node not found: {0}")]
     NodeNotFound(String),
 
+    /// The protected chain graph rejected a mutation.
+    #[error(transparent)]
+    NodeChain(#[from] crate::NodeChainError),
+
     /// A source name is already taken.
     #[error("source name already exists")]
     NameExists,

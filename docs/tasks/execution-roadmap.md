@@ -19,7 +19,7 @@ order. It schedules approved contracts; it cannot override plans.
 | M7 | Probes and Detection | done | M6 | Nezha, DStatus, Komari, TCP, QUIC, runner, dashboard |
 | M8 | Deployment and Hardening | done | M7 | Install script, self-update, backup, SSRF, perf, multi-arch |
 | M9 | Protocol and Output Expansion | done | M3, M4, M5, M6 | WireGuard, AnyTLS, Snell, ShadowTLS, xhttp, JSON profile |
-| M10 | Observability and Audit | done | M6, M7, M2 | Traffic history charts, audit log query API |
+| M10 | Observability and Audit | done | M6, M7, M2 | Traffic history charts, audit query/manual cleanup/retention and runtime log rotation |
 | M11 | Archive and Snapshot | done | M6, M7, M10 | `deve-sub backup`, `deve-sub restore`, snapshot format |
 
 ## Phase 1
@@ -112,6 +112,26 @@ Use [`tests/acceptance/matrix.yaml`](../../tests/acceptance/matrix.yaml) as the
 per-case evidence authority and run `python3 scripts/check_docs.py` for its
 current summary. This roadmap deliberately does not duplicate pass/not-run
 counts or lists, which previously drifted from the executable evidence.
+
+## M4 manual category navigation
+
+NODE-005/UI-009 exposes the complete user tag catalog as visible node categories,
+including empty categories and untagged nodes. Parent-owned catalog refresh,
+loaded-node counts and membership lifecycle are specified in M4 and
+`features/node-organization.md`. Seven concurrent functional scenarios live in
+`tests/e2e/functional/categories.ui.spec.ts`; execution evidence belongs to
+`acceptance/gates.md`. No new entity, migration or REST contract shape is needed.
+The follow-up review adds selection revision ownership, refresh reconciliation
+and node-page failure recovery; five scenarios in `category-refresh.ui.spec.ts`
+cover the repaired lifecycle under NODE-004/005.
+
+## M5 template maintenance
+
+Native Clash routing input and template lifecycle repairs are owned by the
+M5 blueprint and GEN-001–004/015–016, with pinned-delivery fallback owned by M6.
+The implementation and concurrency scenarios are described in
+`features/subscription-templates.md` and `acceptance/functional-matrix.md`;
+current execution evidence belongs to `acceptance/gates.md`.
 
 ## M5 review follow-ups (M6 backlog)
 

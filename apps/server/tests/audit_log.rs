@@ -7,6 +7,9 @@
 
 use std::sync::Arc;
 
+#[path = "audit_log/cleanup.rs"]
+mod cleanup_tests;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
@@ -151,6 +154,12 @@ impl TestApp {
                 fetcher: Arc::new(deve_sub_adapters::HttpFetcher::new())
                     as Arc<dyn SubscriptionFetcher>,
                 rate_limiter,
+                short_code_rate_limiter: Arc::new(
+                    deve_sub_inmemory::InMemoryLoginRateLimiter::new(
+                        60,
+                        std::time::Duration::from_secs(60),
+                    ),
+                ),
                 db_health,
             },
             _dir: dir,

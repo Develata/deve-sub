@@ -218,6 +218,12 @@ impl TestApp {
                 geoip: Arc::new(deve_sub_inmemory::InMemoryGeoIp::new()) as Arc<dyn GeoIpPort>,
                 fetcher: Arc::new(fetcher) as Arc<dyn SubscriptionFetcher>,
                 rate_limiter,
+                short_code_rate_limiter: Arc::new(
+                    deve_sub_inmemory::InMemoryLoginRateLimiter::new(
+                        60,
+                        std::time::Duration::from_secs(60),
+                    ),
+                ),
                 db_health,
             },
             _dir: dir,

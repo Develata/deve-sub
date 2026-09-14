@@ -10,8 +10,8 @@ use utoipa::{IntoParams, ToSchema};
 
 /// Request body for `POST /api/v1/templates`.
 ///
-/// The `spec_yaml` field is the full V3 template document (apiVersion,
-/// kind, metadata, spec) as a YAML string. The server validates it against
+/// The `spec_yaml` field accepts native Clash routing YAML (or a rule list)
+/// and the existing V3 document. The server validates it against
 /// the M5 schema constraints before persistence (GEN-002).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -22,7 +22,7 @@ pub struct CreateTemplateRequest {
     /// Optional description.
     #[serde(default)]
     pub description: String,
-    /// The full V3 template YAML document.
+    /// Native Clash routing YAML or a full V3 template document.
     pub spec_yaml: String,
 }
 
@@ -35,7 +35,7 @@ pub struct UpdateTemplateRequest {
     pub name: String,
     /// Optional description.
     pub description: String,
-    /// The full V3 template YAML document.
+    /// Native Clash routing YAML or a full V3 template document.
     pub spec_yaml: String,
 }
 
@@ -112,6 +112,25 @@ pub struct GetTemplateResponse {
 pub struct ListVersionsResponse {
     /// Versions, newest first.
     pub versions: Vec<TemplateVersionDto>,
+    /// Exclusive cursor for the next page of older versions.
+    #[serde(default)]
+    pub next_before_version: Option<u64>,
+}
+
+/// Query parameters for descending template history.
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(IntoParams, ToSchema))]
+pub struct ListVersionsQuery {
+    /// Return versions older than this number (exclusive).
+    pub before_version: Option<u64>,
+}
+
+/// Active template version, independent of history pagination.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct ActiveTemplateVersionResponse {
+    /// The complete active version.
+    pub version: TemplateVersionDto,
 }
 
 /// Response body for `POST /api/v1/templates/{id}/rollback`.

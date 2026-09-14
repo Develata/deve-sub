@@ -3,7 +3,11 @@
 //!
 //! See `docs/plan/milestones/M10-observability-and-audit.md`.
 
+mod cleanup;
 pub mod commands;
+mod node_actions;
+pub use cleanup::{cleanup, preview_cleanup, prune_audit_logs};
+pub use node_actions::record_node_action;
 
 pub use commands::{
     audit_2fa_disable, audit_2fa_enable, audit_force_logout, audit_login, audit_logout,

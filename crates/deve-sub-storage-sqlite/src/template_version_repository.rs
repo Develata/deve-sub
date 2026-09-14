@@ -155,16 +155,19 @@ impl TemplateVersionRepository for SqliteTemplateVersionRepository {
         &self,
         template_id: TemplateId,
         limit: u32,
+        before_version: Option<u64>,
     ) -> Result<Vec<TemplateVersion>, TemplateError> {
         let limit = limit.min(100) as i64;
         let rows: Vec<VersionRow> = sqlx::query_as(
             "SELECT id, template_id, version, spec_json, spec_yaml, is_active, created_at \
              FROM template_versions \
-             WHERE template_id = ? \
+             WHERE template_id = ? AND (? IS NULL OR version < ?) \
              ORDER BY version DESC \
              LIMIT ?",
         )
         .bind(template_id.to_string())
+        .bind(before_version.map(|v| v as i64))
+        .bind(before_version.map(|v| v as i64))
         .bind(limit)
         .fetch_all(&self.pool)
         .await
@@ -176,21 +179,19 @@ impl TemplateVersionRepository for SqliteTemplateVersionRepository {
         &self,
         version_id: TemplateVersionId,
     ) -> Result<TemplateVersion, TemplateError> {
-        // WHY: atomic activate-by-id. Load the version first to get its
-        // template_id, then deactivate all siblings and activate the target
-        // in a single transaction. The partial unique index
-        // idx_template_versions_single_active guarantees the invariant at
-        // the DB level as defense-in-depth.
-        let version = self
-            .find_by_id(version_id)
-            .await?
-            .ok_or(TemplateError::VersionNotFound)?;
-
+        // Read the target after taking the write lock: a concurrent delete
+        // must yield VersionNotFound, never a successful rollback of a ghost.
         let mut tx = self
             .pool
-            .begin()
+            .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|e| TemplateError::Storage(e.to_string()))?;
+        let row: VersionRow = sqlx::query_as(
+            "SELECT id, template_id, version, spec_json, spec_yaml, is_active, created_at FROM template_versions WHERE id = ?",
+        ).bind(version_id.to_string()).fetch_optional(&mut *tx).await
+            .map_err(|e| TemplateError::Storage(e.to_string()))?
+            .ok_or(TemplateError::VersionNotFound)?;
+        let version = row.to_domain()?;
 
         sqlx::query(
             "UPDATE template_versions SET is_active = 0 WHERE template_id = ? AND is_active = 1",

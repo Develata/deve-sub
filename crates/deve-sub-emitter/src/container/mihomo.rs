@@ -5,12 +5,11 @@
 //! dns) is assembled in Slice 5.
 
 use deve_sub_domain::{
-    Authentication, CongestionController, GroupType, Node, ProtocolConfig, ProtocolKind,
-    SnellObfsMode, Transport, TransportKind, UdpRelayMode, XhttpMode,
+    Authentication, CongestionController, Node, ProtocolConfig, ProtocolKind, SnellObfsMode,
+    Transport, TransportKind, UdpRelayMode, XhttpMode,
 };
 
 use crate::common::format_bandwidth;
-use crate::container::ir::AssembledTemplate;
 use crate::error::EmitError;
 
 pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
@@ -22,43 +21,13 @@ pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
     Ok(out)
 }
 
-pub fn emit_full(template: &AssembledTemplate) -> Result<String, EmitError> {
-    let mut out = String::with_capacity(template.nodes.len() * 256 + 1024);
-    out.push_str("proxies:");
-    for node in &template.nodes {
-        emit_proxy(node, &mut out)?;
-    }
-
-    if !template.groups.is_empty() {
-        out.push('\n');
-        emit_groups(&template.groups, &mut out)?;
-    }
-
-    if !template.rules.is_empty() {
-        out.push('\n');
-        emit_rules(&template.rules, &mut out)?;
-    }
-
-    if !template.dns.is_null() {
-        out.push('\n');
-        emit_json_block("dns", &template.dns, &mut out)?;
-    }
-
-    if !template.tun.is_null() {
-        out.push('\n');
-        emit_json_block("tun", &template.tun, &mut out)?;
-    }
-
-    Ok(out)
-}
-
 /// Escape a string for a YAML double-quoted scalar.
 ///
 /// WHY: mihomo proxy fields (name, password, sni, path, host) are
 /// user-controlled and may contain `"`, `\`, or control characters. Emitting
 /// them raw into a double-quoted YAML scalar produces invalid YAML or allows
 /// field injection. This helper escapes per YAML 1.1 double-quoted rules.
-fn yaml_dq(s: &str) -> String {
+pub(super) fn yaml_dq(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for ch in s.chars() {
@@ -77,85 +46,6 @@ fn yaml_dq(s: &str) -> String {
     }
     out.push('"');
     out
-}
-
-fn emit_groups(
-    groups: &[crate::container::ir::AssembledGroup],
-    out: &mut String,
-) -> Result<(), EmitError> {
-    out.push_str("proxy-groups:");
-    for g in groups {
-        let type_str = match g.group_type {
-            GroupType::Select => "select",
-            GroupType::UrlTest => "url-test",
-            GroupType::Fallback => "fallback",
-            GroupType::LoadBalance => "load-balance",
-            GroupType::Relay => "relay",
-            GroupType::Direct => "direct",
-            GroupType::Reject => "reject",
-        };
-        out.push_str("\n  - name: ");
-        out.push_str(&yaml_dq(&g.name));
-        out.push_str("\n    type: ");
-        out.push_str(type_str);
-        if !g.members.is_empty() {
-            out.push_str("\n    proxies:");
-            for m in &g.members {
-                out.push_str("\n      - ");
-                out.push_str(&yaml_dq(m));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn emit_rules(rules: &[serde_json::Value], out: &mut String) -> Result<(), EmitError> {
-    out.push_str("rules:");
-    for rule in rules {
-        let yaml = json_to_yaml_line(rule)?;
-        for (i, l) in yaml.lines().enumerate() {
-            if i == 0 {
-                out.push_str("\n  - ");
-                out.push_str(l);
-            } else {
-                out.push_str("\n    ");
-                out.push_str(l);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn emit_json_block(
-    key: &str,
-    value: &serde_json::Value,
-    out: &mut String,
-) -> Result<(), EmitError> {
-    let yaml =
-        serde_yaml::to_string(value).map_err(|e| EmitError::Encode(format!("serde_yaml: {e}")))?;
-    // WHY: serde_yaml emits a leading "---\n" document marker and column-0
-    // content; we strip the marker and re-indent under the section key.
-    let body = yaml
-        .strip_prefix("---\n")
-        .unwrap_or(&yaml)
-        .trim_end_matches('\n');
-    out.push_str(key);
-    out.push(':');
-    for l in body.lines() {
-        out.push_str("\n  ");
-        out.push_str(l);
-    }
-    Ok(())
-}
-
-fn json_to_yaml_line(value: &serde_json::Value) -> Result<String, EmitError> {
-    let yaml =
-        serde_yaml::to_string(value).map_err(|e| EmitError::Encode(format!("serde_yaml: {e}")))?;
-    Ok(yaml
-        .strip_prefix("---\n")
-        .unwrap_or(&yaml)
-        .trim_end()
-        .to_owned())
 }
 
 fn emit_proxy(node: &Node, out: &mut String) -> Result<(), EmitError> {

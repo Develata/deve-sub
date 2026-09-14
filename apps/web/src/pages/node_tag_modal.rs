@@ -24,6 +24,8 @@ pub struct TagModalProps {
     node_ids: Vec<String>,
     on_close: EventHandler<()>,
     on_success: EventHandler<()>,
+    /// Creating a tag persists its identity even if assignment is cancelled.
+    on_catalog_change: EventHandler<()>,
 }
 
 pub fn TagModal(props: TagModalProps) -> Element {
@@ -33,13 +35,24 @@ pub fn TagModal(props: TagModalProps) -> Element {
     let mut loading = use_signal(|| true);
     let mut saving = use_signal(|| false);
     let mut error = use_signal(String::new);
+    let mut ready = use_signal(|| false);
+    let mut mode = use_signal(|| "add".to_string());
+    let load_ids = props.node_ids.clone();
+    let is_batch = load_ids.len() > 1;
     let mut new_tag_name = use_signal(String::new);
 
     // Load existing tags once.
-    use_future(move || async move {
+    use_future(move || { let load_ids = load_ids.clone(); async move {
         match get::<ListTagsResponse>("/tags").await {
             Ok(resp) => {
                 all_tags.set(resp.tags);
+                if load_ids.len() == 1 {
+                    match get::<deve_sub_contract::NodeResponse>(&format!("/nodes/{}", load_ids[0])).await {
+                        Ok(resp) => selected.set(resp.node.tags.into_iter().map(|t| t.id).collect()),
+                        Err(e) => { error.set(e.message); loading.set(false); return; }
+                    }
+                }
+                ready.set(true);
                 loading.set(false);
             }
             Err(e) => {
@@ -47,18 +60,10 @@ pub fn TagModal(props: TagModalProps) -> Element {
                 loading.set(false);
             }
         }
-    });
-
-    let toggle = move |id: String| {
-        let mut s = selected.write();
-        if s.contains(&id) {
-            s.remove(&id);
-        } else {
-            s.insert(id);
-        }
-    };
+    }});
 
     let create_tag = move |_| {
+        if *saving.read() || !*ready.read() { return; }
         let name = new_tag_name.read().trim().to_string();
         if name.is_empty() {
             return;
@@ -73,9 +78,11 @@ pub fn TagModal(props: TagModalProps) -> Element {
             match send::<TagResponse, _>("POST", "/tags", Some(&req)).await {
                 Ok(resp) => {
                     let mut current = all_tags.write();
+                    selected.write().insert(resp.tag.id.clone());
                     current.push(resp.tag);
                     new_tag_name.set(String::new());
                     saving.set(false);
+                    props.on_catalog_change.call(());
                 }
                 Err(e) => {
                     error.set(e.message);
@@ -86,13 +93,17 @@ pub fn TagModal(props: TagModalProps) -> Element {
     };
 
     let submit = move |_| {
+        if *saving.read() || !*ready.read() { return; }
         let ids: Vec<String> = selected.read().iter().cloned().collect();
-        if ids.is_empty() {
-            return;
-        }
+
         saving.set(true);
         error.set(String::new());
         let targets = props.node_ids.clone();
+        let update_mode = match mode.read().as_str() {
+            "remove" => deve_sub_contract::TagUpdateModeDto::Remove,
+            "replace" => deve_sub_contract::TagUpdateModeDto::Replace,
+            _ => deve_sub_contract::TagUpdateModeDto::Add,
+        };
         spawn(async move {
             let result = if targets.len() == 1 {
                 let req = SetNodeTagsRequest { tag_ids: ids };
@@ -106,7 +117,7 @@ pub fn TagModal(props: TagModalProps) -> Element {
                         tag_ids: ids.clone(),
                     })
                     .collect();
-                let req = BatchTagsRequest { assignments };
+                let req = BatchTagsRequest { assignments, mode: update_mode };
                 send::<(), _>("POST", "/nodes/batch-tags", Some(&req)).await
             };
             match result {
@@ -126,14 +137,24 @@ pub fn TagModal(props: TagModalProps) -> Element {
     rsx! {
         div {
             class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
-            onclick: move |_| props.on_close.call(()),
+            onclick: move |_| { if !*saving.read() { props.on_close.call(()); } },
             div {
-                class: "w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                class: "node-dialog-panel w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                role: "dialog", aria_label: t(l, "nodes.tag_title"), aria_modal: "true",
                 onclick: move |e| e.stop_propagation(),
                 h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
                     {t(l, "nodes.tag_title")}
                 }
 
+                if is_batch {
+                    p { class: "my-3 text-sm text-stone-500", {t(l, "nodes.tag_batch_hint")} }
+                    select { class: "node-control w-full", aria_label: t(l, "nodes.tag_mode"), value: "{mode}",
+                        onchange: move |e| mode.set(e.value()), disabled: *saving.read() || !*ready.read(),
+                        option { value: "add", {t(l, "nodes.tag_add")} }
+                        option { value: "remove", {t(l, "nodes.tag_remove")} }
+                        option { value: "replace", {t(l, "nodes.tag_replace")} }
+                    }
+                }
                 if *loading.read() {
                     div { class: "mt-4 flex justify-center py-8",
                         div { class: "h-5 w-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600" }
@@ -180,7 +201,7 @@ pub fn TagModal(props: TagModalProps) -> Element {
                         }
                         button {
                             class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                            disabled: *saving.read(),
+                            disabled: *saving.read() || !*ready.read(),
                             onclick: create_tag,
                             {t(l, "nodes.tag_create")}
                         }
@@ -193,12 +214,12 @@ pub fn TagModal(props: TagModalProps) -> Element {
                     div { class: "mt-6 flex justify-end gap-2",
                         button {
                             class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                            onclick: move |_| props.on_close.call(()),
+                            onclick: move |_| { if !*saving.read() { props.on_close.call(()); } },
                             {t(l, "common.cancel")}
                         }
                         button {
                             class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
-                            disabled: *saving.read(),
+                            disabled: *saving.read() || !*ready.read(),
                             onclick: submit,
                             if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
                         }

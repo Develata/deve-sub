@@ -32,14 +32,15 @@ use deve_sub_domain::{
 use thiserror::Error;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
-use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use utoipa_scalar::{Scalar, Servable};
 
 use deve_sub_security::MasterKey;
 
 pub mod audit;
+mod audit_cleanup;
 pub mod auth;
+mod client_ip;
 pub mod csrf;
 pub mod dashboard;
 pub mod delivery;
@@ -47,7 +48,9 @@ pub mod logging;
 pub mod node_overrides;
 pub mod nodes;
 pub mod probes;
+mod response_security;
 pub mod routes;
+mod short_code_guard;
 pub mod source_refresh;
 pub mod sources;
 pub mod state;
@@ -108,26 +111,34 @@ pub struct AppState {
     pub fetcher: Arc<dyn SubscriptionFetcher>,
     pub geoip: Arc<dyn GeoIpPort>,
     pub rate_limiter: Arc<dyn LoginRateLimiter>,
+    /// Independent failed short-code lookup budget; never shares login counters.
+    pub short_code_rate_limiter: Arc<dyn LoginRateLimiter>,
     pub db_health: Arc<dyn DbHealthPort>,
 }
 
 /// Build the complete Axum router with all routes and middleware.
 ///
 /// Middleware stack (outermost to innermost):
-/// 1. `SetRequestIdLayer` — assign `x-request-id` before tracing
-/// 2. `TraceLayer` — structured per-request logs
-/// 3. `PropagateRequestIdLayer` — copy `x-request-id` to response
-/// 4. `CorsLayer` — only when `server.allowed_origins` is non-empty (the
+/// 1. Response security headers and no-store policy
+/// 2. Request tracing — server-owned ID, redacted completion log, response ID
+/// 3. `CorsLayer` — only when `server.allowed_origins` is non-empty (the
 ///    default same-origin deployment needs no CORS headers)
-/// 5. `CompressionLayer` — gzip compression
+/// 4. `CompressionLayer` — gzip compression
 ///
 /// CSRF protection (`Origin` header validation) is applied to the API router
 /// only, not to the Scalar docs endpoint.
 pub fn build_router(state: AppState) -> Router {
     let (api_router, openapi) = routes::build_api_router(state.clone());
 
-    let delivery_router =
-        crate::delivery::register_delivery_routes(Router::new()).with_state(state.clone());
+    let delivery_router = crate::delivery::register_delivery_routes(Router::new())
+        .with_state(state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            crate::short_code_guard::GuardState {
+                limiter: state.short_code_rate_limiter.clone(),
+                trust_proxy_headers: state.config.security.trust_proxy_headers,
+            },
+            crate::short_code_guard::guard,
+        ));
 
     let dist_path = std::path::PathBuf::from(&state.config.server.web_dist_dir);
     let serve_web = state.config.server.serve_web;
@@ -156,9 +167,8 @@ pub fn build_router(state: AppState) -> Router {
         None => router,
     };
     router
-        .layer(PropagateRequestIdLayer::x_request_id())
-        .layer(crate::logging::redacting_trace_layer())
-        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(axum::middleware::from_fn(crate::logging::trace_request))
+        .layer(axum::middleware::from_fn(crate::response_security::protect))
 }
 
 /// Build a restrictive CORS layer from the configured origin allowlist.

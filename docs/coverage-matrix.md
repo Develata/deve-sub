@@ -30,11 +30,12 @@ This matrix keeps the live documentation layers aligned:
 | `milestones/M1-infrastructure` | — | `contracts/module-boundaries.md` | — |
 | `milestones/M2-auth-and-users` | `contracts/module-boundaries.md` | — | `AUTH-*`, `SEC-009`, `SEC-010` |
 | `milestones/M3-protocol-engine` | `contracts/data-models.md` | — | `PARSE-*`, `NODE-*` |
-| `milestones/M4-sources-and-node-pool` | `contracts/module-boundaries.md` | — | `SRC-*`, `NODE-*` |
-| `milestones/M5-generator-and-v3-template` | `contracts/module-boundaries.md` | — | `GEN-001`–`GEN-016` |
-| `milestones/M6-subscription-distribution` | `contracts/module-boundaries.md` | — | `OUT-008`–`OUT-014`, `AUTH-009`, `SEC-009` |
+| `milestones/M4-sources-and-node-pool` | `contracts/module-boundaries.md` | `features/node-organization.md` | `SRC-*`, `NODE-*` |
+| `milestones/M5-generator-and-v3-template` | `contracts/module-boundaries.md` | `features/subscription-templates.md` | `GEN-001`–`GEN-016` |
+| `milestones/M6-subscription-distribution` | `contracts/module-boundaries.md` | — | `OUT-008`–`OUT-014`, `OUT-016`, `AUTH-009`, `SEC-009` |
 | `milestones/M7-probes-and-detection` | `contracts/module-boundaries.md` | — | `PROBE-001`–`PROBE-005`, `NODE-012`–`NODE-018` |
 | `milestones/M8-deployment-and-hardening` | `contracts/release-artifacts.md` | `features/deployment.md` | `DEPLOY-*`, `UPDATE-001`, `UPDATE-002` |
+| `milestones/M10-observability-and-audit` | `contracts/module-boundaries.md` | `features/logging.md` | `AUDIT-001`–`AUDIT-005`, `LOG-001` |
 
 ## Test coverage notes
 
@@ -72,3 +73,7 @@ This matrix keeps the live documentation layers aligned:
 - Existing code evidence does not promote an incomplete milestone.
 - Add a new docs directory only when a real document has a distinct semantic
   role; do not create empty architecture theatre.
+
+Management interaction and concurrency dimensions are detailed in
+[`acceptance/functional-matrix.md`](acceptance/functional-matrix.md), with proof
+references in the existing NODE-*, SRC-*, GEN-* and OUT-* acceptance rows.

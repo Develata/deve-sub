@@ -24,6 +24,8 @@ use deve_sub_domain::{GroupType, Node};
 /// warning, not a silent drop — constraint #7).
 #[derive(Debug, Clone)]
 pub struct AssembledTemplate {
+    /// Validated native Clash routing sections, preserved by the Mihomo emitter.
+    pub clash: Option<String>,
     /// Compatibility-filtered, sorted, deduped canonical nodes.
     pub nodes: Vec<Node>,
     /// Proxy groups with members resolved to display names.
@@ -46,6 +48,7 @@ impl AssembledTemplate {
     #[must_use]
     pub fn from_nodes(nodes: Vec<Node>) -> Self {
         Self {
+            clash: None,
             nodes,
             groups: Vec::new(),
             rules: Vec::new(),

@@ -26,7 +26,7 @@ uses the backup/restore infrastructure for data safety.
 
 ```text
 docker compose up
-    → builds (or pulls) the deve-sub image
+    → pulls the pinned release image from GHCR (or uses its local cache)
     → runs migrations
     → starts the server
     → healthcheck passes within 60s
@@ -105,7 +105,7 @@ M8 is delivered in five slices:
 ```yaml
 services:
   deve-sub:
-    build: .            # or image: ghcr.io/develata/deve-sub:${TAG}
+    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
     ports: ["8080:8080"]
     volumes: ["deve-sub-data:/app/data"]
     healthcheck:
@@ -120,10 +120,33 @@ volumes:
   deve-sub-data:
 ```
 
-The compose file uses the existing Dockerfile. The `serve` command runs
-migrations on startup if needed (via `verify_schema` which exits if schema is
-stale — the operator runs `deve-sub migrate` first, or the entrypoint script
-handles it). For zero-config startup, the entrypoint runs `migrate` then `serve`.
+The default Compose file uses a published, explicitly versioned GHCR image;
+no source checkout or local Rust/Web build is required. The release contains
+both `linux/amd64` and `linux/arm64`, and Compose selects the host platform.
+Source builds remain opt-in: in a checkout, replace `image` with `build: .`
+and run `docker compose up -d --build` using the existing Dockerfile.
+For zero-config startup, the image entrypoint runs `migrate` then `serve`;
+`serve` itself verifies the schema and refuses a stale database.
+Before an upgrade, back up the database and master key, change the image's
+version, then pull and recreate the service in the same Compose project while
+retaining its named volume. Reverting an image does not undo schema migrations.
+Operators can persist `DEVE_SUB_IMAGE_TAG=latest` in the Compose directory's
+`.env` to follow the current stable release, then explicitly pull and recreate.
+The release job publishes the versioned multi-platform image first, then
+promotes that exact digest to `latest` only if its stable tag is still the
+GitHub latest release. Image publishing is serialized to prevent concurrent
+alias writes. Prereleases and old-release reruns cannot promote the alias.
+
+Optional container bootstrap reads `DEVE_SUB_ADMIN_USERNAME` and
+`DEVE_SUB_ADMIN_PASSWORD`. After migration and before `serve`, the entrypoint
+dispatches `user init-admin --if-needed` with the password supplied by
+`--password-env`, then unsets both bootstrap variables before executing the
+server. The existing application setup command owns validation, hashing and
+atomic first-user creation. Empty/unset values for both preserve Web setup;
+partial or invalid credentials fail startup on an empty database. Any existing
+user, including a disabled account, prevents bootstrap replacement. The flag
+is not password reset. See the release artifact contract; AUTH-001/DEPLOY-001
+cover creation, restart, rejection, concurrent initialization and redaction.
 
 ### Install script
 
@@ -252,7 +275,7 @@ real encrypted persistence pipeline.
 - Docker base image and healthcheck: ADR-0006
 - CLI subcommand names: AGENTS.md naming section (`update`)
 - Release artifacts (SBOM, checksums, signatures): Constraint #15
-- No `latest` image tag: Constraint #11
+- No `latest` build dependency; opt-in stable-release alias: Constraint #11
 - Forward-only migration: Constraint #13
 - Acceptance: DEPLOY-001..005, UPDATE-001/002, PERF-001..006
 

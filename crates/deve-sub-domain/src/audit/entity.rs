@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 /// An append-only record of an actor's action on a target.
 ///
 /// The audit log captures who did what to which entity, with optional
-/// non-sensitive metadata. Rows are never updated or deleted (except via a
-/// future retention policy). The `actor_id` foreign key uses `ON DELETE SET
+/// non-sensitive metadata. Rows are immutable; bounded cleanup commits an
+/// accountability receipt with deletion. The `actor_id` foreign key uses `ON DELETE SET
 /// NULL` so deleting a user preserves their audit history with the actor
 /// anonymized.
 ///

@@ -229,6 +229,10 @@ pub struct Rule {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateSpec {
+    /// Native Clash routing sections. Absent for existing V3 templates.
+    /// Application validates these; the Mihomo emitter preserves their semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clash: Option<String>,
     /// Target profiles this template can generate for.
     #[serde(default)]
     pub target_profiles: Vec<String>,

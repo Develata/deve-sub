@@ -52,7 +52,7 @@ Deve Sub 是一个用 **Rust** 构建的自托管代理订阅管理平台。导�
 | **01 · 收集** | 管理 HTTP 订阅源，粘贴分享链接或导入配置文件；定时刷新、ETag/304，失败时保留上一次有效快照。 |
 | **02 · 整理** | 统一节点池、去重、标签、地区、人工 override、批量启停；10k 逻辑节点采用虚拟列表，限制实际 DOM 数量。 |
 | **03 · 检测** | TCP connect、适用协议的 QUIC handshake、通过外部代理核心进行真实代理检测；支持批量取消和链式代理环检测。 |
-| **04 · 编排** | V3 模板、动态选择或固定快照、代理组与规则、版本历史及回滚；生成前检查目标兼容性。 |
+| **04 · 编排** | Clash 分流 YAML 与兼容 V3 模板、动态选择或固定快照、代理组与规则、版本历史及回滚；生成前检查目标兼容性。 |
 | **05 · 分发** | 多客户端配置、长期 Token URL、Token 轮换、ETag 缓存、用户到期与流量配额控制。 |
 | **06 · 管理** | 管理员与普通用户权限、TOTP 两步验证及恢复码、审计日志、备份恢复、Web 与 CLI 双入口。 |
 
@@ -92,28 +92,92 @@ ssh -L 8080:127.0.0.1:8080 user@your-server
 对外提供服务前配置 HTTPS 反向代理、Secure Cookie 和可信代理边界。完整行为见[部署与更新](docs/features/deployment.md)。
 
 <details>
-<summary><strong>Docker Compose · 从固定版本源码构建</strong></summary>
+<summary><strong>Docker Compose · 拉取发布镜像</strong></summary>
 
-需要 Docker 和 Compose 插件。首次运行会编译 Rust binary 与 Web，耗时长于下载预编译产物。
+需要 Docker 和 Compose 插件。GitHub Actions 已发布包含 binary 与 Web 的
+`ghcr.io/develata/deve-sub:v0.1.0`，支持 Linux `amd64` / `arm64`，无需克隆源码或本地编译。
+创建 `deve-sub` 目录，将以下内容保存为 `deve-sub/docker-compose.yml`（与[仓库 Compose](docker-compose.yml)一致）：
+
+```yaml
+services:
+  deve-sub:
+    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
+    environment:
+      DEVE_SUB_ADMIN_USERNAME: ${DEVE_SUB_ADMIN_USERNAME:-}
+      DEVE_SUB_ADMIN_PASSWORD: ${DEVE_SUB_ADMIN_PASSWORD:-}
+      DEVE_SUB_AUDIT_RETENTION_DAYS: ${DEVE_SUB_AUDIT_RETENTION_DAYS:-90}
+      RUST_LOG: ${RUST_LOG:-info}
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - deve-sub-data:/app/data
+    healthcheck:
+      test: ["CMD", "/app/deve-sub", "health", "live"]
+      interval: 30s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  deve-sub-data:
+```
 
 ```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/Develata/deve-sub.git
 cd deve-sub
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose logs -f deve-sub
 ```
 
-[仓库 Compose](docker-compose.yml) 使用 named volume 保存 `/app/data`，入口会迁移数据库后启动服务。
+Compose 使用 named volume 保存 `/app/data` 中的数据库与主密钥，入口会迁移数据库后启动服务。
 默认映射宿主机 `8080` 端口；只供本机访问时，把 `ports` 改成 `127.0.0.1:8080:8080`。
+可在同目录 `.env` 中预设管理员，容器首次启动时自动创建，随后打开
+**http://127.0.0.1:8080** 直接登录；远程访问与 HTTPS 配置同上：
+
+```dotenv
+DEVE_SUB_ADMIN_USERNAME=admin
+DEVE_SUB_ADMIN_PASSWORD='replace-with-your-own-strong-password'
+```
+
+请替换示例密码，长度至少 8 字节；`.env` 中含 `$` 的密码使用单引号包裹，避免变量展开。
+两项均不设置时保留网页初始化。已有用户时不会覆盖账号、密码或启用状态；
+空数据库只设置一项或凭据不合法会启动失败。初始化成功后可以移除这两项配置。
+此功能需要包含本次改动的新版镜像，已发布的 `v0.1.0` 不支持；发布前可按下述源码构建方式使用。
+
+默认固定 `v0.1.0`。如需跟随最新稳定版，在同目录的 `.env` 中设置：
+
+> `latest` 将在首次包含此发布流程的稳定版本发布后生成；现有 `v0.1.0` 尚未补发该别名。
+> 仅推送此配置不会创建镜像标签，首次发布完成前请继续使用 `v0.1.0`。
+
+```dotenv
+DEVE_SUB_IMAGE_TAG=latest
+```
+
+然后执行 `docker compose pull && docker compose up -d`。也可以直接
+`docker pull ghcr.io/develata/deve-sub:latest`；这只下载镜像，不会替换运行中的容器。
+`latest` 随稳定 release 更新；需要固定版本时，把 `.env` 中的值改为具体 tag（如 `v0.1.0`）。
+升级前先备份数据库与主密钥，保留原目录及 Compose 项目名，以继续使用原数据卷。
 停止容器可用 `docker compose down`；不要为普通升级附加 `--volumes`，它会删除持久化数据卷。
+需要自行编译时，见[源码构建方式](docs/features/deployment.md#docker-compose)。
 
 </details>
+
+日志查询、手动清理、自动保留和 Docker 日志轮转，见[日志管理](docs/features/logging.md)。
+
+登录与链接安全配置、Token 轮换及泄漏后的处理方式，见[认证与订阅链接](docs/features/authentication-and-links.md)。
 
 ### 第一次使用
 
 1. **添加节点**：创建订阅源并刷新，或在节点管理中粘贴分享链接。
-2. **整理节点池**：按协议、地区和标签筛选，按需检测连接或设置 override。
-3. **准备模板**：选择输出目标，配置节点选择、代理组和规则，检查兼容性报告。
+2. **整理节点池**：通过可见的手动分类入口查看每个标签下的节点（含空分类和未分类），再按协议、地区等筛选，按需检测连接或设置 override。详见[节点整理](docs/features/node-organization.md)。
+3. **准备模板**：使用默认 Clash/Mihomo 分流示例，或粘贴自己的规则和代理组；节点由节点池注入。其他输出目标仍可使用 V3 模板，详见[订阅模板](docs/features/subscription-templates.md)。
 4. **创建长期订阅**：绑定模板，设置到期和额度，把对应订阅 URL 导入客户端。
 
 <a id="formats"></a>

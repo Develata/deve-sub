@@ -196,6 +196,9 @@ SubscriptionToken {
 current active version (`None`) or is pinned to a specific version (`Some(n)`).
 This is the Subscription-independent-aggregate decision: the Subscription owns
 its selection and version pin; Template updates never silently mutate it.
+Last-successful-generation fallback must match the selection and generation
+mode; when pinned, it must also match that exact template version. An unpinned
+subscription may retain an earlier successful version after regeneration fails.
 
 ### Token and short-code security model
 
@@ -213,9 +216,10 @@ Token verification (delivery):
   no match: 404 (no existence leak, OUT-009)
 
 Short code generation:
-  code = CSPRNG → base62(8-12 chars)   // entropy >= 47 bits at 8 chars
+  code = CSPRNG → base62(22 chars)     // entropy > 128 bits; old codes remain valid
   retry on UNIQUE conflict (OUT-013 atomic rejection)
-  rate limit: per-IP probe throttle on GET /s/{code}
+  rate limit: independent bounded per-IP failure limiter on GET /s/{code}
+    60 failed lookups lock the IP for 60 seconds; never share login counters
 ```
 
 Constitution binding (§159-165): subscription tokens are CSPRNG-generated,
@@ -387,3 +391,29 @@ In the REST/CLI config surface, `-1` seconds or `null` maps to `None`.
 - OpenAPI spec regenerated and up to date (admin surface; the public
   `/sub/{token}` surface is documented but not bound to OpenAPI security
   schemes since it uses path tokens, not cookie auth).
+
+## Credential delivery hardening (AUTH-009, SEC-009, OUT-013)
+
+Short codes are bearer credentials: possession grants subscription access.
+They remain stored in plaintext for authenticated administrator retrieval;
+protect database backups accordingly. New codes have at least 128 bits of
+entropy. Existing codes are preserved until explicitly regenerated. Their
+probe limiter uses the same bounded in-memory adapter in an independent
+instance, counts 404 lookups per canonical client IP, and returns 429 while
+locked. Token/short-code log redaction covers malformed extra path segments;
+only recognized profile names may remain visible.
+
+The Web copy action reads the existing short code through the subscription
+detail API and copies /s/{code}/{profile}; a missing code prompts the operator
+to generate one. Creation, rotation and temporary-link dialogs display full
+/sub/{token}/{profile} URLs once. Web token rotation requires a confirmation
+explaining immediate invalidation and sends grace_seconds=0. The API's
+explicit null/-1 permanent-grace option remains compatible. Rotation affects
+full tokens only; short codes and temporary links retain their own lifecycles.
+
+## Web management acceptance
+
+OUT-016 owns Web subscription creation and management pagination. The default
+node selection is dynamic; created links must return subscription content.
+Records beyond the first list page and all template choices remain reachable.
+This management proof is distinct from OUT-008 conditional ETag delivery.

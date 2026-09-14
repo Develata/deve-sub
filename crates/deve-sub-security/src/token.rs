@@ -21,10 +21,10 @@ const TOKEN_BYTES: usize = 32;
 /// entropy comes from the CSPRNG, not the alphabet).
 const BASE62_ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-/// Number of characters in a short code. 8 chars × log2(62) ≈ 47.6 bits of
-/// entropy — sufficient for a public lookup key with UNIQUE-constraint retry
-/// (OUT-013). See M6 blueprint §"Token and short-code security model".
-const SHORT_CODE_LEN: usize = 8;
+/// Twenty-two base62 characters provide about 131 bits of entropy. Short
+/// codes are bearer credentials and must withstand guessing independently of
+/// throttling. Existing shorter codes remain accepted until regenerated.
+const SHORT_CODE_LEN: usize = 22;
 
 /// Generate a cryptographically secure session token.
 ///
@@ -43,10 +43,10 @@ pub fn generate_session_token() -> Result<String, SecurityError> {
 
 /// Generate a cryptographically secure short code.
 ///
-/// Returns an 8-character base62 string (≥47 bits of entropy). Unlike session
-/// tokens, short codes are stored in the clear — they are public lookup keys
-/// for `GET /s/{code}`, not secrets. The caller retries on UNIQUE conflict
-/// (OUT-013).
+/// Returns a 22-character base62 string (>128 bits of entropy). Short codes
+/// grant subscription access and are stored in the clear for administrator
+/// retrieval; protect them and database backups as credentials. The caller
+/// retries on UNIQUE conflict (OUT-013).
 ///
 /// # Errors
 /// Returns [`SecurityError::Crypto`] if the OS entropy source fails.
@@ -94,9 +94,9 @@ mod tests {
     }
 
     #[test]
-    fn short_code_is_8_chars() {
+    fn short_code_has_at_least_128_bits() {
         let code = generate_short_code().expect("short code generation");
-        assert_eq!(code.len(), SHORT_CODE_LEN);
+        assert!(code.len() as f64 * 62_f64.log2() >= 128.0);
     }
 
     #[test]

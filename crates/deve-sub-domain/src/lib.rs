@@ -24,7 +24,10 @@ pub mod template;
 pub mod tls;
 pub mod transport;
 
-pub use audit::{AuditError, AuditLog, AuditLogFilter, AuditLogRepository};
+pub use audit::{
+    AUDIT_CLEANUP_BATCH, AuditCleanupPreview, AuditError, AuditLog, AuditLogFilter,
+    AuditLogRepository,
+};
 pub use endpoint::{DomainName, Endpoint, Host};
 pub use error::DomainError;
 pub use identity::{
@@ -33,7 +36,7 @@ pub use identity::{
 };
 pub use node::{Authentication, Node, NodeChain, NodeSource, RegionAssignment, RegionMethod};
 pub use node_chain::{NodeChainEntry, NodeChainError, NodeChainGraph, NodeCyclePath};
-pub use node_override::{NodeOverride, NodeOverrideRepository, Tag};
+pub use node_override::{NodeOverride, NodeOverrideRepository, Tag, TagUpdateMode};
 pub use probe::{
     ErrorClass, LatencyProbe, LatencyRecord, LatencyRecordRepository, LatencyResult, ProbeError,
     ProbeRun, ProbeRunRepository, ProbeRunResult, ProbeRunStatus, ProbeSource, ProbeSourceAdapter,

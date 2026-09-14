@@ -396,7 +396,7 @@ async fn rotate_token(
 
 /// `POST /api/v1/subscriptions/{id}/regenerate-short-code` — (re)generate the
 /// short code for a subscription (admin). If a short code already exists, it is
-/// replaced. The short code is a public lookup key, not a secret.
+/// replaced. The short code is a bearer credential and must be kept private.
 #[utoipa::path(
     post,
     path = "/api/v1/subscriptions/{id}/regenerate-short-code",

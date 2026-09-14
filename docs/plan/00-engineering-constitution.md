@@ -139,7 +139,9 @@ explicit Deve authorization.
 8. No auto-changing certificate verification security semantics.
 9. No real node credentials in repo fixtures.
 10. No template executing arbitrary scripts.
-11. No `latest` image as a production release dependency.
+11. No `latest` image as a build dependency. The published Deve Sub `latest`
+    alias is an opt-in deployment channel governed by the release artifact
+    contract; default Compose deployment remains version-pinned.
 12. Each milestone provides a runnable vertical slice.
 13. Each database change has a migration and a recovery test.
 14. Each P0 feature maps to an acceptance case ID.

@@ -32,6 +32,7 @@ fn make_template(
     tun: serde_json::Value,
 ) -> AssembledTemplate {
     AssembledTemplate {
+        clash: None,
         nodes: one_trojan(),
         groups,
         rules,
@@ -128,6 +129,7 @@ fn yaml_dq_escapes_special_characters_in_name() {
     let mut nodes = one_trojan();
     nodes[0].display_name = r#"evil"name\back"#.to_owned();
     let template = AssembledTemplate {
+        clash: None,
         nodes,
         groups: vec![],
         rules: vec![],
@@ -153,6 +155,7 @@ fn yaml_dq_escapes_special_characters_in_password() {
         password: r#"p"w\d"#.to_owned(),
     };
     let template = AssembledTemplate {
+        clash: None,
         nodes,
         groups: vec![],
         rules: vec![],

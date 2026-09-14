@@ -6,14 +6,14 @@
 use dioxus::prelude::*;
 
 use crate::i18n::{Language, t};
-use crate::pages::template_gen_modal::{TemplateGenModal, TemplateGenModalProps};
-use crate::pages::template_modals::{TemplateModals, TemplateModalsProps};
+use crate::pages::template_gen_modal::TemplateGenModal;
+use crate::pages::template_modals::TemplateModals;
 use crate::pages::template_types::{
-    CreateTemplateRequest, GenerationResultDto, GetTemplateResponse, ListTemplatesResponse,
-    ListVersionsResponse, Modal, RollbackRequest, RollbackTemplateResponse, TemplateDto,
-    TemplateResponse, TemplateVersionDto, UpdateTemplateRequest,
+    CreateTemplateRequest, GenerationResultDto, ListTemplatesResponse, Modal, RollbackRequest,
+    RollbackTemplateResponse, TemplateDto, TemplateResponse, TemplateVersionDto,
+    UpdateTemplateRequest,
 };
-use crate::pages::template_versions::{TemplateVersions, TemplateVersionsProps};
+use crate::pages::template_versions::TemplateVersions;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct TemplatesProps {
@@ -23,19 +23,26 @@ pub struct TemplatesProps {
 pub fn TemplatesPage(props: TemplatesProps) -> Element {
     let l = *props.lang.read();
     let mut templates = use_signal(Vec::<TemplateDto>::new);
+    let mut next_cursor = use_signal(|| None::<String>);
+    let mut page_busy = use_signal(|| false);
+    let mut list_revision = use_signal(|| 0_u64);
+    let mut page_error = use_signal(String::new);
     let mut loading = use_signal(|| true);
     let mut error = use_signal(|| String::new());
     let mut modal = use_signal(|| Modal::None);
     let mut form_error = use_signal(|| String::new());
     let mut saving = use_signal(|| false);
+    let mut edit_revision = use_signal(|| 0_u64);
+    let mut edit_ready = use_signal(|| false);
 
     let mut f_name = use_signal(String::new);
     let mut f_desc = use_signal(String::new);
     let mut f_spec = use_signal(String::new);
 
+    let mut next_version = use_signal(|| None::<u64>);
     let mut versions = use_signal(Vec::<TemplateVersionDto>::new);
-    let mut ver_loading = use_signal(|| false);
-    let mut ver_error = use_signal(|| String::new());
+    let ver_loading = use_signal(|| false);
+    let ver_error = use_signal(|| String::new());
 
     let mut gen_profile = use_signal(|| "mihomo".to_string());
     let mut gen_mode = use_signal(|| "lenient".to_string());
@@ -44,11 +51,18 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     let mut gen_error = use_signal(|| String::new());
     let mut is_generate = use_signal(|| true);
 
-    let fetch_templates = move || {
+    let mut fetch_templates = move || {
+        *list_revision.write() += 1;
+        let revision = *list_revision.read();
         spawn(async move {
             loading.set(true);
-            match crate::api::get::<ListTemplatesResponse>("/templates").await {
+            let result = crate::api::get::<ListTemplatesResponse>("/templates").await;
+            if revision != *list_revision.read() {
+                return;
+            }
+            match result {
                 Ok(resp) => {
+                    next_cursor.set(resp.next_cursor);
                     templates.set(resp.templates);
                     error.set(String::new());
                 }
@@ -58,14 +72,42 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         });
     };
 
+    let load_more = move |_| {
+        if *page_busy.read() || *loading.read() {
+            return;
+        }
+        let Some(cursor) = next_cursor.read().clone() else {
+            return;
+        };
+        let revision = *list_revision.read();
+        page_busy.set(true);
+        page_error.set(String::new());
+        spawn(async move {
+            match crate::api::get::<ListTemplatesResponse>(&format!("/templates?cursor={cursor}"))
+                .await
+            {
+                Ok(resp) if revision == *list_revision.read() => {
+                    next_cursor.set(resp.next_cursor);
+                    templates.write().extend(resp.templates);
+                }
+                Ok(_) => {}
+                Err(e) if revision == *list_revision.read() => page_error.set(e.message),
+                Err(_) => {}
+            }
+            page_busy.set(false);
+        });
+    };
+
     use_future(move || async move {
         fetch_templates();
     });
 
     let open_create = move |_| {
+        *edit_revision.write() += 1;
+        edit_ready.set(true);
         f_name.set(String::new());
         f_desc.set(String::new());
-        f_spec.set(String::new());
+        f_spec.set(crate::pages::template_types::DEFAULT_CLASH_YAML.to_string());
         form_error.set(String::new());
         modal.set(Modal::Create);
     };
@@ -75,59 +117,63 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         f_desc.set(t.description.clone());
         f_spec.set(String::new());
         form_error.set(String::new());
-        let tid = t.id.clone();
-        spawn(async move {
-            match crate::api::get::<GetTemplateResponse>(&format!("/templates/{tid}")).await {
-                Ok(_) => {}
-                Err(e) => form_error.set(e.message),
-            }
-        });
-        let tid2 = t.id.clone();
-        spawn(async move {
-            match crate::api::get::<ListVersionsResponse>(&format!("/templates/{tid2}/versions")).await {
-                Ok(resp) => {
-                    if let Some(v) = resp.versions.into_iter().find(|v| v.is_active) {
-                        f_spec.set(v.spec_yaml);
-                    }
-                }
-                Err(e) => form_error.set(e.message),
-            }
-        });
+        *edit_revision.write() += 1;
+        edit_ready.set(false);
+        crate::pages::template_modals::load_active_spec(
+            t.id.clone(),
+            edit_revision,
+            f_spec,
+            edit_ready,
+            form_error,
+        );
         modal.set(Modal::Edit(t));
     };
 
     let mut open_delete = move |t: TemplateDto| {
+        *edit_revision.write() += 1;
         form_error.set(String::new());
         modal.set(Modal::Delete(t));
     };
 
+    let history = crate::pages::template_versions::HistoryRequest {
+        revision: edit_revision,
+        versions,
+        next: next_version,
+        loading: ver_loading,
+        error: ver_error,
+    };
     let mut open_versions = move |t: TemplateDto| {
-        ver_error.set(String::new());
+        *edit_revision.write() += 1;
         versions.set(Vec::new());
+        next_version.set(None);
         modal.set(Modal::Versions(t.clone()));
-        ver_loading.set(true);
-        let tid = t.id.clone();
-        spawn(async move {
-            match crate::api::get::<ListVersionsResponse>(&format!("/templates/{tid}/versions")).await {
-                Ok(resp) => {
-                    versions.set(resp.versions);
-                    ver_error.set(String::new());
-                }
-                Err(e) => ver_error.set(e.message),
+        history.load(t.id, None);
+    };
+    let more_versions = move |_| {
+        if *ver_loading.read() {
+            return;
+        }
+        if let Modal::Versions(t) = modal.read().clone() {
+            if let Some(before) = *next_version.read() {
+                history.load(t.id, Some(before));
             }
-            ver_loading.set(false);
-        });
+        }
     };
 
     let open_rollback = move |v: TemplateVersionDto| {
         form_error.set(String::new());
         let current = modal.read().clone();
         if let Modal::Versions(t) = current {
-            modal.set(Modal::Rollback { template: t, version: v });
+            modal.set(Modal::Rollback {
+                template: t,
+                version: v,
+            });
         }
     };
 
     let mut open_generate = move |t: TemplateDto| {
+        *edit_revision.write() += 1;
+        gen_loading.set(false);
         gen_profile.set("mihomo".to_string());
         gen_mode.set("lenient".to_string());
         gen_result.set(None);
@@ -137,6 +183,8 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     };
 
     let mut open_preview = move |t: TemplateDto| {
+        *edit_revision.write() += 1;
+        gen_loading.set(false);
         gen_profile.set("mihomo".to_string());
         gen_mode.set("lenient".to_string());
         gen_result.set(None);
@@ -146,10 +194,20 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     };
 
     let close_modal = move |_| {
+        if *saving.read() {
+            return;
+        }
+        *edit_revision.write() += 1;
         modal.set(Modal::None);
     };
 
     let do_submit = move |_| {
+        if *saving.read() {
+            return;
+        }
+        if matches!(*modal.read(), Modal::Edit(_)) && !*edit_ready.read() {
+            return;
+        }
         let state = (*modal.read()).clone();
         match state {
             Modal::Create => {
@@ -166,7 +224,9 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
                 saving.set(true);
                 spawn(async move {
                     match crate::api::send::<TemplateResponse, CreateTemplateRequest>(
-                        "POST", "/templates", Some(&req),
+                        "POST",
+                        "/templates",
+                        Some(&req),
                     )
                     .await
                     {
@@ -195,7 +255,9 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
                 spawn(async move {
                     let path = format!("/templates/{id}");
                     match crate::api::send::<TemplateResponse, UpdateTemplateRequest>(
-                        "PUT", &path, Some(&req),
+                        "PUT",
+                        &path,
+                        Some(&req),
                     )
                     .await
                     {
@@ -228,17 +290,24 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     };
 
     let do_rollback = move |v: TemplateVersionDto| {
+        if *saving.read() {
+            return;
+        }
         let state = (*modal.read()).clone();
         let tid = match state {
             Modal::Rollback { template, .. } => template.id.clone(),
             _ => return,
         };
-        let req = RollbackRequest { version_id: v.id.clone() };
+        let req = RollbackRequest {
+            version_id: v.id.clone(),
+        };
         saving.set(true);
         spawn(async move {
             let path = format!("/templates/{tid}/rollback");
             match crate::api::send::<RollbackTemplateResponse, RollbackRequest>(
-                "POST", &path, Some(&req),
+                "POST",
+                &path,
+                Some(&req),
             )
             .await
             {
@@ -253,6 +322,10 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     };
 
     let do_gen = move |_| {
+        if *gen_loading.read() {
+            return;
+        }
+        let revision = *edit_revision.read();
         let state = (*modal.read()).clone();
         let tid = match &state {
             Modal::Generate(t) | Modal::Preview(t) => t.id.clone(),
@@ -260,14 +333,23 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         };
         let profile = gen_profile.read().clone();
         let mode = gen_mode.read().clone();
-        let action = if *is_generate.read() { "generate" } else { "preview" };
+        let action = if *is_generate.read() {
+            "generate"
+        } else {
+            "preview"
+        };
         gen_loading.set(true);
+        gen_result.set(None);
         gen_error.set(String::new());
         spawn(async move {
             let path = format!("/templates/{tid}/{action}?profile={profile}&mode={mode}");
-            match crate::api::send::<GenerationResultDto, serde_json::Value>("POST", &path, None)
-                .await
-            {
+            let result =
+                crate::api::send::<GenerationResultDto, serde_json::Value>("POST", &path, None)
+                    .await;
+            if revision != *edit_revision.read() {
+                return;
+            }
+            match result {
                 Ok(resp) => gen_result.set(Some(resp)),
                 Err(e) => gen_error.set(e.message),
             }
@@ -365,9 +447,12 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
                     }
                 }
             }
+            if !page_error.read().is_empty() { p { role: "alert", class: "text-sm text-red-600", "{page_error}" } }
+            if next_cursor.read().is_some() { button { class: "node-control", disabled: *page_busy.read() || *loading.read(), onclick: load_more, {t(l, "nodes.load_more")} } }
         }
 
         TemplateModals {
+            edit_ready,
             lang: props.lang,
             modal,
             f_name,
@@ -380,6 +465,8 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
         }
 
         TemplateVersions {
+            next_version,
+            on_load_more: more_versions,
             lang: props.lang,
             modal,
             versions,
@@ -389,6 +476,7 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
             saving,
             on_close: close_modal,
             on_rollback: open_rollback,
+            on_confirm_rollback: do_rollback,
         }
 
         TemplateGenModal {

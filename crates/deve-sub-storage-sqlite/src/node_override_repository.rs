@@ -6,6 +6,8 @@
 //! and tag data are returned via the pool query, not via separate calls to
 //! this trait. See NODE-004 through NODE-010.
 
+mod tags;
+
 use async_trait::async_trait;
 use deve_sub_domain::{NodeOverride, NodeOverrideRepository, SourceError, Tag};
 use deve_sub_kernel::{NodeId, NodeOverrideId, TagId};
@@ -184,14 +186,30 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
         node_ids: &[NodeId],
         enabled: bool,
     ) -> Result<u64, SourceError> {
+        if node_ids.is_empty() {
+            return Ok(0);
+        }
         let enabled_i = i64::from(enabled);
         let mut tx = self
             .pool
-            .begin()
+            .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
         let mut count = 0u64;
-        for node_id in node_ids {
+        for node_id in node_ids
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>()
+        {
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM nodes WHERE id = ?)")
+                    .bind(node_id.to_string())
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(|e| SourceError::Storage(e.to_string()))?;
+            if !exists {
+                return Err(SourceError::NodeNotFound(node_id.to_string()));
+            }
             // WHY: each upsert affects exactly one row (insert or update),
             // so rows_affected() is 1 per iteration. A new NodeOverrideId is
             // generated for the INSERT path; on conflict only enabled is set.
@@ -217,61 +235,28 @@ impl NodeOverrideRepository for SqliteNodeOverrideRepository {
     }
 
     async fn set_node_tags(&self, node_id: NodeId, tag_ids: &[TagId]) -> Result<(), SourceError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        sqlx::query("DELETE FROM node_tags WHERE node_id = ?")
-            .bind(node_id.to_string())
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        for tag_id in tag_ids {
-            sqlx::query("INSERT INTO node_tags (node_id, tag_id) VALUES (?, ?)")
-                .bind(node_id.to_string())
-                .bind(tag_id.to_string())
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| SourceError::Storage(e.to_string()))?;
-        }
-        // Tags drive tag-based node selection in generation.
-        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
-        tx.commit()
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        Ok(())
+        self.apply_tags(
+            &[(node_id, tag_ids.to_vec())],
+            deve_sub_domain::TagUpdateMode::Replace,
+        )
+        .await
     }
 
-    async fn batch_set_tags(
+    async fn batch_modify_tags(
         &self,
         assignments: &[(NodeId, Vec<TagId>)],
+        mode: deve_sub_domain::TagUpdateMode,
     ) -> Result<(), SourceError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        for (node_id, tag_ids) in assignments {
-            sqlx::query("DELETE FROM node_tags WHERE node_id = ?")
-                .bind(node_id.to_string())
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| SourceError::Storage(e.to_string()))?;
-            for tag_id in tag_ids {
-                sqlx::query("INSERT INTO node_tags (node_id, tag_id) VALUES (?, ?)")
-                    .bind(node_id.to_string())
-                    .bind(tag_id.to_string())
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(|e| SourceError::Storage(e.to_string()))?;
-            }
-        }
-        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
-        tx.commit()
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        Ok(())
+        self.apply_tags(assignments, mode).await
+    }
+
+    async fn update_tag(
+        &self,
+        tag_id: TagId,
+        name: &str,
+        color: Option<&str>,
+    ) -> Result<Tag, SourceError> {
+        self.rename_tag(tag_id, name, color).await
     }
 
     async fn list_tags(&self) -> Result<Vec<Tag>, SourceError> {

@@ -143,15 +143,15 @@ pub struct TokenRotationResponse {
 
 /// Response body for `POST /api/v1/subscriptions/{id}/regenerate-short-code`.
 ///
-/// The short code is a CSPRNG-generated base62 string (8 chars). Unlike the
-/// delivery token, it is not a secret — it is a public lookup key for
-/// `GET /s/{code}`. If a short code already exists, it is replaced.
+/// The short code is a CSPRNG-generated 22-character base62 bearer credential
+/// (>128 bits of entropy) for `GET /s/{code}`. It is stored in plaintext for
+/// authenticated retrieval. If a short code already exists, it is replaced.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ShortCodeResponse {
     /// The short code row ULID.
     pub short_code_id: String,
-    /// The public base62 short code string (e.g. `"aB3xK9mQ"`).
+    /// The sensitive base62 short code string.
     pub code: String,
 }
 

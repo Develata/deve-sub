@@ -93,6 +93,7 @@ impl FromRef<AppState> for SourceState {
 /// Ports and configuration needed by the node surface.
 #[derive(Clone)]
 pub struct NodeState {
+    pub(crate) audit_log_repo: Arc<dyn AuditLogRepository>,
     pub(crate) override_repo: Arc<dyn NodeOverrideRepository>,
     pub(crate) pool_repo: Arc<dyn NodePoolRepository>,
 }
@@ -100,6 +101,7 @@ pub struct NodeState {
 impl FromRef<AppState> for NodeState {
     fn from_ref(state: &AppState) -> Self {
         Self {
+            audit_log_repo: state.audit_log_repo.clone(),
             override_repo: state.override_repo.clone(),
             pool_repo: state.pool_repo.clone(),
         }
@@ -250,12 +252,14 @@ impl FromRef<AppState> for DashboardState {
 #[derive(Clone)]
 pub struct AuditState {
     pub(crate) audit_log_repo: Arc<dyn AuditLogRepository>,
+    pub(crate) retention_days: u32,
 }
 
 impl FromRef<AppState> for AuditState {
     fn from_ref(state: &AppState) -> Self {
         Self {
             audit_log_repo: state.audit_log_repo.clone(),
+            retention_days: state.config.logging.audit_retention_days,
         }
     }
 }

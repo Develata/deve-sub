@@ -56,6 +56,17 @@ pub struct Tag {
     pub color: Option<String>,
 }
 
+/// Atomic set operation for node tag memberships.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagUpdateMode {
+    /// Replace every target's complete tag set.
+    Replace,
+    /// Add selected tags while preserving current memberships.
+    Add,
+    /// Remove only selected tags.
+    Remove,
+}
+
 /// Storage boundary for node overrides and tags.
 ///
 /// Implementations handle the `node_overrides`, `tags`, and `node_tags`
@@ -95,8 +106,28 @@ pub trait NodeOverrideRepository: Send + Sync {
     async fn set_node_tags(&self, node_id: NodeId, tag_ids: &[TagId]) -> Result<(), SourceError>;
 
     /// Batch replace tags for multiple nodes in one transaction (NODE-005).
-    async fn batch_set_tags(&self, assignments: &[(NodeId, Vec<TagId>)])
-    -> Result<(), SourceError>;
+    async fn batch_set_tags(
+        &self,
+        assignments: &[(NodeId, Vec<TagId>)],
+    ) -> Result<(), SourceError> {
+        self.batch_modify_tags(assignments, TagUpdateMode::Replace)
+            .await
+    }
+
+    /// Apply a set operation atomically after checking all references.
+    async fn batch_modify_tags(
+        &self,
+        assignments: &[(NodeId, Vec<TagId>)],
+        mode: TagUpdateMode,
+    ) -> Result<(), SourceError>;
+
+    /// Rename/recolor a tag without changing its identity or memberships.
+    async fn update_tag(
+        &self,
+        tag_id: TagId,
+        name: &str,
+        color: Option<&str>,
+    ) -> Result<Tag, SourceError>;
 
     /// List all tags, ordered by name.
     async fn list_tags(&self) -> Result<Vec<Tag>, SourceError>;

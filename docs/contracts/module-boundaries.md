@@ -5,6 +5,40 @@
 This contract defines the typed module boundaries, dependency direction, and
 inter-module communication rules for Deve Sub.
 
+### Audit lifecycle boundary (M10)
+
+`AuditLogRepository` owns bounded candidate selection and atomic delete plus
+receipt; application audit commands own retention validation and receipt
+construction. Delivery never performs SQL. `GET /api/v1/audit-logs/policy`
+reports effective retention days (0 disables automatic expiry) and batch size.
+`POST /api/v1/audit-logs/cleanup/preview` accepts `keep_days` (1–3650), returns
+`before_unix_ms`, ordered `entry_ids` (at most 500), and `has_more`.
+`POST /api/v1/audit-logs/cleanup` accepts that cutoff and exact ID list, returns
+`deleted` and `receipt_id`. Invalid scope is 400; changed candidates are 409;
+timeout is 503. All three routes require an administrator and mutations use
+same-origin CSRF protection. Cleanup scope is independent of viewer filters.
+List time filters are inclusive `since` and exclusive `before`, RFC3339 timestamps
+at whole-second precision. Configuration is server-owned and read-only in Web.
+
+### Template input and history boundary (M5)
+
+`spec_yaml` on template create/update accepts the original V3 document or
+Clash/Mihomo routing YAML (`rules`, `proxy-groups`, `rule-providers`, `dns`,
+`tun`), including a bare YAML rule list. Original text is preserved. Native
+templates generate for `mihomo` only. No UI parsing or client conversion is
+permitted. The optional internal `TemplateSpec.clash` stores validated native
+sections as YAML text with mapping order preserved; absent means existing V3 behavior.
+
+`TemplateRepository::update_with_version` allocates and returns the committed
+history number atomically; it must exceed every existing version, including
+after rollback. `GET /templates/{id}/versions/active` returns the active
+version. History accepts an exclusive `before_version` cursor and returns
+`next_before_version`; an absent cursor retains the first-page behavior.
+Each page is bounded to 100 versions. Native validation errors return 400;
+generation errors never replace the last successful output. Deleting a referenced
+template returns 409 `template_in_use`. Pinned subscription cache fallback must
+match both the requested version and generation mode.
+
 ## Hexagonal layering
 
 ```text
@@ -127,3 +161,26 @@ OpenAPI derives are enabled by the `openapi` feature only in API delivery.
 revision, persist its new counter/status, insert the traffic delta batch and
 its lifetime/daily projections. Delivery dispatches `sync_probe_traffic` and
 cannot assemble this transaction. Revision conflict maps to HTTP 409.
+
+### Authentication and credential response boundary
+
+Login and 2FA use the canonical transport peer IP unless explicitly configured
+to trust validated proxy headers. Saturated password verification returns 429.
+All /api/v1 responses and HTML are no-store; responses also set nosniff,
+X-Frame-Options: DENY, frame-ancestors 'none', and no-referrer. Public delivery
+keeps private/no-cache and ETag support. Subscription short-code probe counters
+are separate from login counters; malformed secret paths are redacted before
+tracing. Exact operational limits belong to the M2 and M6 blueprints.
+
+### Node organization boundary
+
+`GET /tags` returns the complete user-authored tag catalog, including tags with
+no node assignments. Web categories render this catalog independently of node
+pagination; their counts describe loaded node membership, not server totals.
+`GET /nodes/{id}/override` returns the complete editable override state.
+`PATCH /tags/{id}` replaces the tag's name/color while retaining its identity.
+`POST /nodes/batch-tags` accepts `mode: replace | add | remove` (default replace).
+Mutation modes are evaluated against current stored memberships atomically;
+Delivery never reads and rewrites sets to emulate add/remove. Domain graph
+validation uses the same protected snapshot as chain persistence. Invalid or
+missing references leave the whole batch unchanged.

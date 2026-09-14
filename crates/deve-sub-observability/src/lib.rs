@@ -6,6 +6,7 @@
 
 #![cfg_attr(test, allow(clippy::expect_used))]
 
+use std::io::IsTerminal;
 use thiserror::Error;
 
 /// Errors produced by observability initialization.
@@ -24,11 +25,22 @@ pub enum ObservabilityError {
 pub fn init_tracing() -> Result<(), ObservabilityError> {
     use tracing_subscriber::EnvFilter;
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = match std::env::var("RUST_LOG") {
+        Ok(value) => {
+            EnvFilter::try_new(value).map_err(|e| ObservabilityError::Init(e.to_string()))?
+        }
+        Err(std::env::VarError::NotPresent) => EnvFilter::new("info"),
+        Err(_) => {
+            return Err(ObservabilityError::Init(
+                "RUST_LOG is not valid Unicode".into(),
+            ));
+        }
+    };
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
+        .with_ansi(std::io::stderr().is_terminal())
         .with_target(true)
         .with_thread_ids(false)
         .with_file(false)

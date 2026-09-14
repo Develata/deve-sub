@@ -14,6 +14,8 @@ pub use deve_sub_contract::{
 pub enum NodeModal {
     /// Modal is closed.
     None,
+    /// Manage tag identities independently of assignments.
+    ManageTags,
     /// Import nodes (manual paste).
     Import,
     /// Assign tags to nodes (single or batch). Carries node ULIDs.

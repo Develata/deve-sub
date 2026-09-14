@@ -45,7 +45,33 @@ const FORBIDDEN_SCRIPT_KEYS: &[&str] = &[
 /// - [`TemplateAppError::SpecYamlParse`] — the YAML is malformed or does not
 ///   conform to the `TemplateDocument` schema.
 pub fn parse_template_document(spec_yaml: &str) -> Result<TemplateDocument, TemplateAppError> {
-    serde_yaml::from_str(spec_yaml).map_err(|e| TemplateAppError::SpecYamlParse(e.to_string()))
+    let raw = checked_yaml(spec_yaml)?;
+    if raw.get("apiVersion").is_some() || raw.get("kind").is_some() || raw.get("spec").is_some() {
+        let doc: TemplateDocument = serde_yaml::from_value(raw)
+            .map_err(|e| TemplateAppError::SpecYamlParse(e.to_string()))?;
+        if doc.spec.clash.is_some() {
+            return Err(TemplateAppError::InvalidInput(
+                "spec.clash is internal; submit native Clash YAML without the V3 wrapper".into(),
+            ));
+        }
+        Ok(doc)
+    } else {
+        super::clash::parse(raw)
+    }
+}
+
+pub(super) fn checked_yaml(spec_yaml: &str) -> Result<Value, TemplateAppError> {
+    if spec_yaml.len() > MAX_SPEC_BYTES {
+        return Err(TemplateAppError::SpecTooLarge(
+            spec_yaml.len(),
+            MAX_SPEC_BYTES,
+        ));
+    }
+    let raw = super::bounded_yaml::parse(spec_yaml)
+        .map_err(|e| TemplateAppError::SpecYamlParse(e.to_string()))?;
+    check_depth(&raw, 0)?;
+    check_forbidden_scripts(&raw)?;
+    Ok(raw)
 }
 
 /// Validate a parsed V3 template document against the M5 schema constraints.
@@ -91,11 +117,23 @@ pub fn validate_document(doc: &TemplateDocument, spec_yaml: &str) -> Result<(), 
     // Parse the raw YAML for depth and forbidden-key checks. These operate
     // on the raw tree because the typed TemplateSpec erases structural
     // detail during deserialization.
-    let raw: Value = serde_yaml::from_str(spec_yaml)
-        .map_err(|e| TemplateAppError::SpecYamlParse(e.to_string()))?;
-
-    check_depth(&raw, 0)?;
-    check_forbidden_scripts(&raw)?;
+    checked_yaml(spec_yaml)?;
+    if let Some(clash) = &doc.spec.clash {
+        super::clash::validate(&super::clash::config(clash)?, None)?;
+        if doc.spec.target_profiles != ["mihomo"]
+            || !doc.spec.proxy_groups.is_empty()
+            || !doc.spec.rules.is_empty()
+            || !doc.spec.dns.is_null()
+            || !doc.spec.tun.is_null()
+            || !doc.spec.output.is_null()
+            || !doc.spec.variables.is_null()
+        {
+            return Err(TemplateAppError::InvalidInput(
+                "native Clash sections cannot be mixed with V3 routing fields or other profiles"
+                    .into(),
+            ));
+        }
+    }
 
     // Proxy group name uniqueness and member reference validity.
     let group_names: std::collections::HashSet<&str> = doc

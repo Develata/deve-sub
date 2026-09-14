@@ -28,9 +28,45 @@ a tag, Release or image publication. Tag pushes repeat those gates before
 publication.
 
 Docker publishes the same version as a lowercase GHCR reference containing
-both `linux/amd64` and `linux/arm64`; it never publishes a `latest` alias.
+both `linux/amd64` and `linux/arm64`: `ghcr.io/develata/deve-sub:<release-tag>`
+(for example, `ghcr.io/develata/deve-sub:v0.1.0`). The optional
+`ghcr.io/develata/deve-sub:latest` alias points to the same multi-platform
+digest as the current stable GitHub release. After publishing the versioned
+image, the serialized Docker release job checks that its tag is stable
+(`vMAJOR.MINOR.PATCH`) and still matches GitHub's `/releases/latest`; only then
+does it promote the digest. Prereleases, old-release reruns, and manual
+preflight builds do not move `latest`. Promotion failure fails the job while
+leaving the versioned image available; rerunning the job retries promotion.
+
+The default Compose deployment consumes an explicit release tag and
+requires no local build; its named volume persists the database and master key
+across container replacements. `DEVE_SUB_IMAGE_TAG=latest` explicitly selects
+the moving alias; pulling it may select a newer version and does not itself
+replace a running container. Operators still back up before `up -d`.
 
 ## Installation and update
+
+### Container administrator bootstrap
+
+The container entrypoint accepts two optional environment variables:
+`DEVE_SUB_ADMIN_USERNAME` and `DEVE_SUB_ADMIN_PASSWORD`. Both absent/empty leave
+the Web setup wizard available. If either is nonempty, it invokes
+`deve-sub user init-admin --if-needed --username ... --password-env
+DEVE_SUB_ADMIN_PASSWORD` against the migrated database before starting HTTP.
+The password is not passed on argv, logged, or stored in application config;
+both variables are unset before executing the long-running server.
+
+`--if-needed` queries existing users before resolving a password source. If
+any user exists, it succeeds without creating, modifying or re-enabling users.
+Otherwise normal setup validation applies: nonempty username up to 64 bytes,
+password from 8 through 1024 bytes, and Argon2id hashing. A missing/invalid
+source aborts startup instead of silently exposing Web setup. Non-UTF-8
+environment values are rejected without including their contents in errors.
+The atomic repository operation decides concurrent winners; an already
+initialized result is a no-op only with this flag. Without it, the manual CLI
+keeps rejecting repeated initialization. No database migration is added.
+
+### Native installation and updates
 
 The installer resolves a release tag once, verifies both downloaded payloads,
 installs the binary and frontend, and passes the absolute frontend directory to

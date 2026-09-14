@@ -29,6 +29,15 @@ fi
 
 /app/deve-sub migrate --db-path /app/data/deve-sub.db
 
+if [ -n "${DEVE_SUB_ADMIN_USERNAME:-}" ] || [ -n "${DEVE_SUB_ADMIN_PASSWORD:-}" ]; then
+    /app/deve-sub user init-admin --if-needed \
+        "--username=${DEVE_SUB_ADMIN_USERNAME:-}" \
+        --password-env DEVE_SUB_ADMIN_PASSWORD \
+        --db-path /app/data/deve-sub.db
+fi
+# Bootstrap credentials must not be inherited by the server or its probe tools.
+unset DEVE_SUB_ADMIN_USERNAME DEVE_SUB_ADMIN_PASSWORD
+
 exec /app/deve-sub serve \
     --db-path /app/data/deve-sub.db \
     --key-path /app/data/master.key \

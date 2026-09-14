@@ -53,6 +53,10 @@ pub enum SecurityError {
     #[error("password hash error: {0}")]
     PasswordHash(String),
 
+    /// The bounded password worker budget is occupied. Retry later.
+    #[error("password verification capacity reached")]
+    PasswordWorkBusy,
+
     /// Master key loading or generation failed.
     #[error("master key error: {0}")]
     MasterKey(String),

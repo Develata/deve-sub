@@ -126,6 +126,9 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LAYOUT"
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-REQUEST-TIMEOUT"
         - "tests/e2e/specs/ui-009-mobile.spec.ts::UI-009"
       status: pass
   - id: UI-010
@@ -148,13 +151,19 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["成功创建且只能执行一次"]
+    assertions: ["成功创建且只能执行一次", "容器环境变量可初始化管理员，已有用户保持不变", "无配置保留 Web 初始化，非法配置阻止空数据库启动", "并发初始化仅创建一个用户，密码不进入日志或服务进程环境"]
     fixtures: []
     evidence:
       tests:
         - "apps/server/tests/auth_flow.rs::setup_admin_succeeds_once"
         - "crates/deve-sub-application/src/auth/commands.rs::setup_admin_rejects_when_initialized"
         - "apps/server/tests/auth_flow.rs::auth_status_reports_initialized_flag"
+        - "apps/cli/tests/admin_bootstrap.rs::env_admin_creates_once_and_preserves_credentials"
+        - "apps/cli/tests/admin_bootstrap.rs::existing_disabled_user_skips_missing_password_source"
+        - "apps/cli/tests/admin_bootstrap.rs::invalid_or_partial_credentials_leave_no_user"
+        - "apps/cli/tests/admin_bootstrap.rs::concurrent_bootstrap_processes_create_only_one_user"
+        - "apps/cli/tests/admin_bootstrap.rs::non_utf8_password_error_is_redacted"
+        - "scripts/tests/test_docker_bootstrap.py"
       status: pass
   - id: AUTH-002
     title: 正确登录
@@ -203,6 +212,10 @@ cases:
         - "crates/deve-sub-inmemory/src/rate_limiter.rs::two_new_keys_reclaim_expired_entries_with_one_slot_remaining"
         - "crates/deve-sub-inmemory/src/rate_limiter.rs::pressure_preserves_current_ip_probation_until_it_locks"
         - "crates/deve-sub-inmemory/src/rate_limiter.rs::nearly_all_locked_pressure_does_not_rescan_for_each_probation"
+        - "apps/server/tests/security/hardening.rs::direct_peer_ip_limits_rotating_usernames_and_ignores_spoofed_headers"
+        - "crates/deve-sub-security/src/password.rs::password_verification_rejects_saturated_budget"
+        - "crates/deve-sub-security/src/password.rs::cancelled_caller_keeps_worker_permit_until_blocking_job_finishes"
+        - "tests/e2e/specs/real-auth.spec.ts::AUTH-004"
       status: pass
   - id: AUTH-005
     title: 2FA
@@ -279,6 +292,7 @@ cases:
       tests:
         - "apps/server/tests/subscription_management.rs::sub002_rotate_token_returns_new_plaintext"
         - "apps/server/tests/subscription_delivery.rs::del019_no_grace_old_token_immediately_invalid"
+        - "tests/e2e/specs/ui-009-mobile.spec.ts::UI-009"
       status: pass
   - id: AUTH-010
     title: 强制注销
@@ -305,6 +319,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
         - "apps/server/tests/source_management.rs::admin_can_create_source"
         - "apps/server/tests/source_management.rs::admin_can_get_source_by_id"
         - "apps/server/tests/source_management.rs::admin_can_list_sources"
@@ -368,6 +383,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/tests/refresh_source/hardening.rs::refresh_failure_preserves_concurrent_source_edits_and_current_policy"
         - "apps/server/tests/source_refresh.rs::refresh_fetch_failure_marks_job_failed"
         - "crates/deve-sub-application/tests/refresh_source.rs::fetch_failure_disables_source_when_keep_on_fail_false"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::failed_reconcile_preserves_old_snapshot"
@@ -489,6 +505,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-SOURCE-JOBS"
+        - "tests/e2e/functional/ordering.ui.spec.ts::FUNC-LIST-ORDER"
         - "apps/server/tests/source_refresh.rs::concurrent_refresh_returns_409"
         - "crates/deve-sub-application/tests/refresh_source.rs::concurrent_refreshes_do_not_cross_pollute"
       status: pass
@@ -810,6 +828,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-IMPORT-RACE"
         - "apps/server/tests/node_pool.rs::admin_can_import_nodes"
         - "apps/server/tests/node_pool.rs::import_duplicate_is_counted_not_overwritten"
         - "apps/server/tests/node_pool.rs::import_empty_content_returns_400"
@@ -856,6 +875,9 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-NODE-FILTER"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-ORDER"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-RESELECT"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_004_batch_enable_disable"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::batch_set_enabled_preserves_other_fields"
       status: pass
@@ -863,13 +885,31 @@ cases:
     title: 批量标签
     priority: P0
     layer: E2E
-    dimensions: []
-    preconditions: []
-    steps: []
-    assertions: ["标签查询即时更新"]
+    dimensions: [single, batch, add, remove, replace, concurrent, categories, empty, pagination, recovery, desktop, mobile]
+    preconditions: ["每例独立数据库、管理员会话与合成节点"]
+    steps: ["创建及重命名标签", "批量增删/替换与并发赋值", "筛选、重开编辑和删除"]
+    assertions: ["标签查询即时更新", "成员使用集合语义", "缺失引用整批回滚", "稳定标签ID与可见色标", "完整手动分类含空分类可见", "分类切换清除节点勾选", "计数按已加载节点，旧响应不覆盖新状态"]
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-TAG-INPUT"
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-TAG-RACE"
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-TAG-IDENTITY"
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MODES"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-VISIBLE"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LIFECYCLE"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-INLINE"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-PAGES"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-ORDER"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-RECOVERY"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-SELECTION"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-REFRESH-PAGE"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-ORDER"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-RESELECT"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-NODE-RECOVERY"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LAYOUT"
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-EDIT"
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_005_batch_tags"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::batch_set_tags_for_multiple_nodes"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::set_node_tags_replaces_tags"
@@ -885,6 +925,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-NODE-FILTER"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_006_manual_region_survives_auto_detection"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::patch_override_region_preserves_other_fields"
       status: pass
@@ -938,6 +979,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-OVERRIDE"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_010_override_survives_refresh"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::override_crud_round_trip"
       status: pass
@@ -1049,6 +1091,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/tags.api.spec.ts::FUNC-CHAIN-RACE"
         - "apps/server/tests/node_pool.rs::node_chain_cycle_rejected"
         - "apps/server/tests/node_pool.rs::node_chain_self_reference_rejected"
         - "apps/server/tests/node_pool.rs::node_chain_duplicate_rejected"
@@ -1064,6 +1107,9 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-ROUNDTRIP"
+        - "tests/e2e/functional/templates.ui.spec.ts::FUNC-CLASH-EDITOR"
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
         - "apps/server/tests/template_management.rs::gen001_template_crud_roundtrip"
       status: pass
   - id: GEN-002
@@ -1077,6 +1123,11 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/src/template/clash_tests.rs::native_clash_rejects_invalid_routing_without_silent_drops"
+        - "crates/deve-sub-application/src/template/bounded_yaml.rs::scalar_alias_expansion_is_bounded_during_parse"
+        - "crates/deve-sub-application/src/template/clash_tests.rs::native_clash_merge_groups_and_escaped_regexes_are_supported"
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-VALIDATION"
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-FIDELITY"
         - "apps/server/tests/template_management.rs::gen002_invalid_template_rejected"
       status: pass
   - id: GEN-003
@@ -1090,6 +1141,9 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-TEMPLATE-CONCURRENT"
+        - "tests/e2e/functional/templates.ui.spec.ts::FUNC-TEMPLATE-HISTORY"
+        - "tests/e2e/functional/ordering.ui.spec.ts::FUNC-TEMPLATE-ORDER"
         - "apps/server/tests/template_management.rs::gen003_edit_creates_new_version"
       status: pass
   - id: GEN-004
@@ -1103,6 +1157,9 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-TEMPLATE-VERSION"
+        - "crates/deve-sub-storage-sqlite/tests/template_lifecycle.rs::rollback_waiting_for_delete_cannot_report_a_ghost_version"
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TEMPLATE-ROLLBACK"
         - "apps/server/tests/template_management.rs::gen004_rollback_restores_prior_version"
         - "apps/server/tests/template_management.rs::gen004b_rollback_rejects_version_owned_by_other_template"
       status: pass
@@ -1247,6 +1304,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-TEMPLATE-PIN"
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-VALIDATION"
         - "apps/server/tests/template_management.rs::gen015_failed_generation_preserves_old_active"
         - "apps/server/tests/template_management.rs::gen015b_empty_pool_preserves_active"
       status: pass
@@ -1261,6 +1320,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/templates.ui.spec.ts::FUNC-TEMPLATE-DIALOG"
+        - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-ROUNDTRIP"
         - "apps/server/tests/template_management.rs::gen016_preview_matches_published_output"
       status: pass
   - id: OUT-001
@@ -1274,6 +1335,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_native_routing_templates_pass_mihomo"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_passes"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_rejects_garbage"
       status: pass
@@ -1444,6 +1506,8 @@ cases:
       tests:
         - "apps/server/tests/subscription_delivery.rs::del013_short_code_delivery"
         - "apps/server/tests/subscription_delivery.rs::del015_regenerate_short_code_replaces_old"
+        - "apps/server/tests/security/hardening.rs::short_code_probes_have_an_independent_ip_budget"
+        - "crates/deve-sub-security/src/token.rs::short_code_has_at_least_128_bits"
       status: pass
   - id: OUT-014
     title: 并发生成
@@ -1607,13 +1671,15 @@ cases:
     priority: P1
     layer: Smoke
     dimensions: []
-    preconditions: []
-    steps: []
-    assertions: ["一条命令启动并健康"]
+    preconditions: ["Docker 与 Compose 可用，可匿名访问固定版本 GHCR 镜像", "环境变量初始化需要包含该功能的新构建镜像"]
+    steps: ["拉取镜像并启动 Compose", "检查健康与 Web 资源", "重建容器并验证数据卷保留", "以含新功能的镜像验证环境变量初始化与登录"]
+    assertions: ["无需源码构建即可启动并健康", "重建后保留数据库、主密钥与原命名卷", "环境变量创建首个管理员，重建不覆盖账号密码，错误配置启动失败"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "docs/acceptance/gates.md (Published-image Compose smoke)"
+        - "scripts/tests/test_docker_bootstrap.py"
+      status: pass
   - id: DEPLOY-002
     title: Linux 安装
     priority: P1
@@ -1791,6 +1857,7 @@ cases:
     evidence:
       tests:
         - "apps/server/tests/security.rs::sec007_untrusted_proxy_headers_ignored"
+        - "apps/server/src/client_ip.rs::proxy_ip_validation_canonicalization_and_peer_fallback"
       status: pass
   - id: SEC-008
     title: SPA 路由
@@ -1819,6 +1886,8 @@ cases:
         - "apps/server/tests/subscription_management.rs::sec009_token_not_in_get_or_list_responses"
         - "apps/server/src/logging.rs::redacts_sub_token"
         - "apps/server/src/logging.rs::redacts_s_short_code"
+        - "apps/server/src/logging.rs::malformed_delivery_paths_do_not_leak_credentials"
+        - "apps/server/tests/security/hardening.rs::sensitive_responses_are_not_cached_or_framed"
       status: pass
   - id: SEC-010
     title: CSRF
@@ -2078,6 +2147,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/audit_log/cleanup.rs::audit_001_time_range_and_invalid_cleanup_inputs"
+        - "tests/e2e/functional/logging-ui.spec.ts::audit001_ui_old_response_cannot_replace_new_filter"
         - "apps/server/tests/audit_log.rs::audit_log_query_returns_entries"
         - "apps/server/tests/audit_log.rs::audit_log_query_filter_by_action"
         - "apps/server/tests/audit_log.rs::audit_log_query_filter_by_actor"
@@ -2109,12 +2180,71 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/logging-api.spec.ts::log001_default_logs_correlate_results_and_redact_secrets"
         - "apps/server/tests/audit_crud.rs::source_crud_audited"
         - "apps/server/tests/audit_crud.rs::template_crud_audited"
         - "apps/server/tests/audit_crud.rs::subscription_crud_audited"
         - "apps/server/tests/audit_crud.rs::probe_source_crud_audited"
         - "apps/server/tests/audit_crud.rs::source_create_audit_has_correct_target"
         - "apps/server/tests/audit_log.rs::user_management_audited"
+      status: pass
+  - id: AUDIT-004
+    title: 审计日志手动清理
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions:
+      - "先预览最多500条，明确截止时间后确认；变更冲突409，重复确认不重复删除"
+      - "并发写入保留近期事件；删除和回执同事务，失败或取消后可恢复；管理员与CSRF保护"
+    fixtures: []
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_preview_is_read_only_and_cleanup_is_bounded"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_concurrent_confirmations_and_writes_preserve_new_events"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_receipt_failure_rolls_back_deletion"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_invalid_scope_and_changed_preview_do_not_delete"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_004_cancelled_lock_wait_can_retry_without_partial_deletion"
+        - "apps/server/tests/audit_log/cleanup.rs::audit_004_api_preview_confirm_receipt_and_replay"
+        - "apps/server/tests/audit_log/cleanup.rs::audit_004_cleanup_requires_admin_and_same_origin"
+        - "tests/e2e/functional/logging-ui.spec.ts::audit004_ui_preview_cancel_confirm_and_receipt"
+        - "tests/e2e/functional/logging-ui.spec.ts::audit004_ui_concurrent_cleanup_requires_new_preview"
+      status: pass
+  - id: AUDIT-005
+    title: 审计日志自动回收
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions:
+      - "默认90天，0禁用，范围校验与env覆盖生效；每分钟有限批次回收"
+      - "迁移与备份恢复保留事件，清理错误不阻止其他历史回收"
+    fixtures: []
+    evidence:
+      tests:
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_005_retention_disable_cutoff_and_unrelated_state"
+        - "crates/deve-sub-storage-sqlite/tests/audit_cleanup.rs::audit_005_migration_index_and_backup_recovery"
+        - "crates/deve-sub-application/src/config/tests.rs::audit_005_retention_defaults_disable_and_validation"
+        - "apps/cli/src/runtime_tests.rs::audit_005_receipt_failure_does_not_block_other_retention"
+        - "tests/e2e/functional/logging-api.spec.ts::audit005_runtime_retention_reclaims_only_expired_events"
+      status: pass
+  - id: LOG-001
+    title: 运行日志清晰记录与容量轮转
+    priority: P1
+    layer: Integration
+    dimensions: []
+    preconditions: []
+    steps: []
+    assertions:
+      - "默认级别记录脱敏路径、状态、耗时、服务端request_id；公开200/304/404均可追踪"
+      - "Docker local 10m×3轮转保留最新日志，独立临时容器验证，不触及用户数据"
+    fixtures: []
+    evidence:
+      tests:
+        - "tests/e2e/functional/logging-api.spec.ts::log001_default_logs_correlate_results_and_redact_secrets"
+        - "scripts/tests/test_docker_logging.py::main"
       status: pass
   - id: TRAFFIC-001
     title: 每日流量快照
@@ -2205,4 +2335,19 @@ cases:
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
         - "apps/cli/tests/backup_restore.rs::backup004_old_traffic_and_pruned_totals_round_trip"
         - "crates/deve-sub-storage-sqlite/tests/node_lookup_index.rs::forward_index_removes_scan_and_backup_can_reupgrade"
+      status: pass
+
+  - id: OUT-016
+    title: Web订阅创建与管理分页
+    priority: P0
+    layer: E2E
+    dimensions: [desktop, mobile, pagination]
+    preconditions: ["隔离数据库、管理员、合成节点与模板"]
+    steps: ["Web表单使用默认选择创建订阅", "获取生成链接", "加载第51条订阅及模板选项"]
+    assertions: ["创建成功且返回内容可获取", "后续订阅记录与模板选择可达"]
+    fixtures: ["tests/e2e/functional/fixture.ts"]
+    evidence:
+      tests:
+        - "tests/e2e/functional/organization.ui.spec.ts::FUNC-SUB-CREATE"
+        - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
       status: pass

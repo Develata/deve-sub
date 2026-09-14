@@ -1,5 +1,48 @@
 # Milestone 5 — Generator and V3 Template
 
+## Clash routing input and version recovery
+
+The default authoring surface accepts Clash/Mihomo routing YAML: `rules`,
+`proxy-groups`, `rule-providers`, `dns`, and `tun`. A bare YAML rule list is
+also accepted. When groups are omitted, Application supplies a `PROXY` select
+group with `include-all-proxies: true`. Explicit groups retain their native
+options, including filters, health checks and nested group references.
+Nodes remain owned by the unified pool; embedded `proxies` and external
+`proxy-providers` are rejected rather than silently replaced. Other top-level
+sections outside this routing scope are rejected with a field-specific error.
+
+Application detects the input format and validates size/depth/scripts before
+typed conversion. Native routing is retained in an optional `clash` field on
+the internal TemplateSpec as YAML text; mapping order (notably DNS policies)
+is preserved, and authored YAML remains unchanged in version history.
+This internal field cannot be supplied inside a V3 wrapper. Aliases and merge
+keys are decoded under an 8 MiB value budget before constructing a full tree;
+custom tags, duplicate mapping keys and excessive depth are rejected. Merge
+processing moves already-budgeted values and preserves explicit key order.
+Existing V3 documents remain valid. Native input targets Mihomo only; other
+profiles fail explicitly in both strict and lenient mode. Rule order, flags,
+provider definitions, DNS/TUN and group options survive emission. Save checks
+rule structure, policy/provider references, duplicate/reserved group names and
+cycles; generation validates concrete node references and assigns stable,
+unique output names when pool names collide with groups, built-ins or nodes.
+Client-specific regex and detailed DNS/TUN behavior remain Mihomo-owned;
+server validation does not claim to replace a client configuration check.
+
+The template repository allocates `MAX(version) + 1` under the same write
+transaction as version insertion and active-pointer update. Rollback never
+rewinds the allocator. Concurrent updates preserve separate snapshots.
+The editor reads the active version directly, independent of history paging;
+history uses descending version cursors. Modal requests are scoped to the
+current dialog so late history/preview responses cannot replace another
+template's state. Failure preserves authored input and the last successful
+generation. These changes require no physical schema migration.
+
+Authority remains Application for input and generation, Domain for persisted
+values and Ports, SQLite for atomic version allocation, and Emitter for YAML
+assembly. Web only edits text and dispatches typed requests. Verification is
+GEN-001–004/015–016 plus native routing and concurrent lifecycle cases in
+`tests/e2e/functional/templates.api.spec.ts` and the functional matrix.
+
 ## Scope
 
 V3 template lifecycle (schema, CRUD, versioning, rollback), node selection

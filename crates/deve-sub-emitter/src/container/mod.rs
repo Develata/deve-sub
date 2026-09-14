@@ -10,6 +10,7 @@
 
 pub mod ir;
 pub mod mihomo;
+mod mihomo_template;
 pub mod singbox;
 pub mod v2ray;
 pub mod xray;
@@ -35,7 +36,7 @@ pub fn emit_mihomo(nodes: &[Node]) -> Result<String, EmitError> {
 /// Pass groups/rules/dns/tun via [`AssembledTemplate`] so the emitter maps
 /// them to the target document instead of dropping them.
 pub fn emit_mihomo_full(template: &AssembledTemplate) -> Result<String, EmitError> {
-    mihomo::emit_full(template)
+    mihomo_template::emit_full(template)
 }
 
 /// Emit a sing-box JSON document.

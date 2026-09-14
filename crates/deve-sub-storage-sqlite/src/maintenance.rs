@@ -68,7 +68,7 @@ impl SqliteMaintenance {
             database_bytes: file_size(&self.database_path).await,
             wal_bytes: file_size(&self.wal_path).await,
         };
-        tracing::info!(
+        tracing::debug!(
             busy,
             log_frames,
             checkpointed_frames,

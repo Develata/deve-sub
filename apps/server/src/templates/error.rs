@@ -13,6 +13,11 @@ pub(super) fn map_template_app_error(
 ) -> (StatusCode, Json<ErrorResponse>) {
     use deve_sub_application::TemplateAppError;
     match e {
+        TemplateAppError::Template(deve_sub_domain::TemplateError::InUse) => err(
+            StatusCode::CONFLICT,
+            "template_in_use",
+            "template is used by a subscription; unlink or delete that subscription first",
+        ),
         TemplateAppError::InvalidInput(msg) => err(StatusCode::BAD_REQUEST, "invalid_input", &msg),
         TemplateAppError::SpecYamlParse(msg) => {
             err(StatusCode::BAD_REQUEST, "invalid_spec_yaml", &msg)

@@ -17,7 +17,10 @@ pub mod subscription;
 pub mod template;
 pub mod traffic;
 
-pub use audit::{AuditLogDto, ListAuditLogsResponse};
+pub use audit::{
+    AuditCleanupPreviewRequest, AuditCleanupPreviewResponse, AuditCleanupRequest,
+    AuditCleanupResponse, AuditLogDto, AuditPolicyResponse, ListAuditLogsResponse,
+};
 pub use auth::{
     AuthStatusResponse, CreateUserRequest, CreateUserResponse, CurrentUserResponse, ErrorResponse,
     ListUsersResponse, LoginRequest, LoginResponse, LoginTwoFactorRequest,
@@ -37,7 +40,7 @@ pub use node::{
     ImportNodesResponse, ImportOutcomeDto, ListNodesResponse, ListTagsResponse, NodeChainResponse,
     NodeDto, NodeOverrideDto, NodeOverrideResponse, NodeResponse, NodeTagAssignmentDto,
     RegionMethodDto, RegionResponse, SetNodeChainRequest, SetNodeTagsRequest, SetRegionRequest,
-    TagDto, TagResponse, UpdateOverrideRequest,
+    TagDto, TagResponse, TagUpdateModeDto, UpdateOverrideRequest,
 };
 pub use probe::{
     CreateProbeRunRequest, CreateProbeSourceRequest, ErrorClassDto, LatencyRecordDto,
@@ -57,12 +60,12 @@ pub use subscription::{
     UpdateSubscriptionRequest,
 };
 pub use template::{
-    ActiveGenerationQuery, ActiveGenerationResponse, ChainEdgeDto, CompatibilityQuery,
-    CompatibilityReportDto, CreateTemplateRequest, ExcludedNodeDto, GenerateQuery,
-    GenerationResultDto, GetTemplateResponse, GroupResolutionDto, ListTemplatesQuery,
-    ListTemplatesResponse, ListVersionsResponse, MissingNodeRefDto, ResolveTemplateResponse,
-    RollbackRequest, RollbackTemplateResponse, TemplateDto, TemplateResponse, TemplateVersionDto,
-    UpdateTemplateRequest,
+    ActiveGenerationQuery, ActiveGenerationResponse, ActiveTemplateVersionResponse, ChainEdgeDto,
+    CompatibilityQuery, CompatibilityReportDto, CreateTemplateRequest, ExcludedNodeDto,
+    GenerateQuery, GenerationResultDto, GetTemplateResponse, GroupResolutionDto,
+    ListTemplatesQuery, ListTemplatesResponse, ListVersionsQuery, ListVersionsResponse,
+    MissingNodeRefDto, ResolveTemplateResponse, RollbackRequest, RollbackTemplateResponse,
+    TemplateDto, TemplateResponse, TemplateVersionDto, UpdateTemplateRequest,
 };
 pub use traffic::{
     ManualCorrectionRequest, ManualCorrectionResponse, TrafficSourceBreakdownDto,

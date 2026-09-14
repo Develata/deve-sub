@@ -350,15 +350,10 @@ pub fn signal_cancel(cancelled: &AtomicBool) {
     cancelled.store(true, Ordering::Relaxed);
 }
 
-/// Best-effort disable a source after a refresh failure when `keep_on_fail`
-/// is false (unchanged from the original implementation).
+/// Consult current policy without rewriting a stale source snapshot.
 async fn disable_on_failure(repo: &dyn SourceRepository, source: &Source) {
-    if !source.keep_on_fail && source.enabled {
-        let mut disabled = source.clone();
-        disabled.enabled = false;
-        if let Err(e) = repo.update(&disabled).await {
-            tracing::warn!(error = %e, "failed to disable source after refresh failure");
-        }
+    if let Err(e) = repo.disable_after_failure(source.id).await {
+        tracing::warn!(error = %e, "failed to disable source after refresh failure");
     }
 }
 

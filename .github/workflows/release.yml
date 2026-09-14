@@ -214,6 +214,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     environment: release
+    # WHY: serialize the latest-release check and alias write across tag runs.
+    concurrency:
+      group: ghcr-release-${{ github.repository }}
+      queue: max
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -232,14 +237,13 @@ jobs:
         id: image
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
       - name: Build and push multi-arch image
+        id: publish
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          # WHY: immutable semver tag only — no `latest` (constraint #11,
-          # DS-AUD-012). The `latest` tag misleads users into tracking an
-          # unversioned, potentially incompatible image.
+          # Publish the versioned image before moving the optional stable alias.
           tags: |
             ${{ steps.image.outputs.name }}
           cache-from: |
@@ -247,3 +251,21 @@ jobs:
             type=gha,scope=docker-ci
             type=gha,scope=release-images
           cache-to: type=gha,scope=release-images,mode=max
+      - name: Promote current stable release to latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          # WHY: prereleases and an old release rerun must not move latest.
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Skip latest: not a stable release tag"
+            exit 0
+          fi
+          latest_tag=$(timeout 30 gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')
+          if [[ "$latest_tag" != "$GITHUB_REF_NAME" ]]; then
+            echo "Skip latest: this tag is not the current stable release"
+            exit 0
+          fi
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          timeout 120 docker buildx imagetools create \
+            --tag "$image:latest" "$image@${PUBLISHED_DIGEST:?missing published digest}"

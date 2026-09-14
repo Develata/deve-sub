@@ -190,7 +190,7 @@ entity_id!(
     "subscription short code",
     "Strong-typed identifier for a subscription short code row. Identifies the \
      row only; the short code value itself is a CSPRNG-generated base62 string \
-     stored in the clear (it is a public lookup key, not a secret)."
+     stored in the clear for authenticated retrieval; it is a bearer credential."
 );
 
 entity_id!(

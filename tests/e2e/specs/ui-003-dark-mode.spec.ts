@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/auth';
 
-test('UI-003: light/dark mode — all pages have no unreadable text', async ({ authedPage: page }) => {
+test('UI-003: light/dark mode — all pages have no unreadable text', async ({ authedPage: page }, testInfo) => {
   await page.locator('aside button').filter({ hasText: /设置|Settings/ }).click();
   await page.waitForLoadState('networkidle');
 
@@ -14,12 +14,12 @@ test('UI-003: light/dark mode — all pages have no unreadable text', async ({ a
   await page.locator('aside button').filter({ hasText: /仪表盘|Dashboard/ }).click();
   await page.waitForLoadState('networkidle');
   await expect(page.locator('main')).toBeVisible();
-  await page.screenshot({ path: 'screenshots/ui-003-dark-dashboard.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-003-dark-dashboard.png') });
 
   // Check nodes page in dark.
   await page.locator('aside button').filter({ hasText: /节点管理|Nodes/ }).click();
   await page.waitForLoadState('networkidle');
-  await page.screenshot({ path: 'screenshots/ui-003-dark-nodes.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-003-dark-nodes.png') });
 
   // Switch to light.
   await page.locator('aside button').filter({ hasText: /设置|Settings/ }).click();
@@ -29,7 +29,7 @@ test('UI-003: light/dark mode — all pages have no unreadable text', async ({ a
 
   await page.locator('aside button').filter({ hasText: /仪表盘|Dashboard/ }).click();
   await page.waitForLoadState('networkidle');
-  await page.screenshot({ path: 'screenshots/ui-003-light-dashboard.png' });
+  await page.screenshot({ path: testInfo.outputPath('ui-003-light-dashboard.png') });
 
   // Verify text color is readable (not the same as background).
   const bodyColor = await page.evaluate(() => {

@@ -514,6 +514,17 @@ async fn node_005_batch_tags() {
         .await
         .expect("batch set tags");
 
+    // The compatibility command must enforce the same ambiguous-target rule.
+    let duplicate = source::batch_set_tags(
+        &override_repo,
+        vec![(ids[0], vec![]), (ids[0], vec![tag2.id])],
+    )
+    .await;
+    assert!(matches!(
+        duplicate,
+        Err(source::SourceAppError::InvalidInput(_))
+    ));
+
     // NODE-005 assertion: tag query reflects assignments immediately
     let nodes = pool_repo
         .list_nodes(&Default::default(), None, 100)

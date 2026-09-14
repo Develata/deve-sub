@@ -114,6 +114,9 @@ fn map_generation_error(
 ) -> (StatusCode, Json<ErrorResponse>) {
     use deve_sub_application::TemplateAppError;
     match e {
+        TemplateAppError::InvalidInput(message) => {
+            err(StatusCode::BAD_REQUEST, "invalid_input", &message)
+        }
         TemplateAppError::TemplateNotFound => err(
             StatusCode::NOT_FOUND,
             "template_not_found",

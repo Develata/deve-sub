@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/auth';
 
-test('UI-005: Fantasy Violet theme — chessboard background, decorations and cards remain readable', async ({ authedPage: page }) => {
+test('UI-005: Fantasy Violet theme — chessboard background, decorations and cards remain readable', async ({ authedPage: page }, testInfo) => {
   await page.locator('aside button').filter({ hasText: /设置|Settings/ }).click();
   await page.waitForLoadState('networkidle');
 
@@ -20,7 +20,7 @@ test('UI-005: Fantasy Violet theme — chessboard background, decorations and ca
   for (const p of pages) {
     await page.locator('aside button').filter({ hasText: p.nav }).click();
     await page.waitForLoadState('networkidle');
-    await page.screenshot({ path: `screenshots/${p.file}.png` });
+    await page.screenshot({ path: testInfo.outputPath(`${p.file}.png`) });
   }
 
   const hasViolet = await page.evaluate(() => document.documentElement.classList.contains('theme-violet'));

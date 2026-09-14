@@ -20,6 +20,8 @@ COPY crates/ crates/
 COPY apps/ apps/
 COPY migrations/ migrations/
 COPY scripts/ scripts/
+# WHY: the Web template editor embeds this preset with include_str! at compile time.
+COPY examples/templates/ examples/templates/
 
 # Both runtime platforms consume the same source-built frontend stage.
 FROM source AS frontend

@@ -1009,12 +1009,15 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["记录连接 RTT 和错误分类"]
+    assertions: ["记录连接 RTT 和错误分类", "缺失节点明确跳过；测量中删除节点不丢失其他节点历史", "历史持久化失败时任务Failed且保留诊断结果，批次不部分写入"]
     fixtures: []
     evidence:
       tests:
         - "apps/server/tests/probes.rs::tcp_probe_records_rtt_for_live_endpoint"
         - "apps/server/tests/probes.rs::tcp_probe_closed_port_classified_as_refused"
+        - "apps/server/tests/probes/history.rs::node012_missing_node_is_skipped_without_losing_valid_history"
+        - "apps/server/tests/probes/history.rs::node012_delete_during_measurement_preserves_other_history"
+        - "apps/server/tests/probes/history.rs::node012_history_write_failure_marks_failed_and_retains_diagnostics"
       status: pass
   - id: NODE-013
     title: QUIC 延迟

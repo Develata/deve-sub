@@ -74,6 +74,7 @@ pub async fn execute_probe_run(
     cancelled: Arc<std::sync::atomic::AtomicBool>,
     config: RunnerConfig,
 ) -> Result<(), ProbeError> {
+    let mut run_results = Vec::new();
     let result = execute_probe_run_inner(
         run_id,
         node_ids,
@@ -81,15 +82,19 @@ pub async fn execute_probe_run(
         deps.clone(),
         cancelled,
         config,
+        &mut run_results,
     )
     .await;
 
     if let Err(ref e) = result {
         tracing::error!(error = %e, %run_id, "probe run failed, writing Failed status");
-        let _ = deps
-            .run_repo
-            .update_status(run_id, ProbeRunStatus::Failed, &[], Some(Timestamp::now()))
-            .await;
+        let _ = persist_outcome(
+            deps.run_repo.as_ref(),
+            run_id,
+            ProbeRunStatus::Failed,
+            &run_results,
+        )
+        .await;
     }
 
     result
@@ -102,6 +107,7 @@ async fn execute_probe_run_inner(
     deps: RunnerDeps,
     cancelled: Arc<std::sync::atomic::AtomicBool>,
     config: RunnerConfig,
+    run_results: &mut Vec<ProbeRunResult>,
 ) -> Result<(), ProbeError> {
     // If the run was cancelled before the runner picked it up, exit without
     // overwriting the terminal status.
@@ -168,7 +174,7 @@ async fn execute_probe_run_inner(
                         return LatencyResult {
                             node_id,
                             rtt_ms: None,
-                            error_class: ErrorClass::DnsFailed,
+                            error_class: ErrorClass::Ok,
                         };
                     }
                 };
@@ -184,12 +190,13 @@ async fn execute_probe_run_inner(
         .await;
 
     // Process results into run results + latency records.
-    let mut run_results: Vec<ProbeRunResult> = Vec::with_capacity(results.len());
+    run_results.reserve(results.len());
     let mut latency_records: Vec<LatencyRecord> = Vec::with_capacity(results.len());
     for r in results {
-        let skipped = cancelled.load(Ordering::Relaxed)
-            && r.rtt_ms.is_none()
-            && r.error_class == ErrorClass::Ok;
+        let skipped = !node_by_id.contains_key(&r.node_id)
+            || (cancelled.load(Ordering::Relaxed)
+                && r.rtt_ms.is_none()
+                && r.error_class == ErrorClass::Ok);
         if !skipped {
             latency_records.push(LatencyRecord {
                 id: LatencyRecordId::new(),
@@ -209,46 +216,40 @@ async fn execute_probe_run_inner(
         });
     }
 
-    // Batch persist latency records (B-14). A storage failure here is logged,
-    // not fatal — the run status still reflects what the probes observed.
-    // `batch_create` is a no-op for empty slices.
-    if let Err(e) = deps.latency_repo.batch_create(&latency_records).await {
-        tracing::warn!(error = %e, %run_id, "failed to batch persist latency records");
-    }
+    // WHY: Completed must mean eligible history is durable. The outer wrapper
+    // retains these diagnostics when persistence fails and records Failed.
+    deps.latency_repo.batch_create(&latency_records).await?;
 
     // Determine final status.
     let is_cancelled = cancelled.load(Ordering::Relaxed);
-    let (final_status, completed_at) = if is_cancelled {
-        (ProbeRunStatus::Cancelled, Some(Timestamp::now()))
+    let final_status = if is_cancelled {
+        ProbeRunStatus::Cancelled
     } else {
-        (ProbeRunStatus::Completed, Some(Timestamp::now()))
+        ProbeRunStatus::Completed
     };
 
-    // WHY: a cancel can fire the flag AND persist `Cancelled` between our
-    // `cancelled.load()` and this write. If so, the terminal guard returns
-    // `RunAlreadyTerminal` — the user already received a 200 for `Cancelled`,
-    // so we must not overwrite it. Still persist diagnostic results.
-    match deps
-        .run_repo
-        .update_status(run_id, final_status, &run_results, completed_at)
+    persist_outcome(deps.run_repo.as_ref(), run_id, final_status, run_results).await
+}
+
+async fn persist_outcome(
+    run_repo: &dyn ProbeRunRepository,
+    run_id: ProbeRunId,
+    status: ProbeRunStatus,
+    results: &[ProbeRunResult],
+) -> Result<(), ProbeError> {
+    let completed_at = Some(Timestamp::now());
+    // WHY: preserve an already committed terminal outcome, while keeping the
+    // runner's diagnostics even when history persistence failed or cancel won.
+    match run_repo
+        .update_status(run_id, status, results, completed_at)
         .await
     {
-        Ok(()) => {}
+        Ok(()) => Ok(()),
         Err(ProbeError::RunAlreadyTerminal) => {
-            tracing::info!(%run_id, "probe run became terminal via concurrent cancel; status write skipped");
-            if let Err(e) = deps
-                .run_repo
-                .update_results(run_id, &run_results, completed_at)
-                .await
-            {
-                tracing::warn!(error = %e, %run_id, "failed to persist diagnostic results after concurrent cancel");
-            }
-            return Ok(());
+            run_repo.update_results(run_id, results, completed_at).await
         }
-        Err(e) => return Err(e),
+        Err(e) => Err(e),
     }
-
-    Ok(())
 }
 
 #[cfg(test)]

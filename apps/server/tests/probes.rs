@@ -1038,3 +1038,6 @@ async fn batch_cancel_probe_run_aborts_inflight_and_skips_pending() {
 
 #[path = "resource_admission/probe.rs"]
 mod resource_admission;
+
+#[path = "probes/history.rs"]
+mod history;

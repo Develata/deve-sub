@@ -98,24 +98,29 @@ impl LatencyRecordRepository for SqliteLatencyRecordRepository {
             .await
             .map_err(|e| ProbeError::Storage(e.to_string()))?;
         for record in records {
+            let node_id = record.node_id.to_string();
             let measured_at = format_ts(record.measured_at).map_err(ProbeError::Storage)?;
             let error_class = if record.error_class == ErrorClass::Ok {
                 None
             } else {
                 Some(record.error_class.encode())
             };
+            // WHY: node deletion owns its history. Check within this write
+            // transaction so a concurrent delete cannot poison the other rows;
+            // unrelated constraints/errors still fail the whole batch.
             sqlx::query(
                 "INSERT INTO latency_records \
                  (id, run_id, node_id, probe_type, rtt_ms, error_class, measured_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+                 SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM nodes WHERE id = ?)",
             )
             .bind(record.id.to_string())
             .bind(record.run_id.to_string())
-            .bind(record.node_id.to_string())
+            .bind(&node_id)
             .bind(record.probe_type.encode())
             .bind(record.rtt_ms.map(i64::from))
             .bind(error_class)
             .bind(measured_at)
+            .bind(&node_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| ProbeError::Storage(e.to_string()))?;

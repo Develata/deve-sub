@@ -260,6 +260,17 @@ The runner is a built-in background job, not a separate service (constraint
 cancellable (CancellationToken, NODE-016), and safely shut down on server
 stop (joins all in-flight tasks with a timeout, constraint #20).
 
+Nodes absent from the pool at batch lookup are reported as skipped, without
+inventing a DNS failure or latency sample. If a measured node is deleted before
+history persistence, retain its point-in-time diagnostic result on the run but
+omit its history row; deletion must not roll back other nodes' measurements.
+The latency repository checks node existence within the same write transaction
+as the batch. All eligible rows commit together. Any other history storage error
+fails the run and retains its collected diagnostics, rather than reporting
+Completed with missing history (NODE-012). An already committed terminal status
+is preserved during concurrent cancellation; cancellation is a best-effort signal
+once the runner enters its final status write.
+
 ### Node chain proxy
 
 ```text

@@ -59,8 +59,10 @@ pub trait LatencyRecordRepository: Send + Sync {
     /// Insert a latency record.
     async fn create(&self, record: &LatencyRecord) -> Result<(), ProbeError>;
 
-    /// Insert multiple latency records in a single transaction (B-14).
-    /// Either all records are inserted or none (atomic).
+    /// Insert latency records for nodes still present at the write boundary.
+    /// Omit nodes deleted since measurement, retaining their diagnostics on the
+    /// run. All remaining records are inserted atomically; other failures roll
+    /// back the entire batch and propagate to the runner (NODE-012).
     async fn batch_create(&self, records: &[LatencyRecord]) -> Result<(), ProbeError>;
 
     /// List recent latency records for a node, ordered by `measured_at` desc.

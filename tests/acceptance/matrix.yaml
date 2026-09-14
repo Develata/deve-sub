@@ -127,6 +127,7 @@ cases:
     evidence:
       tests:
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LAYOUT"
         - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-REQUEST-TIMEOUT"
         - "tests/e2e/specs/ui-009-mobile.spec.ts::UI-009"
       status: pass
@@ -882,10 +883,10 @@ cases:
     title: 批量标签
     priority: P0
     layer: E2E
-    dimensions: [single, batch, add, remove, replace, concurrent, desktop, mobile]
+    dimensions: [single, batch, add, remove, replace, concurrent, categories, empty, pagination, recovery, desktop, mobile]
     preconditions: ["每例独立数据库、管理员会话与合成节点"]
     steps: ["创建及重命名标签", "批量增删/替换与并发赋值", "筛选、重开编辑和删除"]
-    assertions: ["标签查询即时更新", "成员使用集合语义", "缺失引用整批回滚", "稳定标签ID与可见色标"]
+    assertions: ["标签查询即时更新", "成员使用集合语义", "缺失引用整批回滚", "稳定标签ID与可见色标", "完整手动分类含空分类可见", "分类切换清除节点勾选", "计数按已加载节点，旧响应不覆盖新状态"]
     fixtures: []
     evidence:
       tests:
@@ -893,6 +894,13 @@ cases:
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-TAG-RACE"
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-TAG-IDENTITY"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MODES"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-VISIBLE"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LIFECYCLE"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-INLINE"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-PAGES"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-ORDER"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-RECOVERY"
+        - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LAYOUT"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-EDIT"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_005_batch_tags"

@@ -174,6 +174,9 @@ tracing. Exact operational limits belong to the M2 and M6 blueprints.
 
 ### Node organization boundary
 
+`GET /tags` returns the complete user-authored tag catalog, including tags with
+no node assignments. Web categories render this catalog independently of node
+pagination; their counts describe loaded node membership, not server totals.
 `GET /nodes/{id}/override` returns the complete editable override state.
 `PATCH /tags/{id}` replaces the tag's name/color while retaining its identity.
 `POST /nodes/batch-tags` accepts `mode: replace | add | remove` (default replace).

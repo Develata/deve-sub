@@ -8,6 +8,7 @@ use dioxus::prelude::*;
 
 use crate::api::{get, send};
 use crate::i18n::{Language, format_t, t};
+use crate::pages::node_categories::{NodeCategories, NodeCategory};
 use crate::pages::node_chain_modal::ChainModal;
 use crate::pages::node_import_modal::ImportModal;
 use crate::pages::node_override_modal::{OverrideModal, RegionModal};
@@ -15,7 +16,7 @@ use crate::pages::node_tag_modal::TagModal;
 use crate::pages::node_tag_manager::TagManager;
 use crate::pages::node_list::NodeList;
 use crate::pages::node_types::{
-    BatchEnabledRequest, BatchResultDto, ListNodesResponse, NodeDto, NodeModal,
+    BatchEnabledRequest, BatchResultDto, ListNodesResponse, ListTagsResponse, NodeDto, NodeModal, TagDto,
 };
 
 const ITEM_HEIGHT: f64 = 72.0;
@@ -32,7 +33,11 @@ pub fn NodesPage(props: NodesProps) -> Element {
     let mut loading = use_signal(|| true);
     let mut error = use_signal(String::new);
     let mut search = use_signal(String::new);
-    let mut tag_filter = use_signal(String::new);
+    let mut category = use_signal(NodeCategory::default);
+    let mut tags = use_signal(Vec::<TagDto>::new);
+    let mut tags_loading = use_signal(|| true);
+    let mut tags_error = use_signal(String::new);
+    let mut nodes_loaded = use_signal(|| false);
     let mut region_filter = use_signal(String::new);
     let mut status_filter = use_signal(String::new);
     let mut batch_busy = use_signal(|| false);
@@ -42,20 +47,46 @@ pub fn NodesPage(props: NodesProps) -> Element {
     let mut scroll_top = use_signal(|| 0.0_f64);
     let mut cursor = use_signal(|| Option::<String>::None);
     let mut loading_more = use_signal(|| false);
+    let mut refreshing = use_signal(|| false);
     let mut modal = use_signal(|| NodeModal::None);
     let mut batch_msg = use_signal(String::new);
 
     let mut fetch_nodes = move || {
         *request_revision.write() += 1;
         let revision = *request_revision.read();
+        refreshing.set(true);
+        loading_more.set(false);
+        tags_loading.set(true);
+        // WHY: catalog identity is independent of node pagination and membership.
+        // A failed or superseded read must never make an empty category disappear.
+        spawn(async move {
+            let result = get::<ListTagsResponse>("/tags").await;
+            if revision != *request_revision.read() { return; }
+            match result {
+                Ok(resp) => {
+                    let deleted = matches!(&*category.read(), NodeCategory::Tag(id) if !resp.tags.iter().any(|tag| &tag.id == id));
+                    if deleted {
+                        category.set(NodeCategory::All);
+                        selected.write().clear();
+                        scroll_top.set(0.0);
+                        reset_list_scroll();
+                    }
+                    tags.set(resp.tags);
+                    tags_error.set(String::new());
+                }
+                Err(e) => tags_error.set(e.message),
+            }
+            tags_loading.set(false);
+        });
         spawn(async move {
             let result = get::<ListNodesResponse>("/nodes?include_inactive=true&limit=10000").await;
         if revision != *request_revision.read() { return; }
+        refreshing.set(false);
         match result {
                 Ok(resp) => {
                     error.set(String::new());
-                    if !tag_filter.read().is_empty() && !resp.nodes.iter().any(|node| node.tags.iter().any(|tag| tag.id == *tag_filter.read())) { tag_filter.set(String::new()); }
                     nodes.set(resp.nodes);
+                    nodes_loaded.set(true);
                     cursor.set(resp.next_cursor);
                     loading.set(false);
                 }
@@ -68,25 +99,11 @@ pub fn NodesPage(props: NodesProps) -> Element {
     };
 
     use_future(move || async move {
-        let revision = *request_revision.read();
-        let result = get::<ListNodesResponse>("/nodes?include_inactive=true&limit=10000").await;
-        if revision != *request_revision.read() { return; }
-        match result {
-            Ok(resp) => {
-                error.set(String::new());
-                nodes.set(resp.nodes);
-                cursor.set(resp.next_cursor);
-                loading.set(false);
-            }
-            Err(e) => {
-                error.set(e.message);
-                loading.set(false);
-            }
-        }
+        fetch_nodes();
     });
 
     let load_more = move |_| {
-        if *loading_more.read() {
+        if *loading_more.read() || *refreshing.read() {
             return;
         }
         let c = cursor.read().clone();
@@ -96,7 +113,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
         spawn(async move {
             let path = format!("/nodes?include_inactive=true&limit=100&cursor={c}");
             let result = get::<ListNodesResponse>(&path).await;
-            if revision != *request_revision.read() { loading_more.set(false); return; }
+            if revision != *request_revision.read() { return; }
             match result {
                 Ok(resp) => {
                     nodes.write().extend(resp.nodes);
@@ -153,7 +170,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
         all.iter()
             .filter(|n| s.is_empty() || n.display_name.to_lowercase().contains(&s))
             .filter(|n| p.is_empty() || n.protocol == p)
-            .filter(|n| tag_filter.read().is_empty() || n.tags.iter().any(|tag| tag.id == *tag_filter.read()))
+            .filter(|n| category.read().matches(n))
             .filter(|n| region_filter.read().is_empty() || n.region.as_deref() == Some(region_filter.read().as_str()))
             .filter(|n| status_filter.read().is_empty() || n.is_active == (*status_filter.read() == "enabled"))
             .collect()
@@ -167,7 +184,11 @@ pub fn NodesPage(props: NodesProps) -> Element {
         set.into_iter().collect()
     };
 
-    let tags: std::collections::BTreeMap<String, String> = all.iter().flat_map(|n| n.tags.iter().map(|t| (t.id.clone(), t.name.clone()))).collect();
+    let mut tag_counts = std::collections::HashMap::<String, usize>::new();
+    for node in all.iter() {
+        for tag in &node.tags { *tag_counts.entry(tag.id.clone()).or_default() += 1; }
+    }
+    let untagged = all.iter().filter(|node| node.tags.is_empty()).count();
     let regions: std::collections::BTreeSet<String> = all.iter().filter_map(|n| n.region.clone()).collect();
     let filtered_ids: Vec<String> = filtered.iter().map(|n| n.id.clone()).collect();
     let total = filtered.len();
@@ -242,6 +263,19 @@ pub fn NodesPage(props: NodesProps) -> Element {
             }
 
             // Filters.
+            NodeCategories { lang: l, tags: tags.read().clone(), counts: tag_counts,
+                total: all.len(), untagged, counts_ready: *nodes_loaded.read(), active: category.read().clone(),
+                loading: *tags_loading.read(), error: tags_error.read().clone(),
+                on_refresh: move |_| fetch_nodes(),
+                on_select: move |next| {
+                    if *category.read() != next {
+                        category.set(next);
+                        selected.write().clear();
+                        scroll_top.set(0.0);
+                        reset_list_scroll();
+                    }
+                }
+            }
             div { class: "flex flex-wrap items-center gap-3",
                 input {
                     class: "flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
@@ -270,10 +304,6 @@ pub fn NodesPage(props: NodesProps) -> Element {
             }
 
             div { class: "flex flex-wrap items-center gap-2",
-                select { class: "node-control", aria_label: t(l, "nodes.filter_tags"), value: "{tag_filter}", onchange: move |e| { tag_filter.set(e.value()); scroll_top.set(0.0); reset_list_scroll(); },
-                    option { value: "", {t(l, "nodes.all_tags")} }
-                    for (id, name) in tags { option { value: "{id}", "{name}" } }
-                }
                 select { class: "node-control", aria_label: t(l, "nodes.region"), value: "{region_filter}", onchange: move |e| { region_filter.set(e.value()); scroll_top.set(0.0); reset_list_scroll(); },
                     option { value: "", {t(l, "nodes.all_regions")} }
                     for region in regions { option { value: "{region}", "{region}" } }
@@ -283,7 +313,8 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     option { value: "enabled", {t(l, "nodes.enabled")} }
                     option { value: "disabled", {t(l, "nodes.disabled")} }
                 }
-                span { class: "text-sm text-stone-500", "{total} / {all.len()}" }
+                span { class: "text-sm text-stone-600 dark:text-stone-400",
+                    {format_t(l, "nodes.matching_count", total)} " / " {format_t(l, "nodes.loaded_count", all.len())} }
             }
 
             if *loading.read() {
@@ -300,7 +331,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     div { class: "flex justify-center pt-4",
                         button {
                             class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                            disabled: *loading_more.read(),
+                            disabled: *loading_more.read() || *refreshing.read(),
                             onclick: load_more,
                             if *loading_more.read() { {t(l, "common.loading")} } else { {t(l, "nodes.load_more")} }
                         }
@@ -326,7 +357,8 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     lang: props.lang,
                     node_ids: ids.clone(),
                     on_close: move |_| modal.set(NodeModal::None),
-                    on_success: move |_| fetch_nodes(),
+                    on_success: move |_| { selected.write().clear(); fetch_nodes(); },
+                    on_catalog_change: move |_| fetch_nodes(),
                 }
             },
             NodeModal::SetRegion(id) => rsx! {

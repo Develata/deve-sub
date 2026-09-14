@@ -113,6 +113,15 @@ per-case evidence authority and run `python3 scripts/check_docs.py` for its
 current summary. This roadmap deliberately does not duplicate pass/not-run
 counts or lists, which previously drifted from the executable evidence.
 
+## M4 manual category navigation
+
+NODE-005/UI-009 exposes the complete user tag catalog as visible node categories,
+including empty categories and untagged nodes. Parent-owned catalog refresh,
+loaded-node counts and membership lifecycle are specified in M4 and
+`features/node-organization.md`. Seven concurrent functional scenarios live in
+`tests/e2e/functional/categories.ui.spec.ts`; execution evidence belongs to
+`acceptance/gates.md`. No new entity, migration or REST contract shape is needed.
+
 ## M5 template maintenance
 
 Native Clash routing input and template lifecycle repairs are owned by the

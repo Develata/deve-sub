@@ -39,7 +39,7 @@ test('FUNC-TAG-MANAGE create, rename, batch assignment, filter and delete', asyn
   await assignment.getByRole('button', { name: /^保存$|^Save$/ }).click();
   expect((await applied).status()).toBe(204);
   await navigate(page, /^节点管理$|^Nodes$/);
-  await page.getByRole('combobox', { name: /按标签筛选|Filter by tag/ }).selectOption(tag.id);
+  await page.locator(`[data-node-category="${tag.id}"]`).click();
   await expect(page.locator('[data-node-row]')).toHaveCount(2);
   await expect(page.locator('[data-node-row]').first().locator('.node-tag')).toHaveText('日本 · 常用');
   await expect(page.locator('[data-node-row]').first().locator('.node-tag-dot')).toHaveCSS('background-color', 'rgb(37, 99, 235)');

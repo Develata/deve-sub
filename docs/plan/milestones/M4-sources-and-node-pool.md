@@ -243,6 +243,20 @@ empty replacement. Batch forms default to add and explain replace/remove.
 Override and region editors load persisted values before enabling save.
 Background refresh must not overwrite a newer list request or selection.
 
+Manual tags are also the node page's visible categories. The complete `/tags`
+catalog owns category identity, including empty categories; loaded node
+memberships must never decide whether a category exists. A wrapping category
+bar exposes all nodes, untagged nodes and each named tag with its color and a
+count over loaded nodes before other filters. Counts may overlap for multi-tag
+nodes and are explicitly not whole-database totals when pagination remains.
+Selecting a different category clears node selection and resets virtual scroll;
+search/protocol/region/status remain intersecting filters. Rename retains the
+active category by ID; removing its last member retains the empty category;
+only a successful catalog read confirming deletion resets it to all nodes.
+Catalog refresh errors retain the last catalog and provide retry. Every catalog
+response is guarded against newer refreshes, including inline tag creation even
+when the user cancels assignment. No new category entity or API is introduced.
+
 Design reference: miaomiaowu v0.8.5 node management uses visible tag badges,
 filter groups and grouped actions. Deve Sub retains its own brand and virtual
 list, with a compact toolbar, visible selection count, responsive dialogs and

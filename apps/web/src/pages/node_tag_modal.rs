@@ -24,6 +24,8 @@ pub struct TagModalProps {
     node_ids: Vec<String>,
     on_close: EventHandler<()>,
     on_success: EventHandler<()>,
+    /// Creating a tag persists its identity even if assignment is cancelled.
+    on_catalog_change: EventHandler<()>,
 }
 
 pub fn TagModal(props: TagModalProps) -> Element {
@@ -80,6 +82,7 @@ pub fn TagModal(props: TagModalProps) -> Element {
                     current.push(resp.tag);
                     new_tag_name.set(String::new());
                     saving.set(false);
+                    props.on_catalog_change.call(());
                 }
                 Err(e) => {
                     error.set(e.message);

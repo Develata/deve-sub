@@ -8,6 +8,7 @@ pub mod audit_table;
 pub mod audit_types;
 pub mod dashboard;
 pub mod login;
+pub mod node_categories;
 pub mod node_chain_modal;
 pub mod node_import_modal;
 pub mod node_override_modal;

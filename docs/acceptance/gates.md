@@ -405,3 +405,44 @@ artifacts are under ignored `tests/e2e/test-results/functional-*`. Those local
 paths are execution receipts, not durable CI artifact links. Authoritative
 repeatable commands and proof entrypoints are retained in the functional
 matrix and `tests/acceptance/matrix.yaml`.
+
+## M4 manual category navigation — 2026-09-13
+
+Owner: main agent; one read-only review lane checked category identity, UI state,
+pagination and acceptance evidence. Scope: Web node organization, translations,
+styles and documentation; no backend schema/API shape or release change.
+
+- Reproduction: a real isolated server with three manual tags (one unassigned)
+  exposed only assigned tags through the old dropdown. The new visible-category
+  regression failed before the change and passed with the complete tag catalog.
+- Functional matrix: 62 passed, 4 workers, zero retries on the final production
+  WASM, including 14 new desktop/mobile category checks. Coverage includes empty
+  categories, multi-tag counts, rename, removing the last member, deletion, inline
+  creation followed by cancellation, pagination, controlled late success/failure,
+  error recovery and selection clearing. Adding the 768px viewport assertion
+  then rerunning both layout cases: 2 passed.
+- Existing Playwright regression: 16 passed, including 10,000-node virtualization,
+  language, themes, keyboard navigation, mobile and authentication. Real browser
+  screenshots were inspected at desktop, Pixel 5 and tablet widths. Page identity,
+  meaningful content, layout, reachable controls and keyboard selection passed;
+  no unexpected page exceptions or normal-flow console errors. Injected HTTP 500s
+  are expected only in controlled recovery/ordering cases. Browser plugin was
+  unavailable; the existing Playwright runner used isolated loopback servers.
+- Rust gates: fmt, check, Clippy with `-D warnings`, full all-targets/all-features
+  tests and doc tests passed. Full tests: 90 suites, 1,025 passed, 8 ignored.
+  Dependency audit: advisories/bans/licenses/sources passed. CSS and release WASM
+  builds passed; pre-existing Dioxus component naming warnings remain.
+- Docs/acceptance: 157 cases, 420 verified proof references. Architecture gate:
+  15 crates passed, including new files and the 500-line fuse. Node translations
+  were extracted into their own module; all previous translations remain intact
+  except the superseded dropdown label. CI tooling: 17 unit tests passed.
+- Read-only review: no unresolved blocker. Initial ordering test route ownership
+  was corrected and both delayed-success/delayed-failure paths passed afterwards.
+  Final changed/untracked file checks and `git diff --check` passed.
+
+Category counts describe loaded nodes before other filters; the catalog is
+complete even if a category's nodes are on a later page. Controlled small node
+pages prove this UI boundary without claiming full-database counts. Other browser
+engines, external proxy clients, long soak and Docker publishing were not run for
+this UI slice. Transient logs use `/tmp/deve-sub-categories-*.log`; browser artifacts
+use the runner's ignored per-run directories and `/tmp/deve-sub-categories-*.png`.

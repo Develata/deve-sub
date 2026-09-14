@@ -187,6 +187,13 @@ Schema validation enforces: required fields, enum values, YAML alias depth
 ≤ 10, total size ≤ 1 MiB (SEC-005 parity), no script tags (constraint #10),
 proxy group names unique, group member references valid.
 
+The existing `source` filter compares the effective source label, not a source
+ID: an independent import label takes precedence; otherwise storage selects the
+first live source name in source-ID order. This preserves existing name-based
+templates. Source edits/deletion invalidate generation through the pool revision
+in their storage transaction. Expanding this filter to all contributing sources
+or stable IDs would require a separate compatibility decision.
+
 ### Proxy group model
 
 Seven group types per spec §11.2:

@@ -14,6 +14,11 @@ use deve_sub_domain::{
 use deve_sub_kernel::{NodeId, SourceId, SourceSnapshotId, Timestamp};
 use deve_sub_storage_sqlite::{SqliteNodePoolRepository, SqliteSourceRepository};
 
+#[path = "node_pool_reconcile/manual_membership.rs"]
+mod manual_membership;
+#[path = "node_pool_reconcile/source_invalidation.rs"]
+mod source_invalidation;
+
 struct TestDb {
     pool: sqlx::sqlite::SqlitePool,
     master_key: std::sync::Arc<deve_sub_security::MasterKey>,

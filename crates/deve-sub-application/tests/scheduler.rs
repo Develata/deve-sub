@@ -15,7 +15,11 @@ use deve_sub_application::source::{
     self, CreateSourceParams, FetchError, FetchResult, GeoIpPort, RefreshDeps, RefreshScheduler,
     RegionDetection, SubscriptionFetcher, execute_refresh_job, start_refresh_job,
 };
-use deve_sub_domain::{SourceRepository, SourceSnapshotRepository, SourceType};
+use deve_sub_domain::{
+    SourceRefreshJobRepository, SourceRefreshJobStatus, SourceRepository, SourceSnapshotRepository,
+    SourceType,
+};
+use deve_sub_kernel::SourceId;
 use deve_sub_storage_sqlite::{
     SqliteNodePoolRepository, SqliteSourceRefreshJobRepository, SqliteSourceRepository,
     SqliteSourceSnapshotRepository,
@@ -93,7 +97,11 @@ impl TestDb {
 
 const TROJAN_URI: &str = "trojan://PASS@example.com:443?sni=example.com&type=tcp#Node";
 
-async fn create_auto_source(repo: &SqliteSourceRepository, name: &str, interval_secs: u64) {
+async fn create_auto_source(
+    repo: &SqliteSourceRepository,
+    name: &str,
+    interval_secs: u64,
+) -> SourceId {
     source::create_source(
         repo,
         CreateSourceParams {
@@ -107,7 +115,43 @@ async fn create_auto_source(repo: &SqliteSourceRepository, name: &str, interval_
         },
     )
     .await
-    .expect("create source");
+    .expect("create source")
+    .id
+}
+
+// WHY: elapsed wall time cannot prove a tick ran under SQLite contention.
+// Observe durable completion before shutdown; failed jobs remain test failures.
+async fn wait_for_completed_refresh(db: &TestDb, source_id: SourceId) {
+    let jobs = SqliteSourceRefreshJobRepository::new(db.pool.clone());
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let current = jobs.list_for_source(source_id, 1).await.expect("jobs");
+            if let Some(job) = current.first()
+                && job.status.is_terminal()
+            {
+                assert_eq!(job.status, SourceRefreshJobStatus::Completed, "{job:?}");
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("scheduler must complete the due source within 5s");
+}
+
+async fn stop_scheduler(
+    stop: tokio::sync::oneshot::Sender<()>,
+    mut handle: tokio::task::JoinHandle<()>,
+) {
+    stop.send(()).expect("scheduler is still running");
+    let result = tokio::time::timeout(Duration::from_secs(5), &mut handle).await;
+    if result.is_err() {
+        handle.abort();
+        let _ = handle.await;
+    }
+    result
+        .expect("scheduler shutdown within 5s")
+        .expect("scheduler task");
 }
 
 /// SRC-003: The scheduler refreshes a due source on the first tick.
@@ -125,7 +169,7 @@ async fn scheduler_refreshes_due_source_on_tick() {
     ));
     let (fetcher, calls) = CountingFetcher::new(TROJAN_URI.as_bytes().to_vec());
 
-    create_auto_source(&source_repo, "auto-source", 3600).await;
+    let source_id = create_auto_source(&source_repo, "auto-source", 3600).await;
 
     let scheduler = RefreshScheduler::new(
         source_repo.clone(),
@@ -143,13 +187,13 @@ async fn scheduler_refreshes_due_source_on_tick() {
     };
     let handle = tokio::spawn(scheduler.run(shutdown));
 
-    tokio::time::sleep(Duration::from_millis(150)).await;
-    let _ = shutdown_tx.send(());
-    let _ = handle.await;
+    wait_for_completed_refresh(&db, source_id).await;
+    stop_scheduler(shutdown_tx, handle).await;
 
-    assert!(
-        calls.load(Ordering::SeqCst) >= 1,
-        "scheduler should have refreshed the due source at least once"
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "scheduler must refresh the due source exactly once"
     );
 
     let sources = source_repo.list(None, 100).await.expect("list sources");
@@ -158,7 +202,7 @@ async fn scheduler_refreshes_due_source_on_tick() {
         .list_for_source(sources[0].id, 100)
         .await
         .expect("list snapshots");
-    assert!(!snapshots.is_empty(), "at least one snapshot created");
+    assert_eq!(snapshots.len(), 1, "exactly one snapshot created");
 }
 
 /// SRC-003: A source that is not yet due is not refreshed.
@@ -200,6 +244,8 @@ async fn scheduler_skips_not_due_source() {
             .expect("manual refresh");
     }
 
+    // A due control proves the scheduler actually scanned this negative case.
+    let control = create_auto_source(&source_repo, "due-control", 3600).await;
     let scheduler = RefreshScheduler::new(
         source_repo.clone(),
         snapshot_repo.clone(),
@@ -216,14 +262,30 @@ async fn scheduler_skips_not_due_source() {
     };
     let handle = tokio::spawn(scheduler.run(shutdown));
 
-    tokio::time::sleep(Duration::from_millis(150)).await;
-    let _ = shutdown_tx.send(());
-    let _ = handle.await;
+    wait_for_completed_refresh(&db, control).await;
+    stop_scheduler(shutdown_tx, handle).await;
 
     assert_eq!(
         calls.load(Ordering::SeqCst),
-        0,
-        "scheduler should not refresh a source that is not due"
+        1,
+        "only the due control may be refreshed"
+    );
+    assert_eq!(
+        snapshot_repo
+            .list_for_source(sid, 100)
+            .await
+            .expect("snapshots")
+            .len(),
+        1
+    );
+    assert_eq!(
+        SqliteSourceRefreshJobRepository::new(db.pool.clone())
+            .list_for_source(sid, 100)
+            .await
+            .expect("jobs")
+            .len(),
+        1,
+        "not-due source retains only its earlier manual job"
     );
 }
 
@@ -247,6 +309,7 @@ async fn scheduler_skips_disabled_source() {
     let mut s = source_repo.list(None, 1).await.expect("list")[0].clone();
     s.enabled = false;
     source_repo.update(&s).await.expect("disable");
+    let control = create_auto_source(&source_repo, "enabled-control", 3600).await;
 
     let scheduler = RefreshScheduler::new(
         source_repo.clone(),
@@ -264,14 +327,28 @@ async fn scheduler_skips_disabled_source() {
     };
     let handle = tokio::spawn(scheduler.run(shutdown));
 
-    tokio::time::sleep(Duration::from_millis(150)).await;
-    let _ = shutdown_tx.send(());
-    let _ = handle.await;
+    wait_for_completed_refresh(&db, control).await;
+    stop_scheduler(shutdown_tx, handle).await;
 
     assert_eq!(
         calls.load(Ordering::SeqCst),
-        0,
-        "disabled source should not be refreshed"
+        1,
+        "only the enabled control may be refreshed"
+    );
+    assert!(
+        snapshot_repo
+            .list_for_source(s.id, 100)
+            .await
+            .expect("snapshots")
+            .is_empty()
+    );
+    assert!(
+        SqliteSourceRefreshJobRepository::new(db.pool.clone())
+            .list_for_source(s.id, 100)
+            .await
+            .expect("jobs")
+            .is_empty(),
+        "disabled source cannot acquire a refresh job"
     );
 }
 
@@ -308,12 +385,7 @@ async fn scheduler_stops_on_shutdown() {
     };
     let handle = tokio::spawn(scheduler.run(shutdown));
 
-    let _ = shutdown_tx.send(());
-    let result = tokio::time::timeout(Duration::from_secs(5), handle).await;
-    assert!(
-        result.is_ok(),
-        "scheduler should stop within 5s of shutdown"
-    );
+    stop_scheduler(shutdown_tx, handle).await;
 }
 
 #[path = "scheduler/shutdown.rs"]

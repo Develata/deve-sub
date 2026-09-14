@@ -88,8 +88,8 @@ impl CacheKeyParams<'_> {
         }
 
         let mut hasher = Sha256::new();
-        // Bump only when previously emitted content can no longer be trusted.
-        feed(&mut hasher, b"deve-sub-generation-v2");
+        // v3 also rejects v2 output cached across untracked source-label changes.
+        feed(&mut hasher, b"deve-sub-generation-v3");
         feed(&mut hasher, self.template_id.to_string().as_bytes());
         feed(&mut hasher, self.template_version.to_string().as_bytes());
         feed(&mut hasher, self.profile.as_bytes());

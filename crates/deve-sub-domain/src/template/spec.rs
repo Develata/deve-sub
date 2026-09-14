@@ -208,7 +208,7 @@ pub enum FilterField {
     Region,
     /// User-defined tag.
     Tag,
-    /// Source ID the node was imported from.
+    /// Effective source label (remote name or independent import label).
     Source,
 }
 

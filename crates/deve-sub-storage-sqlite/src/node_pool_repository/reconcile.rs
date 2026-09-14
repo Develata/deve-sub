@@ -134,6 +134,7 @@ impl SqliteNodePoolRepository {
                             &to_json(&node.protocol)?,
                             &node.endpoint.host.uri_host(),
                             fingerprint,
+                            "",
                             self.master_key.as_deref(),
                         )
                         .await?
@@ -201,12 +202,13 @@ impl SqliteNodePoolRepository {
 
         // 6. Mark missing: nodes previously bound to this source that were not
         // seen in this refresh. Their binding was deleted in step 4 and not
-        // recreated. If no other source binds them, they become missing.
+        // recreated. Independent manual imports remain present without bindings.
         let missing_candidates: Vec<String> = old_bound.difference(&seen).cloned().collect();
         if !missing_candidates.is_empty() {
             // WHY: fetch all remaining bindings in one grouped query per chunk
             // instead of one COUNT per node (N+1). A candidate absent from the
-            // result has zero remaining bindings and must be marked missing.
+            // result has zero remaining bindings; the write also checks for
+            // independent provenance in the persisted label, not its display JOIN.
             let mut still_bound: HashSet<String> = HashSet::new();
             for chunk in missing_candidates.chunks(500) {
                 let placeholders = std::iter::repeat_n("?,", chunk.len())
@@ -231,12 +233,12 @@ impl SqliteNodePoolRepository {
             }
             for old_node_id in &missing_candidates {
                 if !still_bound.contains(old_node_id) {
-                    sqlx::query("UPDATE nodes SET missing_from_source = 1 WHERE id = ?")
+                    let changed = sqlx::query("UPDATE nodes SET missing_from_source = 1, revision = revision + 1 WHERE id = ? AND source_label = '' AND missing_from_source = 0")
                         .bind(old_node_id)
                         .execute(&mut *tx)
                         .await
                         .map_err(|e| SourceError::Storage(e.to_string()))?;
-                    result.missing_nodes += 1;
+                    result.missing_nodes += changed.rows_affected();
                 }
             }
         }

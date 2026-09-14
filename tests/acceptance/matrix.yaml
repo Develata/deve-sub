@@ -350,13 +350,14 @@ cases:
     layer: Integration
     dimensions: []
     preconditions: ["source.auto_update=true，update_interval_secs 已过"]
-    steps: ["启动 RefreshScheduler", "等待至少一个 tick"]
+    steps: ["启动 RefreshScheduler", "有界等待到期对照源的持久任务完成，再发送关闭并检查任务退出"]
     assertions: ["按间隔执行且不重复并发", "批次中关闭后停止排队源的启动，等待已启动任务退出并清理注册和租约"]
     fixtures: ["crates/deve-sub-application/tests/scheduler.rs"]
     evidence:
       tests:
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_refreshes_due_source_on_tick"
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_skips_not_due_source"
+        - "crates/deve-sub-application/tests/scheduler.rs::scheduler_skips_disabled_source"
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_stops_on_shutdown"
         - "crates/deve-sub-application/tests/scheduler/shutdown.rs::src003_shutdown_drains_active_group_without_starting_queued_sources"
         - "crates/deve-sub-application/tests/scheduler/shutdown.rs::src003_shutdown_cancel_does_not_escape_to_queued_sources"
@@ -994,13 +995,18 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["节点标记缺失，不直接消失"]
+    assertions: ["仅远程来源全部撤销且无独立手动导入时标记缺失，不直接删除", "重复、再次导入及并发刷新保留手动节点的ID、标签和覆盖"]
     fixtures: []
     evidence:
       tests:
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::missing_nodes_marked_on_subsequent_refresh"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::missing_node_reactivated_on_reappearance"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_queries.rs::list_nodes_active_only_excludes_missing"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_manual_first_survives_remote_removal"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_source_first_manual_duplicate_survives_remote_removal"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_missing_reimport_survives_later_remote_removal"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_concurrent_import_and_refresh_preserve_manual_membership"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_remote_named_manual_still_becomes_missing"
       status: pass
   - id: NODE-012
     title: TCP 延迟
@@ -1322,6 +1328,10 @@ cases:
         - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen015_legacy_cache_is_not_a_last_good_fallback"
         - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen015_legacy_active_cache_is_not_exposed_as_valid_output"
         - "apps/server/tests/template_management/generation_safety.rs::gen015_unsupported_group_returns_422_and_preserves_active"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/source_invalidation.rs::src001_source_changes_invalidate_pool_and_rollback_together"
+        - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_source_rename_invalidates_direct_generation_cache"
+        - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_source_delete_invalidates_direct_generation_cache"
+        - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_v2_cache_is_regenerated_and_never_used_as_fallback"
       status: pass
   - id: GEN-016
     title: 预览一致性

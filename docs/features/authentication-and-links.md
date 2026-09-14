@@ -32,6 +32,11 @@ own bounded IP limiter and cannot exhaust the administrator login counters.
 Old short codes remain valid; regenerate them explicitly to obtain the new
 length. Do not publish full links in logs, screenshots or support requests.
 
+Concurrent short-code regenerations replace the current credential in commit
+order. Only the last committed code remains valid; an overlapping request does
+not exhaust random-code retries or leave the previous credential active. A
+failed replacement leaves the previous code usable.
+
 The subscription list's Copy action fetches the existing short code and
 copies `/s/{code}/{profile}`. If no short code exists, generate one first.
 Creation, token rotation and temporary-link dialogs display an importable

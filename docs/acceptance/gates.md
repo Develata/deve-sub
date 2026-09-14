@@ -591,3 +591,54 @@ power-loss, permanently unwritable storage and long-running soak were not
 exercised locally. If storage cannot persist any status, terminal recording
 remains best effort and relies on the existing startup recovery path. The
 bounded concurrent tests do not exhaust all possible interleavings.
+
+## M5/M6 generation boundaries and concurrent short codes — 2026-09-14
+
+Owner: main agent; one independent read-only reviewer audited and reviewed the
+fixes against main `174986ec5ce98b0983eeb30924fb617c88896037`.
+Scope: GEN-006, GEN-015 and OUT-013, including their plans, contracts, generated
+OpenAPI and regression matrix. No dependency, schema migration, real-data
+maintenance, release or deployment is part of this slice.
+
+Three findings were accepted after the main agent reproduced them independently:
+
+- P1 / GEN-006: explicit and quick groups expanded a fixed subscription from
+  selected node A to unselected node B. Groups now stay within the effective
+  fixed or dynamic selection, report explicit references as `outside_selection`,
+  and preserve nested group references. Empty Mihomo groups cannot publish.
+- P1 / GEN-015: lenient generation published unsupported Mihomo group types,
+  replaced the active good output and failed real client validation. Both modes
+  and preview now reject unsupported groups with 422 `incompatible_groups`.
+  Active good output and delivery fallback remain unchanged on failure.
+- P2 / OUT-013: concurrent regeneration used a stale old-code ID and exhausted
+  collision retries against the subscription uniqueness constraint. Replacement
+  now deletes the current subscription-owned row as the first write in its
+  atomic transaction. The real HTTP test changed from 26 failures in 36 requests
+  to 36 successes; exactly one code remains, every prior code returns 404 and the
+  current code returns 200. Existing code-collision rollback still passes.
+
+Generation cache keys now include a semantics revision. Old rows remain stored
+for normal retention but cannot be served through direct, active or fallback
+lookups. Real same-database upgrade testing covers an old pinned cache that
+included B: it is regenerated and returns 200 without B. Old invalid active
+output is unavailable; if regeneration fails before any current valid cache
+exists, delivery returns 503. After rebuilding, a later invalid edit preserves
+the current good fallback. Both rebuilt and fallback configurations pass the
+installed Mihomo v1.19.0 validator. This deliberately avoids trusting unsafe
+legacy output during an upgrade.
+
+All eight new regression tests failed before their respective fixes. Local
+baseline checks passed: fmt, check, strict Clippy, all-targets/all-features Rust
+tests (92 suites, 1,045 passed, 8 ignored), doc tests and dependency audit. After
+the final selected-ID deduplication adjustment, fmt and strict Clippy passed
+again, as did the affected generation suite (21 tests), delivery and template
+API suites (47 tests), binary build, both real API/upgrade reproductions and
+generated OpenAPI comparison. Docs/acceptance passed 157 cases and 448 proof
+references; architecture passed 15 crates including untracked files; CI tooling
+passed 17 tests. The same reviewer closed all accepted findings with no blocker.
+
+Transient logs use `/tmp/deve-sub-link-review-*.log`; the final read-only review
+is `/tmp/deve-sub-link-review-rereview.md`. No frontend source changed; browser,
+WASM and Docker integration remain checks for the subsequent PR CI. Real power
+loss, long-running soak and every output-profile client were not tested locally.
+The bounded concurrent scenarios do not exhaust all possible interleavings.

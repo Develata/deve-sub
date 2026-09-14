@@ -196,6 +196,10 @@ SubscriptionToken {
 current active version (`None`) or is pinned to a specific version (`Some(n)`).
 This is the Subscription-independent-aggregate decision: the Subscription owns
 its selection and version pin; Template updates never silently mutate it.
+Proxy groups must remain inside the subscription's selected node set, including
+explicit references and quick filters. M5 generation semantics versioning also
+applies to delivery cache hits and fallback: legacy output predating the selection
+and container safety checks is rebuilt, never served as a last-good substitute.
 Last-successful-generation fallback must match the selection and generation
 mode; when pinned, it must also match that exact template version. An unpinned
 subscription may retain an earlier successful version after regeneration fails.
@@ -409,6 +413,13 @@ probe limiter uses the same bounded in-memory adapter in an independent
 instance, counts 404 lookups per canonical client IP, and returns 429 while
 locked. Token/short-code log redaction covers malformed extra path segments;
 only recognized profile names may remain visible.
+
+Short-code regeneration replaces the current credential and its subscription
+reference in one storage transaction. The command does not supply a previously
+read short-code ID: concurrent regenerations serialize at the write boundary,
+each replaces the then-current code, and only the last committed code remains
+valid. Random-code collision retries apply to code uniqueness only. A failed
+replacement retains the old code and reference atomically (OUT-013).
 
 The Web copy action reads the existing short code through the subscription
 detail API and copies /s/{code}/{profile}; a missing code prompts the operator

@@ -1190,11 +1190,13 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["新节点不会自动加入"]
+    assertions: ["新节点不会自动加入", "显式代理组与自动分组不能扩张固定或动态选择范围", "空选择及空组不能发布"]
     fixtures: []
     evidence:
       tests:
         - "apps/server/tests/template_management.rs::gen006_fixed_selection_excludes_new_nodes"
+        - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen006_groups_cannot_expand_fixed_or_dynamic_selection"
+        - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen006_empty_selection_and_empty_resolved_group_cannot_publish"
       status: pass
   - id: GEN-007
     title: 按地区分组
@@ -1307,7 +1309,7 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["生成失败继续返回旧版本"]
+    assertions: ["生成失败继续返回当前生成语义下的旧成功版本", "Mihomo不兼容组在两种模式均拒绝并返回明确422", "旧生成语义缓存不可经命中、活动查询或失败回退交付"]
     fixtures: []
     evidence:
       tests:
@@ -1315,6 +1317,11 @@ cases:
         - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-VALIDATION"
         - "apps/server/tests/template_management.rs::gen015_failed_generation_preserves_old_active"
         - "apps/server/tests/template_management.rs::gen015b_empty_pool_preserves_active"
+        - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen015_mihomo_unsupported_groups_never_replace_last_good"
+        - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen015_legacy_cache_hits_are_regenerated_on_every_surface"
+        - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen015_legacy_cache_is_not_a_last_good_fallback"
+        - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen015_legacy_active_cache_is_not_exposed_as_valid_output"
+        - "apps/server/tests/template_management/generation_safety.rs::gen015_unsupported_group_returns_422_and_preserves_active"
       status: pass
   - id: GEN-016
     title: 预览一致性
@@ -1507,12 +1514,13 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["原子拒绝重复值"]
+    assertions: ["原子拒绝重复值", "并发重生成按提交顺序替换当前短码，不耗尽随机碰撞重试；失败保留旧凭据"]
     fixtures: []
     evidence:
       tests:
         - "apps/server/tests/subscription_delivery.rs::del013_short_code_delivery"
         - "apps/server/tests/subscription_delivery.rs::del015_regenerate_short_code_replaces_old"
+        - "apps/server/tests/subscription_delivery/short_code_concurrency.rs::out013_concurrent_regeneration_replaces_current_code_without_retry_exhaustion"
         - "apps/server/tests/security/hardening.rs::short_code_probes_have_an_independent_ip_budget"
         - "crates/deve-sub-security/src/token.rs::short_code_has_at_least_128_bits"
       status: pass

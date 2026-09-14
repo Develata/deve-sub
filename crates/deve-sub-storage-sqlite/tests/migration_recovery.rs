@@ -2229,9 +2229,7 @@ async fn b13_short_code_replace_rolls_back_on_code_conflict() {
         created_at: Timestamp::now(),
     };
 
-    let result = repo
-        .replace(sub_a_id, Some(old_sc_id), &new_short_code)
-        .await;
+    let result = repo.replace(&new_short_code).await;
     assert!(
         result.is_err(),
         "replace must fail when the new code is already taken by another subscription"

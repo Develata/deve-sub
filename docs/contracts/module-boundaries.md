@@ -45,6 +45,22 @@ template/profile. Subscription edits/deletion release old protection on the
 next store. Storage owns this retention transaction; no new delivery operation
 or cross-repository application transaction is introduced.
 
+The resolved selector bounds all group membership, including explicit and quick
+groups, for both admin generation and delivery. Explicit out-of-selection nodes
+are reported as `outside_selection`. Empty resolved Mihomo groups and unsupported
+Mihomo group types fail before publication in both generation modes.
+Unsupported groups return 422 `incompatible_groups` from generate/preview, with
+the group names and types in the error message. Cache keys
+include a generation semantics version; old active/fallback entries whose keys
+do not match current semantics are unavailable until valid regeneration.
+
+### Short-code replacement boundary (M6)
+
+`ShortCodeRepository::replace` receives the new credential and replaces its
+subscription's current short code atomically. It never trusts an old ID read by
+the caller. Concurrent replacements preserve exactly one current credential;
+failed writes preserve the previous credential and reference.
+
 ### Source refresh cancellation boundary (M4)
 
 Manual and scheduled refreshes share the application cancellation registry.

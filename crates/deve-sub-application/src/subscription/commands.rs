@@ -464,9 +464,9 @@ pub struct ShortCodeResult {
 
 /// (Re)generate a short code for a subscription.
 ///
-/// If the subscription already has a short code, the old row is deleted first.
-/// Generates a CSPRNG base62 code and retries on UNIQUE conflict (OUT-013).
-/// Links the new short code to the subscription via `set_short_code_id`.
+/// Generates a CSPRNG base62 code and retries on code collision (OUT-013).
+/// Storage atomically replaces the current code and subscription reference;
+/// an earlier application read cannot decide which credential to remove.
 ///
 /// # Errors
 /// - [`SubscriptionAppError::SubscriptionNotFound`] — subscription missing.
@@ -477,7 +477,7 @@ pub async fn regenerate_short_code(
     short_code_repo: &dyn ShortCodeRepository,
     subscription_id: SubscriptionId,
 ) -> Result<ShortCodeResult, SubscriptionAppError> {
-    let subscription = sub_repo
+    let _subscription = sub_repo
         .find_by_id(subscription_id)
         .await
         .map_err(map_subscription_error)?
@@ -486,10 +486,7 @@ pub async fn regenerate_short_code(
     for _ in 0..SHORT_CODE_MAX_RETRIES {
         let code = generate_short_code()?;
         let short_code = ShortCode::new(subscription_id, code.clone());
-        match short_code_repo
-            .replace(subscription_id, subscription.short_code_id, &short_code)
-            .await
-        {
+        match short_code_repo.replace(&short_code).await {
             Ok(()) => {
                 return Ok(ShortCodeResult {
                     short_code_id: short_code.id,

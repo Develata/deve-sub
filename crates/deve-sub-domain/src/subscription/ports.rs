@@ -150,18 +150,11 @@ pub trait ShortCodeRepository: Send + Sync {
     /// (OUT-013); the application layer retries with a fresh CSPRNG code.
     async fn create(&self, short_code: &ShortCode) -> Result<(), SubscriptionError>;
 
-    /// Atomically replace the short code for a subscription: delete the old
-    /// short code (if any), insert the new one, and update the subscription's
-    /// `short_code_id` reference — all in one transaction.
-    /// WHY: `regenerate_short_code` was previously three separate repo calls
-    /// across two traits; a failure between them left the subscription
-    /// pointing to a deleted short code (P1-2 A2).
-    async fn replace(
-        &self,
-        subscription_id: SubscriptionId,
-        old_short_code_id: Option<ShortCodeId>,
-        new_short_code: &ShortCode,
-    ) -> Result<(), SubscriptionError>;
+    /// Atomically replace the credential for `new_short_code.subscription_id`.
+    /// Resolve the current row at the write boundary, insert the new credential
+    /// and update the subscription reference together. Concurrent replacements
+    /// serialize; failed writes retain the previous credential and reference.
+    async fn replace(&self, new_short_code: &ShortCode) -> Result<(), SubscriptionError>;
 
     /// Find a short code by its code string. Used by the `GET /s/{code}`
     /// delivery handler.

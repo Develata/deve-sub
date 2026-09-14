@@ -34,6 +34,29 @@ pub struct GenerationCacheEntry {
     pub is_active: bool,
 }
 
+impl GenerationCacheEntry {
+    /// Whether this entry was keyed under the current generation semantics.
+    /// WHY: legacy output may violate corrected selection/container boundaries;
+    /// it must not bypass regeneration through active or last-good lookups.
+    #[must_use]
+    pub fn has_current_semantics(&self) -> bool {
+        let Ok(mode) = self.mode.parse() else {
+            return false;
+        };
+        self.cache_key
+            == CacheKeyParams {
+                template_id: self.template_id,
+                template_version: self.template_version,
+                profile: &self.profile,
+                mode,
+                selection_mode: &self.selection_mode,
+                selection_payload: &self.selection_payload,
+                pool_revision: Revision::new(self.pool_revision),
+            }
+            .compute_key()
+    }
+}
+
 /// Parameters for a cache lookup or store.
 #[derive(Debug, Clone)]
 pub struct CacheKeyParams<'a> {
@@ -65,6 +88,8 @@ impl CacheKeyParams<'_> {
         }
 
         let mut hasher = Sha256::new();
+        // Bump only when previously emitted content can no longer be trusted.
+        feed(&mut hasher, b"deve-sub-generation-v2");
         feed(&mut hasher, self.template_id.to_string().as_bytes());
         feed(&mut hasher, self.template_version.to_string().as_bytes());
         feed(&mut hasher, self.profile.as_bytes());

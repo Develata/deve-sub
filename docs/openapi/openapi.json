@@ -5586,7 +5586,7 @@
             }
           },
           "422": {
-            "description": "Strict mode: incompatible nodes excluded",
+            "description": "Incompatible nodes or unsupported proxy groups",
             "content": {
               "application/json": {
                 "schema": {
@@ -5791,7 +5791,7 @@
             }
           },
           "422": {
-            "description": "Strict mode: incompatible nodes excluded",
+            "description": "Incompatible nodes or unsupported proxy groups",
             "content": {
               "application/json": {
                 "schema": {

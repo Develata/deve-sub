@@ -208,8 +208,13 @@ the full path (GEN-012).
 
 Quick-group filters auto-populate members: by region (`region: US`), by
 protocol (`protocol: trojan`), by tag (`tag: production`). Filters are
-evaluated at generation time for dynamic selections, snapshot at save time
-for fixed selections.
+evaluated within the resolved `nodeSelector` set. The selector is the final
+node boundary for both admin generation and subscription delivery; neither
+explicit group members nor quick filters can expand it. Fixed selections never
+gain unselected nodes after a template edit. Explicit active references outside
+the selection are reported as `outside_selection`; nested group references keep
+their topology. A Mihomo group with no members after resolution fails generation
+before publication, rather than producing an invalid empty group.
 
 ### Generation pipeline
 
@@ -260,15 +265,22 @@ reason code (e.g. `UNSUPPORTED_PROTOCOL`, `UNSUPPORTED_TRANSPORT`). Incompatible
 nodes are excluded and reported (constraint #7: no silent dropping). Strict
 mode (GEN-014) fails generation if any node is excluded.
 
+An incompatible group type that would be emitted into a Mihomo container fails
+in both modes. Lenient mode can exclude incompatible nodes, but cannot publish
+an invalid group or silently remove a group referenced by rules. Other profiles
+retain their documented lenient proxy-only output and dropped-field warnings.
+
 ### Generation cache
 
 Cache key composition (spec §983-991):
 
 ```text
 cache_key = hash(
+  generation_semantics_version,
   template_id,
   template_version,
   profile,
+  generation_mode,
   node_selection_mode,
   selection_payload,    # filters (dynamic) or nodeIds+revision (fixed)
   pool_revision,        # dynamic mode: current pool revision
@@ -278,6 +290,14 @@ cache_key = hash(
 Cache hit returns stored content without regeneration. Cache miss generates,
 validates, stores, then atomically publishes. On generation failure, the
 previous active generation remains served (constraint #19, GEN-015).
+
+Generation semantics versioning invalidates persisted output when selection or
+container correctness changes. Current cache keys are recomputable from each
+entry's stored inputs. Direct hits, active-output queries and last-good fallback
+may expose only entries produced under current semantics. The selection/group
+safety upgrade rebuilds legacy caches on demand; their rows remain untouched
+until ordinary retention, but cannot be treated as valid fallback. If rebuilding
+fails before a current valid result exists, delivery returns a controlled error.
 
 ## Failure/recovery
 

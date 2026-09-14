@@ -67,10 +67,27 @@ pub async fn resolve_template(
 
     let (selected_node_ids, selection_missing) =
         resolve_selection_impl(&doc.spec.node_selector, &view);
+    let selected: std::collections::HashSet<_> = selected_node_ids.iter().copied().collect();
 
     let mut groups = Vec::with_capacity(doc.spec.proxy_groups.len());
     for group in &doc.spec.proxy_groups {
-        let resolution = resolve_group_impl(group, &view);
+        let mut resolution = resolve_group_impl(group, &view);
+        // WHY: proxy groups organize the selected set; they cannot expand a
+        // fixed subscription or bypass dynamic filters with explicit members.
+        resolution.explicit_node_ids.retain(|id| {
+            if selected.contains(id) {
+                true
+            } else {
+                resolution.missing.push(MissingNodeRef {
+                    node_id: *id,
+                    reason: MissingReason::OutsideSelection,
+                });
+                false
+            }
+        });
+        resolution
+            .quick_group_node_ids
+            .retain(|id| selected.contains(id));
         groups.push(resolution);
     }
 

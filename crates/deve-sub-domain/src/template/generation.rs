@@ -159,8 +159,8 @@ pub enum GenerationError {
     /// Strict mode was requested and one or more nodes were incompatible.
     #[error("generation failed: {0} incompatible node(s)")]
     IncompatibleNodes(CompatibilityReport),
-    /// Strict mode was requested and one or more proxy group types were
-    /// incompatible with the target profile.
+    /// A group type cannot be emitted in the target container, or strict mode
+    /// forbids dropping an incompatible group from proxy-only output.
     #[error("generation failed: {count} incompatible group type(s): {names}")]
     IncompatibleGroupTypes {
         count: usize,

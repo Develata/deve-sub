@@ -38,7 +38,7 @@ use crate::state::TemplateState;
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "Template or active version not found", body = ErrorResponse),
-        (status = 422, description = "Strict mode: incompatible nodes excluded", body = ErrorResponse),
+        (status = 422, description = "Incompatible nodes or unsupported proxy groups", body = ErrorResponse),
         (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
@@ -160,6 +160,13 @@ fn map_generation_error(
                 ),
             )
         }
+        TemplateAppError::Generation(
+            error @ deve_sub_domain::GenerationError::IncompatibleGroupTypes { .. },
+        ) => err(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "incompatible_groups",
+            &error.to_string(),
+        ),
         TemplateAppError::Emit(msg) => err(
             StatusCode::INTERNAL_SERVER_ERROR,
             "emit_error",
@@ -284,7 +291,7 @@ async fn get_active_template_generation(
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "Template or active version not found", body = ErrorResponse),
-        (status = 422, description = "Strict mode: incompatible nodes excluded", body = ErrorResponse),
+        (status = 422, description = "Incompatible nodes or unsupported proxy groups", body = ErrorResponse),
         (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]

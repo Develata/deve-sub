@@ -188,7 +188,7 @@ pub async fn generate_for_delivery(
                 )
                 .await
             {
-                Ok(Some(last_good)) => {
+                Ok(Some(last_good)) if last_good.has_current_semantics() => {
                     tracing::warn!(
                         template_id = %request.template_id,
                         profile = %request.profile,
@@ -201,7 +201,7 @@ pub async fn generate_for_delivery(
                         .push("generation failed; served last successful version".to_owned());
                     Ok(result)
                 }
-                Ok(None) => Err(pipeline_err),
+                Ok(_) => Err(pipeline_err),
                 Err(cache_err) => {
                     tracing::warn!(
                         error = %cache_err,
@@ -284,7 +284,10 @@ pub async fn get_active_generation(
     template_id: TemplateId,
     profile: &str,
 ) -> Result<Option<GenerationCacheEntry>, TemplateAppError> {
-    Ok(cache_repo.find_active(template_id, profile).await?)
+    Ok(cache_repo
+        .find_active(template_id, profile)
+        .await?
+        .filter(GenerationCacheEntry::has_current_semantics))
 }
 
 async fn resolve_context(
@@ -381,10 +384,6 @@ async fn run_pipeline(
     let resolution = resolve_template(&doc, pool_repo).await?;
 
     let mut all_ids = resolution.selected_node_ids;
-    for g in &resolution.groups {
-        all_ids.extend(g.explicit_node_ids.iter().copied());
-        all_ids.extend(g.quick_group_node_ids.iter().copied());
-    }
     all_ids.sort_unstable();
     all_ids.dedup();
 
@@ -464,7 +463,7 @@ async fn run_pipeline(
         }
     }
     if !incompatible_groups.is_empty() {
-        if mode == GenerationMode::Strict {
+        if mode == GenerationMode::Strict || profile == ProfileKind::Mihomo {
             let names = incompatible_groups
                 .iter()
                 .map(|g| format!("{} ({})", g.group_name, g.group_type))
@@ -490,6 +489,15 @@ async fn run_pipeline(
     }
 
     let groups = assemble_groups(&doc.spec.proxy_groups, &resolution.groups, &name_by_id);
+
+    if profile == ProfileKind::Mihomo
+        && let Some(group) = groups.iter().find(|group| group.members.is_empty())
+    {
+        return Err(TemplateAppError::InvalidInput(format!(
+            "group '{}' has no available members within the node selection",
+            group.name
+        )));
+    }
 
     // DS-AUD-B17: profiles other than mihomo do not yet have full-template
     // emitters. Emitting only nodes would silently drop the template's

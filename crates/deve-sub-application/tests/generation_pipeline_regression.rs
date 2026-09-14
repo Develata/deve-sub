@@ -20,6 +20,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+#[path = "generation_safety/mod.rs"]
+mod generation_safety;
+
 use deve_sub_application::template::{
     CreateTemplateParams, create_template, generate, generate_for_delivery, get_active_generation,
 };

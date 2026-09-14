@@ -196,6 +196,10 @@ SubscriptionToken {
 current active version (`None`) or is pinned to a specific version (`Some(n)`).
 This is the Subscription-independent-aggregate decision: the Subscription owns
 its selection and version pin; Template updates never silently mutate it.
+Proxy groups must remain inside the subscription's selected node set, including
+explicit references and quick filters. M5 generation semantics versioning also
+applies to delivery cache hits and fallback: legacy output predating the selection
+and container safety checks is rebuilt, never served as a last-good substitute.
 Last-successful-generation fallback must match the selection and generation
 mode; when pinned, it must also match that exact template version. An unpinned
 subscription may retain an earlier successful version after regeneration fails.

@@ -38,6 +38,22 @@ Each page is bounded to 100 versions. Native validation errors return 400;
 generation errors never replace the last successful output. Deleting a referenced
 template returns 409 `template_in_use`. Pinned subscription cache fallback must
 match both the requested version and generation mode.
+`GenerationCacheRepository::store` atomically protects the newest matching
+lenient result for each persisted subscription's selection/version pin, plus
+the active result, while keeping at most eight additional inactive entries per
+template/profile. Subscription edits/deletion release old protection on the
+next store. Storage owns this retention transaction; no new delivery operation
+or cross-repository application transaction is introduced.
+
+### Source refresh cancellation boundary (M4)
+
+Manual and scheduled refreshes share the application cancellation registry.
+The runner owns each registration until completion or drop. The cancel endpoint
+returns 200 with `cancelled=true` when it signals the worker; clients continue
+polling for its final outcome. Terminal jobs return `cancelled=false`. A live
+job without a registered signal returns 503 `cancel_unavailable`, leaving the
+job and source lease intact. Only the runner records cancellation after observing
+it before publication; a refresh past that boundary completes normally.
 
 ## Hexagonal layering
 

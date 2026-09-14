@@ -15,9 +15,7 @@ pub struct SqliteGenerationCacheRepository {
     pool: SqlitePool,
 }
 
-/// Retention bound: inactive entries kept per (template_id, profile) as the
-/// find_latest last-good fallback pool; older inactive entries are pruned on
-/// every store.
+/// Extra inactive entries per template/profile, beyond active and live fallbacks.
 const INACTIVE_RETAIN: i64 = 8;
 
 impl SqliteGenerationCacheRepository {
@@ -161,19 +159,27 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         .await
         .map_err(|e| TemplateError::Storage(e.to_string()))?;
 
-        // Retention: prune inactive entries beyond the newest INACTIVE_RETAIN
-        // for this (template_id, profile). WHY: repeated regenerations (e.g.
-        // every pool-revision bump via delivery) insert one row each; without
-        // a bound the table grows unboundedly. The active entry is excluded
-        // so the published version is never pruned, and the newest inactive
-        // entries remain available as the find_latest last-good fallback
-        // (constraint #19).
+        // WHY (constraint #19): protect each subscription's last-good result,
+        // not merely the eight most recent deliveries across all selectors.
+        // Both persisted selectors use the same NodeSelector serialization.
+        // Materialize protection before deletion; pins and lenient delivery
+        // mode must match. Unreferenced history stays bounded even after edits
+        // or deletion, and repeated revisions cannot grow this set indefinitely.
         sqlx::query(
-            "DELETE FROM generation_cache WHERE id IN (\
+            "WITH protected(id) AS MATERIALIZED (\
+                 SELECT MAX(c.id) FROM subscriptions s JOIN generation_cache c \
+                 ON c.template_id = s.template_id AND c.profile = s.profile \
+                 AND c.selection_payload = s.node_selection AND c.mode = 'lenient' \
+                 AND (s.template_version_pin IS NULL OR c.template_version = s.template_version_pin) \
+                 WHERE s.template_id = ? AND s.profile = ? GROUP BY s.id) \
+             DELETE FROM generation_cache WHERE id IN (\
                  SELECT id FROM generation_cache \
                  WHERE template_id = ? AND profile = ? AND is_active = 0 \
+                 AND id NOT IN (SELECT id FROM protected) \
                  ORDER BY id DESC LIMIT -1 OFFSET ?)",
         )
+        .bind(entry.template_id.to_string())
+        .bind(&entry.profile)
         .bind(entry.template_id.to_string())
         .bind(&entry.profile)
         .bind(INACTIVE_RETAIN)

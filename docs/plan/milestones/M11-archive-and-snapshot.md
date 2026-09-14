@@ -113,7 +113,8 @@ manifest disagree with its archived database.
 restore(backup_path):
   1. require unique regular archive entries; check format/schema compatibility
   2. verify master-key fingerprint continuity; refuse a missing/wrong required key
-  3. acquire the server sidecar lock; copy snapshot to a sibling staging file
+  3. acquire the server sidecar lock; create a private, unique sibling staging
+     directory and copy the snapshot into it, isolated from prior WAL/SHM files
   4. compare staged row counts with the archived manifest before migration
   5. run forward migrations on staging; verify PRAGMA integrity_check
   6. checkpoint, close, fsync and atomically replace the target with rollback protection
@@ -132,7 +133,9 @@ restore(backup_path):
 - Schema version mismatch (backup newer than binary): `restore` refuses. The
   user must upgrade the binary to match or exceed the backup's schema version.
 - Migration failure during restore: the production target is unchanged;
-  failure affects only staging. Restore a pre-upgrade backup with the older
+  failure affects only staging. Normal success/error removes that invocation's
+  staging directory and sidecars; crash remnants are never reused or overwritten
+  by a later restore. Restore a pre-upgrade backup with the older
   binary to downgrade. Lifelong traffic totals are included even after raw
   history pruning; the master key must be backed up separately.
 

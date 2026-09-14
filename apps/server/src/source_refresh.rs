@@ -261,6 +261,7 @@ pub async fn get_latest_refresh_job(
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "Job not found", body = ErrorResponse),
+        (status = 503, description = "Cancellation signal unavailable; retry", body = ErrorResponse),
     )
 )]
 pub async fn cancel_refresh_job(
@@ -303,17 +304,23 @@ pub async fn cancel_refresh_job(
         }));
     }
 
-    let cancelled = if let Ok(flags) = state.refresh_cancel_flags.lock() {
-        flags.get(&id).cloned()
-    } else {
-        None
-    };
-
-    if let Some(flag) = cancelled {
-        signal_cancel(&flag);
-    } else {
-        let _ = state.refresh_job_repo.mark_cancelled(id).await;
-    }
+    let flag = state
+        .refresh_cancel_flags
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| {
+            // WHY: a worker can be between acquiring its lease and registering.
+            // Only it can confirm cancellation; marking a terminal state here
+            // releases the lease while an unsignalled worker may still publish.
+            err(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "cancel_unavailable",
+                "refresh cancellation is temporarily unavailable; retry",
+            )
+        })?;
+    signal_cancel(&flag);
 
     Ok(Json(CancelRefreshJobResponse {
         job_id: id.to_string(),

@@ -438,12 +438,13 @@ cases:
     dimensions: []
     preconditions: ["source 已创建，refresh job 处于 Running"]
     steps: ["POST /api/v1/sources/refresh-jobs/{job_id}/cancel", "确认 phase 停在当前阶段"]
-    assertions: ["取消后不发布半成品"]
+    assertions: ["手动和自动刷新取消信号由实际执行者确认；发布前取消不写入快照", "取消注册缺失返回503，保留Running租约；结束后清理注册并允许新任务"]
     fixtures: ["apps/server/tests/source_refresh.rs", "crates/deve-sub-application/src/source/refresh.rs"]
     evidence:
       tests:
         - "apps/server/tests/source_refresh.rs::concurrent_refresh_returns_409"
-        - "crates/deve-sub-application/src/source/refresh.rs (cancel checks at each phase boundary)"
+        - "apps/server/tests/source_refresh/cancellation.rs::src009_scheduled_cancel_prevents_publish_and_releases_registration"
+        - "apps/server/tests/source_refresh/cancellation.rs::src009_unregistered_cancel_preserves_running_lease"
       status: pass
   - id: SRC-010
     title: 条件过滤
@@ -1516,10 +1517,13 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["所有客户端只看到完整版本"]
+    assertions: ["所有客户端只看到完整版本", "共用模板的每个订阅保留匹配选择和版本固定的最后成功结果；重复生成有界且孤立缓存可回收"]
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-storage-sqlite/tests/generation_retention.rs::out014_retention_preserves_each_live_selection_and_reclaims_orphans"
+        - "crates/deve-sub-storage-sqlite/tests/generation_retention.rs::out014_retention_preserves_pins_and_lenient_fallback_separately"
+        - "tests/e2e/functional/delivery-cache.api.spec.ts::FUNC-DELIVERY-RETENTION"
         - "apps/server/tests/subscription_delivery.rs::del012_concurrent_delivery_all_complete"
       status: pass
   - id: PROBE-001
@@ -2313,10 +2317,12 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check"]
+    assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check", "旧 staging WAL 不得混入新备份；验证失败保留目标并清理本次 staging"]
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/restore_staging.rs::backup003_restore_ignores_previous_staging_wal"
+        - "apps/cli/tests/restore_staging.rs::backup003_failed_verification_cleans_own_staging"
         - "apps/cli/tests/backup_concurrency.rs::backup002_concurrent_writes_preserve_manifest_and_restore"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"

@@ -30,7 +30,7 @@ UI 乱序用受控响应释放顺序，不依赖固定 sleep。
 ## 场景
 
 API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运行一次，
-共 72 项（14 API + 29 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
+共 73 项（15 API + 29 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
 不能只把 HTTP 请求发出当成通过。
 
 | 场景标识 | 绑定 | 维度/操作 | 必须成立的结果 |
@@ -59,6 +59,7 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 | FUNC-OVERRIDE | NODE-010 | 重开覆盖编辑器，只改名称 | 其他覆盖字段完整保留 |
 | FUNC-TEMPLATE-ROLLBACK | GEN-004 | v2 回滚确认到 v1 | 实际 POST 成功，活动版本及内容恢复 |
 | FUNC-SUB-CREATE | OUT-016 | Web 默认表单创建订阅 | 201，返回链接可获取内容 |
+| FUNC-DELIVERY-RETENTION | OUT-014 | 12个不同selector并发生成，共用模板；全部节点不可用后并发下载 | 每个订阅仍返回各自最后成功内容，不能被其他selector挤掉或串用 |
 | FUNC-PAGINATION | SRC-001/GEN-001/OUT-016 | 21 源、51 模板和订阅 | 后续记录可操作，模板选项完整 |
 | FUNC-SOURCE-JOBS | SRC-002/013 | A/B 同时刷新，A先成功、B后失败 | 忙碌状态独立，失败后列表和重试入口保留 |
 | FUNC-REQUEST-TIMEOUT | UI-009 | 节点请求不返回 | 实际 AbortSignal 到期后显示错误，结束等待 |

@@ -11,13 +11,17 @@
 //! the `source_refresh_jobs` table and the per-source lease prevents
 //! concurrent refreshes.
 
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use deve_sub_domain::{
     NodePoolRepository, SourceRefreshJobRepository, SourceRepository, SourceSnapshotRepository,
 };
+use deve_sub_kernel::SourceRefreshJobId;
 use futures_util::stream::{self, StreamExt};
+
+use crate::{CancellationFlags, CancellationRegistration};
 
 use super::fetcher::SubscriptionFetcher;
 use super::geoip::GeoIpPort;
@@ -40,6 +44,7 @@ pub struct RefreshScheduler {
     tick_interval: Duration,
     max_concurrency: usize,
     lease_timeout: Duration,
+    cancel_flags: CancellationFlags<SourceRefreshJobId>,
 }
 
 impl RefreshScheduler {
@@ -62,6 +67,7 @@ impl RefreshScheduler {
             tick_interval: Duration::from_secs(DEFAULT_TICK_SECS),
             max_concurrency: DEFAULT_MAX_CONCURRENCY,
             lease_timeout: Duration::from_secs(DEFAULT_LEASE_TIMEOUT_SECS),
+            cancel_flags: CancellationFlags::default(),
         }
     }
 
@@ -82,6 +88,13 @@ impl RefreshScheduler {
     #[must_use]
     pub fn lease_timeout(mut self, timeout: Duration) -> Self {
         self.lease_timeout = timeout;
+        self
+    }
+
+    /// Share live job cancellation with manual refreshes and server shutdown.
+    #[must_use]
+    pub fn cancel_flags(mut self, flags: CancellationFlags<SourceRefreshJobId>) -> Self {
+        self.cancel_flags = flags;
         self
     }
 
@@ -151,9 +164,16 @@ impl RefreshScheduler {
             .map(|source_id| {
                 let deps = &deps;
                 async move {
-                    let cancelled = AtomicBool::new(false);
                     match start_refresh_job(deps, source_id).await {
                         Ok(job_id) => {
+                            let cancelled = Arc::new(AtomicBool::new(false));
+                            // WHY: the API must signal the same flag the runner checks.
+                            // The guard also unregisters a future dropped during shutdown.
+                            let _registration = CancellationRegistration::new(
+                                Arc::clone(&self.cancel_flags),
+                                job_id,
+                                Arc::clone(&cancelled),
+                            );
                             let result =
                                 execute_refresh_job(deps, job_id, source_id, &cancelled).await;
                             (source_id, result)

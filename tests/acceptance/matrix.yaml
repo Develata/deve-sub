@@ -351,13 +351,16 @@ cases:
     dimensions: []
     preconditions: ["source.auto_update=true，update_interval_secs 已过"]
     steps: ["启动 RefreshScheduler", "等待至少一个 tick"]
-    assertions: ["按间隔执行且不重复并发"]
+    assertions: ["按间隔执行且不重复并发", "批次中关闭后停止排队源的启动，等待已启动任务退出并清理注册和租约"]
     fixtures: ["crates/deve-sub-application/tests/scheduler.rs"]
     evidence:
       tests:
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_refreshes_due_source_on_tick"
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_skips_not_due_source"
         - "crates/deve-sub-application/tests/scheduler.rs::scheduler_stops_on_shutdown"
+        - "crates/deve-sub-application/tests/scheduler/shutdown.rs::src003_shutdown_drains_active_group_without_starting_queued_sources"
+        - "crates/deve-sub-application/tests/scheduler/shutdown.rs::src003_shutdown_cancel_does_not_escape_to_queued_sources"
+        - "crates/deve-sub-application/tests/scheduler/start_shutdown.rs::src003_shutdown_during_durable_start_cancels_before_fetch"
       status: pass
   - id: SRC-004
     title: ETag

@@ -55,6 +55,11 @@ job without a registered signal returns 503 `cancel_unavailable`, leaving the
 job and source lease intact. Only the runner records cancellation after observing
 it before publication; a refresh past that boundary completes normally.
 
+The source scheduler observes shutdown within a tick, stops new admission and
+drains already admitted workers. A lease acquisition that overlaps shutdown
+finishes its durable transition and cancels before fetch. The CLI's bounded
+grace/abort fallback still applies to workers that cannot finish normally.
+
 ## Hexagonal layering
 
 ```text

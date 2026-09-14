@@ -406,11 +406,10 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
 
 /// Await a scheduler task with a bounded grace period (constraint #20).
 ///
-/// WHY: `RefreshScheduler::run` only observes the shutdown signal between
-/// ticks; a tick with slow in-flight fetches (up to the HTTP timeout each)
-/// would otherwise hold process exit open indefinitely. After the grace
-/// period the task is aborted — refresh jobs are lease-tracked in the DB and
-/// recovered as Failed on next start, so aborting mid-tick loses nothing.
+/// WHY: schedulers stop admitting new work, but an active fetch or storage
+/// operation can still exceed the process shutdown budget. After the grace
+/// period, abort; unfinished refresh jobs retain their durable lease and are
+/// recovered as Failed on next start. Published snapshots remain atomic.
 async fn stop_scheduler(mut handle: tokio::task::JoinHandle<()>, name: &'static str) {
     match tokio::time::timeout(Duration::from_secs(30), &mut handle).await {
         Ok(Ok(())) => {}

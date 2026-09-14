@@ -315,3 +315,9 @@ async fn scheduler_stops_on_shutdown() {
         "scheduler should stop within 5s of shutdown"
     );
 }
+
+#[path = "scheduler/shutdown.rs"]
+mod shutdown;
+
+#[path = "scheduler/start_shutdown.rs"]
+mod start_shutdown;

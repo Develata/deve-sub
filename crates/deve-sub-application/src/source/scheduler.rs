@@ -12,7 +12,7 @@
 //! concurrent refreshes.
 
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use deve_sub_domain::{
@@ -100,19 +100,33 @@ impl RefreshScheduler {
 
     pub async fn run(self, shutdown: impl std::future::Future<Output = ()> + Send) {
         tokio::pin!(shutdown);
+        let stopping = AtomicBool::new(false);
         tracing::info!(
             tick_secs = self.tick_interval.as_secs(),
             "refresh scheduler started"
         );
         loop {
             tokio::select! {
+                biased;
                 _ = &mut shutdown => {
                     tracing::info!("refresh scheduler shutting down");
                     return;
                 }
-                _ = tokio::time::sleep(self.tick_interval) => {
-                    self.tick().await;
+                _ = tokio::time::sleep(self.tick_interval) => {}
+            }
+            let tick = self.tick(&stopping);
+            tokio::pin!(tick);
+            tokio::select! {
+                biased;
+                _ = &mut shutdown => {
+                    // WHY: dropping a tick can abandon a durable start transition.
+                    // Close admission first, then drain its bounded active group.
+                    stopping.store(true, Ordering::Relaxed);
+                    tracing::info!("refresh scheduler stopping admission and draining");
+                    tick.await;
+                    return;
                 }
+                _ = &mut tick => {}
             }
         }
     }
@@ -132,9 +146,9 @@ impl RefreshScheduler {
     /// jobs older than `lease_timeout`. A job stuck in `Running` (runner
     /// killed, panicked without unwind, or host lost power) otherwise
     /// blocks all future refreshes for that source for the entire uptime.
-    async fn tick(&self) {
+    async fn tick(&self, stopping: &AtomicBool) {
         self.reclaim_stale_leases().await;
-        let due = self.collect_due_sources().await;
+        let due = self.collect_due_sources(stopping).await;
         if due.is_empty() {
             return;
         }
@@ -160,13 +174,20 @@ impl RefreshScheduler {
             fetcher: self.fetcher.as_ref(),
             geoip: self.geoip.as_ref(),
         };
-        let results: Vec<_> = stream::iter(due)
+        let results = stream::iter(due)
+            .take_while(|_| std::future::ready(!stopping.load(Ordering::Relaxed)))
             .map(|source_id| {
                 let deps = &deps;
                 async move {
+                    if stopping.load(Ordering::Relaxed) {
+                        return None;
+                    }
                     match start_refresh_job(deps, source_id).await {
                         Ok(job_id) => {
-                            let cancelled = Arc::new(AtomicBool::new(false));
+                            // A start already awaiting storage must finish, but a
+                            // shutdown during that await must prevent its fetch.
+                            let cancelled =
+                                Arc::new(AtomicBool::new(stopping.load(Ordering::Relaxed)));
                             // WHY: the API must signal the same flag the runner checks.
                             // The guard also unregisters a future dropped during shutdown.
                             let _registration = CancellationRegistration::new(
@@ -176,17 +197,19 @@ impl RefreshScheduler {
                             );
                             let result =
                                 execute_refresh_job(deps, job_id, source_id, &cancelled).await;
-                            (source_id, result)
+                            Some((source_id, result))
                         }
-                        Err(e) => (source_id, Err(e)),
+                        Err(e) => Some((source_id, Err(e))),
                     }
                 }
             })
-            .buffer_unordered(self.max_concurrency)
-            .collect()
-            .await;
+            .buffer_unordered(self.max_concurrency);
+        tokio::pin!(results);
 
-        for (source_id, result) in results {
+        while let Some(result) = results.next().await {
+            let Some((source_id, result)) = result else {
+                continue;
+            };
             match &result {
                 Ok(r) => {
                     if r.not_modified {
@@ -210,13 +233,16 @@ impl RefreshScheduler {
         }
     }
 
-    async fn collect_due_sources(&self) -> Vec<deve_sub_kernel::SourceId> {
+    async fn collect_due_sources(&self, stopping: &AtomicBool) -> Vec<deve_sub_kernel::SourceId> {
         let now = deve_sub_kernel::Timestamp::now();
         let page_size: u32 = 100;
 
         let mut candidates: Vec<deve_sub_domain::source::Source> = Vec::new();
         let mut cursor: Option<deve_sub_kernel::SourceId> = None;
         loop {
+            if stopping.load(Ordering::Relaxed) {
+                return Vec::new();
+            }
             let page = match self.source_repo.list(cursor, page_size).await {
                 Ok(sources) => sources,
                 Err(e) => {
@@ -239,7 +265,7 @@ impl RefreshScheduler {
             cursor = next_cursor;
         }
 
-        if candidates.is_empty() {
+        if candidates.is_empty() || stopping.load(Ordering::Relaxed) {
             return Vec::new();
         }
 

@@ -1,16 +1,15 @@
 //! Bounded virtual rows with visible tag membership and scoped selection.
 #![cfg(target_family = "wasm")]
-use super::node_types::{NodeDto, NodeModal};
+use super::{node_selection::NodeSelection, node_types::{NodeDto, NodeModal}};
 use crate::i18n::{Language, t};
 use dioxus::prelude::*;
-use std::collections::HashSet;
 
 /// Visible node rows and the parent-owned selection and scroll state.
 #[derive(Props, Clone, PartialEq)]
 pub struct NodeListProps {
     lang: Signal<Language>,
     nodes: Vec<NodeDto>,
-    selected: Signal<HashSet<String>>,
+    selected: Signal<NodeSelection>,
     modal: Signal<NodeModal>,
     total: usize,
     total_height: f64,
@@ -42,15 +41,15 @@ pub fn NodeList(mut props: NodeListProps) -> Element {
                             let id = node.id.clone(); let checkbox_id = id.clone(); let row_id = id.clone();
                             let tags_id = id.clone(); let override_id = id.clone(); let region_id = id.clone();
                             let chain_id = id.clone(); let chain = node.chain.clone();
-                            let checked = props.selected.read().contains(&id);
+                            let checked = props.selected.read().ids().contains(&id);
                             rsx! {
                                 div { key: "{id}", "data-node-row": "{id}",
                                     class: if checked { "node-grid node-row node-selected" } else { "node-grid node-row" },
                                     style: "height: {props.item_height}px;",
-                                    onclick: move |_| { let mut set = props.selected.write(); if !set.remove(&row_id) { set.insert(row_id.clone()); } },
+                                    onclick: move |_| props.selected.write().toggle(row_id.clone()),
                                     input { r#type: "checkbox", checked, aria_label: format!("{} {}", t(l, "nodes.select"), node.display_name),
                                         onclick: move |e| e.stop_propagation(),
-                                        onchange: move |e| { if e.checked() { props.selected.write().insert(checkbox_id.clone()); } else { props.selected.write().remove(&checkbox_id); } },
+                                        onchange: move |e| props.selected.write().set(checkbox_id.clone(), e.checked()),
                                     }
                                     div { class: "min-w-0",
                                         div { class: "truncate text-sm font-medium", title: "{node.display_name}", "{node.display_name}" }

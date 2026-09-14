@@ -12,6 +12,7 @@ pub mod node_categories;
 pub mod node_chain_modal;
 pub mod node_import_modal;
 pub mod node_override_modal;
+pub mod node_selection;
 pub mod node_tag_modal;
 pub mod node_types;
 pub mod nodes;

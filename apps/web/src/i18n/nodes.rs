@@ -27,6 +27,8 @@ pub(super) fn t(lang: Language, key: &str) -> &str {
         (Language::En, "nodes.actions") => "Actions",
         (Language::Zh, "nodes.load_more") => "加载更多",
         (Language::En, "nodes.load_more") => "Load More",
+        (Language::Zh, "nodes.load_retained") => "节点加载失败，已保留上次结果。可重试加载或刷新。",
+        (Language::En, "nodes.load_retained") => "Could not load nodes. Previous results are kept; retry loading or refreshing.",
         (Language::Zh, "nodes.clear_selection") => "清除选择",
         (Language::En, "nodes.clear_selection") => "Clear Selection",
         (Language::Zh, "nodes.import_btn") => "导入节点",

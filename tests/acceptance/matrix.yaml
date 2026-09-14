@@ -876,6 +876,8 @@ cases:
     evidence:
       tests:
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-NODE-FILTER"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-ORDER"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-RESELECT"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_004_batch_enable_disable"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::batch_set_enabled_preserves_other_fields"
       status: pass
@@ -900,6 +902,11 @@ cases:
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-PAGES"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-ORDER"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-RECOVERY"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-SELECTION"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-REFRESH-PAGE"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-ORDER"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-RESELECT"
+        - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-NODE-RECOVERY"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LAYOUT"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-EDIT"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"

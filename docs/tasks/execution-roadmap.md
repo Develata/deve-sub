@@ -121,6 +121,9 @@ loaded-node counts and membership lifecycle are specified in M4 and
 `features/node-organization.md`. Seven concurrent functional scenarios live in
 `tests/e2e/functional/categories.ui.spec.ts`; execution evidence belongs to
 `acceptance/gates.md`. No new entity, migration or REST contract shape is needed.
+The follow-up review adds selection revision ownership, refresh reconciliation
+and node-page failure recovery; five scenarios in `category-refresh.ui.spec.ts`
+cover the repaired lifecycle under NODE-004/005.
 
 ## M5 template maintenance
 

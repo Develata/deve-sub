@@ -446,3 +446,34 @@ pages prove this UI boundary without claiming full-database counts. Other browse
 engines, external proxy clients, long soak and Docker publishing were not run for
 this UI slice. Transient logs use `/tmp/deve-sub-categories-*.log`; browser artifacts
 use the runner's ignored per-run directories and `/tmp/deve-sub-categories-*.png`.
+
+## M4 category review fixes — 2026-09-13
+
+Review scope: c42c0b0 and its node-page call paths. Main agent owns fixes;
+two fresh read-only review lanes checked the same scope independently. Three
+accepted P2 findings were fixed: refresh retaining unloaded/out-of-category
+batch targets, late enable/disable completion clearing newer selection, and
+node-page failure hiding previously loaded rows and the retry control.
+
+- Before fixes: four real-browser regressions failed on the committed WASM.
+  Membership changes used real API requests; pagination and delayed requests
+  controlled only transport. One reviewer independently captured the erroneous
+  batch target for both membership changes and first-page refresh.
+- After fixes: focused category/organization suite 36 passed, including five
+  new scenarios on desktop and mobile. Full functional suite: 72 passed,
+  4 workers, zero retries. Existing browser suite: 16 passed, including the
+  10,000-node virtual list. Same-ID deselect/reselect proves intent revision
+  protection, while an unchanged selection still clears on successful completion.
+- Rust: 90 suites, 1,025 passed, 8 ignored. fmt, check, strict Clippy and doc tests
+  passed; CSS/release WASM build passed. Dependency audit passed. Docs gate:
+  157 cases, 427 proof references; architecture gate: 15 crates including all
+  new files; CI tooling: 17 tests passed. No schema or API changes.
+- Final review: both lanes report no blocker. The independent browser lane
+  reran its two original reproductions successfully, with no page exceptions.
+  The main agent verified every accepted finding and the final changed/untracked
+  diff. Plan wording explicitly limits asynchronous selection cleanup ownership
+  to batch enable/disable; tag dialogs continue their existing modal workflow.
+
+Transient evidence is `/tmp/deve-sub-category-review-*.log` and ignored per-run
+browser artifacts. This slice does not claim a whole-repository audit, other
+browser-engine coverage, long soak, deployment or Docker image publication.

@@ -12,6 +12,7 @@ use crate::pages::node_categories::{NodeCategories, NodeCategory};
 use crate::pages::node_chain_modal::ChainModal;
 use crate::pages::node_import_modal::ImportModal;
 use crate::pages::node_override_modal::{OverrideModal, RegionModal};
+use crate::pages::node_selection::NodeSelection;
 use crate::pages::node_tag_modal::TagModal;
 use crate::pages::node_tag_manager::TagManager;
 use crate::pages::node_list::NodeList;
@@ -43,7 +44,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
     let mut batch_busy = use_signal(|| false);
     let mut request_revision = use_signal(|| 0_u64);
     let mut protocol_filter = use_signal(String::new);
-    let mut selected = use_signal(std::collections::HashSet::<String>::new);
+    let mut selected = use_signal(NodeSelection::default);
     let mut scroll_top = use_signal(|| 0.0_f64);
     let mut cursor = use_signal(|| Option::<String>::None);
     let mut loading_more = use_signal(|| false);
@@ -85,6 +86,12 @@ pub fn NodesPage(props: NodesProps) -> Element {
         match result {
                 Ok(resp) => {
                     error.set(String::new());
+                    // WHY: a first-page refresh can unload selected later-page
+                    // nodes or reveal that membership moved to another category.
+                    let active = category.read();
+                    let available = resp.nodes.iter().filter(|node| active.matches(node))
+                        .map(|node| node.id.as_str()).collect();
+                    selected.write().retain(&available);
                     nodes.set(resp.nodes);
                     nodes_loaded.set(true);
                     cursor.set(resp.next_cursor);
@@ -116,6 +123,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
             if revision != *request_revision.read() { return; }
             match result {
                 Ok(resp) => {
+                    error.set(String::new());
                     nodes.write().extend(resp.nodes);
                     cursor.set(resp.next_cursor);
                     loading_more.set(false);
@@ -130,11 +138,12 @@ pub fn NodesPage(props: NodesProps) -> Element {
 
     let mut batch_set_enabled = move |enabled: bool| {
         if *batch_busy.read() { return; }
-        let ids: Vec<String> = selected.read().iter().cloned().collect();
+        let ids: Vec<String> = selected.read().ids().iter().cloned().collect();
         if ids.is_empty() {
             return;
         }
         batch_busy.set(true);
+        let selection_revision = selected.read().revision();
         batch_msg.set(String::new());
         spawn(async move {
             let req = BatchEnabledRequest {
@@ -153,7 +162,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                         r.updated as usize,
                     ));
                     fetch_nodes();
-                    selected.write().clear();
+                    selected.write().clear_if_unchanged(selection_revision);
                 }
                 Err(e) => {
                     batch_msg.set(e.message);
@@ -209,7 +218,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
         .collect();
     let offset_y = start_idx as f64 * ITEM_HEIGHT;
 
-    let selected_count = selected.read().len();
+    let selected_count = selected.read().ids().len();
     let has_selection = selected_count > 0;
 
     rsx! {
@@ -230,7 +239,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                 }
                 button { class: "node-control", onclick: move |_| modal.set(NodeModal::ManageTags), {t(l, "nodes.manage_tags")} }
                 button { class: "node-control", disabled: total == 0 || *batch_busy.read(),
-                    onclick: move |_| selected.set(filtered_ids.iter().cloned().collect()), {t(l, "nodes.select_filtered")} }
+                    onclick: move |_| selected.write().replace(filtered_ids.iter().cloned().collect()), {t(l, "nodes.select_filtered")} }
                 if has_selection {
                     button {
                         class: "rounded-md border border-green-300 px-3 py-2 text-sm text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-900/20",
@@ -245,7 +254,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     button {
                         class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
                         onclick: move |_| {
-                            let ids: Vec<String> = selected.read().iter().cloned().collect();
+                            let ids: Vec<String> = selected.read().ids().iter().cloned().collect();
                             modal.set(NodeModal::Tags(ids));
                         },
                         {t(l, "nodes.batch_tags")}
@@ -317,13 +326,17 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     {format_t(l, "nodes.matching_count", total)} " / " {format_t(l, "nodes.loaded_count", all.len())} }
             }
 
+            if !error.read().is_empty() {
+                div { role: "alert", class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400",
+                    if *nodes_loaded.read() { {t(l, "nodes.load_retained")} " " }
+                    "{error}"
+                }
+            }
             if *loading.read() {
                 div { class: "flex items-center justify-center py-12",
                     div { class: "h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-stone-700 dark:border-t-amber-500" }
                 }
-            } else if !error.read().is_empty() {
-                div { class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{error}" }
-            } else {
+            } else if *nodes_loaded.read() {
                 NodeList { lang: props.lang, nodes: visible_items, selected, modal,
                     total, total_height, offset_y, scroll_top, item_height: ITEM_HEIGHT, viewport_height: VIEWPORT_HEIGHT }
 

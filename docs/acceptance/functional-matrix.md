@@ -30,7 +30,7 @@ UI 乱序用受控响应释放顺序，不依赖固定 sleep。
 ## 场景
 
 API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运行一次，
-共 62 项（14 API + 24 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
+共 72 项（14 API + 29 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
 不能只把 HTTP 请求发出当成通过。
 
 | 场景标识 | 绑定 | 维度/操作 | 必须成立的结果 |
@@ -51,6 +51,11 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 | FUNC-CATEGORY-ORDER | NODE-005 | 旧目录成功/失败晚于新改名目录返回 | 新分类名与选中ID保留，旧错误不覆盖成功 |
 | FUNC-CATEGORY-RECOVERY | NODE-005 | 首次目录失败、已有目录刷新失败、重试 | 节点可看，已有分类与选择不丢失，错误可恢复 |
 | FUNC-CATEGORY-LAYOUT | NODE-005/UI-009 | 126字名称、18个空分类、桌面/手机、暗色、英文 | 名称可读，入口可达，44px触控高度，容器不横向溢出 |
+| FUNC-CATEGORY-SELECTION | NODE-005 | 勾选后由另一请求移出分类，再刷新 | 当前分类仍选中，已移出节点不再是批量目标 |
+| FUNC-CATEGORY-REFRESH-PAGE | NODE-005 | 勾选后续页节点，再刷新首批 | 已退出加载集的勾选被取消 |
+| FUNC-CATEGORY-BATCH-ORDER | NODE-004/005 | A批量请求挂起，切到B并勾选，再释放A | A请求仅修改A，B的新勾选保留 |
+| FUNC-CATEGORY-BATCH-RESELECT | NODE-004/005 | 批量等待中取消再勾选同一ID，对比无新操作 | 新意图保留；未改动的旧选择在成功后清空 |
+| FUNC-CATEGORY-NODE-RECOVERY | NODE-005 | 下一页及刷新各失败一次，再重试 | 已加载行、勾选和重试入口保留，成功后错误清除 |
 | FUNC-OVERRIDE | NODE-010 | 重开覆盖编辑器，只改名称 | 其他覆盖字段完整保留 |
 | FUNC-TEMPLATE-ROLLBACK | GEN-004 | v2 回滚确认到 v1 | 实际 POST 成功，活动版本及内容恢复 |
 | FUNC-SUB-CREATE | OUT-016 | Web 默认表单创建订阅 | 201，返回链接可获取内容 |

@@ -257,6 +257,14 @@ Catalog refresh errors retain the last catalog and provide retry. Every catalog
 response is guarded against newer refreshes, including inline tag creation even
 when the user cancels assignment. No new category entity or API is introduced.
 
+On an accepted node refresh, selection is intersected with loaded node IDs that
+still belong to the current category. A node moved out of that category or no
+longer loaded cannot remain an implicit batch target. Selection carries a local
+revision advanced by each user selection intent, even a deselect/reselect of the
+same IDs. Batch enable/disable completion clears selection only if that revision is unchanged;
+later choices are preserved. Node-page and refresh failures retain the last
+loaded rows, selection and cursor, show an error, and allow a bounded retry.
+
 Design reference: miaomiaowu v0.8.5 node management uses visible tag badges,
 filter groups and grouped actions. Deve Sub retains its own brand and virtual
 list, with a compact toolbar, visible selection count, responsive dialogs and

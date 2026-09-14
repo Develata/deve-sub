@@ -477,3 +477,19 @@ node-page failure hiding previously loaded rows and the retry control.
 Transient evidence is `/tmp/deve-sub-category-review-*.log` and ignored per-run
 browser artifacts. This slice does not claim a whole-repository audit, other
 browser-engine coverage, long soak, deployment or Docker image publication.
+
+## M8 integration build input correction — 2026-09-13
+
+PR #3 integration CI exposed a source-image build failure: the Web template
+editor embeds `examples/templates/clash-routing.yaml`, but the Docker source
+stage omitted that directory. The native checkout's WASM and browser tests
+passed because the file was available outside the container. The source stage
+now copies the template presets before either build branch executes.
+
+The original failure is recorded in GitHub Actions run `34793505608`, Docker
+job `103822662218`: `include_str!` could not read the preset under `/build`.
+Existing Docker CI owns the regression path: compile the real frontend, boot
+the image, verify environment bootstrap, bounded log rotation and health.
+This correction changes build inputs only; the M8 release contract and Rust
+behavior remain unchanged. The PR's subsequent CI result is the acceptance
+receipt; no image publication or production deployment is asserted here.

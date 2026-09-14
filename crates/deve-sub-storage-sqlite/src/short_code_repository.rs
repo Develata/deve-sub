@@ -63,10 +63,7 @@ impl ShortCodeRepository for SqliteShortCodeRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            // WHY: UNIQUE(code) is the only unique constraint on this table.
-            // A violation means the CSPRNG-generated code collided with an
-            // existing one (OUT-013). The application layer retries with a
-            // fresh code.
+            // Initial inserts can conflict on code or subscription ownership.
             if crate::error_classify::is_unique_violation(&e) {
                 SubscriptionError::ShortCodeExists
             } else {
@@ -76,12 +73,7 @@ impl ShortCodeRepository for SqliteShortCodeRepository {
         Ok(())
     }
 
-    async fn replace(
-        &self,
-        subscription_id: SubscriptionId,
-        old_short_code_id: Option<ShortCodeId>,
-        new_short_code: &ShortCode,
-    ) -> Result<(), SubscriptionError> {
+    async fn replace(&self, new_short_code: &ShortCode) -> Result<(), SubscriptionError> {
         // WHY: delete-old + insert-new + update-subscription-ref must be one
         // transaction so a failure between any two steps cannot leave the
         // subscription pointing to a deleted short code, or a new short code
@@ -97,13 +89,14 @@ impl ShortCodeRepository for SqliteShortCodeRepository {
             .await
             .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
 
-        if let Some(old_id) = old_short_code_id {
-            sqlx::query("DELETE FROM subscription_short_codes WHERE id = ?")
-                .bind(old_id.to_string())
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
-        }
+        // WHY: a caller's old ID becomes stale when another regeneration wins.
+        // This first write serializes replacements and removes the current row,
+        // avoiding pointless random-code retries on UNIQUE(subscription_id).
+        sqlx::query("DELETE FROM subscription_short_codes WHERE subscription_id = ?")
+            .bind(&new_sub_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| SubscriptionError::Storage(e.to_string()))?;
 
         sqlx::query(
             "INSERT INTO subscription_short_codes \
@@ -126,7 +119,7 @@ impl ShortCodeRepository for SqliteShortCodeRepository {
 
         let result = sqlx::query("UPDATE subscriptions SET short_code_id = ? WHERE id = ?")
             .bind(&new_id)
-            .bind(subscription_id.to_string())
+            .bind(&new_sub_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| SubscriptionError::Storage(e.to_string()))?;

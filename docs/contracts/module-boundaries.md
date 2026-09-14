@@ -54,6 +54,13 @@ the group names and types in the error message. Cache keys
 include a generation semantics version; old active/fallback entries whose keys
 do not match current semantics are unavailable until valid regeneration.
 
+### Short-code replacement boundary (M6)
+
+`ShortCodeRepository::replace` receives the new credential and replaces its
+subscription's current short code atomically. It never trusts an old ID read by
+the caller. Concurrent replacements preserve exactly one current credential;
+failed writes preserve the previous credential and reference.
+
 ### Source refresh cancellation boundary (M4)
 
 Manual and scheduled refreshes share the application cancellation registry.

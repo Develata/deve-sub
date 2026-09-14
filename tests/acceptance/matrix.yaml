@@ -1514,12 +1514,13 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["原子拒绝重复值"]
+    assertions: ["原子拒绝重复值", "并发重生成按提交顺序替换当前短码，不耗尽随机碰撞重试；失败保留旧凭据"]
     fixtures: []
     evidence:
       tests:
         - "apps/server/tests/subscription_delivery.rs::del013_short_code_delivery"
         - "apps/server/tests/subscription_delivery.rs::del015_regenerate_short_code_replaces_old"
+        - "apps/server/tests/subscription_delivery/short_code_concurrency.rs::out013_concurrent_regeneration_replaces_current_code_without_retry_exhaustion"
         - "apps/server/tests/security/hardening.rs::short_code_probes_have_an_independent_ip_budget"
         - "crates/deve-sub-security/src/token.rs::short_code_has_at_least_128_bits"
       status: pass

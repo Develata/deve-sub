@@ -414,6 +414,13 @@ instance, counts 404 lookups per canonical client IP, and returns 429 while
 locked. Token/short-code log redaction covers malformed extra path segments;
 only recognized profile names may remain visible.
 
+Short-code regeneration replaces the current credential and its subscription
+reference in one storage transaction. The command does not supply a previously
+read short-code ID: concurrent regenerations serialize at the write boundary,
+each replaces the then-current code, and only the last committed code remains
+valid. Random-code collision retries apply to code uniqueness only. A failed
+replacement retains the old code and reference atomically (OUT-013).
+
 The Web copy action reads the existing short code through the subscription
 detail API and copies /s/{code}/{profile}; a missing code prompts the operator
 to generate one. Creation, rotation and temporary-link dialogs display full

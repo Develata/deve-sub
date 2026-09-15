@@ -340,6 +340,12 @@ In the REST/CLI config surface, `-1` seconds or `null` maps to `None`.
   remains served (constraint #19, GEN-015). The delivery handler falls back
   to the last successful version. If no prior generation exists, return 503
   with a clear error (no empty/fake config).
+- Explicit source deletion overrides last-good availability: entries older than
+  M4/M5's persistent withdrawal floor cannot be served, including through short
+  codes, temporary links or conditional ETag requests. A selection with no usable
+  nodes returns a clear unavailable response; it never resurrects withdrawn
+  nodes or returns a false 304. Clients observe new content on their next pull;
+  already downloaded configurations are outside the server's control.
 - Short-code UNIQUE conflict: the generator retries with a new CSPRNG code
   (OUT-013). After a bounded retry budget, return 500. The conflict is
   atomic (UNIQUE constraint rejects the duplicate); no partial state.

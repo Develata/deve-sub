@@ -100,6 +100,12 @@ live bindings for remote labels.
 atomically with the source mutation. Prior
 generation semantics are not trusted as direct hits or last-good fallback.
 
+Source deletion also withdraws orphaned remote-only nodes and advances the
+pool-meta cache floor in this transaction. The generation-cache repository
+enforces that floor on all reads, stores and activation; a rejected stale store
+or activation cannot disturb a newer valid result. This boundary survives
+restarts and overrides last-good fallback after explicit source withdrawal.
+
 ## Hexagonal layering
 
 ```text

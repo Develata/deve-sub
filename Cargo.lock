@@ -1128,6 +1128,7 @@ dependencies = [
  "deve-sub-protocol",
  "deve-sub-security",
  "deve-sub-storage-sqlite",
+ "fancy-regex",
  "futures-util",
  "serde",
  "serde_json",
@@ -1985,6 +1986,17 @@ checksum = "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
 dependencies = [
  "parking",
  "pin-project-lite",
+]
+
+[[package]]
+name = "fancy-regex"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "998b056554fbe42e03ae0e152895cd1a7e1002aec800fdc6635d20270260c46f"
+dependencies = [
+ "bit-set",
+ "regex-automata",
+ "regex-syntax",
 ]
 
 [[package]]

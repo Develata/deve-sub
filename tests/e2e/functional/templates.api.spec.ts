@@ -46,8 +46,10 @@ test('FUNC-CLASH-ROUNDTRIP native routing YAML saves and generates unchanged rul
   const { content } = await result.json();
   expect(content).toContain('MATCH,PROXY');
   expect(content).toContain('IP-CIDR,192.168.0.0/16,DIRECT,no-resolve');
-  expect(content).toContain('include-all-proxies: true');
-  expect(content).toContain('Node-0');
+  expect(content).not.toContain('include-all-proxies:');
+  const groupSection = content.match(/proxy-groups:[\s\S]*?(?=\nrules:)/)?.[0];
+  expect(groupSection).toBeDefined();
+  for (const member of ['DIRECT', 'Node-0', 'Node-1', 'Node-2']) expect(groupSection).toContain(`- ${member}`);
   const preview = await api.post(`/api/v1/templates/${created.template.id}/preview?profile=mihomo&mode=strict`);
   expect(preview.status()).toBe(200);
   expect((await preview.json()).content).toBe(content);
@@ -113,7 +115,7 @@ test('FUNC-TEMPLATE-PIN fallback stays inside the pinned version and deletion ex
   expect(await fallbacks[1].text()).toBe(newer);
 });
 
-test('FUNC-CLASH-VALIDATION invalid references cannot create partial history or replace good output', async ({ api }) => {
+test('FUNC-CLASH-VALIDATION unavailable members block locally and invalid references preserve good output', async ({ api }) => {
   const nodes = await importNodes(api);
   const created = await api.post('/api/v1/templates', { data: { name: 'explicit node', spec_yaml: clashYaml.replace('include-all-proxies: true', 'proxies: [Node-0]').replace('    proxies: [DIRECT]\n', '') } });
   expect(created.status()).toBe(201);
@@ -121,11 +123,18 @@ test('FUNC-CLASH-VALIDATION invalid references cannot create partial history or 
   const path = `/api/v1/templates/${template.id}`;
   const result = await api.post(`${path}/generate?profile=mihomo&mode=strict`);
   expect(result.status()).toBe(200);
-  const good = (await result.json()).content;
+  const original = (await result.json()).content;
   expect((await api.post('/api/v1/nodes/batch-enabled', { data: { node_ids: [nodes[0]], enabled: false } })).status()).toBe(200);
-  const failed = await api.post(`${path}/generate?profile=mihomo&mode=strict`);
-  expect(failed.status()).toBe(400);
-  expect((await failed.json()).message).toContain('Node-0');
+  const updated = await api.post(`${path}/generate?profile=mihomo&mode=strict`);
+  expect(updated.status()).toBe(200);
+  const safe = await updated.json();
+  const good = safe.content;
+  expect(good).not.toBe(original);
+  expect(good).toContain('- REJECT');
+  expect(good).not.toContain('node-0.example.com');
+  expect(safe.warnings.join(' ')).toContain('Node-0');
+  const invalidEdit = await api.put(path, { data: { name: template.name, description: '', spec_yaml: clashYaml.replace('MATCH,PROXY', 'MATCH,unknown') } });
+  expect(invalidEdit.status()).toBe(400);
   expect((await (await api.get(`${path}/generations/active?profile=mihomo`)).json()).content).toBe(good);
   const invalid = ['rules: [MATCH,PROXY]', 'rules: ["RULE-SET,missing,DIRECT"]',
     'rules: ["MATCH,PROXY"]\nproxies: []', 'rules: ["MATCH,PROXY"]\nscript: forbidden'];

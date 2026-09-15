@@ -8,7 +8,9 @@
 
 mod bounded_yaml;
 mod clash;
+mod clash_filter;
 mod clash_generation;
+mod clash_membership;
 mod clash_rules;
 pub mod commands;
 pub mod compatibility;

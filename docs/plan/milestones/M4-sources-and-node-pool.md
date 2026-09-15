@@ -260,6 +260,21 @@ node view and source-label filters. A failed revision write rolls back the sourc
 mutation too. Generation semantics versioning rebuilds pre-fix cached output;
 old cache rows remain subject to ordinary retention.
 
+Deleting a source withdraws its contribution, not just its binding. Within the
+source repository's write transaction, mark its previously bound nodes missing
+only if they have neither another source binding nor independent import label;
+preserve node IDs, credentials, tags and overrides. Then delete the source and
+advance the pool revision and persistent cache withdrawal floor together.
+Concurrent manual import/refresh serializes with this transaction; a failed
+write rolls back the whole operation. Repeated deletion remains not-found.
+
+Migration 0028 adds the floor to the existing pool-meta singleton. Previously
+orphaned remote-only rows are retained for diagnostics but marked missing;
+independent imports and nodes with live bindings remain available. Backup restore
+is the rollback path. Historical discarded manual provenance still requires
+explicit reimport, as above. SRC-001/NODE-011 and GEN-015 cover ownership,
+rollback, concurrent deletion/import, stale cache writes and migration recovery.
+
 ## Node organization workflow (NODE-004/005/006/010/018)
 
 Tags are sets of stable IDs. Names are trimmed, nonempty, at most 128 Unicode

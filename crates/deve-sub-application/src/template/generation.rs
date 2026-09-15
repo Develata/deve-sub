@@ -429,7 +429,8 @@ async fn run_pipeline(
     }
 
     sort_and_dedup(&mut nodes);
-    super::clash_generation::prepare_nodes(&mut nodes, &doc.spec)?;
+    super::clash_generation::prepare_nodes(&mut nodes, &mut doc.spec, pool_repo, &mut warnings)
+        .await?;
 
     let name_by_id: std::collections::HashMap<NodeId, String> = nodes
         .iter()
@@ -488,15 +489,19 @@ async fn run_pipeline(
         }
     }
 
-    let groups = assemble_groups(&doc.spec.proxy_groups, &resolution.groups, &name_by_id);
+    let mut groups = assemble_groups(&doc.spec.proxy_groups, &resolution.groups, &name_by_id);
 
-    if profile == ProfileKind::Mihomo
-        && let Some(group) = groups.iter().find(|group| group.members.is_empty())
-    {
-        return Err(TemplateAppError::InvalidInput(format!(
-            "group '{}' has no available members within the node selection",
-            group.name
-        )));
+    if profile == ProfileKind::Mihomo {
+        for group in groups.iter_mut().filter(|g| g.members.is_empty()) {
+            // Keep every routing/group reference valid without changing it to
+            // another node or direct connection after its last member vanishes.
+            group.group_type = deve_sub_domain::GroupType::Select;
+            group.members.push("REJECT".into());
+            warnings.push(format!(
+                "group '{}' has no available members; using REJECT",
+                group.name
+            ));
+        }
     }
 
     // DS-AUD-B17: profiles other than mihomo do not yet have full-template

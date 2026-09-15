@@ -699,3 +699,76 @@ branch checks belong to the subsequent PR CI. Real power loss, long-running
 soak, every concurrency interleaving and every external client were not tested
 locally; this bounded review does not establish that the whole project is free
 of defects.
+
+## M4/M5/M6 explicit source withdrawal — 2026-09-15
+
+Owner: main agent; one independent read-only reviewer reviewed the complete
+tracked and new-file slice against main
+`8b06f0a22873a236a28752264dc94e54c0ef1fe7`. Scope: SRC-001, NODE-011,
+GEN-006/015, OUT-008/014 and DEPLOY-001. No real-data maintenance, release or
+deployment was performed.
+
+- Source deletion now atomically withdraws exclusive remote nodes, retains
+  shared and independently imported nodes, and advances a persistent cache
+  withdrawal floor. Injected failure rolls back all changes; concurrent manual
+  import preserves identity and user edits. Cache reads, delayed writes and
+  activation cannot cross the floor. Current post-deletion output remains
+  eligible for later ordinary failure fallback and bounded retention.
+- Native Clash and V3 groups retain their names and inbound routes when their
+  members disappear. If usable selected nodes remain, an empty group becomes
+  select + REJECT. Native dynamic membership is resolved with bounded matching
+  and removed from emitted groups so the client cannot exclude the sentinel or
+  silently select DIRECT. Overall empty selection returns 503 on public URLs;
+  unknown names and invalid filters still fail explicitly. DNS policy order,
+  original templates and fixed selection boundaries are preserved.
+- The reviewer found surviving nodes' old ID-qualified names could become
+  unresolved when deletion removed a naming collision. Parent reproduced and
+  fixed ordinary and secondary collision aliases, including the corresponding
+  withdrawn-node case. Three before/after reproductions cover this finding;
+  exact current names retain priority and aliases cannot expand selection.
+- Migration 0028 repairs previously orphaned remote-only records without
+  deleting their IDs, encrypted fields, tags or overrides. The recovery test
+  builds schema 0027, keeps a backup, upgrades both copies and verifies repeated
+  migration is stable. It does not run an old application binary through an
+  encrypted-data upgrade. Discarded historical manual provenance still requires
+  explicit reimport. The global floor conservatively rebuilds unrelated cached
+  selections too.
+- The dependency gate detected RUSTSEC-2026-0285, published during this round.
+  A separate dependency commit raises rustls to 0.23.45 and its required webpki
+  dependency to 0.103.15; the updated audit passes. The fix was checked against
+  the [official Rustls advisory](https://github.com/rustls/rustls/security/advisories/GHSA-2mjx-qc3c-rqvc).
+
+Local verification: fmt, check, strict Clippy, all-targets/all-features Rust
+tests (93 suites, 1,070 passed, 0 failed, 8 ignored), doc tests and dependency
+audit passed. After the last alias regression was added, the affected generation
+suite passed all 32 tests and Clippy, check and the binary build passed again.
+Delivery/template HTTP suites passed 49 tests. Docs/acceptance passed 157 cases
+and 476 proof references; architecture passed 15 crates including untracked
+files; CI tooling passed 17 tests. OpenAPI was regenerated from the binary and
+adds the admin generation-invalidated 409 response. The independent reviewer
+closed the accepted finding with no unresolved blocker.
+
+The fresh binary's real HTTP path passed remote refresh, exclusive/shared/manual
+deletion, dynamic and fixed/pinned delivery, token/short/temporary URLs, old and
+new ETags, and a restart against the same database. Seven checksum-pinned Mihomo
+v1.19.0 cases passed both configuration validation and live group membership
+inspection, including nested groups, lookaround, sentinel exclusions and the
+original versus materialized membership control.
+
+The rebuilt WASM frontend passed 15 API and 58 desktop/mobile functional cases
+with four workers and no retries. Browser plugin was unavailable; local UI
+testing used existing Chromium build 1243 via a temporary Playwright config
+because the project's build 1234 was absent and its download was slow. PR CI
+retains the project-selected browser. Separate real desktop/mobile deletion
+smokes verified the revised confirmation, successful deletion and no JavaScript
+exceptions; both screenshots were inspected. A smoke locator initially assumed
+a dialog role absent from the existing component; the harness was corrected
+after inspecting the rendered DOM.
+
+Transient evidence uses `/tmp/deve-sub-withdrawal-*.log`, with final review at
+`/tmp/deve-sub-withdrawal-final-review.md`. PR CI owns subsequent Docker and
+complete integration checks. No ARM64 runtime, real power loss, long-running
+soak or exhaustive concurrency interleavings were tested locally. The checked
+regex deadline is not hard preemption of a database await or an individual
+match. Clients receive the update on their next pull; already downloaded
+configurations remain outside server control.

@@ -88,8 +88,8 @@ impl CacheKeyParams<'_> {
         }
 
         let mut hasher = Sha256::new();
-        // v3 also rejects v2 output cached across untracked source-label changes.
-        feed(&mut hasher, b"deve-sub-generation-v3");
+        // v4 rebuilds pre-withdrawal output and unsafe empty native groups.
+        feed(&mut hasher, b"deve-sub-generation-v4");
         feed(&mut hasher, self.template_id.to_string().as_bytes());
         feed(&mut hasher, self.template_version.to_string().as_bytes());
         feed(&mut hasher, self.profile.as_bytes());
@@ -112,6 +112,9 @@ impl CacheKeyParams<'_> {
 }
 
 /// Storage boundary for the generation cache.
+/// Reads, stores and activation honor the persistent source-withdrawal floor.
+/// Late generations below that floor cannot become hits or last-good results;
+/// rejected writes must leave the current valid active entry unchanged.
 #[async_trait]
 pub trait GenerationCacheRepository: Send + Sync {
     /// Look up a cached entry by its cache key. Returns `None` on miss.
@@ -131,7 +134,7 @@ pub trait GenerationCacheRepository: Send + Sync {
     /// A version pin restricts fallback to that exact version; mode must match.
     /// Find the most recent entry for a selection shape — same
     /// `(template_id, profile, selection_mode, selection_payload)` —
-    /// regardless of pool revision or active flag.
+    /// regardless of active flag, but never below the withdrawal revision.
     ///
     /// Ordering is by entry ID (ULIDs are monotonic by creation time), so
     /// the result is the LAST successfully generated content for this

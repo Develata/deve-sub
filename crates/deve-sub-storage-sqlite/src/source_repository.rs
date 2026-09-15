@@ -332,6 +332,20 @@ impl SourceRepository for SqliteSourceRepository {
             .begin()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
+        // WHY: take write admission before inspecting ownership. Deleting one
+        // source cannot revoke another source's or a manual import's contribution.
+        sqlx::query(
+            "UPDATE nodes SET missing_from_source = 1, revision = revision + 1 \
+             WHERE source_label = '' AND missing_from_source = 0 \
+             AND id IN (SELECT node_id FROM node_source_bindings WHERE source_id = ?) \
+             AND NOT EXISTS (SELECT 1 FROM node_source_bindings b \
+                 WHERE b.node_id = nodes.id AND b.source_id != ?)",
+        )
+        .bind(id.to_string())
+        .bind(id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| SourceError::Storage(e.to_string()))?;
         let result = sqlx::query("DELETE FROM sources WHERE id = ?")
             .bind(id.to_string())
             .execute(&mut *tx)
@@ -340,8 +354,10 @@ impl SourceRepository for SqliteSourceRepository {
         if result.rows_affected() == 0 {
             return Err(SourceError::SourceNotFound);
         }
-        // Cascaded bindings alter the effective source label used by generation.
-        crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
+        // WHY: last-good availability cannot undo an explicit withdrawal. The
+        // persistent floor also fences old generations that finish after delete.
+        sqlx::query("UPDATE pool_meta SET revision = revision + 1, withdrawal_revision = revision + 1 WHERE id = 1")
+            .execute(&mut *tx).await.map_err(|e| SourceError::Storage(e.to_string()))?;
         tx.commit()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;

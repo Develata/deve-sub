@@ -194,6 +194,47 @@ templates. Source edits/deletion invalidate generation through the pool revision
 in their storage transaction. Expanding this filter to all contributing sources
 or stable IDs would require a separate compatibility decision.
 
+An explicit source deletion establishes a persistent minimum cache pool revision
+in the same storage transaction (M4). Direct, active and last-good cache lookups
+cannot expose older entries; storing or activating an older in-flight generation
+must fail atomically. This deliberately invalidates pre-deletion cache entries
+for the whole pool: unrelated selections may rebuild once, trading some fallback
+availability for a small auditable revocation boundary. Ordinary refreshes and
+source renames do not advance this floor. Current post-deletion results may again
+serve as last-good fallback on later transient failures. Generation semantics v4
+rebuilds legacy output; cache history remains under existing bounded retention.
+
+Mihomo group assembly resolves unavailable persisted node references before
+emission. With usable nodes remaining, an empty resolved group becomes a select
+group containing only REJECT, retaining its name and every inbound rule/group
+reference. Unknown native node names remain errors; inactive/missing known nodes
+are removed with warnings. Previous ID-qualified references, including secondary
+collision counters, resolve only to selected nodes with that original name and ID;
+current exact node/group names take precedence. Empty overall selections still
+fail explicitly.
+
+Native Clash auto-membership is materialized server-side for each generation:
+explicit members, include-all/proxies, name filters, exclusions and type filters
+produce a deduplicated concrete list. Remove the resolved dynamic fields from
+output so the client cannot interpret an empty group as COMPATIBLE/DIRECT. Keep
+unaffected group options and routing rules; do not mutate the saved template.
+Use bounded fancy-regex matching for common look-around/name expressions;
+invalid, unsupported or over-budget expressions fail explicitly instead of
+silently changing scope. This is not a claim of complete .NET regex compatibility.
+Acceptance uses the fixed Mihomo validator and live group API to verify the materialized output,
+including negative look-ahead, nested groups and exclusion of a REJECT sentinel.
+This behavior follows the pinned client's [group parser](https://github.com/MetaCubeX/mihomo/blob/v1.19.0/adapter/outboundgroup/parser.go)
+and [final exclusions](https://github.com/MetaCubeX/mihomo/blob/v1.19.0/adapter/outboundgroup/groupbase.go).
+Adapter type filters use the client's type names, including ShadowTLS's emitted
+inner protocol. Only materialized groups are written back into the YAML mapping;
+DNS policy ordering and stored author input remain intact.
+Each expression is limited to 4096 bytes and the generation to 256 expressions,
+one million candidate/match visits, 64 MiB cumulative name/pattern work and a
+one-second checked deadline. Backtracking is capped at 10,000 steps per match;
+delegated automata are size-limited to 1 MiB. Historical name lookup shares the
+visit/deadline budget and pages 1000 records at a time. These checks are not hard
+preemption of an individual database await or regex call.
+
 ### Proxy group model
 
 Seven group types per spec §11.2:
@@ -220,8 +261,8 @@ node boundary for both admin generation and subscription delivery; neither
 explicit group members nor quick filters can expand it. Fixed selections never
 gain unselected nodes after a template edit. Explicit active references outside
 the selection are reported as `outside_selection`; nested group references keep
-their topology. A Mihomo group with no members after resolution fails generation
-before publication, rather than producing an invalid empty group.
+their topology. If usable selected nodes remain, a resolved empty Mihomo group
+keeps its name as select + REJECT. An empty overall selection fails generation.
 
 ### Generation pipeline
 

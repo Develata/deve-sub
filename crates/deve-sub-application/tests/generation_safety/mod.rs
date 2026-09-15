@@ -12,6 +12,7 @@ use deve_sub_kernel::{GenerationCacheId, NodeId};
 use serde_json::{Value, json};
 
 mod source_mutation;
+mod withdrawal_groups;
 
 fn document(selector: Value, groups: Value) -> String {
     json!({"apiVersion":"deve-sub.io/v1", "kind":"SubscriptionTemplate",
@@ -92,17 +93,27 @@ async fn gen006_groups_cannot_expand_fixed_or_dynamic_selection() {
 }
 
 #[tokio::test]
-async fn gen006_empty_selection_and_empty_resolved_group_cannot_publish() {
+async fn gen006_empty_selection_and_resolved_group_preserve_scope() {
     for selector in [
         json!({"mode":"fixed", "nodeIds":[]}),
         json!({"mode":"fixed", "nodeIds":[TROJAN_ID_A]}),
     ] {
+        let empty = selector["nodeIds"].as_array().expect("ids").is_empty();
         let db = TestDb::new(&document(selector, json!([{"name":"only-outside", "type":"select", "members":[{"kind":"node", "id":TROJAN_ID_B}]}])), "empty-scope").await;
+        let result = run(&db, make_request(db.template_id, "mihomo"), "generate").await;
+        if !empty {
+            let result = result.expect("safe blocked group with selected A");
+            assert!(!result.content.contains("bravo-node"));
+            let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+            assert_eq!(
+                output["proxy-groups"][0]["proxies"],
+                serde_yaml::to_value(["REJECT"]).expect("members")
+            );
+            continue;
+        }
         assert!(
-            run(&db, make_request(db.template_id, "mihomo"), "generate")
-                .await
-                .is_err(),
-            "an empty resolved selection/group cannot produce a valid scoped container"
+            result.is_err(),
+            "an empty selection cannot produce a valid scoped container"
         );
         assert!(
             get_active_generation(

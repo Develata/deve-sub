@@ -45,6 +45,10 @@ pub enum TemplateError {
     #[error("proxy group references unknown group: {0}")]
     UnknownGroupReference(String),
 
+    /// Source withdrawal invalidated a generation before it could be published.
+    #[error("generation invalidated by source deletion; regenerate with the current node pool")]
+    CacheInvalidated,
+
     /// A storage operation failed.
     #[error("storage error: {0}")]
     Storage(String),

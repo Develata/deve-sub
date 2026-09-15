@@ -71,7 +71,8 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         let row: Option<CacheRow> = sqlx::query_as(
             "SELECT id, template_id, template_version, profile, mode, selection_mode, \
              selection_payload, pool_revision, cache_key, content, is_active \
-             FROM generation_cache WHERE cache_key = ?",
+             FROM generation_cache WHERE cache_key = ? \
+             AND pool_revision >= (SELECT withdrawal_revision FROM pool_meta WHERE id = 1)",
         )
         .bind(cache_key)
         .fetch_optional(&self.pool)
@@ -88,7 +89,8 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         let row: Option<CacheRow> = sqlx::query_as(
             "SELECT id, template_id, template_version, profile, mode, selection_mode, \
              selection_payload, pool_revision, cache_key, content, is_active \
-             FROM generation_cache WHERE template_id = ? AND profile = ? AND is_active = 1",
+             FROM generation_cache WHERE template_id = ? AND profile = ? AND is_active = 1 \
+             AND pool_revision >= (SELECT withdrawal_revision FROM pool_meta WHERE id = 1)",
         )
         .bind(template_id.to_string())
         .bind(profile)
@@ -116,6 +118,7 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
              FROM generation_cache \
              WHERE template_id = ? AND profile = ? AND selection_mode = ? \
              AND selection_payload = ? AND (? IS NULL OR template_version = ?) AND mode = ? \
+             AND pool_revision >= (SELECT withdrawal_revision FROM pool_meta WHERE id = 1) \
              ORDER BY id DESC LIMIT 1",
         )
         .bind(template_id.to_string())
@@ -138,11 +141,14 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
             .await
             .map_err(|e| TemplateError::Storage(e.to_string()))?;
 
-        sqlx::query(
+        // The first statement obtains write admission and checks the floor in
+        // the same snapshot as insertion; a late pre-withdrawal writer must fail.
+        let inserted = sqlx::query(
             "INSERT INTO generation_cache \
              (id, template_id, template_version, profile, mode, selection_mode, \
               selection_payload, pool_revision, cache_key, content, is_active) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? \
+             WHERE ? >= (SELECT withdrawal_revision FROM pool_meta WHERE id = 1)",
         )
         .bind(entry.id.to_string())
         .bind(entry.template_id.to_string())
@@ -155,9 +161,13 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         .bind(&entry.cache_key)
         .bind(&entry.content)
         .bind(i64::from(entry.is_active))
+        .bind(entry.pool_revision as i64)
         .execute(&mut *tx)
         .await
         .map_err(|e| TemplateError::Storage(e.to_string()))?;
+        if inserted.rows_affected() == 0 {
+            return Err(TemplateError::CacheInvalidated);
+        }
 
         // WHY (constraint #19): protect each subscription's last-good result,
         // not merely the eight most recent deliveries across all selectors.
@@ -171,6 +181,7 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
                  ON c.template_id = s.template_id AND c.profile = s.profile \
                  AND c.selection_payload = s.node_selection AND c.mode = 'lenient' \
                  AND (s.template_version_pin IS NULL OR c.template_version = s.template_version_pin) \
+                 AND c.pool_revision >= (SELECT withdrawal_revision FROM pool_meta WHERE id = 1) \
                  WHERE s.template_id = ? AND s.profile = ? GROUP BY s.id) \
              DELETE FROM generation_cache WHERE id IN (\
                  SELECT id FROM generation_cache \
@@ -215,16 +226,16 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         .await
         .map_err(|e| TemplateError::Storage(e.to_string()))?;
 
-        let result = sqlx::query("UPDATE generation_cache SET is_active = 1 WHERE id = ?")
+        let result = sqlx::query("UPDATE generation_cache SET is_active = 1 WHERE id = ? AND template_id = ? AND profile = ? AND pool_revision >= (SELECT withdrawal_revision FROM pool_meta WHERE id = 1)")
             .bind(new_id.to_string())
+            .bind(template_id.to_string())
+            .bind(profile)
             .execute(&mut *tx)
             .await
             .map_err(|e| TemplateError::Storage(e.to_string()))?;
 
         if result.rows_affected() == 0 {
-            return Err(TemplateError::Storage(
-                "cache entry to activate not found".to_owned(),
-            ));
+            return Err(TemplateError::CacheInvalidated);
         }
 
         tx.commit()

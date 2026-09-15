@@ -5,6 +5,9 @@ use deve_sub_domain::{GenerationCacheEntry, GenerationCacheRepository};
 use deve_sub_kernel::{GenerationCacheId, TemplateId};
 use deve_sub_storage_sqlite::SqliteGenerationCacheRepository;
 
+#[path = "generation_retention/source_withdrawal.rs"]
+mod source_withdrawal;
+
 struct Fixture {
     pool: sqlx::SqlitePool,
     cache: SqliteGenerationCacheRepository,

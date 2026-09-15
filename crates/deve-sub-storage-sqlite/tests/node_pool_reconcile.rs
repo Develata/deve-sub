@@ -16,6 +16,8 @@ use deve_sub_storage_sqlite::{SqliteNodePoolRepository, SqliteSourceRepository};
 
 #[path = "node_pool_reconcile/manual_membership.rs"]
 mod manual_membership;
+#[path = "node_pool_reconcile/source_deletion.rs"]
+mod source_deletion;
 #[path = "node_pool_reconcile/source_invalidation.rs"]
 mod source_invalidation;
 

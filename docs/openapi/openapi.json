@@ -5585,6 +5585,16 @@
               }
             }
           },
+          "409": {
+            "description": "Source withdrawal invalidated this generation; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Incompatible nodes or unsupported proxy groups",
             "content": {

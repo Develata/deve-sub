@@ -67,6 +67,16 @@ async fn source_mutation(action: &str) {
             "the old source label no longer matches; cached content is not a fresh result"
         );
     }
+    if action == "delete" {
+        assert!(
+            matches!(
+                run(&db, request, "delivery").await,
+                Err(TemplateAppError::NoCompatibleNodes)
+            ),
+            "explicit withdrawal cannot be undone by fallback"
+        );
+        return;
+    }
     let fallback = run(&db, request, "delivery")
         .await
         .expect("current last-good fallback");
@@ -90,38 +100,40 @@ async fn gen015_source_delete_invalidates_direct_generation_cache() {
 }
 
 #[tokio::test]
-async fn gen015_v2_cache_is_regenerated_and_never_used_as_fallback() {
-    for surface in ["generate", "preview", "delivery"] {
-        let db = TestDb::new(SPEC_MIHOMO_ONLY, "v2-hit").await;
-        seed_legacy_cache(&db, Some("deve-sub-generation-v2")).await;
-        let result = run(&db, make_request(db.template_id, "mihomo"), surface)
+async fn gen015_v2_v3_caches_are_regenerated_and_never_used_as_fallback() {
+    for salt in ["deve-sub-generation-v2", "deve-sub-generation-v3"] {
+        for surface in ["generate", "preview", "delivery"] {
+            let db = TestDb::new(SPEC_MIHOMO_ONLY, "v2-hit").await;
+            seed_legacy_cache(&db, Some(salt)).await;
+            let result = run(&db, make_request(db.template_id, "mihomo"), surface)
+                .await
+                .expect("regenerate");
+            assert!(
+                result.content.contains("proxies:"),
+                "pre-withdrawal semantics must be rebuilt"
+            );
+        }
+        let db = TestDb::new(SPEC_MIHOMO_ONLY, "v2-fallback").await;
+        seed_legacy_cache(&db, Some(salt)).await;
+        let ids = [TROJAN_ID_A, TROJAN_ID_B, TROJAN_ID_C].map(|id| NodeId::parse(id).expect("id"));
+        deve_sub_storage_sqlite::SqliteNodeOverrideRepository::new(db.pool.clone())
+            .batch_set_enabled(&ids, false)
             .await
-            .expect("regenerate");
+            .expect("disable");
         assert!(
-            result.content.contains("proxies:"),
-            "v2 may contain stale source-label selection"
+            get_active_generation(
+                &SqliteGenerationCacheRepository::new(db.pool.clone()),
+                db.template_id,
+                "mihomo"
+            )
+            .await
+            .expect("active")
+            .is_none()
+        );
+        assert!(
+            run(&db, make_request(db.template_id, "mihomo"), "delivery")
+                .await
+                .is_err()
         );
     }
-    let db = TestDb::new(SPEC_MIHOMO_ONLY, "v2-fallback").await;
-    seed_legacy_cache(&db, Some("deve-sub-generation-v2")).await;
-    let ids = [TROJAN_ID_A, TROJAN_ID_B, TROJAN_ID_C].map(|id| NodeId::parse(id).expect("id"));
-    deve_sub_storage_sqlite::SqliteNodeOverrideRepository::new(db.pool.clone())
-        .batch_set_enabled(&ids, false)
-        .await
-        .expect("disable");
-    assert!(
-        get_active_generation(
-            &SqliteGenerationCacheRepository::new(db.pool.clone()),
-            db.template_id,
-            "mihomo"
-        )
-        .await
-        .expect("active")
-        .is_none()
-    );
-    assert!(
-        run(&db, make_request(db.template_id, "mihomo"), "delivery")
-            .await
-            .is_err()
-    );
 }

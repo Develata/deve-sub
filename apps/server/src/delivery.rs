@@ -251,6 +251,11 @@ fn map_delivery_error(e: subscription::SubscriptionAppError) -> Response {
             tracing::warn!(error = %msg, "delivery: generation failed");
             service_unavailable()
         }
+        SubscriptionAppError::NoAvailableNodes => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "No available nodes for this subscription; update its source or selection.",
+        )
+            .into_response(),
         SubscriptionAppError::Storage(msg) => {
             tracing::warn!(error = %msg, "delivery: storage error");
             (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()

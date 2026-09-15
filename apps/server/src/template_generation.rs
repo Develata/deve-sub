@@ -38,6 +38,7 @@ use crate::state::TemplateState;
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "Template or active version not found", body = ErrorResponse),
+        (status = 409, description = "Source withdrawal invalidated this generation; retry", body = ErrorResponse),
         (status = 422, description = "Incompatible nodes or unsupported proxy groups", body = ErrorResponse),
         (status = 500, description = "Internal error", body = ErrorResponse),
     )
@@ -114,6 +115,11 @@ fn map_generation_error(
 ) -> (StatusCode, Json<ErrorResponse>) {
     use deve_sub_application::TemplateAppError;
     match e {
+        TemplateAppError::Template(deve_sub_domain::TemplateError::CacheInvalidated) => err(
+            StatusCode::CONFLICT,
+            "generation_invalidated",
+            "source selection changed during generation; regenerate using the current node pool",
+        ),
         TemplateAppError::InvalidInput(message) => {
             err(StatusCode::BAD_REQUEST, "invalid_input", &message)
         }

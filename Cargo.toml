@@ -55,6 +55,7 @@ time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 proptest = "1"
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
+fancy-regex = "=0.16.2"
 axum = { version = "0.8", features = ["macros"] }
 tower-http = { version = "0.6", features = ["cors", "compression-gzip", "trace", "request-id", "fs"] }
 clap = { version = "4", features = ["derive", "env"] }
@@ -81,7 +82,7 @@ serde_yaml = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["gzip", "deflate", "brotli", "zstd", "stream", "rustls-tls"] }
 maxminddb = "0.30"
 quinn = { version = "0.11", default-features = false, features = ["rustls", "runtime-tokio"] }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 webpki-roots = "1"
 rcgen = { version = "0.13", default-features = false, features = ["ring"] }

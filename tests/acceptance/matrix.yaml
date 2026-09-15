@@ -328,6 +328,7 @@ cases:
         - "apps/server/tests/source_management.rs::defaults_applied"
         - "apps/server/tests/source_management.rs::delete_nonexistent_returns_404"
         - "apps/server/tests/source_management.rs::duplicate_name_returns_conflict"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/source_deletion.rs::node011_delete_source_rolls_back_with_failed_invalidation"
       status: pass
   - id: SRC-002
     title: 手动刷新
@@ -1007,6 +1008,9 @@ cases:
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_missing_reimport_survives_later_remote_removal"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_concurrent_import_and_refresh_preserve_manual_membership"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/manual_membership.rs::node011_remote_named_manual_still_becomes_missing"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/source_deletion.rs::node011_delete_source_withdraws_only_its_exclusive_nodes"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/source_deletion.rs::node011_delete_source_rolls_back_with_failed_invalidation"
+        - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/source_deletion.rs::node011_concurrent_delete_and_manual_import_preserve_identity"
       status: pass
   - id: NODE-012
     title: TCP 延迟
@@ -1202,7 +1206,7 @@ cases:
       tests:
         - "apps/server/tests/template_management.rs::gen006_fixed_selection_excludes_new_nodes"
         - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen006_groups_cannot_expand_fixed_or_dynamic_selection"
-        - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen006_empty_selection_and_empty_resolved_group_cannot_publish"
+        - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen006_empty_selection_and_resolved_group_preserve_scope"
       status: pass
   - id: GEN-007
     title: 按地区分组
@@ -1315,7 +1319,7 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["生成失败继续返回当前生成语义下的旧成功版本", "Mihomo不兼容组在两种模式均拒绝并返回明确422", "旧生成语义缓存不可经命中、活动查询或失败回退交付"]
+    assertions: ["普通生成失败可回退仍满足撤销边界的当前语义缓存，主动删源不能恢复已撤销节点", "Mihomo不兼容组在两种模式均拒绝并返回明确422", "旧生成语义缓存不可经命中、活动查询或失败回退交付"]
     fixtures: []
     evidence:
       tests:
@@ -1331,7 +1335,16 @@ cases:
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/source_invalidation.rs::src001_source_changes_invalidate_pool_and_rollback_together"
         - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_source_rename_invalidates_direct_generation_cache"
         - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_source_delete_invalidates_direct_generation_cache"
-        - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_v2_cache_is_regenerated_and_never_used_as_fallback"
+        - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_v2_v3_caches_are_regenerated_and_never_used_as_fallback"
+        - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_withdrawn_v3_leaf_blocks_without_breaking_parent"
+        - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_withdrawn_members_preserve_routes_and_options"
+        - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_auto_groups_cannot_fall_back_to_direct_when_empty"
+        - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_auto_groups_resolve_lookaround_and_explicit_members"
+        - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_unknown_names_and_invalid_filters_cannot_publish"
+        - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_exclusion_uses_client_adapter_types"
+        - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_retained_node_alias_survives_withdrawn_name_collision"
+        - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_withdrawn_secondary_alias_is_removed_without_losing_survivors"
+        - "crates/deve-sub-application/src/template/clash_filter.rs::gen015_native_regex_bounds_reject_excessive_work"
       status: pass
   - id: GEN-016
     title: 预览一致性
@@ -1459,6 +1472,7 @@ cases:
         - "apps/server/tests/subscription_delivery.rs::del003_non_matching_etag_returns_200"
         - "apps/server/tests/subscription_delivery.rs::del004_if_none_match_star_returns_304"
         - "apps/server/tests/subscription_delivery.rs::del010_cache_hit_returns_same_content"
+        - "apps/server/tests/subscription_delivery/source_withdrawal.rs::out014_source_delete_updates_all_urls_and_never_confirms_withdrawn_etag"
       status: pass
   - id: OUT-009
     title: Token 错误
@@ -1541,7 +1555,7 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["所有客户端只看到完整版本", "共用模板的每个订阅保留匹配选择和版本固定的最后成功结果；重复生成有界且孤立缓存可回收"]
+    assertions: ["所有客户端只看到完整版本", "迟到旧生成不能存入或激活，删除前ETag不能确认旧正文；完全无可用节点返回503", "共用模板的每个订阅保留匹配选择和版本固定的最后成功结果；重复生成有界且孤立缓存可回收"]
     fixtures: []
     evidence:
       tests:
@@ -1549,6 +1563,9 @@ cases:
         - "crates/deve-sub-storage-sqlite/tests/generation_retention.rs::out014_retention_preserves_pins_and_lenient_fallback_separately"
         - "tests/e2e/functional/delivery-cache.api.spec.ts::FUNC-DELIVERY-RETENTION"
         - "apps/server/tests/subscription_delivery.rs::del012_concurrent_delivery_all_complete"
+        - "crates/deve-sub-storage-sqlite/tests/generation_retention/source_withdrawal.rs::gen015_source_deletion_fences_all_cache_reads_and_late_writes"
+        - "apps/server/tests/subscription_delivery/source_withdrawal.rs::out014_late_generation_cannot_replace_post_delete_output"
+        - "apps/server/tests/subscription_delivery/source_withdrawal.rs::out014_source_delete_updates_all_urls_and_never_confirms_withdrawn_etag"
       status: pass
   - id: PROBE-001
     title: Nezha
@@ -1707,6 +1724,7 @@ cases:
       tests:
         - "docs/acceptance/gates.md (Published-image Compose smoke)"
         - "scripts/tests/test_docker_bootstrap.py"
+        - "crates/deve-sub-storage-sqlite/tests/source_withdrawal_migration.rs::migration0028_repairs_orphans_and_backup_can_reupgrade"
       status: pass
   - id: DEPLOY-002
     title: Linux 安装

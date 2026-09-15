@@ -305,7 +305,7 @@ async fn deliver_for_subscription(
         request,
     )
     .await
-    .map_err(|e| SubscriptionAppError::GenerationFailed(e.to_string()))?;
+    .map_err(SubscriptionAppError::from)?;
 
     let etag = compute_etag(&result.content);
 

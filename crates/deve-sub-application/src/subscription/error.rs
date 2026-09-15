@@ -72,6 +72,10 @@ pub enum SubscriptionAppError {
     #[error("generation failed during delivery: {0}")]
     GenerationFailed(String),
 
+    /// The current selection has no usable nodes and no permitted fallback.
+    #[error("no available nodes for this subscription")]
+    NoAvailableNodes,
+
     /// A storage operation failed.
     #[error("storage error: {0}")]
     Storage(String),
@@ -87,6 +91,15 @@ pub enum SubscriptionAppError {
     /// A cryptographic or token operation failed.
     #[error(transparent)]
     Security(#[from] deve_sub_security::SecurityError),
+}
+
+impl From<crate::template::TemplateAppError> for SubscriptionAppError {
+    fn from(error: crate::template::TemplateAppError) -> Self {
+        match error {
+            crate::template::TemplateAppError::NoCompatibleNodes => Self::NoAvailableNodes,
+            other => Self::GenerationFailed(other.to_string()),
+        }
+    }
 }
 
 /// Map a [`SubscriptionError`] to the matching [`SubscriptionAppError`]

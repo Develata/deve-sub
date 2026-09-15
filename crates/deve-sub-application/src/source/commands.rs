@@ -181,7 +181,8 @@ pub async fn update_source(
 ///
 /// Returns [`SourceAppError::SourceNotFound`] if the source does not exist.
 /// The storage layer cascades the deletion to snapshots, items, and
-/// node-source bindings.
+/// node-source bindings, withdraws exclusive nodes, and invalidates older
+/// generated output in the same transaction.
 ///
 /// # Errors
 /// - [`SourceAppError::SourceNotFound`] — source does not exist.

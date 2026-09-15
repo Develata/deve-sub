@@ -149,7 +149,8 @@ explicit Deve authorization.
 16. No microservices for ordinary module boundary issues.
 17. Prefer modular monolith and clear Ports over abstract frameworks.
 18. Compatibility conclusions require client validation or official format.
-19. On failure, preserve the last successful subscription version.
+19. On failure, preserve the last successful subscription version that remains
+    eligible for distribution. Explicit source withdrawal takes precedence (M4/M5).
 20. All async background tasks are observable, cancellable, and safely shut
     down.
 

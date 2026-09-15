@@ -143,7 +143,8 @@ pub struct ReconcileResult {
 pub struct NodePoolEntry {
     /// The canonical node aggregate.
     pub node: Node,
-    /// Whether the last remote source removed a node with no independent import.
+    /// Whether refresh or deletion withdrew the last remote source of a node
+    /// with no independent import.
     /// Missing nodes stay in the pool for diagnostics; they are excluded
     /// from generation. See NODE-011.
     pub missing_from_source: bool,

@@ -3,7 +3,7 @@
   "info": {
     "title": "Deve Sub API",
     "description": "Self-hosted proxy subscription infrastructure manager",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "paths": {
     "/api/v1/audit-logs": {

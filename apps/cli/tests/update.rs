@@ -234,7 +234,13 @@ async fn update001_unsigned_release_rejected_by_default() {
     let dir = tempfile::tempdir().expect("tempdir");
     let binary_path = copy_current_binary(dir.path());
     let original_bytes = read_file(&binary_path);
-    let base_url = start_mock_server(b"untrusted binary".to_vec(), true, "0.1.0", 0).await;
+    let base_url = start_mock_server(
+        b"untrusted binary".to_vec(),
+        true,
+        env!("CARGO_PKG_VERSION"),
+        0,
+    )
+    .await;
     let output = Command::new(BIN)
         .args([
             "update",
@@ -264,7 +270,13 @@ async fn update001_unsigned_opt_in_never_bypasses_invalid_signature() {
         let dir = tempfile::tempdir().expect("tempdir");
         let binary_path = copy_current_binary(dir.path());
         let original_bytes = read_file(&binary_path);
-        let base_url = start_mock_server(b"untrusted binary".to_vec(), true, "0.1.0", assets).await;
+        let base_url = start_mock_server(
+            b"untrusted binary".to_vec(),
+            true,
+            env!("CARGO_PKG_VERSION"),
+            assets,
+        )
+        .await;
         let output = Command::new(BIN)
             .args([
                 "update",

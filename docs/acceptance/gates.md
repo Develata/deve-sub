@@ -791,8 +791,9 @@ Results and limits are detailed in the
 
 - `cargo fmt --all -- --check`, locked workspace check and strict Clippy with
   all targets/features passed. Full locked workspace tests exited 0: 97 test
-  targets, 1,100 passed, 0 failed, 8 explicitly ignored external-validator
-  cases, plus benchmark smoke. The isolated proxy test repeats itself in a
+  targets, 1,100 passed, 0 failed, 8 explicitly ignored cases: 7 require
+  external validators and 1 is the separately executed real-process soak.
+  Benchmark smoke also passed. The isolated proxy test repeats itself in a
   child process; that child summary is excluded from these totals. A prior
   run printed successful suites but the executor returned 143; the complete
   command was rerun independently to obtain the confirmed exit 0.

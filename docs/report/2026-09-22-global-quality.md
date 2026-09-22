@@ -63,7 +63,8 @@ job 超时配置、PR multiarch 特许跳过及真实 CLI 报告写入；Python 
 
 ## 运行验证记录
 
-最终全量 Rust 测试明确退出 0（1,100 通过、8 个外部验证器测试忽略），
+最终全量 Rust 测试明确退出 0（1,100 通过、8 个忽略：7 个需外部验证器，
+另 1 个是已单独执行的真实进程 soak），
 fmt/check/严格 Clippy、doc tests、依赖审计与文档门禁均通过。详见
 [验收门禁](../acceptance/gates.md)。原始本地日志使用
 `/tmp/deve-sub-quality-*`，定向 UI 证据在 `/tmp/deve-sub-ui-review-results`。
@@ -82,6 +83,14 @@ Chromium build 1234（151.0.7922.34），临时配置仅切换到完整 Chromium
 0 ERROR、0 task panic，退出后 tracked jobs 为 0。FD 尾段稳定在 24，RSS
 尾段约 26–32 MiB。覆盖导入、生成/下载、SSRF 刷新失败、探测与退出；
 不代替长期泄漏证明或真实外部源成功刷新。
+
+## 安装环境核对补充
+
+本轮新增 `tools/ci` 后遗漏了 Docker source stage 的目录复制，工具清单复核时
+发现并补上 `COPY tools/ tools/`。离线临时目录按真实 COPY 输入重现：旧版
+`cargo metadata --locked --no-deps` 退出 101，缺少 `tools/ci/Cargo.toml`；
+补齐后退出 0，识别全部 16 个 workspace 包。两次检查均有 60 秒超时。
+这是源构建输入回归，不是缺少 Docker；尚未因此完成全量容器构建。
 
 ## 保留的验证与设计缺口
 

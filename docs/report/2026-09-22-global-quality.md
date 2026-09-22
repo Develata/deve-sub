@@ -139,9 +139,9 @@ Chromium build 1234（151.0.7922.34），临时配置仅切换到完整 Chromium
   未注册特权 binfmt、修改 daemon 或把构建失败改成跳过通过。CI 已配置
   setup-qemu；其远端实际结果仍未运行。
 
-因此 DEPLOY-003 更新为 pass，DEPLOY-004 为 blocked。M8 要求两种架构
-healthcheck 均通过，故 DEPLOY-005 整体仍为 blocked，只有 amd64 子维度通过。
-当前矩阵为 157 项：151 pass、2 blocked、4 not-run，497 个通过项证明引用。
+当时 DEPLOY-003 更新为 pass，DEPLOY-004 为 blocked。M8 要求两种架构
+healthcheck 均通过，故该阶段 DEPLOY-005 整体仍为 blocked，只有 amd64 子维度通过。
+该阶段矩阵为 157 项：151 pass、2 blocked、4 not-run，497 个通过项证明引用。
 Rust CI 工具 19 项、慢传回归 2 项、架构守卫 9 项、Python CI 工具 11 项
 与 soak harness 回归 1 项均通过；fmt、全 workspace 严格 Clippy、doc tests、
 actionlint、静态 CI 清单与文档门禁通过。本节没有修改产品 Rust 源码；前轮
@@ -152,11 +152,54 @@ actionlint、静态 CI 清单与文档门禁通过。本节没有修改产品 Ru
 命令的显式跳过，其中 7 个外部验证器测试本轮单独执行通过，soak 前轮已单独
 执行；不修改 `#[ignore]` 来制造无外部工具时的通过结果。
 
+## ARM64 模拟执行环境修复后的验收
+
+用户明确授权后，使用固定摘要的 `tonistiigi/binfmt` 特权容器仅注册 ARM64：
+`sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0`。
+命令退出 0，输出 `installing: arm64 OK`；`qemu-aarch64` 注册为 enabled，
+带 `POCF` 标志。安装容器已移除，注册处理器仍生效。
+
+运行环境是 x86_64 Docker Desktop/WSL2 上的 QEMU user-mode 模拟执行。
+这不代表原生 ARM 硬件性能，也不代表远端 GitHub Actions 或发布已经执行。
+本次构建基于 `4d128cf`，产品源码仍与前轮 amd64 的 `e33114e` 相同。
+完整源码构建退出 0，耗时 844.966 秒；原先失败的 ARM64 `/bin/sh` 和
+runtime stage 均已通过。镜像为 `deve-sub:arm64-authorized-4d128cf`，实际
+OS/架构为 `linux/arm64`，镜像 ID：
+`sha256:0587e18c0e384166a96407b5bf7a004580a673dd1c3540a2b818ef2303c928dc`。
+
+正式运行检查使用这个镜像 ID，保持默认入口和内置 healthcheck：6.922 秒
+变为 Docker healthy，live/ready/Web 均为 200，UID 1000，没有匿名卷，
+脚本清理自身容器后退出 0。结合相同产品源码的 amd64 5.751 秒健康记录，
+两种架构都达到 M8 的 60 秒标准。构建工具层本轮未命中本地缓存；两轮
+BuildKit 的 rustup、Dioxus 操作摘要及父摘要相同，没有跨目标缓存键分裂的
+证据。该次构建耗时不能用作 GitHub Actions 的提速结论。
+
+同一 ARM64 镜像的管理员环境变量/Web 初始化与登录、重建保留原凭据、
+三种非法初始化凭据拒绝均通过（38.498 秒）。日志轮转写入 45,000 条后
+保留 26,567,322 字节，首条为 19,030，最新结尾保留；脚本退出 0（5.737 秒）。
+测试独有容器、卷和网络全部清理。
+
+默认 Headless Shell 1234 对 ARM64 后端完成真实初始化、登录、源创建、
+留空 URL 改名、刷新确认和删除；WASM 200 且 MIME 正确，JavaScript 异常
+为 0。1280×800 与 390×700 截图目检通过。此浏览器容器的默认 health
+耗时 7.047 秒，浏览器操作 2.934 秒；独有容器、浏览器进程及临时 profile
+均已清理。未增加自动重试或放宽既有期限。
+
+DEPLOY-004、DEPLOY-005 因上述真实结果更新为 pass；矩阵明确写出两种架构
+的健康要求。最终为 157 项：153 pass、0 blocked、4 not-run，499 个通过项
+证明引用。文档门禁与生成 TSV 一致性通过。此次仅修改验收投影，产品 Rust
+源码未变，没有重新运行未受影响的全量 Rust 测试。
+
+本轮临时证据路径为 `/tmp/deve-sub-arm64-authorized-*` 与
+`/tmp/deve-sub-arm64-docker-web-smoke-20260922-*`。未 push、发布镜像或修改
+GitHub 设置；此前失败记录保留，用于区分环境修复前后的结果。
+
 ## 保留的验证与设计缺口
 
-- 仍未运行两个签名更新项和两个 10k 节点性能预算项；ARM64 运行被本地模拟
-  环境阻塞。Rust/浏览器通过不会自动提升这些验收状态。
-- 本轮不证明 ARM64 运行、所有外部客户端、断电恢复或长期资源上界。
+- 仍未运行两个签名更新项和两个 10k 节点性能预算项。
+  Rust/浏览器通过不会自动提升这些验收状态。
+- ARM64 已通过 QEMU 运行验收；原生 ARM 硬件、所有外部客户端、断电恢复
+  或长期资源上界仍未被本轮证明。
 - WASM 编译仍有既有前端 warning；native 严格 Clippy 不等于 WASM 零警告。
 - Web 的本地产品名称偏好和服务端集中品牌配置仍有设计漂移：设置页保存到
   localStorage，侧栏仍含固定名称（`apps/web/src/main_wasm.rs`）；现有 UI-006

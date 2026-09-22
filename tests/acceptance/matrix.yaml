@@ -1783,7 +1783,7 @@ cases:
     evidence:
       tests:
         - "scripts/tests/test_docker_health.py::main"
-      status: blocked
+      status: pass
   - id: DEPLOY-005
     title: Docker healthcheck via internalized health command
     priority: P1
@@ -1791,12 +1791,12 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["Docker HEALTHCHECK uses deve-sub health live, container becomes healthy within 60s"]
+    assertions: ["Docker HEALTHCHECK uses deve-sub health live, containers become healthy within 60s on both amd64 and arm64"]
     fixtures: []
     evidence:
       tests:
         - "scripts/tests/test_docker_health.py::main"
-      status: blocked
+      status: pass
   - id: UPDATE-001
     title: 签名更新
     priority: P1

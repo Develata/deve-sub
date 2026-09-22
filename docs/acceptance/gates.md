@@ -898,3 +898,52 @@ Raw transient evidence uses `/tmp/deve-sub-followup-*` and
 [report](../report/2026-09-22-global-quality.md) records limits and conditions.
 Signed-update VM checks, 10k-node performance budgets and remote Actions are
 still not-run. No push, release or GitHub settings change occurred.
+
+## ARM64 execution after authorized emulator registration (2026-09-22)
+
+This follow-up closes the local M8 DEPLOY-004/005 execution blocker above.
+The owner is the main agent; backend independently reviews the two-architecture
+evidence, CI owns build/runtime execution and UI owns the real browser smoke.
+Only acceptance projections change; product Rust sources and the CI workflow
+are unchanged. No blueprint change or new feature is introduced.
+
+With explicit user authorization, `tonistiigi/binfmt` at digest
+`sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0`
+registered only ARM64 through a privileged container. The command exited 0;
+`qemu-aarch64` is enabled with `POCF` flags. Its temporary installation container
+was removed, while the handler registration remains active. Execution is QEMU
+user-mode on the x86_64 Docker Desktop/WSL2 host, not native ARM hardware.
+
+- A complete source build at `4d128cf` exited 0 in 844.966s. Production sources
+  match the preceding amd64 `e33114e` build. The inspected image is linux/arm64,
+  tag `deve-sub:arm64-authorized-4d128cf`, image ID
+  `sha256:0587e18c0e384166a96407b5bf7a004580a673dd1c3540a2b818ef2303c928dc`.
+  The previously failing ARM64 shell/runtime layer now executes successfully.
+- `python3 scripts/tests/test_docker_health.py --image
+  deve-sub:arm64-authorized-4d128cf --platform linux/arm64` exited 0. Default
+  entrypoint and internal healthcheck were unchanged: Docker healthy in
+  6.922s, live/ready/Web all 200, UID 1000, zero anonymous volumes and owned
+  container removed. Together with the same-source amd64 5.751s result, both
+  architectures meet M8's 60s requirement.
+- With `DOCKER_DEFAULT_PLATFORM=linux/arm64`, the existing bootstrap and
+  logging scripts exited 0 in 38.498s and 5.737s. Environment/Web setup and
+  login, recreation preserving original credentials, and three invalid
+  bootstrap cases passed. Log rotation kept 26,567,322 bytes after 45,000
+  records; old records were discarded and the latest ending was preserved.
+  Independent cleanup checks found no owned test container, volume or network.
+- Default Headless Shell 1234 against that ARM64 image completed Web setup,
+  login and source create/rename-with-omitted-URL/reload/delete. WASM loaded
+  with the correct MIME type; JavaScript exceptions were zero. Desktop and
+  mobile screenshots were inspected. Its unmodified healthcheck passed in
+  7.047s; the browser journey took 2.934s. Container, browser process and
+  temporary profile cleanup passed, with existing deadlines and no retries.
+
+DEPLOY-004/005 now pass, and the 005 assertion explicitly requires both
+architectures. Docs/acceptance gates passed: 157 cases, 153 pass, 0 blocked,
+4 not-run and 499 verified pass-proof references; generated TSV is consistent.
+The unchanged Rust baseline was not repeated for these evidence-only edits.
+Logs use `/tmp/deve-sub-arm64-authorized-*` and
+`/tmp/deve-sub-arm64-docker-web-smoke-20260922-*`. Prior failed-build evidence
+is retained. This does not establish native ARM performance or remote CI timing;
+signed-update VM checks and 10k-node performance budgets remain not-run.
+No push, image publication or GitHub settings change occurred.

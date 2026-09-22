@@ -91,6 +91,9 @@ pub async fn build_ssrf_client(
         .map_err(|e| ProbeError::ProbeFailed(format!("SSRF check failed: {e}")))?;
 
     let mut builder = reqwest::Client::builder()
+        // WHY: environment proxies bypass the checked/pinned destination and
+        // can resolve panel hostnames again outside the SSRF boundary.
+        .no_proxy()
         .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
         // WHY: disable auto-redirect so a compromised panel cannot redirect
         // the server to internal addresses after the SSRF check passes.

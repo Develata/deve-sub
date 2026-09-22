@@ -163,6 +163,12 @@ DNS rebinding: after SSRF check passes, the fetcher connects to the
 checked IP, not re-resolving the hostname. If the HTTP client re-resolves,
 the guard wraps the resolver to pin the IP.
 
+The subscription HTTP client disables inherited system/environment proxies:
+a proxy could independently resolve/connect to an unchecked destination and
+invalidate this pin. This also applies to literal IPv4/IPv6 URLs. SEC-003
+includes a subprocess regression with deliberately unreachable proxy settings;
+the request must still reach only the checker-provided fixture address.
+
 Redirects: follow up to 3 redirects, re-checking SSRF on each redirect
 target. Reject if a redirect points to an internal address (SEC-004).
 

@@ -165,6 +165,11 @@ plaintext is never persisted or logged.
 
 ### Probe source adapter Port
 
+Panel HTTP requests share the M4 SSRF boundary: pin checked destination IPs,
+disable automatic redirects and disable inherited environment/system proxies.
+Proxy resolution must not replace the validated destination. SEC-003 also
+exercises the shared panel HTTP client through the DStatus adapter.
+
 ```text
 Port trait: ProbeSourceAdapter
   async fn sync_traffic(&self, source: &ProbeSource)

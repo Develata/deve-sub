@@ -19,8 +19,8 @@ use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_ma
 use deve_sub_application::template::{CreateTemplateParams, create_template, generate};
 use deve_sub_domain::{
     Authentication, DomainName, Endpoint, GenerationMode, GenerationRequest, Host, Node,
-    NodePoolRepository, NodeSource, ProtocolConfig, ProtocolKind, RegionAssignment, RegionMethod,
-    TrojanConfig, UdpCapability,
+    NodeFilter, NodePoolRepository, NodeSelector, NodeSource, ProtocolConfig, ProtocolKind,
+    RegionAssignment, RegionMethod, SelectionMode, TrojanConfig, UdpCapability,
 };
 use deve_sub_kernel::Timestamp;
 use deve_sub_security::MasterKey;
@@ -227,6 +227,39 @@ fn bench_generate(c: &mut Criterion) {
                             req.clone(),
                         ))
                         .expect("generate uncached")
+                    },
+                    BatchSize::PerIteration,
+                );
+            },
+        );
+
+        // A small fixed subscription should scale with its selected nodes,
+        // even when the shared encrypted pool is much larger.
+        let pinned = rt
+            .block_on(pool_repo.list_nodes(&NodeFilter::active_only(), None, 16))
+            .expect("pinned nodes");
+        let mut fixed_request = request.clone();
+        fixed_request.node_selection = Some(NodeSelector {
+            mode: SelectionMode::Fixed,
+            node_ids: pinned.into_iter().map(|e| e.node.id).collect(),
+            ..Default::default()
+        });
+        group.bench_with_input(
+            BenchmarkId::new("generate", "fixed-16-uncached"),
+            &fixed_request,
+            |b, req| {
+                b.iter_batched(
+                    || rt.block_on(db.clear_cache()),
+                    |_| {
+                        rt.block_on(generate(
+                            &template_repo,
+                            &version_repo,
+                            &pool_repo,
+                            &cache_repo,
+                            &pool_meta_repo,
+                            req.clone(),
+                        ))
+                        .expect("generate fixed uncached")
                     },
                     BatchSize::PerIteration,
                 );

@@ -288,7 +288,12 @@ Chain validation (on save):
 M5's `ChainGraph` handles proxy-group-level chain dependency. Node-level chain
 is a separate graph: each node's `chain` field lists the nodes its traffic
 traverses. The DFS cycle-detection algorithm is reused from M5's pattern but
-applied to the node-level graph.
+applied to the node-level graph. Both use shared, explicit heap frames rather
+than recursion: short per-node chains do not bound the complete graph's depth.
+Keep deterministic root/neighbor order and the complete closed cycle path.
+Traversal is O(V + E) after ordering, with O(V + E) auxiliary heap memory and
+constant call-stack use. NODE-018 includes deep acyclic and cyclic graphs on a
+small worker stack; no global 500-node pool limit is assumed.
 
 ### Traffic aggregation
 

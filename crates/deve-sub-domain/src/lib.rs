@@ -11,6 +11,7 @@
 pub mod audit;
 pub mod endpoint;
 pub mod error;
+mod graph;
 pub mod identity;
 pub mod node;
 pub mod node_chain;

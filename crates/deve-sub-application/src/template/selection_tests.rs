@@ -7,6 +7,7 @@ use super::*;
 use deve_sub_domain::source::SourceError;
 use deve_sub_domain::{Node, NodeSource, RegionAssignment, RegionMethod};
 use deve_sub_kernel::{NodeId, Timestamp};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Build a minimal `NodePoolEntry` for testing.
 fn make_entry(
@@ -242,8 +243,11 @@ fn apply_sort_order_descending() {
 }
 
 /// A mock pool repository that returns a fixed set of entries.
+#[derive(Default)]
 struct MockPool {
     entries: Vec<NodePoolEntry>,
+    list_calls: AtomicUsize,
+    requested_ids: AtomicUsize,
 }
 
 #[async_trait::async_trait]
@@ -260,6 +264,7 @@ impl NodePoolRepository for MockPool {
         cursor: Option<NodeId>,
         limit: u32,
     ) -> Result<Vec<NodePoolEntry>, SourceError> {
+        self.list_calls.fetch_add(1, Ordering::Relaxed);
         let start = match cursor {
             None => 0,
             Some(c) => self
@@ -280,6 +285,7 @@ impl NodePoolRepository for MockPool {
         Ok(self.entries.iter().find(|e| e.node.id == id).cloned())
     }
     async fn get_nodes(&self, ids: &[NodeId]) -> Result<Vec<NodePoolEntry>, SourceError> {
+        self.requested_ids.fetch_add(ids.len(), Ordering::Relaxed);
         Ok(self
             .entries
             .iter()
@@ -335,7 +341,10 @@ async fn resolve_selection_dynamic_filters_by_protocol() {
             vec![],
         ),
     ];
-    let pool = MockPool { entries };
+    let pool = MockPool {
+        entries,
+        ..Default::default()
+    };
     let selector = NodeSelector {
         mode: SelectionMode::Dynamic,
         filters: vec![NodeFilterRule {
@@ -373,7 +382,10 @@ async fn resolve_selection_fixed_returns_only_pinned() {
             vec![],
         ),
     ];
-    let pool = MockPool { entries };
+    let pool = MockPool {
+        entries,
+        ..Default::default()
+    };
     let selector = NodeSelector {
         mode: SelectionMode::Fixed,
         filters: vec![],
@@ -383,6 +395,8 @@ async fn resolve_selection_fixed_returns_only_pinned() {
     let (ids, missing) = resolve_selection(&selector, &pool).await.expect("resolve");
     assert_eq!(ids.len(), 1);
     assert!(missing.is_empty());
+    assert_eq!(pool.list_calls.load(Ordering::Relaxed), 0);
+    assert_eq!(pool.requested_ids.load(Ordering::Relaxed), 1);
 }
 
 #[tokio::test]
@@ -396,7 +410,10 @@ async fn resolve_selection_fixed_reports_missing() {
         false,
         vec![],
     )];
-    let pool = MockPool { entries };
+    let pool = MockPool {
+        entries,
+        ..Default::default()
+    };
     let selector = NodeSelector {
         mode: SelectionMode::Fixed,
         filters: vec![],
@@ -443,7 +460,10 @@ async fn resolve_group_with_quick_group_filter() {
             vec![],
         ),
     ];
-    let pool = MockPool { entries };
+    let pool = MockPool {
+        entries,
+        ..Default::default()
+    };
     let group = ProxyGroup {
         name: "us-trojan".to_owned(),
         group_type: deve_sub_domain::template::GroupType::Select,
@@ -484,7 +504,10 @@ async fn resolve_group_reports_inactive_and_missing() {
             vec![],
         ),
     ];
-    let pool = MockPool { entries };
+    let pool = MockPool {
+        entries,
+        ..Default::default()
+    };
     let group = ProxyGroup {
         name: "test".to_owned(),
         group_type: deve_sub_domain::template::GroupType::Select,
@@ -512,3 +535,6 @@ async fn resolve_group_reports_inactive_and_missing() {
     );
     assert_eq!(resolution.missing[2].reason, MissingReason::NotFound);
 }
+
+#[path = "selection_scope_tests.rs"]
+mod scope;

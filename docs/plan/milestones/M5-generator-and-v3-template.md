@@ -251,8 +251,10 @@ Seven group types per spec §11.2:
 
 `relay` groups model chain proxy edges. The full chain graph includes
 node→node, node→group, group→node, group→group edges (spec §832-839). Cycle
-detection runs on save via DFS three-color marking; cycles are rejected with
-the full path (GEN-012).
+detection runs on save via DFS three-color marking with explicit heap frames;
+cycles are rejected with the full path (GEN-012). The shared domain traversal
+preserves deterministic root/neighbor ordering without recursive call-stack
+growth; YAML structural-depth limits do not bound group-reference path depth.
 
 Quick-group filters auto-populate members: by region (`region: US`), by
 protocol (`protocol: trojan`), by tag (`tag: production`). Filters are
@@ -263,6 +265,16 @@ gain unselected nodes after a template edit. Explicit active references outside
 the selection are reported as `outside_selection`; nested group references keep
 their topology. If usable selected nodes remain, a resolved empty Mihomo group
 keeps its name as select + REJECT. An empty overall selection fails generation.
+
+Selection resolution loads only the domain it needs. Fixed selectors batch-fetch
+their pinned IDs and explicit group references without listing or decrypting the
+whole pool; dynamic selectors ignore pinned IDs and list the active pool once.
+Quick groups evaluate only selected entries, preserving pool ID order, while
+explicit references retain their unavailable/outside-selection diagnostics.
+Standalone groups without a quick filter require only their explicit IDs.
+Repository-call regressions bind GEN-005/006/007/008/011; the generation benchmark
+includes a 16-node fixed selector against 100/1,000/10,000-node encrypted pools
+(PERF-004), so unrelated pool growth remains visible as a performance regression.
 
 ### Generation pipeline
 

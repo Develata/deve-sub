@@ -7,7 +7,7 @@
 //! - **Dynamic selection**: apply `NodeFilterRule`s to all active, non-missing
 //!   pool entries. New nodes that match the filters are automatically included
 //!   (GEN-005).
-//! - **Fixed selection**: look up pinned `node_ids` individually. New nodes are
+//! - **Fixed selection**: batch-fetch pinned `node_ids`. New nodes are
 //!   not included because they are not in the pinned list (GEN-006).
 //! - **Quick-group filters**: auto-populate group members by region, protocol,
 //!   or tag (GEN-007, GEN-008).
@@ -43,13 +43,17 @@ pub async fn resolve_template(
     doc: &TemplateDocument,
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<TemplateResolution, TemplateAppError> {
-    let active_pool = list_active_nodes(pool_repo).await?;
+    let active_pool = if doc.spec.node_selector.mode == SelectionMode::Dynamic {
+        list_active_nodes(pool_repo).await?
+    } else {
+        Vec::new()
+    };
 
     // WHY: collect every explicit/pinned NodeId across the selector and all
     // proxy groups, then issue a single batch `get_nodes` query instead of
     // one `get_node` per reference (W-D: K+1 pool listing + N get_node →
     // 1 list + 1 batch fetch).
-    let mut explicit_ids: Vec<NodeId> = doc.spec.node_selector.node_ids.clone();
+    let mut explicit_ids = pinned_ids(&doc.spec.node_selector).to_vec();
     for group in &doc.spec.proxy_groups {
         for member in &group.members {
             if let GroupMember::Node { id } = member {
@@ -69,9 +73,27 @@ pub async fn resolve_template(
         resolve_selection_impl(&doc.spec.node_selector, &view);
     let selected: std::collections::HashSet<_> = selected_node_ids.iter().copied().collect();
 
+    // WHY: groups cannot expand selection. Fixed selectors already fetched
+    // every candidate by ID; scanning/decrypting the full pool adds O(pool)
+    // work to even a one-node subscription. Borrow the selected entries and
+    // preserve pool ID order without cloning their credentials/configuration.
+    let mut candidates: Vec<_> = match doc.spec.node_selector.mode {
+        SelectionMode::Dynamic => active_pool
+            .iter()
+            .filter(|entry| selected.contains(&entry.node.id))
+            .collect(),
+        SelectionMode::Fixed => explicit_entries
+            .values()
+            .filter(|entry| selected.contains(&entry.node.id))
+            .collect(),
+    };
+    if doc.spec.node_selector.mode == SelectionMode::Fixed {
+        candidates.sort_unstable_by_key(|entry| entry.node.id);
+    }
+
     let mut groups = Vec::with_capacity(doc.spec.proxy_groups.len());
     for group in &doc.spec.proxy_groups {
-        let mut resolution = resolve_group_impl(group, &view);
+        let mut resolution = resolve_group_impl(group, &view, candidates.iter().copied());
         // WHY: proxy groups organize the selected set; they cannot expand a
         // fixed subscription or bypass dynamic filters with explicit members.
         resolution.explicit_node_ids.retain(|id| {
@@ -85,9 +107,6 @@ pub async fn resolve_template(
                 false
             }
         });
-        resolution
-            .quick_group_node_ids
-            .retain(|id| selected.contains(id));
         groups.push(resolution);
     }
 
@@ -102,14 +121,18 @@ pub async fn resolve_template(
 ///
 /// - **Dynamic**: list all active, non-missing nodes and apply filter rules.
 ///   Matching node IDs are returned in pool order (by `NodeId`).
-/// - **Fixed**: look up each pinned `node_id` individually. Found and active
+/// - **Fixed**: batch-fetch the pinned `node_ids`. Found and active
 ///   nodes are returned; missing ones are reported.
 pub async fn resolve_selection(
     selector: &NodeSelector,
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<(Vec<NodeId>, Vec<MissingNodeRef>), TemplateAppError> {
-    let active_pool = list_active_nodes(pool_repo).await?;
-    let explicit_entries = fetch_explicit_entries(pool_repo, &selector.node_ids).await?;
+    let active_pool = if selector.mode == SelectionMode::Dynamic {
+        list_active_nodes(pool_repo).await?
+    } else {
+        Vec::new()
+    };
+    let explicit_entries = fetch_explicit_entries(pool_repo, pinned_ids(selector)).await?;
     let view = PoolView {
         active: &active_pool,
         explicit: &explicit_entries,
@@ -119,7 +142,7 @@ pub async fn resolve_selection(
 
 /// Resolve a single proxy group's membership against the pool.
 ///
-/// Explicit `GroupMember::Node` entries are checked individually. If a
+/// Explicit `GroupMember::Node` entries are fetched in one batch. If a
 /// `QuickGroupFilter` is present, matching nodes from the pool are appended
 /// (deduplicated against explicit members). `GroupMember::Group` references are
 /// not resolved here — they are validated structurally in `validate_document`.
@@ -127,7 +150,11 @@ pub async fn resolve_group(
     group: &ProxyGroup,
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<GroupResolution, TemplateAppError> {
-    let active_pool = list_active_nodes(pool_repo).await?;
+    let active_pool = if group.filter.is_some() {
+        list_active_nodes(pool_repo).await?
+    } else {
+        Vec::new()
+    };
     let explicit_ids: Vec<NodeId> = group
         .members
         .iter()
@@ -141,13 +168,20 @@ pub async fn resolve_group(
         active: &active_pool,
         explicit: &explicit_entries,
     };
-    Ok(resolve_group_impl(group, &view))
+    Ok(resolve_group_impl(group, &view, active_pool.iter()))
+}
+
+fn pinned_ids(selector: &NodeSelector) -> &[NodeId] {
+    match selector.mode {
+        SelectionMode::Fixed => &selector.node_ids,
+        SelectionMode::Dynamic => &[],
+    }
 }
 
 /// Pre-fetched pool data shared by the synchronous `_impl` resolvers.
 ///
-/// `active` is the full list of active, non-missing pool entries (for dynamic
-/// selection and quick-group filtering). `explicit` is a lookup of specific
+/// `active` is populated only for dynamic selection or standalone quick groups.
+/// `explicit` is a lookup of specific
 /// node IDs requested by name (for fixed selection and explicit group members).
 /// Both are fetched once by the async entry points and reused across all
 /// groups, avoiding K+1 pool listings and N individual `get_node` calls.
@@ -203,7 +237,11 @@ fn resolve_selection_impl(
     }
 }
 
-fn resolve_group_impl(group: &ProxyGroup, view: &PoolView<'_>) -> GroupResolution {
+fn resolve_group_impl<'a>(
+    group: &ProxyGroup,
+    view: &PoolView<'_>,
+    candidates: impl Iterator<Item = &'a NodePoolEntry>,
+) -> GroupResolution {
     let mut explicit_node_ids = Vec::new();
     let mut missing = Vec::new();
     let mut explicit_set: std::collections::HashSet<NodeId> = std::collections::HashSet::new();
@@ -239,7 +277,7 @@ fn resolve_group_impl(group: &ProxyGroup, view: &PoolView<'_>) -> GroupResolutio
 
     let mut quick_group_node_ids = Vec::new();
     if let Some(filter) = &group.filter {
-        for entry in view.active {
+        for entry in candidates {
             if explicit_set.contains(&entry.node.id) {
                 continue;
             }

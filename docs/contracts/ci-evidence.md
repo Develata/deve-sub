@@ -18,6 +18,11 @@ All required jobs have finite explicit timeouts, and only obsolete same-PR
 workflow runs may cancel one another. There is no shadow plan schema or selective
 execution surface. This workspace-only binary is not packaged in product releases.
 
+Docker runtime verification is also part of the static inventory: the regular
+Docker job must run the shared image smoke; multiarch must load both matching
+platform images and run both smokes, retaining either failure. Building ARM64
+without starting it is not DEPLOY-004 evidence.
+
 ## Artifact manifest
 
 `python3 scripts/ci/artifact.py create|verify --kind binary|wasm --root PATH`

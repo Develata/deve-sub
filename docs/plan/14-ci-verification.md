@@ -74,7 +74,15 @@ the downloaded payload before trusting its file inventory.
 
 Docker's backend and frontend stages continue to compile from source. Stable
 Dioxus installation precedes source copies; a platform-independent WASM stage
-is shared by both runtime architectures. Docker and multiarch have separate
+is shared by both runtime architectures. The ordinary Docker job and both
+multiarch images use the same bounded runtime smoke: verify the loaded
+architecture and default internal health command,
+observe Docker become healthy within 60 seconds, and exercise live/ready/Web
+HTTP plus the non-root user. Run both architectures even if one smoke fails;
+the combined result fails if either does. Each invocation owns a random
+container, loopback port and tmpfs data, and cleans up on success, failure or
+handled termination. These checks implement M8 DEPLOY-003/004/005; a successful
+cross-build alone is insufficient. Docker and multiarch have separate
 cache write scopes and may read each other's cache. Cache misses change cost,
 not verification scope or truth. Published artifacts are never identified by
 cache keys alone.

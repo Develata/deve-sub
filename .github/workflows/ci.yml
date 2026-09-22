@@ -39,6 +39,7 @@ jobs:
       - run: pip install pyyaml==6.0.3
       - run: python3 -m unittest discover -s scripts/ci/tests
       - run: python3 scripts/tests/test_soak.py
+      - run: python3 scripts/tests/test_docker_health_deadline.py
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: ci-tool
@@ -408,57 +409,8 @@ jobs:
         run: python3 scripts/tests/test_docker_bootstrap.py --image deve-sub:ci
       - name: Verify bounded container log rotation
         run: python3 scripts/tests/test_docker_logging.py --image deve-sub:ci
-      - name: Run container and verify health
-        run: |
-          docker volume create deve-sub-ci-data
-
-          # The image entrypoint runs migrate then serve (DS-AUD-007),
-          # so a single docker run is sufficient — no separate migrate step.
-          docker run -d --name deve-sub-test -p 8080:8080 -v deve-sub-ci-data:/app/data deve-sub:ci
-
-          # Poll the Docker healthcheck status until healthy
-          for i in $(seq 1 30); do
-            status=$(docker inspect --format='{{.State.Health.Status}}' deve-sub-test 2>/dev/null || echo "starting")
-            if [ "$status" = "healthy" ]; then
-              echo "Container is healthy"
-              break
-            fi
-            echo "Waiting for healthy state (attempt $i: $status)..."
-            sleep 1
-          done
-
-          if [ "$status" != "healthy" ]; then
-            echo "FAIL: container did not become healthy within 30s"
-            docker logs deve-sub-test
-            exit 1
-          fi
-
-          # Verify both health endpoints
-          curl -sf http://localhost:8080/health/live
-          curl -sf http://localhost:8080/health/ready
-
-          # Verify the real frontend is served, not the placeholder (DS-AUD-004).
-          # The real dist references the WASM JS bundle; the placeholder does not.
-          curl -sf http://localhost:8080/ | grep -q 'deve-sub-web' || {
-            echo "FAIL: root page does not reference the WASM bundle — placeholder served"
-            docker logs deve-sub-test
-            exit 1
-          }
-          echo "Real frontend is served"
-
-          # Verify non-root user
-          uid=$(docker exec deve-sub-test id -u)
-          if [ "$uid" != "1000" ]; then
-            echo "FAIL: container runs as UID $uid, expected 1000"
-            exit 1
-          fi
-          echo "Container runs as non-root user (UID 1000)"
-      - name: Cleanup
-        if: always()
-        run: |
-          docker stop deve-sub-test 2>/dev/null || true
-          docker rm deve-sub-test 2>/dev/null || true
-          docker volume rm deve-sub-ci-data 2>/dev/null || true
+      - name: Verify image architecture, healthcheck and Web runtime
+        run: python3 scripts/tests/test_docker_health.py --image deve-sub:ci --platform linux/amd64
 
   # Multi-arch build verification (DEPLOY-003/004).
   # WHY: runs on push to main and on the nightly schedule, not on PRs.
@@ -502,26 +454,23 @@ jobs:
           load: true
           tags: deve-sub-amd64
           cache-from: type=gha,scope=multiarch-ci
-      - name: Verify amd64 image boots and healthcheck passes
+      - name: Load arm64 image from cache
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          load: true
+          tags: deve-sub-arm64
+          cache-from: type=gha,scope=multiarch-ci
+      - name: Verify both architectures boot with the real healthcheck
+        # WHY: cross-compilation alone cannot prove the ARM64 image starts.
+        # Each smoke owns its cleanup; finish both and retain either failure.
         run: |
-          docker volume create deve-sub-ma-amd64
-          # The image entrypoint runs migrate then serve (DS-AUD-007).
-          docker run -d --name deve-sub-ma-amd64 -p 8081:8080 \
-            -v deve-sub-ma-amd64:/app/data --platform linux/amd64 deve-sub-amd64
-          for _attempt in $(seq 1 30); do
-            status=$(docker inspect --format='{{.State.Health.Status}}' deve-sub-ma-amd64 2>/dev/null || echo "starting")
-            [ "$status" = "healthy" ] && break
-            sleep 1
-          done
-          if [ "$status" != "healthy" ]; then
-            echo "FAIL: amd64 container did not become healthy"
-            docker logs deve-sub-ma-amd64
-            exit 1
-          fi
-          echo "amd64 healthcheck: healthy (DEPLOY-003/005)"
-          docker stop deve-sub-ma-amd64 2>/dev/null || true
-          docker rm deve-sub-ma-amd64 2>/dev/null || true
-          docker volume rm deve-sub-ma-amd64 2>/dev/null || true
+          status=0
+          python3 scripts/tests/test_docker_health.py --image deve-sub-amd64 --platform linux/amd64 || status=1
+          python3 scripts/tests/test_docker_health.py --image deve-sub-arm64 --platform linux/arm64 || status=1
+          exit "$status"
 
   acceptance-gate:
     name: acceptance-gate

@@ -95,7 +95,57 @@ pub(crate) fn validate(workflow: &Value, packages: &BTreeSet<String>) -> Result<
     );
     let count = rust_shards(&jobs["test"], packages)?;
     browser_lanes(&jobs["browser-e2e"])?;
+    docker_runtime(&jobs["docker"], &jobs["multiarch"])?;
     Ok(count)
+}
+
+fn docker_runtime(docker: &Value, multiarch: &Value) -> Result<()> {
+    for (job, name, run) in [
+        (
+            docker,
+            "Verify image architecture, healthcheck and Web runtime",
+            "python3 scripts/tests/test_docker_health.py --image deve-sub:ci --platform linux/amd64",
+        ),
+        (
+            multiarch,
+            "Verify both architectures boot with the real healthcheck",
+            "status=0\npython3 scripts/tests/test_docker_health.py --image deve-sub-amd64 --platform linux/amd64 || status=1\npython3 scripts/tests/test_docker_health.py --image deve-sub-arm64 --platform linux/arm64 || status=1\nexit \"$status\"\n",
+        ),
+    ] {
+        ensure!(
+            named_step(job, name)? == &json!({"name": name, "run": run}),
+            "{name}: required runtime checks cannot be omitted or suppressed"
+        );
+    }
+    for arch in ["amd64", "arm64"] {
+        let name = format!("Load {arch} image from cache");
+        let step = named_step(multiarch, &name)?;
+        ensure!(
+            step.get("if").is_none()
+                && step.get("continue-on-error").is_none()
+                && step["uses"]
+                    .as_str()
+                    .is_some_and(|action| action.starts_with("docker/build-push-action@"))
+                && step["with"]["context"] == "."
+                && step["with"]["platforms"] == format!("linux/{arch}")
+                && step["with"]["tags"] == format!("deve-sub-{arch}")
+                && step["with"]["load"] == true
+                && step["with"]["push"] == false,
+            "{name}: each local image must be loaded for its matching runtime check"
+        );
+    }
+    Ok(())
+}
+
+fn named_step<'a>(job: &'a Value, name: &str) -> Result<&'a Value> {
+    let mut matches = array(&job["steps"])?
+        .iter()
+        .filter(|step| step["name"] == name);
+    let step = matches
+        .next()
+        .with_context(|| format!("missing step: {name}"))?;
+    ensure!(matches.next().is_none(), "duplicate step: {name}");
+    Ok(step)
 }
 
 fn rust_shards(test: &Value, packages: &BTreeSet<String>) -> Result<usize> {

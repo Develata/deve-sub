@@ -9693,7 +9693,6 @@
         "required": [
           "name",
           "source_type",
-          "url",
           "auto_update",
           "update_interval_secs",
           "enabled",
@@ -9738,8 +9737,11 @@
             "minimum": 0
           },
           "url": {
-            "type": "string",
-            "description": "Subscription URL."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Replacement subscription URL. Omission/null preserves the current secret."
           }
         },
         "additionalProperties": false

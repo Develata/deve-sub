@@ -1060,7 +1060,7 @@ async fn refresh_all_filtered_preserves_active_snapshot() {
             id: source.id,
             name: "filtered-source".to_owned(),
             source_type: SourceType::UriList,
-            url: "https://example.com/sub".to_owned(),
+            url: Some("https://example.com/sub".to_owned()),
             auto_update: false,
             update_interval_secs: 3600,
             enabled: true,

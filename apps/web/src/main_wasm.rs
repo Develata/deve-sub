@@ -50,27 +50,15 @@ pub enum Page {
     Settings,
 }
 
-const NAV_ITEMS: [(Page, &str, &str); 8] = [
-    (Page::Dashboard, "nav.dashboard", "M"),
-    (Page::Nodes, "nav.nodes", "N"),
-    (Page::Sources, "nav.sources", "S"),
-    (Page::Templates, "nav.templates", "T"),
-    (Page::Subscriptions, "nav.subscriptions", "U"),
-    (Page::Users, "nav.users", "Y"),
-    (Page::Audit, "nav.audit", "A"),
-    (Page::Settings, "nav.settings", ","),
-];
-
-/// Keyboard shortcut: Alt+<key> switches pages (UI-010).
-const NAV_SHORTCUTS: [(Page, &str); 8] = [
-    (Page::Dashboard, "m"),
-    (Page::Nodes, "n"),
-    (Page::Sources, "s"),
-    (Page::Templates, "t"),
-    (Page::Subscriptions, "u"),
-    (Page::Users, "y"),
-    (Page::Audit, "a"),
-    (Page::Settings, ","),
+const NAV_ITEMS: [(Page, &str); 8] = [
+    (Page::Dashboard, "nav.dashboard"),
+    (Page::Nodes, "nav.nodes"),
+    (Page::Sources, "nav.sources"),
+    (Page::Templates, "nav.templates"),
+    (Page::Subscriptions, "nav.subscriptions"),
+    (Page::Users, "nav.users"),
+    (Page::Audit, "nav.audit"),
+    (Page::Settings, "nav.settings"),
 ];
 
 fn app() -> Element {
@@ -107,15 +95,6 @@ fn app() -> Element {
         if let Some(accent) = theme::read_custom_accent() {
             theme::apply_custom_accent(&accent);
         }
-    });
-
-    // Keyboard navigation (UI-010).
-    use_future(move || async move {
-        // WHY: Alt+key for page switching, Escape to close mobile menu.
-        // This is a simplified global handler — Dioxus doesn't have a
-        // built-in global keyboard event, so we poll via window event.
-        // The actual keyboard handling is done via onkeydown on focusable
-        // elements in each page component.
     });
 
     let l = *lang.read();
@@ -162,7 +141,7 @@ fn app() -> Element {
                             span { class: "text-lg font-bold text-amber-600 dark:text-amber-500", "Deve Sub" }
                         }
                         nav { class: "flex-1 space-y-1 p-4",
-                            for (page, label_key, shortcut) in NAV_ITEMS {
+                            for (page, label_key) in NAV_ITEMS {
                                 {
                                     let is_active = *current_page.read() == page;
                                     let class = if is_active {
@@ -178,12 +157,6 @@ fn app() -> Element {
                                             onclick: move |_| {
                                                 current_page.set(page);
                                                 mobile_menu.set(false);
-                                            },
-                                            onkeydown: move |e| {
-                                                if e.key() == Key::Enter {
-                                                    current_page.set(page);
-                                                    mobile_menu.set(false);
-                                                }
                                             },
                                             span { {t(l, label_key)} }
                                         }

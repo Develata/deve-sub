@@ -70,3 +70,22 @@ body {
 .node-category:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .node-category-name { min-width: 0; overflow-wrap: anywhere; }
 .node-category-count { @apply text-xs text-stone-600 dark:text-stone-400; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+/* Native source dialogs stay usable in short viewports and at large text sizes. */
+.source-dialog { width: min(32rem, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; overflow-y: auto; overscroll-behavior: contain; }
+.source-dialog::backdrop { background: rgb(0 0 0 / 40%); }
+.source-input { @apply mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800; min-height: 44px; }
+.source-dialog :is(input, select, button):focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Keep source actions on screen without duplicating the table's data/controls. */
+@media (width < 768px) {
+  .source-table, .source-table tbody { display: block; }
+  .source-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .source-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 16px; }
+  .source-table td { min-width: 0; padding: 0; }
+  .source-identity, .source-address, .source-actions { grid-column: 1 / -1; }
+  .source-identity { overflow-wrap: anywhere; }
+  .source-address span { max-width: none; white-space: normal; overflow-wrap: anywhere; }
+  .source-actions > div { gap: 8px; margin-top: 4px; }
+  .source-actions button { flex: 1; min-width: 44px; min-height: 44px; }
+}

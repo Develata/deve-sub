@@ -27,7 +27,7 @@ workspace = true
 [target.'cfg(target_family = "wasm")'.dependencies]
 deve-sub-contract = { workspace = true }
 dioxus = { workspace = true }
-web-sys = { workspace = true }
+web-sys = { workspace = true, features = ["HtmlDialogElement", "NodeList"] }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 js-sys = { workspace = true }

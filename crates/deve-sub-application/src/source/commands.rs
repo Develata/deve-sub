@@ -109,31 +109,12 @@ pub async fn create_source(
     Ok(source)
 }
 
-/// Parameters for [`update_source`].
-pub struct UpdateSourceParams {
-    /// ID of the source to update.
-    pub id: SourceId,
-    /// New name.
-    pub name: String,
-    /// New input format.
-    pub source_type: SourceType,
-    /// New subscription URL.
-    pub url: String,
-    /// Whether automatic refresh is enabled.
-    pub auto_update: bool,
-    /// Refresh interval in seconds.
-    pub update_interval_secs: u64,
-    /// Whether the source is active.
-    pub enabled: bool,
-    /// Whether to keep existing nodes if a refresh fails.
-    pub keep_on_fail: bool,
-    /// Include/exclude filter rules applied to parsed nodes (SRC-010).
-    pub filter_rules: Option<SourceFilterRules>,
-}
+/// Parameters for [`update_source`], including an optional URL replacement.
+pub use deve_sub_domain::SourceConfigUpdate as UpdateSourceParams;
 
 /// Update an existing source.
 ///
-/// Loads the source, applies the new fields, and persists it. Returns
+/// Applies a typed configuration edit against current stored state. Returns
 /// [`SourceAppError::SourceNotFound`] if the source does not exist.
 ///
 /// # Errors
@@ -146,7 +127,9 @@ pub async fn update_source(
     params: UpdateSourceParams,
 ) -> Result<Source, SourceAppError> {
     validate_name(&params.name)?;
-    validate_url(&params.url)?;
+    if let Some(url) = &params.url {
+        validate_url(url)?;
+    }
     if params.update_interval_secs == 0 {
         return Err(SourceAppError::InvalidInput(
             "update_interval_secs must be greater than 0",
@@ -158,23 +141,9 @@ pub async fn update_source(
         ));
     }
 
-    let mut source = repo
-        .find_by_id(params.id)
+    repo.update_config(&params)
         .await
-        .map_err(map_source_error)?
-        .ok_or(SourceAppError::SourceNotFound)?;
-
-    source.name = params.name;
-    source.source_type = params.source_type;
-    source.url = params.url;
-    source.auto_update = params.auto_update;
-    source.update_interval_secs = params.update_interval_secs;
-    source.enabled = params.enabled;
-    source.keep_on_fail = params.keep_on_fail;
-    source.filter_rules = params.filter_rules;
-
-    repo.update(&source).await.map_err(map_source_error)?;
-    Ok(source)
+        .map_err(map_mutation_error)
 }
 
 /// Delete a source by ID.
@@ -191,7 +160,7 @@ pub async fn delete_source(
     repo: &dyn SourceRepository,
     id: SourceId,
 ) -> Result<(), SourceAppError> {
-    repo.delete(id).await.map_err(map_delete_error)?;
+    repo.delete(id).await.map_err(map_mutation_error)?;
     Ok(())
 }
 
@@ -232,10 +201,8 @@ fn map_source_error(e: SourceError) -> SourceAppError {
     }
 }
 
-/// Map storage errors for delete operations. Delete returns
-/// `SourceNotFound` on zero rows affected, which maps to the application
-/// error directly.
-fn map_delete_error(e: SourceError) -> SourceAppError {
+/// Map mutation failures, including a source deleted before write admission.
+fn map_mutation_error(e: SourceError) -> SourceAppError {
     match e {
         SourceError::SourceNotFound => SourceAppError::SourceNotFound,
         SourceError::NameExists => SourceAppError::NameExists,

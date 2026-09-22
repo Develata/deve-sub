@@ -7,7 +7,7 @@ use deve_sub_kernel::{NodeId, Revision, SourceId, SourceSnapshotId, Timestamp};
 use super::error::SourceError;
 use super::refresh_job::{RefreshPhase, SourceRefreshJob};
 use super::source_item::ItemParseStatus;
-use super::{Source, SourceSnapshot};
+use super::{Source, SourceConfigUpdate, SourceSnapshot};
 use crate::node_override::{NodeOverride, Tag};
 use crate::{Node, ProtocolKind};
 
@@ -37,6 +37,11 @@ pub trait SourceRepository: Send + Sync {
     /// Update an existing source. Returns [`SourceError::SourceNotFound`]
     /// if the source does not exist.
     async fn update(&self, source: &Source) -> Result<(), SourceError>;
+
+    /// Atomically edit current configuration without replacing omitted secrets
+    /// or transport settings. The returned source and cache invalidation share
+    /// the write transaction. Missing sources return [`SourceError::SourceNotFound`].
+    async fn update_config(&self, update: &SourceConfigUpdate) -> Result<Source, SourceError>;
 
     /// Delete a source and all its snapshots, items, and source bindings.
     async fn delete(&self, id: SourceId) -> Result<(), SourceError>;

@@ -96,6 +96,14 @@ live bindings for remote labels.
 
 ### Source cache invalidation (M4/M5)
 
+`UpdateSourceRequest.url` is optional: omission/null retains the current secret,
+while a nonempty string explicitly replaces it; an empty string returns 400.
+Response URLs remain masked. `SourceRepository::update_config` atomically
+applies a `SourceConfigUpdate`, preserving an omitted URL's ciphertext, HTTP
+method and headers from the current row. It returns the updated source and
+commits its pool-revision invalidation together; concurrent URL replacement
+cannot be reverted by an unrelated edit that omitted the URL.
+
 `SourceRepository::update` and `delete` commit their pool-revision invalidation
 atomically with the source mutation. Prior
 generation semantics are not trusted as direct hits or last-good fallback.

@@ -16,7 +16,12 @@ npm ci
 DEVE_SUB_BINARY=../../target/debug/deve-sub npm run test:functional
 ```
 
-配置 `functional.config.ts` 使用 4 workers、0 retries。每个测试独占服务进程、
+配置 `functional.config.ts` 本地使用 4 workers、0 retries。CI 将 API、桌面、
+移动端分为三个独立 lane，每个 runner 显式使用 2 workers；第四个 legacy lane
+保留共享种子状态的串行执行及进程生命周期测试。所有 lane 都执行，
+`fail-fast: false`，最多四个 runner 并发；任何失败或取消都阻断最终验收。
+`cargo run --locked -p deve-sub-ci -- inventory` 校验这些 lane 及实际命令完整，
+报告按 lane 独立命名，避免并发上传覆盖。每个测试独占服务进程、
 临时数据库、密钥、管理员会话及回环端口；只有同一竞争用例内的并发请求共享
 目标。借用已有 server-lifecycle 的启动检查、有限退出和 finally 清理。结果按
 run UUID 和 test/project 分目录保留 JSON、失败 trace、截图及服务日志；fixture
@@ -61,6 +66,8 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 | FUNC-SUB-CREATE | OUT-016 | Web 默认表单创建订阅 | 201，返回链接可获取内容 |
 | FUNC-DELIVERY-RETENTION | OUT-014 | 12个不同selector并发生成，共用模板；全部节点不可用后并发下载 | 每个订阅仍返回各自最后成功内容，不能被其他selector挤掉或串用 |
 | FUNC-PAGINATION | SRC-001/GEN-001/OUT-016 | 21 源、51 模板和订阅 | 后续记录可操作，模板选项完整 |
+| FUNC-SOURCE-FORM | SRC-001/UI-009/010 | 焦点循环、Enter/Escape、390×420视口、挂起保存与503后重试 | 焦点不逃逸、可取消并返回入口、等待不重复提交、填写保留、重试真实保存、改名省略URL而显式新地址才替换；移动端长URL不挤出操作、桌面保持多列 |
+| FUNC-SOURCE-DELETE | SRC-001/UI-010 | 删除具体源，默认取消，再次确认 | 显示源名，取消未删除，确认后API返回404 |
 | FUNC-SOURCE-JOBS | SRC-002/013 | A/B 同时刷新，A先成功、B后失败 | 忙碌状态独立，失败后列表和重试入口保留 |
 | FUNC-REQUEST-TIMEOUT | UI-009 | 节点请求不返回 | 实际 AbortSignal 到期后显示错误，结束等待 |
 | FUNC-LIST-ORDER | SRC-013 | 新列表成功后旧列表失败 | 旧错误不能隐藏当前数据 |

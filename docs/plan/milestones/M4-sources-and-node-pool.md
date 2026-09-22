@@ -266,6 +266,17 @@ node view and source-label filters. A failed revision write rolls back the sourc
 mutation too. Generation semantics versioning rebuilds pre-fix cached output;
 old cache rows remain subject to ordinary retention.
 
+Source edit responses expose only a masked URL. In `PUT /api/v1/sources/{id}`,
+an omitted or null URL preserves the current encrypted URL; a nonempty supplied
+URL replaces it, and an explicitly empty URL is invalid. The edit form leaves
+the URL draft empty and submits a replacement only after user input. Application
+validates the typed configuration update and dispatches one atomic repository
+operation. That operation preserves omitted URL ciphertext, HTTP method and
+headers directly in the stored row, returns the committed source, and advances
+the pool revision in the same transaction. It must not read a whole source in
+Application and later write back stale secrets. SRC-001 covers omission, null,
+replacement, validation failure, concurrent replacement and rollback.
+
 Deleting a source withdraws its contribution, not just its binding. Within the
 source repository's write transaction, mark its previously bound nodes missing
 only if they have neither another source binding nor independent import label;
@@ -337,3 +348,26 @@ identity; concurrent imports cannot upgrade a stale read snapshot into a write.
 Refresh failure must not write a copied Source over newer configuration: its
 port performs only a conditional enabled update using the current keep_on_fail.
 The controlled refresh regression binds SRC-005; concurrent import binds NODE-001.
+
+## Source form interaction (SRC-001, UI-009/010)
+
+On narrow screens, each source table row stacks its details and actions within
+the viewport, retaining the same controls and table semantics. Desktop keeps
+separate data columns. Long names/URLs wrap without pushing actions off screen.
+
+Source create/edit/delete dialogs use native modal semantics: focus starts on
+name for editing and cancel for deletion, stays inside the dialog, and returns
+to the initiating control if it still exists. Escape cancels an idle dialog.
+The panel scrolls within the viewport; associated labels, visible focus and
+44px controls support keyboard and touch use. Delete confirmation identifies
+the source by name and retains the withdrawal explanation.
+
+Source forms submit through a single typed REST command, including Enter.
+Edit URL drafts start empty to preserve the existing secret; redacted URLs are
+only explanatory text and are never submitted as replacement credentials.
+While pending, fields and cancellation are disabled and duplicate submission
+is ignored; the existing request deadline bounds that wait. A failure preserves
+all input, announces the error and re-enables retry. Interval editing preserves
+an empty draft instead of silently resetting it to the default. Server-side
+validation remains authoritative. Browser regressions FUNC-SOURCE-FORM and
+FUNC-SOURCE-DELETE cover the successful and failure paths on desktop/mobile.

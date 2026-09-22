@@ -113,8 +113,9 @@ pub struct UpdateSourceRequest {
     pub name: String,
     /// Input format.
     pub source_type: SourceTypeDto,
-    /// Subscription URL.
-    pub url: String,
+    /// Replacement subscription URL. Omission/null preserves the current secret.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     /// Whether automatic refresh is enabled.
     pub auto_update: bool,
     /// Refresh interval in seconds.

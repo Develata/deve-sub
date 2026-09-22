@@ -9,10 +9,12 @@
 //! See ADR-0007. The plaintext columns were dropped in migration 0015; a
 //! master key is required to read or write sensitive data.
 
+mod config_update;
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use deve_sub_domain::{Source, SourceError, SourceRepository, SourceType};
+use deve_sub_domain::{Source, SourceConfigUpdate, SourceError, SourceRepository, SourceType};
 use deve_sub_kernel::SourceId;
 use deve_sub_security::{MasterKey, envelope};
 use sqlx::sqlite::SqlitePool;
@@ -322,6 +324,10 @@ impl SourceRepository for SqliteSourceRepository {
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
+    }
+
+    async fn update_config(&self, update: &SourceConfigUpdate) -> Result<Source, SourceError> {
+        self.apply_config(update).await
     }
 
     async fn delete(&self, id: SourceId) -> Result<(), SourceError> {

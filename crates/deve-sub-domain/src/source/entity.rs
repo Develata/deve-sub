@@ -117,6 +117,29 @@ pub struct Source {
     pub created_at: Timestamp,
 }
 
+/// An administrator's source configuration edit, applied atomically to the
+/// current stored row. Transport headers and HTTP method are outside this edit.
+pub struct SourceConfigUpdate {
+    /// Source to update.
+    pub id: SourceId,
+    /// New human-readable name.
+    pub name: String,
+    /// New input format.
+    pub source_type: SourceType,
+    /// Replacement URL; `None` preserves the current encrypted value.
+    pub url: Option<String>,
+    /// Whether automatic refresh is enabled.
+    pub auto_update: bool,
+    /// Refresh interval in seconds.
+    pub update_interval_secs: u64,
+    /// Whether the source is active.
+    pub enabled: bool,
+    /// Whether to retain nodes after a failed refresh.
+    pub keep_on_fail: bool,
+    /// Replacement include/exclude filters; `None` clears the filters.
+    pub filter_rules: Option<SourceFilterRules>,
+}
+
 impl Source {
     /// Create a new enabled source with default settings.
     #[must_use]

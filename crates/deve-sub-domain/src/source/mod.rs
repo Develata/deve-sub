@@ -12,7 +12,7 @@ pub mod refresh_job;
 pub mod snapshot;
 pub mod source_item;
 
-pub use entity::{Source, SourceFilterRules, SourceType};
+pub use entity::{Source, SourceConfigUpdate, SourceFilterRules, SourceType};
 pub use error::SourceError;
 pub use ports::{
     ImportOutcome, ImportResult, NodeFilter, NodePoolEntry, NodePoolRepository, PoolMetaRepository,

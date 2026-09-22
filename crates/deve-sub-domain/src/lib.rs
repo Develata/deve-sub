@@ -54,8 +54,9 @@ pub use protocol_config::{
 pub use source::{
     ImportOutcome, ImportResult, ItemParseStatus, NodeFilter, NodePoolEntry, NodePoolRepository,
     PoolMetaRepository, ReconcileEntry, ReconcileInput, ReconcileResult, RefreshPhase, Source,
-    SourceError, SourceFilterRules, SourceItem, SourceRefreshJob, SourceRefreshJobRepository,
-    SourceRefreshJobStatus, SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
+    SourceConfigUpdate, SourceError, SourceFilterRules, SourceItem, SourceRefreshJob,
+    SourceRefreshJobRepository, SourceRefreshJobStatus, SourceRepository, SourceSnapshot,
+    SourceSnapshotRepository, SourceType,
 };
 pub use subscription::{
     ShortCode, ShortCodeRepository, Subscription, SubscriptionError, SubscriptionRepository,

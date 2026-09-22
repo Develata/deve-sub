@@ -775,3 +775,59 @@ soak or exhaustive concurrency interleavings were tested locally. The checked
 regex deadline is not hard preemption of a database await or an individual
 match. Clients receive the update on their next pull; already downloaded
 configurations remain outside server control.
+
+
+## Global quality and performance slice — 2026-09-22
+
+Base: `23cf9ee`; branch: `fix/global-quality-performance`. Scope: M4/M5/M7/M8,
+SRC-001, SEC-003, PROBE-002, NODE-018, GEN-005/006/007/008/011/012,
+UI-009/010 and ADR-0008. Main agent integrated and independently verified the
+findings; backend, CI and UI owners worked in separate directories. The CI
+reviewer independently closed the backend, proxy, source-secret and UI lanes;
+main reviewed CI. No accepted blocker remains.
+
+Results and limits are detailed in the
+[global quality report](../report/2026-09-22-global-quality.md):
+
+- `cargo fmt --all -- --check`, locked workspace check and strict Clippy with
+  all targets/features passed. Full locked workspace tests exited 0: 97 test
+  targets, 1,100 passed, 0 failed, 8 explicitly ignored external-validator
+  cases, plus benchmark smoke. The isolated proxy test repeats itself in a
+  child process; that child summary is excluded from these totals. A prior
+  run printed successful suites but the executor returned 143; the complete
+  command was rerun independently to obtain the confirmed exit 0.
+- Doc tests passed (14 library crates, no executable examples). `cargo deny
+  --locked check` passed advisories, bans, licenses and sources. Current release
+  CLI and WASM built; CSS regeneration was byte-identical and release-generated
+  OpenAPI matched the committed projection. Existing WASM warnings remain.
+- Docs/acceptance: 157 cases, 496 verified proof references, 150 pass and 7
+  historical not-run rows. Architecture: 16 classified crates and 9 mutation
+  tests. CI Rust tool: 17 tests and live inventory of 9 Rust shards / 16
+  packages / 4 browser lanes. Python tooling: 11 tests. `actionlint ci.yml`
+  passed. Collection proved the functional API/desktop/mobile partition is
+  disjoint and complete (15 + 31 + 31).
+- Final release CLI plus rebuilt WASM: all 77 functional cases passed in 81.81s
+  with two workers, then all 16 legacy cases passed in 31.17s; zero retries,
+  zero flaky and zero skipped. Existing deadlines were retained. Chromium
+  build 1234 (151.0.7922.34) was available as the full browser; temporary local
+  configs selected that channel and separate evidence paths. CI retains its
+  browser installation. Three process-lifecycle cases passed separately.
+  Source dialog and completed mobile screenshots were inspected. The initial
+  overloaded debug run had two timeouts; the report preserves those conditions.
+- A 90-second real debug-process soak completed 502 cycles / 2,450 requests,
+  zero unexpected failures, zero ERROR/task panics and zero final tracked jobs;
+  FD tail stayed at 24, RSS tail about 26–32 MiB. This is bounded lifecycle
+  evidence, not proof of long-term absence of leaks.
+
+Reproduction entry points remain the commands above, `tests/e2e/functional.config.ts`,
+`tests/e2e/playwright.config.ts`, `tests/e2e/lifecycle.config.ts` and
+`scripts/perf/soak.py`. Transient logs use `/tmp/deve-sub-quality-*`; benchmark
+samples live under `target/criterion/generate_*/generate/fixed-16-uncached/`.
+The report records methodology rather than promising those temporary files
+are archived.
+
+No push, release, deployment or GitHub settings change was performed. Remote
+Actions timing/cancellation, Docker/ARM64 runtime, signed-update paths and
+external-validator binaries were not run locally in this slice. Existing
+not-run performance-budget rows remain not-run despite benchmark smoke.
+Branding configuration drift is explicitly retained in the report as follow-up.

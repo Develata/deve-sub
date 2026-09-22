@@ -11,6 +11,7 @@
 pub mod audit;
 pub mod endpoint;
 pub mod error;
+mod graph;
 pub mod identity;
 pub mod node;
 pub mod node_chain;
@@ -53,8 +54,9 @@ pub use protocol_config::{
 pub use source::{
     ImportOutcome, ImportResult, ItemParseStatus, NodeFilter, NodePoolEntry, NodePoolRepository,
     PoolMetaRepository, ReconcileEntry, ReconcileInput, ReconcileResult, RefreshPhase, Source,
-    SourceError, SourceFilterRules, SourceItem, SourceRefreshJob, SourceRefreshJobRepository,
-    SourceRefreshJobStatus, SourceRepository, SourceSnapshot, SourceSnapshotRepository, SourceType,
+    SourceConfigUpdate, SourceError, SourceFilterRules, SourceItem, SourceRefreshJob,
+    SourceRefreshJobRepository, SourceRefreshJobStatus, SourceRepository, SourceSnapshot,
+    SourceSnapshotRepository, SourceType,
 };
 pub use subscription::{
     ShortCode, ShortCodeRepository, Subscription, SubscriptionError, SubscriptionRepository,

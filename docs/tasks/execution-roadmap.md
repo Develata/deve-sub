@@ -98,7 +98,8 @@ all pass; NODE-012 through NODE-018 all pass.
 ## Remaining acceptance gaps
 
 M8 CI optimization follows `plan/14-ci-verification.md`: retain full execution,
-validate the static package/command inventory, verify artifact handoffs and
+use repository Rust tooling to validate the static package/browser command
+inventory, run isolated browser suites in parallel, verify artifact handoffs and
 aggregate every mandatory GitHub job result. Unused shadow planning and unsigned
 Rust execution receipts have been removed. Selective PR execution remains
 deferred until coverage and timing evidence justify a new implementation.

@@ -3,14 +3,25 @@
 ## Scope
 
 Machine-readable development evidence for `plan/14-ci-verification.md`.
-These scripts are repository tooling, not production CLI APIs.
+These tools are repository tooling, not production CLI APIs.
 
 ## Static inventory
 
-`python3 scripts/ci/inventory.py` validates the complete static workflow against
-Cargo workspace metadata. Every package occurs once; the exact Cargo command
-and flags are required, with no conditional/error-suppressed Rust test step.
-There is no shadow plan schema or selective execution surface.
+`cargo run --locked -p deve-sub-ci -- inventory` validates the complete static
+workflow against Cargo workspace metadata. Every package occurs once; the exact
+Cargo command and flags are required, with no conditional/error-suppressed Rust
+test step. The four browser lanes cover legacy, functional API, desktop and
+mobile exactly once; lane commands and the legacy lifecycle command are checked.
+Rust and browser matrices disable fail-fast. Browser execution is bounded to
+four lanes and two workers per functional lane; legacy keeps one worker.
+All required jobs have finite explicit timeouts, and only obsolete same-PR
+workflow runs may cancel one another. There is no shadow plan schema or selective
+execution surface. This workspace-only binary is not packaged in product releases.
+
+Docker runtime verification is also part of the static inventory: the regular
+Docker job must run the shared image smoke; multiarch must load both matching
+platform images and run both smokes, retaining either failure. Building ARM64
+without starting it is not DEPLOY-004 evidence.
 
 ## Artifact manifest
 
@@ -33,12 +44,18 @@ inventory guards command and package drift. These checks trust the reviewed
 workflow and its runner, rather than treating a runner-authored receipt as
 independent execution authentication.
 
-`python3 scripts/ci/gate.py --output PATH` consumes GitHub `needs` and the event.
+`cargo run --locked -p deve-sub-ci -- gate --output PATH` consumes GitHub `needs`
+from `CI_NEEDS` and the event from `GITHUB_EVENT_NAME`.
 It writes schema version 3 with complete job outcomes, exiting nonzero unless
 every required job succeeded. Only multiarch on PR may be skipped, reported as
 `not-run`. Unknown/missing jobs and unexpected skips fail. The report never
 asserts that all acceptance cases ran. Older receipt reports remain historical.
 Publication still requires the release workflow and operator authorization.
+The JSON schema is unchanged by the Rust migration. A failed or cancelled
+browser matrix lane makes its required aggregate unsuccessful; the gate cannot
+convert that result into a pass. The gate runs with `always()` and writes its
+report before returning failure; missing setup/toolchain inputs still fail the
+job rather than manufacturing a successful report.
 
 Reports and logs use synthetic fixtures only. Failure browser traces may carry
 disposable test login/session metadata; never connect this harness to production

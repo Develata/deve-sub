@@ -119,20 +119,9 @@ impl ChainGraph {
     ///
     /// Returns the first cycle found, or `None` if the graph is acyclic.
     pub fn detect_cycle(&self) -> Option<CyclePath> {
-        let mut color: HashMap<&ChainVertex, Color> = HashMap::new();
-        let mut path: Vec<&ChainVertex> = Vec::new();
-
-        let mut roots: Vec<&ChainVertex> = self.adjacency.keys().collect();
-        roots.sort_by_key(|a| a.to_string());
-
-        for v in roots {
-            if !color.contains_key(v)
-                && let Some(cycle) = self.dfs_visit(v, &mut color, &mut path)
-            {
-                return Some(cycle);
-            }
-        }
-        None
+        crate::graph::first_cycle(&self.adjacency, compare_vertices).map(|vertices| CyclePath {
+            vertices: vertices.into_iter().cloned().collect(),
+        })
     }
 
     /// List all edges in the graph.
@@ -147,49 +136,16 @@ impl ChainGraph {
             })
             .collect()
     }
+}
 
-    fn dfs_visit<'a>(
-        &'a self,
-        v: &'a ChainVertex,
-        color: &mut HashMap<&'a ChainVertex, Color>,
-        path: &mut Vec<&'a ChainVertex>,
-    ) -> Option<CyclePath> {
-        color.insert(v, Color::Gray);
-        path.push(v);
-
-        if let Some(neighbors) = self.adjacency.get(v) {
-            let mut sorted: Vec<&ChainVertex> = neighbors.iter().collect();
-            sorted.sort_by_key(|a| a.to_string());
-
-            for neighbor in sorted {
-                let neighbor_color = color.get(neighbor).copied().unwrap_or(Color::White);
-                match neighbor_color {
-                    Color::White => {
-                        if let Some(cycle) = self.dfs_visit(neighbor, color, path) {
-                            return Some(cycle);
-                        }
-                    }
-                    Color::Gray => {
-                        // WHY: Gray means `neighbor` is on the current DFS
-                        // path, so it must be present in `path`. Using
-                        // `unwrap_or(0)` here would silently produce a wrong
-                        // cycle start if that invariant ever broke; `if let`
-                        // is safer (skips rather than falsifies).
-                        if let Some(cycle_start) = path.iter().position(|x| **x == *neighbor) {
-                            let mut vertices: Vec<ChainVertex> =
-                                path[cycle_start..].iter().map(|x| (**x).clone()).collect();
-                            vertices.push(neighbor.clone());
-                            return Some(CyclePath { vertices });
-                        }
-                    }
-                    Color::Black => {}
-                }
-            }
-        }
-
-        path.pop();
-        color.insert(v, Color::Black);
-        None
+// Preserve the former display-string order ("group:" before "node:")
+// without allocating a display string for each comparison.
+fn compare_vertices(a: &ChainVertex, b: &ChainVertex) -> std::cmp::Ordering {
+    match (a, b) {
+        (ChainVertex::Group(a), ChainVertex::Group(b)) => a.cmp(b),
+        (ChainVertex::Node(a), ChainVertex::Node(b)) => a.cmp(b),
+        (ChainVertex::Group(_), ChainVertex::Node(_)) => std::cmp::Ordering::Less,
+        (ChainVertex::Node(_), ChainVertex::Group(_)) => std::cmp::Ordering::Greater,
     }
 }
 
@@ -200,16 +156,48 @@ fn member_to_vertex(m: &GroupMember) -> ChainVertex {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
-enum Color {
-    White,
-    Gray,
-    Black,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deep_group_references_use_bounded_call_stack() {
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut groups: Vec<_> = (0..4_000)
+                    .map(|i| ProxyGroup {
+                        name: format!("g{i:04}"),
+                        group_type: GroupType::Select,
+                        members: if i < 3_999 {
+                            vec![GroupMember::Group {
+                                name: format!("g{:04}", i + 1),
+                            }]
+                        } else {
+                            Vec::new()
+                        },
+                        filter: None,
+                        sort_order: None,
+                    })
+                    .collect();
+                assert!(ChainGraph::from_groups(&groups).detect_cycle().is_none());
+                groups[3_999].members.push(GroupMember::Group {
+                    name: "g0000".into(),
+                });
+                let cycle = ChainGraph::from_groups(&groups)
+                    .detect_cycle()
+                    .expect("cycle");
+                let mut expected: Vec<_> = groups
+                    .iter()
+                    .map(|g| ChainVertex::Group(g.name.clone()))
+                    .collect();
+                expected.push(ChainVertex::Group("g0000".into()));
+                assert_eq!(cycle.vertices, expected);
+            })
+            .expect("thread")
+            .join()
+            .expect("bounded stack traversal");
+    }
 
     fn node(id: &str) -> GroupMember {
         GroupMember::Node {

@@ -124,82 +124,51 @@ impl NodeChainGraph {
     ///
     /// Returns the first cycle found, or `None` if the graph is acyclic.
     pub fn detect_cycle(&self) -> Option<NodeCyclePath> {
-        let mut color: HashMap<&NodeId, Color> = HashMap::new();
-        let mut path: Vec<&NodeId> = Vec::new();
-
-        let mut roots: Vec<&NodeId> = self.adjacency.keys().collect();
-        roots.sort();
-
-        for v in roots {
-            if !color.contains_key(v)
-                && let Some(cycle) = self.dfs_visit(v, &mut color, &mut path)
-            {
-                return Some(cycle);
-            }
-        }
-        None
+        crate::graph::first_cycle(&self.adjacency, NodeId::cmp).map(|nodes| NodeCyclePath {
+            nodes: nodes.into_iter().copied().collect(),
+        })
     }
-
-    fn dfs_visit<'a>(
-        &'a self,
-        v: &'a NodeId,
-        color: &mut HashMap<&'a NodeId, Color>,
-        path: &mut Vec<&'a NodeId>,
-    ) -> Option<NodeCyclePath> {
-        // WHY: recursion depth is bounded by the longest simple chain, which
-        // is at most the pool size N. With N ≤ 500 (declared domain) and
-        // ~100–200 B/frame, the worst case (~50–100 KB) is far within the
-        // 8 MB main-thread / 2 MB tokio stack budget. Revisit (iterative
-        // DFS) only if pool size or chain nesting can grow unbounded.
-        color.insert(v, Color::Gray);
-        path.push(v);
-
-        if let Some(neighbors) = self.adjacency.get(v) {
-            let mut sorted: Vec<&NodeId> = neighbors.iter().collect();
-            sorted.sort();
-
-            for neighbor in sorted {
-                let neighbor_color = color.get(neighbor).copied().unwrap_or(Color::White);
-                match neighbor_color {
-                    Color::White => {
-                        if let Some(cycle) = self.dfs_visit(neighbor, color, path) {
-                            return Some(cycle);
-                        }
-                    }
-                    Color::Gray => {
-                        // WHY: Gray means `neighbor` is on the current DFS
-                        // path, so it must be present in `path`. Using
-                        // `unwrap_or(0)` here would silently produce a wrong
-                        // cycle start if that invariant ever broke; `if let`
-                        // is safer (skips rather than falsifies).
-                        if let Some(cycle_start) = path.iter().position(|x| **x == *neighbor) {
-                            let mut nodes: Vec<NodeId> =
-                                path[cycle_start..].iter().map(|x| **x).collect();
-                            nodes.push(*neighbor);
-                            return Some(NodeCyclePath { nodes });
-                        }
-                    }
-                    Color::Black => {}
-                }
-            }
-        }
-
-        path.pop();
-        color.insert(v, Color::Black);
-        None
-    }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Color {
-    White,
-    Gray,
-    Black,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deep_chain_and_cycle_do_not_depend_on_thread_stack_depth() {
+        // A pool has no 500-node ceiling: individually short chains can form
+        // a very deep graph. Use a small worker stack to guard against DFS
+        // recursion without depending on platform-default thread stack size.
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut ids: Vec<_> = (0..20_000).map(|_| NodeId::new()).collect();
+                ids.sort_unstable();
+                let mut chains: Vec<_> = ids
+                    .windows(2)
+                    .map(|pair| (pair[0], Some(vec![pair[1]])))
+                    .collect();
+                assert!(
+                    NodeChainGraph::from_chains(&chains)
+                        .detect_cycle()
+                        .is_none()
+                );
+
+                chains.push((ids[ids.len() - 1], Some(vec![ids[0]])));
+                let cycle = NodeChainGraph::from_chains(&chains)
+                    .detect_cycle()
+                    .expect("cycle");
+                let expected: Vec<_> = ids.iter().copied().chain([ids[0]]).collect();
+                assert_eq!(cycle.nodes.len(), expected.len());
+                assert!(
+                    cycle.nodes == expected,
+                    "cycle must retain every edge in ID order"
+                );
+            })
+            .expect("thread")
+            .join()
+            .expect("bounded stack traversal");
+    }
 
     fn nid(s: &str) -> NodeId {
         NodeId::parse(s).expect("valid ULID")

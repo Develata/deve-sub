@@ -38,3 +38,5 @@ pub mod node_list;
 pub mod node_tag_manager;
 
 pub mod source_modals;
+
+mod source_dialog;

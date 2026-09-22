@@ -126,6 +126,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-DELETE"
+        - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-FORM"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LAYOUT"
         - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-REQUEST-TIMEOUT"
@@ -142,6 +144,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-DELETE"
+        - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-FORM"
         - "tests/e2e/specs/ui-010-keyboard-nav.spec.ts::UI-010"
       status: pass
   - id: AUTH-001
@@ -319,6 +323,12 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-storage-sqlite/tests/source_config_update.rs::src001_config_update_and_revision_failure_roll_back_together"
+        - "crates/deve-sub-storage-sqlite/tests/source_config_update.rs::src001_concurrent_omission_never_reverts_explicit_url_replacement"
+        - "crates/deve-sub-storage-sqlite/tests/source_config_update.rs::src001_omitted_url_preserves_exact_secret_ciphertexts_and_current_transport"
+        - "apps/server/tests/source_management/secret_update.rs::src001_edit_preserves_omitted_secret_and_accepts_explicit_replacement"
+        - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-DELETE"
+        - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-FORM"
         - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
         - "apps/server/tests/source_management.rs::admin_can_create_source"
         - "apps/server/tests/source_management.rs::admin_can_get_source_by_id"
@@ -1108,6 +1118,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-domain/src/node_chain.rs::deep_chain_and_cycle_do_not_depend_on_thread_stack_depth"
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-CHAIN-RACE"
         - "apps/server/tests/node_pool.rs::node_chain_cycle_rejected"
         - "apps/server/tests/node_pool.rs::node_chain_self_reference_rejected"
@@ -1191,6 +1202,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/src/template/selection_scope_tests.rs::dynamic_groups_preserve_pagination_and_selector_intersection"
+        - "crates/deve-sub-application/src/template/selection_scope_tests.rs::dynamic_selection_does_not_fetch_ignored_pins"
         - "apps/server/tests/template_management.rs::gen005_dynamic_selection_includes_new_nodes"
       status: pass
   - id: GEN-006
@@ -1204,6 +1217,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/src/template/selection_scope_tests.rs::fixed_groups_reuse_pinned_nodes_and_preserve_reference_diagnostics"
         - "apps/server/tests/template_management.rs::gen006_fixed_selection_excludes_new_nodes"
         - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen006_groups_cannot_expand_fixed_or_dynamic_selection"
         - "crates/deve-sub-application/tests/generation_safety/mod.rs::gen006_empty_selection_and_resolved_group_preserve_scope"
@@ -1219,6 +1233,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/src/template/selection_scope_tests.rs::fixed_groups_reuse_pinned_nodes_and_preserve_reference_diagnostics"
         - "apps/server/tests/template_management.rs::gen007_quick_group_by_region"
       status: pass
   - id: GEN-008
@@ -1232,6 +1247,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/src/template/selection_scope_tests.rs::dynamic_groups_preserve_pagination_and_selector_intersection"
         - "apps/server/tests/template_management.rs::gen008_quick_group_by_protocol"
       status: pass
   - id: GEN-009
@@ -1271,6 +1287,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/src/template/selection_scope_tests.rs::fixed_groups_reuse_pinned_nodes_and_preserve_reference_diagnostics"
         - "apps/server/tests/template_management.rs::gen011_node_deletion_reports_missing_refs"
       status: pass
   - id: GEN-012
@@ -1284,6 +1301,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-domain/src/template/chain.rs::deep_group_references_use_bounded_call_stack"
         - "apps/server/tests/template_management.rs::gen012_cyclic_group_dependency_rejected"
       status: pass
   - id: GEN-013
@@ -1591,6 +1609,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-adapters/tests/http_fetcher_proxy.rs::sec003_environment_proxy_cannot_override_pinned_address"
         - "apps/server/tests/probe_sync.rs::probe002_dstatus_sync_writes_traffic_and_snapshot"
       status: pass
   - id: PROBE-003
@@ -1749,8 +1768,9 @@ cases:
     assertions: ["启动通过"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "scripts/tests/test_docker_health.py::main"
+      status: pass
   - id: DEPLOY-004
     title: arm64 镜像
     priority: P1
@@ -1761,8 +1781,9 @@ cases:
     assertions: ["启动通过"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "scripts/tests/test_docker_health.py::main"
+      status: pass
   - id: DEPLOY-005
     title: Docker healthcheck via internalized health command
     priority: P1
@@ -1770,11 +1791,12 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["Docker HEALTHCHECK uses deve-sub health live, container becomes healthy within 60s"]
+    assertions: ["Docker HEALTHCHECK uses deve-sub health live, containers become healthy within 60s on both amd64 and arm64"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "scripts/tests/test_docker_health.py::main"
+      status: pass
   - id: UPDATE-001
     title: 签名更新
     priority: P1
@@ -1846,6 +1868,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-adapters/tests/http_fetcher_proxy.rs::sec003_environment_proxy_cannot_override_pinned_address"
         - "crates/deve-sub-adapters/tests/http_fetcher.rs::fetcher_pins_ssrf_checker_ip"
         - "crates/deve-sub-adapters/tests/http_fetcher.rs::ssrf_checker_called_before_connect"
       status: pass

@@ -165,6 +165,11 @@ plaintext is never persisted or logged.
 
 ### Probe source adapter Port
 
+Panel HTTP requests share the M4 SSRF boundary: pin checked destination IPs,
+disable automatic redirects and disable inherited environment/system proxies.
+Proxy resolution must not replace the validated destination. SEC-003 also
+exercises the shared panel HTTP client through the DStatus adapter.
+
 ```text
 Port trait: ProbeSourceAdapter
   async fn sync_traffic(&self, source: &ProbeSource)
@@ -288,7 +293,12 @@ Chain validation (on save):
 M5's `ChainGraph` handles proxy-group-level chain dependency. Node-level chain
 is a separate graph: each node's `chain` field lists the nodes its traffic
 traverses. The DFS cycle-detection algorithm is reused from M5's pattern but
-applied to the node-level graph.
+applied to the node-level graph. Both use shared, explicit heap frames rather
+than recursion: short per-node chains do not bound the complete graph's depth.
+Keep deterministic root/neighbor order and the complete closed cycle path.
+Traversal is O(V + E) after ordering, with O(V + E) auxiliary heap memory and
+constant call-stack use. NODE-018 includes deep acyclic and cyclic graphs on a
+small worker stack; no global 500-node pool limit is assumed.
 
 ### Traffic aggregation
 

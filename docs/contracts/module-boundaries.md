@@ -96,6 +96,14 @@ live bindings for remote labels.
 
 ### Source cache invalidation (M4/M5)
 
+`UpdateSourceRequest.url` is optional: omission/null retains the current secret,
+while a nonempty string explicitly replaces it; an empty string returns 400.
+Response URLs remain masked. `SourceRepository::update_config` atomically
+applies a `SourceConfigUpdate`, preserving an omitted URL's ciphertext, HTTP
+method and headers from the current row. It returns the updated source and
+commits its pool-revision invalidation together; concurrent URL replacement
+cannot be reverted by an unrelated edit that omitted the URL.
+
 `SourceRepository::update` and `delete` commit their pool-revision invalidation
 atomically with the source mutation. Prior
 generation semantics are not trusted as direct hits or last-good fallback.
@@ -205,6 +213,35 @@ deve-sub-storage-sqlite, deve-sub-adapters → port traits in domain/application
 - Architecture: `docs/plan/03-architecture.md`
 - Workspace layout: `docs/plan/04-workspace-layout.md`
 - API boundary: ADR-0001, ADR-0004
+
+### Production dependency checks
+
+The architecture gate classifies every workspace package. Normal,
+target-specific and build dependencies obey the same boundary; dev-only
+integration-test dependencies may use real adapters. New packages require an
+explicit classification. The permitted local dependencies are:
+
+| Package family (`deve-sub-*`) | Permitted production dependencies |
+|---|---|
+| kernel, contract, ci tooling | No other workspace package |
+| domain, security, observability | kernel |
+| protocol, emitter, compatibility | kernel, domain |
+| application | kernel, contract, domain, security, protocol, emitter, compatibility |
+| storage-sqlite, inmemory, adapters | kernel, domain, application, security |
+| server | kernel, contract, domain, application, security, compatibility, web |
+| web | contract |
+| cli | All production packages; never CI tooling |
+
+Domain/value/codec/application packages cannot depend on SQLx, Axum, Reqwest or
+Dioxus. Kernel, contract and domain also exclude Tokio. Web cannot depend on
+server I/O frameworks; server cannot depend on SQLx or Reqwest. Library errors
+remain structured with `thiserror`; `anyhow` is confined to CLI composition
+and repository tool entry points. These are dependency checks, not proof that
+every function respects its layer; source review remains necessary.
+
+Verification: `python3 scripts/check_architecture.py` checks all tracked and
+untracked Rust source, including tooling; `python3 scripts/tests/test_architecture.py`
+injects forbidden edges, target/build bypasses and valid integration-test edges.
 
 ## HTTP state capabilities
 

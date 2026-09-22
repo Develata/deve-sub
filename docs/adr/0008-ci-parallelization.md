@@ -115,6 +115,26 @@ An isolated Dioxus install-root cache addresses that measured invalidation.
 Its future wall-time benefit must be measured on a new GitHub run, not inferred
 from a local cache hit.
 
+## 2026-09-22 bounded browser matrix and Rust tooling amendment
+
+The four browser lanes split legacy UI, functional API, desktop and mobile
+without changing their test selection. Legacy seeded state remains serial;
+each isolated functional lane uses two workers on its own runner. A static
+four-lane matrix reuses the same verified producer artifacts, disables
+fail-fast, and retains unique failure reports. This removes the previous
+single-job serialization without adding a custom scheduler. Runner startup,
+dependency/browser installation and queueing remain costs; wall-time savings
+require a new remote measurement and are not established by local checks.
+
+Static inventory and the schema-v3 gate move into the small `deve-sub-ci` Rust
+workspace binary, sharing the Cargo toolchain and baseline. Python artifact
+provenance and platform-specific glue stay in place. PR concurrency replaces
+only obsolete runs of that PR. Non-PR groups include the run ID, because
+GitHub replaces a pending member of a shared group even with cancellation of
+running jobs disabled. Every job now has a finite explicit timeout.
+
+See [GitHub workflow concurrency and timeout semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax).
+
 ## References
 
 - `.github/workflows/ci.yml` — WHY comments carry the change-set labels

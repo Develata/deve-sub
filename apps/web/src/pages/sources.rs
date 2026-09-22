@@ -38,7 +38,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
     let mut f_url = use_signal(String::new);
     let mut f_type = use_signal(|| SourceTypeDto::Auto);
     let mut f_auto = use_signal(|| false);
-    let mut f_interval = use_signal(|| 3600u64);
+    let mut f_interval = use_signal(|| "3600".to_string());
     let mut f_keep = use_signal(|| true);
     let mut f_enabled = use_signal(|| true);
     let mut f_filter_rules = use_signal(|| Option::<_>::None);
@@ -89,7 +89,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         f_url.set(String::new());
         f_type.set(SourceTypeDto::Auto);
         f_auto.set(false);
-        f_interval.set(3600);
+        f_interval.set("3600".to_string());
         f_keep.set(true);
         f_enabled.set(true);
         f_filter_rules.set(None);
@@ -99,10 +99,11 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
 
     let mut open_edit = move |source: SourceDto| {
         f_name.set(source.name.clone());
-        f_url.set(source.url.clone());
+        // WHY: list/detail URLs are redacted; an empty edit draft preserves the secret.
+        f_url.set(String::new());
         f_type.set(source.source_type);
         f_auto.set(source.auto_update);
-        f_interval.set(source.update_interval_secs);
+        f_interval.set(source.update_interval_secs.to_string());
         f_keep.set(source.keep_on_fail);
         f_enabled.set(source.enabled);
         f_filter_rules.set(source.filter_rules.clone());
@@ -115,7 +116,8 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         modal.set(Modal::Delete(source));
     };
 
-    let close_modal = move |_| {
+    let close_modal = move |()| {
+        if *saving.read() { return; }
         modal.set(Modal::None);
     };
 
@@ -192,22 +194,28 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
         });
     };
 
-    let do_submit = move |_| {
+    let do_submit = move |()| {
+        if *saving.read() { return; }
+        form_error.set(String::new());
         let state = (*modal.read()).clone();
         match state {
             Modal::Create => {
-                let name = f_name.read().clone();
-                let url = f_url.read().clone();
+                let name = f_name.read().trim().to_string();
+                let url = f_url.read().trim().to_string();
                 if name.is_empty() || url.is_empty() {
-                    form_error.set("Name and URL are required".to_string());
+                    form_error.set(t(l, "sources.required").to_string());
                     return;
                 }
+                let Ok(interval) = f_interval.read().parse::<u64>() else {
+                    form_error.set(t(l, "sources.interval_invalid").to_string());
+                    return;
+                };
                 let req = CreateSourceRequest {
                     name,
                     source_type: *f_type.read(),
                     url,
                     auto_update: *f_auto.read(),
-                    update_interval_secs: *f_interval.read(),
+                    update_interval_secs: interval,
                     keep_on_fail: *f_keep.read(),
                     filter_rules: f_filter_rules.read().clone(),
                 };
@@ -231,18 +239,22 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
             }
             Modal::Edit(source) => {
                 let id = source.id.clone();
-                let name = f_name.read().clone();
-                let url = f_url.read().clone();
-                if name.is_empty() || url.is_empty() {
-                    form_error.set("Name and URL are required".to_string());
+                let name = f_name.read().trim().to_string();
+                let url = f_url.read().trim().to_string();
+                if name.is_empty() {
+                    form_error.set(t(l, "sources.name_required").to_string());
                     return;
                 }
+                let Ok(interval) = f_interval.read().parse::<u64>() else {
+                    form_error.set(t(l, "sources.interval_invalid").to_string());
+                    return;
+                };
                 let req = UpdateSourceRequest {
                     name,
                     source_type: *f_type.read(),
-                    url,
+                    url: (!url.is_empty()).then_some(url),
                     auto_update: *f_auto.read(),
-                    update_interval_secs: *f_interval.read(),
+                    update_interval_secs: interval,
                     enabled: *f_enabled.read(),
                     keep_on_fail: *f_keep.read(),
                     filter_rules: f_filter_rules.read().clone(),
@@ -287,7 +299,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
 
     rsx! {
         div { class: "space-y-4",
-            div { class: "flex items-center justify-between",
+            div { class: "flex flex-wrap items-center justify-between gap-3",
                 h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "sources.title")} }
                 div { class: "flex gap-2",
                     button {
@@ -317,11 +329,11 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                 div { class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{error}" }
             } else if sources.read().is_empty() {
                 div { class: "rounded-md border border-stone-200 p-8 text-center dark:border-stone-800",
-                    p { class: "text-sm text-stone-500 dark:text-stone-400", "暂无订阅源" }
+                    p { class: "text-sm text-stone-500 dark:text-stone-400", {t(l, "sources.empty")} }
                 }
             } else {
                 div { class: "overflow-x-auto rounded-lg border border-stone-200 dark:border-stone-800",
-                    table { class: "w-full text-sm",
+                    table { class: "source-table w-full text-sm",
                         thead {
                             tr { class: "border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
                                 th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "sources.name")} }
@@ -342,8 +354,8 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                                         tr {
                                             key: "{id}",
                                             class: "border-b border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-800/50",
-                                            td { class: "px-4 py-3 font-medium text-stone-900 dark:text-stone-100", "{source.name}" }
-                                            td { class: "px-4 py-3 text-stone-500 dark:text-stone-400",
+                                            td { class: "source-identity px-4 py-3 font-medium text-stone-900 dark:text-stone-100", "{source.name}" }
+                                            td { class: "source-address px-4 py-3 text-stone-500 dark:text-stone-400",
                                                 span { class: "block max-w-xs truncate", "{source.url}" }
                                             }
                                             td { class: "px-4 py-3 text-stone-500 dark:text-stone-400",
@@ -356,7 +368,7 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                                                     span { class: "inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-400", {t(l, "nodes.disabled")} }
                                                 }
                                             }
-                                            td { class: "px-4 py-3 text-right",
+                                            td { class: "source-actions px-4 py-3 text-right",
                                                 div { class: "flex justify-end gap-1",
                                                     button {
                                                         class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",

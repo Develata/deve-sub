@@ -246,6 +246,9 @@ impl<C: SsrfChecker> HttpFetcher<C> {
         }
 
         let mut builder = reqwest::Client::builder()
+            // WHY: a system proxy resolves/connects independently of our
+            // checked DNS addresses, invalidating the SSRF pin (SEC-003).
+            .no_proxy()
             .timeout(self.timeout)
             .redirect(reqwest::redirect::Policy::none())
             .gzip(true)

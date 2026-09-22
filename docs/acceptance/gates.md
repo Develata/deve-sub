@@ -69,7 +69,8 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
 
 - CI static topology: `plan/14-ci-verification.md`; evidence format:
   `contracts/ci-evidence.md`. Run `python3 -m unittest discover -s scripts/ci/tests`
-  and `python3 scripts/ci/inventory.py`. The matrix covers every workspace member
+  and `cargo test --locked -p deve-sub-ci`, then
+  `cargo run --locked -p deve-sub-ci -- inventory`. The matrix covers every workspace member
   and must run the exact full Cargo command. GitHub job results feed the final
   gate; artifacts retain separate source/run/content provenance. There is no
   shadow planner or Rust execution receipt protocol.
@@ -78,10 +79,22 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
   optional OpenAPI dependency, source fuse and immutable Action references.
   Reviewed legacy source-size exceptions live only in
   `scripts/architecture-exceptions.json`; they cannot grow silently.
+  `python3 scripts/tests/test_architecture.py` verifies forbidden layer edges,
+  target/build dependencies and permitted test-only adapters.
 - Native installer regression: `python3 scripts/tests/test_install.py --binary
   target/debug/deve-sub --web-dir apps/web/dist` requires bubblewrap and built
   assets. It isolates filesystem/PID state, uses real CLI/database/Web paths
   and simulates systemd/account management; it is not DEPLOY-002 VM evidence.
+- `python3 scripts/tests/test_docker_health.py --image TAG --platform linux/amd64`
+  (or `linux/arm64`) verifies an already built image's architecture, unchanged
+  internal healthcheck, <=60s healthy transition, live/ready/Web HTTP and UID
+  1000. Each run removes its own labeled container and uses tmpfs rather than
+  persistent data. The regular Docker job and both multiarch images use this
+  same smoke; a local image from an earlier revision proves only the smoke
+  tool, not the current source build.
+- `python3 scripts/tests/test_docker_health_deadline.py` checks the HTTP probe's
+  total deadline against a real continuously streaming loopback response and
+  verifies that normal responses and signal-handler restoration still work.
 - `cargo deny --locked check`: advisory, license and registry policy. Exact
   advisory exceptions and their rationale live in `deny.toml`.
 - `python3 scripts/install-validators.py /tmp/deve-sub-validators`: checksum-
@@ -772,3 +785,165 @@ soak or exhaustive concurrency interleavings were tested locally. The checked
 regex deadline is not hard preemption of a database await or an individual
 match. Clients receive the update on their next pull; already downloaded
 configurations remain outside server control.
+
+
+## Global quality and performance slice — 2026-09-22
+
+Base: `23cf9ee`; branch: `fix/global-quality-performance`. Scope: M4/M5/M7/M8,
+SRC-001, SEC-003, PROBE-002, NODE-018, GEN-005/006/007/008/011/012,
+UI-009/010 and ADR-0008. Main agent integrated and independently verified the
+findings; backend, CI and UI owners worked in separate directories. The CI
+reviewer independently closed the backend, proxy, source-secret and UI lanes;
+main reviewed CI. No accepted blocker remains.
+
+Results and limits are detailed in the
+[global quality report](../report/2026-09-22-global-quality.md):
+
+- `cargo fmt --all -- --check`, locked workspace check and strict Clippy with
+  all targets/features passed. Full locked workspace tests exited 0: 97 test
+  targets, 1,100 passed, 0 failed, 8 explicitly ignored cases: 7 require
+  external validators and 1 is the separately executed real-process soak.
+  Benchmark smoke also passed. The isolated proxy test repeats itself in a
+  child process; that child summary is excluded from these totals. A prior
+  run printed successful suites but the executor returned 143; the complete
+  command was rerun independently to obtain the confirmed exit 0.
+- Doc tests passed (14 library crates, no executable examples). `cargo deny
+  --locked check` passed advisories, bans, licenses and sources. Current release
+  CLI and WASM built; CSS regeneration was byte-identical and release-generated
+  OpenAPI matched the committed projection. Existing WASM warnings remain.
+- Docs/acceptance: 157 cases, 496 verified proof references, 150 pass and 7
+  historical not-run rows. Architecture: 16 classified crates and 9 mutation
+  tests. CI Rust tool: 17 tests and live inventory of 9 Rust shards / 16
+  packages / 4 browser lanes. Python tooling: 11 tests. `actionlint ci.yml`
+  passed. Collection proved the functional API/desktop/mobile partition is
+  disjoint and complete (15 + 31 + 31).
+- Final release CLI plus rebuilt WASM: all 77 functional cases passed in 81.81s
+  with two workers, then all 16 legacy cases passed in 31.17s; zero retries,
+  zero flaky and zero skipped. Existing deadlines were retained. Chromium
+  build 1234 (151.0.7922.34) was available as the full browser; temporary local
+  configs selected that channel and separate evidence paths. CI retains its
+  browser installation. Three process-lifecycle cases passed separately.
+  Source dialog and completed mobile screenshots were inspected. The initial
+  overloaded debug run had two timeouts; the report preserves those conditions.
+- A 90-second real debug-process soak completed 502 cycles / 2,450 requests,
+  zero unexpected failures, zero ERROR/task panics and zero final tracked jobs;
+  FD tail stayed at 24, RSS tail about 26–32 MiB. This is bounded lifecycle
+  evidence, not proof of long-term absence of leaks.
+
+Reproduction entry points remain the commands above, `tests/e2e/functional.config.ts`,
+`tests/e2e/playwright.config.ts`, `tests/e2e/lifecycle.config.ts` and
+`scripts/perf/soak.py`. Transient logs use `/tmp/deve-sub-quality-*`; benchmark
+samples live under `target/criterion/generate_*/generate/fixed-16-uncached/`.
+The report records methodology rather than promising those temporary files
+are archived.
+
+No push, release, deployment or GitHub settings change was performed. Remote
+Actions timing/cancellation, Docker/ARM64 runtime, signed-update paths and
+external-validator binaries were not run locally in this slice. Existing
+not-run performance-budget rows remain not-run despite benchmark smoke.
+Branding configuration drift is explicitly retained in the report as follow-up.
+
+## Installed validators and default-browser follow-up (2026-09-22)
+
+This follow-up binds M8 DEPLOY-003/004/005 to the shared runtime smoke and
+extends the ADR-0008 static CI inventory. The main owner changed the workflow,
+Rust inventory and evidence; backend owned the smoke and reviewed CI; the UI
+reviewer independently tested the smoke's HTTP deadline and real browser path.
+
+- Actual installed Mihomo 1.19.0, sing-box 1.13.14 and Xray 26.3.27 passed all
+  seven ignored emitter validator tests (3 + 2 + 2), with zero skips. Run the
+  `out001_mihomo_check`, `out003_singbox_check` and `out004_xray_check` test
+  targets with the installed validator directory on PATH and
+  `-- --ignored --test-threads=1`. This proves fixture configuration validation,
+  not complete external protocol/network compatibility.
+- Original Playwright configs with default Headless Shell build 1234 passed
+  77 functional, 16 legacy and 3 lifecycle tests: 94.253s, 38.8s and 0.774s.
+  No channel override, relaxed timeout, retry, flaky or skipped test. Browser
+  processes, test services and temporary E2E directories were removed.
+- The full current-source amd64 Docker image built successfully after a
+  Debian HTTP 502 failure and one unchanged-command retry. Production sources
+  match `e33114e`; image ID:
+  `sha256:c27921b3f46e4bb71b5b9191f824b4e6d2e9069429720ef3c93b912f8afd3c8e`.
+  Default Docker health became healthy in 5.751s; all three HTTP checks, UID
+  1000 and zero anonymous volumes passed. Bootstrap/login/recreation/rejected
+  invalid credentials and 45,000-record bounded log rotation also passed.
+  These are local source-build results, not publication of a new image.
+- A real browser against that Docker image completed Web setup/login and
+  source create/rename-with-omitted-URL/reload/delete. WASM loaded with the
+  correct MIME type; no JavaScript exception occurred. Desktop and 390px
+  mobile screenshots were inspected. Container/browser/profile cleanup passed.
+- ARM64 source build failed before application execution: runtime-stage
+  `/bin/sh` returned `exec format error`. The Docker Desktop builder lists
+  ARM64 but local emulation does not execute it. No privileged binfmt changes
+  were made. DEPLOY-004 is blocked; DEPLOY-005 also remains blocked because M8
+  requires both architecture healthchecks, despite the passing amd64 result.
+  CI config includes QEMU and now loads and exercises both architecture images,
+  retaining either runtime failure.
+- The new smoke checks the unchanged image healthcheck and a 60-second
+  healthy deadline, uses loopback/tmpfs and removes only its labeled container.
+  Wrong architecture and handled termination were tested using an old local
+  image solely as harness evidence. A real slow stream reproduced the old
+  socket-timeout gap; a whole-request deadline now fails it at about 5s.
+  Two short loopback regression tests cover slow/normal bodies and restored
+  alarm state. Old-image smoke results do not certify current product source.
+- Final affected checks passed: Rust CI tool 19 tests; live inventory of 9
+  shards / 16 packages / 4 browser lanes; Python CI 11, architecture 9,
+  soak harness 1 and HTTP deadline 2 tests; fmt, workspace strict Clippy,
+  doc tests and actionlint. Docs/acceptance: 157 cases, 151 pass, 2 blocked,
+  4 not-run, 497 verified pass-proof references. Prior full product Rust
+  tests remain applicable because production sources did not change here.
+
+Raw transient evidence uses `/tmp/deve-sub-followup-*` and
+`/tmp/deve-sub-docker-web-smoke-20260922-*`. The
+[report](../report/2026-09-22-global-quality.md) records limits and conditions.
+Signed-update VM checks, 10k-node performance budgets and remote Actions are
+still not-run. No push, release or GitHub settings change occurred.
+
+## ARM64 execution after authorized emulator registration (2026-09-22)
+
+This follow-up closes the local M8 DEPLOY-004/005 execution blocker above.
+The owner is the main agent; backend independently reviews the two-architecture
+evidence, CI owns build/runtime execution and UI owns the real browser smoke.
+Only acceptance projections change; product Rust sources and the CI workflow
+are unchanged. No blueprint change or new feature is introduced.
+
+With explicit user authorization, `tonistiigi/binfmt` at digest
+`sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0`
+registered only ARM64 through a privileged container. The command exited 0;
+`qemu-aarch64` is enabled with `POCF` flags. Its temporary installation container
+was removed, while the handler registration remains active. Execution is QEMU
+user-mode on the x86_64 Docker Desktop/WSL2 host, not native ARM hardware.
+
+- A complete source build at `4d128cf` exited 0 in 844.966s. Production sources
+  match the preceding amd64 `e33114e` build. The inspected image is linux/arm64,
+  tag `deve-sub:arm64-authorized-4d128cf`, image ID
+  `sha256:0587e18c0e384166a96407b5bf7a004580a673dd1c3540a2b818ef2303c928dc`.
+  The previously failing ARM64 shell/runtime layer now executes successfully.
+- `python3 scripts/tests/test_docker_health.py --image
+  deve-sub:arm64-authorized-4d128cf --platform linux/arm64` exited 0. Default
+  entrypoint and internal healthcheck were unchanged: Docker healthy in
+  6.922s, live/ready/Web all 200, UID 1000, zero anonymous volumes and owned
+  container removed. Together with the same-source amd64 5.751s result, both
+  architectures meet M8's 60s requirement.
+- With `DOCKER_DEFAULT_PLATFORM=linux/arm64`, the existing bootstrap and
+  logging scripts exited 0 in 38.498s and 5.737s. Environment/Web setup and
+  login, recreation preserving original credentials, and three invalid
+  bootstrap cases passed. Log rotation kept 26,567,322 bytes after 45,000
+  records; old records were discarded and the latest ending was preserved.
+  Independent cleanup checks found no owned test container, volume or network.
+- Default Headless Shell 1234 against that ARM64 image completed Web setup,
+  login and source create/rename-with-omitted-URL/reload/delete. WASM loaded
+  with the correct MIME type; JavaScript exceptions were zero. Desktop and
+  mobile screenshots were inspected. Its unmodified healthcheck passed in
+  7.047s; the browser journey took 2.934s. Container, browser process and
+  temporary profile cleanup passed, with existing deadlines and no retries.
+
+DEPLOY-004/005 now pass, and the 005 assertion explicitly requires both
+architectures. Docs/acceptance gates passed: 157 cases, 153 pass, 0 blocked,
+4 not-run and 499 verified pass-proof references; generated TSV is consistent.
+The unchanged Rust baseline was not repeated for these evidence-only edits.
+Logs use `/tmp/deve-sub-arm64-authorized-*` and
+`/tmp/deve-sub-arm64-docker-web-smoke-20260922-*`. Prior failed-build evidence
+is retained. This does not establish native ARM performance or remote CI timing;
+signed-update VM checks and 10k-node performance budgets remain not-run.
+No push, image publication or GitHub settings change occurred.

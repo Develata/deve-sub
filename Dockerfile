@@ -18,6 +18,7 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY apps/ apps/
+COPY tools/ tools/
 COPY migrations/ migrations/
 COPY scripts/ scripts/
 # WHY: the Web template editor embeds this preset with include_str! at compile time.

@@ -31,6 +31,9 @@ crates/
 ├── observability/          # tracing, metrics
 └── testkit/                # test helpers
 
+tools/
+└── ci/                     # repository-only inventory and result policy
+
 spikes/                     # excluded from workspace (UI spike, etc.)
 frontend-assets/
 migrations/
@@ -62,6 +65,12 @@ crates/kernel
 and `crates/emitter` depend on `crates/domain`. Adapter crates depend on Port
 traits defined in `crates/domain` or `crates/application`, not the other way
 around.
+
+`tools/ci` (`deve-sub-ci`) is repository tooling with only general-purpose
+dependencies. It is a workspace member so ordinary Rust lint/test gates cover
+it, but production crates must not depend on it and release packages contain
+only the product binary. GitHub Actions remains the scheduler; the tool owns
+the policy checks defined in `14-ci-verification.md`.
 
 ## Spike exclusion
 

@@ -20,6 +20,13 @@ Runtime rotation and audit retention/manual cleanup are documented in
 [日志管理](logging.md). Compose bounds its own runtime logs; database audit history
 defaults to 90 days in builds containing the M10 lifecycle extension (0 disables).
 
+Subscription-source refresh and traffic-panel sync connect directly to the
+addresses checked by their SSRF guard. They do not inherit `HTTP_PROXY`,
+`HTTPS_PROXY` or `ALL_PROXY`; proxy-side DNS resolution would invalidate the
+checked destination. Deployments must provide direct reachability to these
+sources/panels. This does not change client proxy configurations generated for
+subscribers, or explicitly configured real-proxy node tests.
+
 `deve-sub update` replaces the native binary and checks a signed manifest by
 default. With Web serving enabled (including default configuration), it refuses
 before downloading unless `--binary-only` explicitly accepts frontend version

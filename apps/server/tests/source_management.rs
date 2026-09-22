@@ -13,6 +13,9 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
+#[path = "source_management/secret_update.rs"]
+mod secret_update;
+
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,

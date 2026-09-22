@@ -85,6 +85,16 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
   target/debug/deve-sub --web-dir apps/web/dist` requires bubblewrap and built
   assets. It isolates filesystem/PID state, uses real CLI/database/Web paths
   and simulates systemd/account management; it is not DEPLOY-002 VM evidence.
+- `python3 scripts/tests/test_docker_health.py --image TAG --platform linux/amd64`
+  (or `linux/arm64`) verifies an already built image's architecture, unchanged
+  internal healthcheck, <=60s healthy transition, live/ready/Web HTTP and UID
+  1000. Each run removes its own labeled container and uses tmpfs rather than
+  persistent data. The regular Docker job and both multiarch images use this
+  same smoke; a local image from an earlier revision proves only the smoke
+  tool, not the current source build.
+- `python3 scripts/tests/test_docker_health_deadline.py` checks the HTTP probe's
+  total deadline against a real continuously streaming loopback response and
+  verifies that normal responses and signal-handler restoration still work.
 - `cargo deny --locked check`: advisory, license and registry policy. Exact
   advisory exceptions and their rationale live in `deny.toml`.
 - `python3 scripts/install-validators.py /tmp/deve-sub-validators`: checksum-
@@ -832,3 +842,59 @@ Actions timing/cancellation, Docker/ARM64 runtime, signed-update paths and
 external-validator binaries were not run locally in this slice. Existing
 not-run performance-budget rows remain not-run despite benchmark smoke.
 Branding configuration drift is explicitly retained in the report as follow-up.
+
+## Installed validators and default-browser follow-up (2026-09-22)
+
+This follow-up binds M8 DEPLOY-003/004/005 to the shared runtime smoke and
+extends the ADR-0008 static CI inventory. The main owner changed the workflow,
+Rust inventory and evidence; backend owned the smoke and reviewed CI; the UI
+reviewer independently tested the smoke's HTTP deadline and real browser path.
+
+- Actual installed Mihomo 1.19.0, sing-box 1.13.14 and Xray 26.3.27 passed all
+  seven ignored emitter validator tests (3 + 2 + 2), with zero skips. Run the
+  `out001_mihomo_check`, `out003_singbox_check` and `out004_xray_check` test
+  targets with the installed validator directory on PATH and
+  `-- --ignored --test-threads=1`. This proves fixture configuration validation,
+  not complete external protocol/network compatibility.
+- Original Playwright configs with default Headless Shell build 1234 passed
+  77 functional, 16 legacy and 3 lifecycle tests: 94.253s, 38.8s and 0.774s.
+  No channel override, relaxed timeout, retry, flaky or skipped test. Browser
+  processes, test services and temporary E2E directories were removed.
+- The full current-source amd64 Docker image built successfully after a
+  Debian HTTP 502 failure and one unchanged-command retry. Production sources
+  match `e33114e`; image ID:
+  `sha256:c27921b3f46e4bb71b5b9191f824b4e6d2e9069429720ef3c93b912f8afd3c8e`.
+  Default Docker health became healthy in 5.751s; all three HTTP checks, UID
+  1000 and zero anonymous volumes passed. Bootstrap/login/recreation/rejected
+  invalid credentials and 45,000-record bounded log rotation also passed.
+  These are local source-build results, not publication of a new image.
+- A real browser against that Docker image completed Web setup/login and
+  source create/rename-with-omitted-URL/reload/delete. WASM loaded with the
+  correct MIME type; no JavaScript exception occurred. Desktop and 390px
+  mobile screenshots were inspected. Container/browser/profile cleanup passed.
+- ARM64 source build failed before application execution: runtime-stage
+  `/bin/sh` returned `exec format error`. The Docker Desktop builder lists
+  ARM64 but local emulation does not execute it. No privileged binfmt changes
+  were made. DEPLOY-004 is blocked; DEPLOY-005 also remains blocked because M8
+  requires both architecture healthchecks, despite the passing amd64 result.
+  CI config includes QEMU and now loads and exercises both architecture images,
+  retaining either runtime failure.
+- The new smoke checks the unchanged image healthcheck and a 60-second
+  healthy deadline, uses loopback/tmpfs and removes only its labeled container.
+  Wrong architecture and handled termination were tested using an old local
+  image solely as harness evidence. A real slow stream reproduced the old
+  socket-timeout gap; a whole-request deadline now fails it at about 5s.
+  Two short loopback regression tests cover slow/normal bodies and restored
+  alarm state. Old-image smoke results do not certify current product source.
+- Final affected checks passed: Rust CI tool 19 tests; live inventory of 9
+  shards / 16 packages / 4 browser lanes; Python CI 11, architecture 9,
+  soak harness 1 and HTTP deadline 2 tests; fmt, workspace strict Clippy,
+  doc tests and actionlint. Docs/acceptance: 157 cases, 151 pass, 2 blocked,
+  4 not-run, 497 verified pass-proof references. Prior full product Rust
+  tests remain applicable because production sources did not change here.
+
+Raw transient evidence uses `/tmp/deve-sub-followup-*` and
+`/tmp/deve-sub-docker-web-smoke-20260922-*`. The
+[report](../report/2026-09-22-global-quality.md) records limits and conditions.
+Signed-update VM checks, 10k-node performance budgets and remote Actions are
+still not-run. No push, release or GitHub settings change occurred.

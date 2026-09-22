@@ -1768,8 +1768,9 @@ cases:
     assertions: ["启动通过"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "scripts/tests/test_docker_health.py::main"
+      status: pass
   - id: DEPLOY-004
     title: arm64 镜像
     priority: P1
@@ -1780,8 +1781,9 @@ cases:
     assertions: ["启动通过"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "scripts/tests/test_docker_health.py::main"
+      status: blocked
   - id: DEPLOY-005
     title: Docker healthcheck via internalized health command
     priority: P1
@@ -1792,8 +1794,9 @@ cases:
     assertions: ["Docker HEALTHCHECK uses deve-sub health live, container becomes healthy within 60s"]
     fixtures: []
     evidence:
-      tests: []
-      status: not-run
+      tests:
+        - "scripts/tests/test_docker_health.py::main"
+      status: blocked
   - id: UPDATE-001
     title: 签名更新
     priority: P1

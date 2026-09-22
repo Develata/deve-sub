@@ -90,12 +90,72 @@ Chromium build 1234（151.0.7922.34），临时配置仅切换到完整 Chromium
 发现并补上 `COPY tools/ tools/`。离线临时目录按真实 COPY 输入重现：旧版
 `cargo metadata --locked --no-deps` 退出 101，缺少 `tools/ci/Cargo.toml`；
 补齐后退出 0，识别全部 16 个 workspace 包。两次检查均有 60 秒超时。
-这是源构建输入回归，不是缺少 Docker；尚未因此完成全量容器构建。
+这先证明了源构建输入回归；完整源码镜像的后续结果见下节。
+
+## 工具补齐后的继续验收
+
+用户安装项目固定版本验证器与默认 Headless Shell 后，重新执行实际客户端和
+原始浏览器配置：
+
+- 在 `/home/deve/.local/share/deve-sub/validators` 使用 Mihomo 1.19.0、
+  sing-box 1.13.14、Xray 26.3.27。显式运行三个 emitter 集成测试文件的
+  `--ignored --test-threads=1`，3 + 2 + 2 共 7 项通过，无跳过。这里证明的是
+  受 profile 兼容性过滤的 fixture 配置加载、坏配置拒绝及 Mihomo 原生路由
+  模板检查，不是所有协议/字段或真实代理网络连通性。
+- 原 `functional.config.ts` 使用 2 workers，77/77 通过（94.253 秒）；
+  原 `playwright.config.ts` 16/16 通过（38.8 秒），`lifecycle.config.ts`
+  3/3 通过（0.774 秒）。无 channel 替换、无超时放宽、无自动重试。
+  实际启动的是 Headless Shell build 1234；8 个浏览器进程均正常退出，
+  本轮测试服务与临时 E2E 目录无残留。390px 源列表截图再次目检通过。
+- 复核发现 multiarch CI 只启动 amd64，ARM64 只有构建。这不满足 M8 要求。
+  CI 配置现要求加载并运行两种架构，共用 `scripts/tests/test_docker_health.py`；
+  校验真实镜像架构、原生内置 healthcheck、60 秒内 healthy、live/ready/Web
+  HTTP 和 UID 1000。临时数据使用 tmpfs，失败和正常中断都清理本次容器；
+  两架构均尝试，任何一个失败即阻断。Rust 清单守卫防止删除加载步骤、跳过
+  检查或吞错；工具测试从 17 项增至 19 项。
+- 独立 review 复现 socket 空闲超时不能限制持续慢传：旧探测 7.007 秒仍成功；
+  整次请求增加 POSIX 总期限后，同输入 5.003 秒受控失败，正常响应 0.011 秒
+  通过，计时器与原信号处理器恢复。旧镜像仅用于验证新工具自身，不能提升
+  当前源码的部署验收状态。
+- 当前生产源码与 `e33114e` 一致的 amd64 镜像完整构建成功；构建包含
+  Dioxus CLI、后端及实际 WASM 前端，未使用旧应用镜像代替。首次构建因
+  Debian 软件源 HTTP 502 在 253.660 秒失败；原命令重试在 808.250 秒成功。
+  这是本机冷构建记录，不是 GitHub Actions 耗时；未关闭 TLS 校验或更换源。
+  镜像 ID 为
+  `sha256:c27921b3f46e4bb71b5b9191f824b4e6d2e9069429720ef3c93b912f8afd3c8e`，
+  本地标签为 `deve-sub:followup-e33114e-amd64-b4f420a032`。
+- 新镜像默认入口在 5.751 秒变为 Docker healthy；live/ready/Web 均为 200，
+  UID 1000，没有匿名卷。环境变量/Web 初始化与登录、重建保留原管理员、
+  缺失/过短初始凭据在 HTTP 启动前拒绝均通过。日志写入 45,000 条后保留
+  26,567,322 字节，起始记录为 19,030、最新结尾保留。各脚本清理自身资源。
+- 真实浏览器访问新镜像提供的 Web：初始化、登录、源创建、地址留空改名、
+  刷新确认及删除通过；观察到改名 PUT 省略 URL，WASM 200 且类型正确，
+  JavaScript 异常为 0。1280×800 与 390×700 截图目检通过；本次容器、
+  浏览器进程和临时 profile 均已清理。这补充验证了 Docker 内实际产物，
+  不仅是宿主机 release CLI 与本地 dist 的组合。
+- ARM64 完整构建在 21.625 秒失败：runtime stage 的 ARM64 `/bin/sh`
+  执行 `apt-get` 前即 `exec format error`，尚未产生当前 ARM64 镜像。
+  本机 Docker Desktop builder 宣告 `linux/arm64`，但实际模拟执行不可用；
+  未注册特权 binfmt、修改 daemon 或把构建失败改成跳过通过。CI 已配置
+  setup-qemu；其远端实际结果仍未运行。
+
+因此 DEPLOY-003 更新为 pass，DEPLOY-004 为 blocked。M8 要求两种架构
+healthcheck 均通过，故 DEPLOY-005 整体仍为 blocked，只有 amd64 子维度通过。
+当前矩阵为 157 项：151 pass、2 blocked、4 not-run，497 个通过项证明引用。
+Rust CI 工具 19 项、慢传回归 2 项、架构守卫 9 项、Python CI 工具 11 项
+与 soak harness 回归 1 项均通过；fmt、全 workspace 严格 Clippy、doc tests、
+actionlint、静态 CI 清单与文档门禁通过。本节没有修改产品 Rust 源码；前轮
+1,100 项全量测试仍对应同一生产实现，本轮重新验证发生修改的 CI 工具。
+
+补充日志使用 `/tmp/deve-sub-followup-*` 和
+`/tmp/deve-sub-docker-web-smoke-20260922-*`。前轮 8 个 ignored 仍是普通 Cargo
+命令的显式跳过，其中 7 个外部验证器测试本轮单独执行通过，soak 前轮已单独
+执行；不修改 `#[ignore]` 来制造无外部工具时的通过结果。
 
 ## 保留的验证与设计缺口
 
-- 矩阵中的 7 个历史 not-run 仍保留：三个 Docker/架构部署项、两个签名更新项、
-  两个 10k 节点性能预算项。Rust/浏览器通过不会自动提升这些验收状态。
+- 仍未运行两个签名更新项和两个 10k 节点性能预算项；ARM64 运行被本地模拟
+  环境阻塞。Rust/浏览器通过不会自动提升这些验收状态。
 - 本轮不证明 ARM64 运行、所有外部客户端、断电恢复或长期资源上界。
 - WASM 编译仍有既有前端 warning；native 严格 Clippy 不等于 WASM 零警告。
 - Web 的本地产品名称偏好和服务端集中品牌配置仍有设计漂移：设置页保存到

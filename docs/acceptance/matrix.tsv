@@ -112,9 +112,9 @@ CLI-005	doctor	P0	CLI	pass
 CLI-006	Health live/ready subcommand	P1	CLI	pass
 DEPLOY-001	SQLite Compose	P1	Smoke	pass
 DEPLOY-002	Linux 安装	P1	VM Test	pass
-DEPLOY-003	amd64 镜像	P1	CI	not-run
-DEPLOY-004	arm64 镜像	P1	CI	not-run
-DEPLOY-005	Docker healthcheck via internalized health command	P1	DEPLOY	not-run
+DEPLOY-003	amd64 镜像	P1	CI	pass
+DEPLOY-004	arm64 镜像	P1	CI	blocked
+DEPLOY-005	Docker healthcheck via internalized health command	P1	DEPLOY	blocked
 UPDATE-001	签名更新	P1	VM Test	not-run
 UPDATE-002	更新失败	P1	VM Test	not-run
 SEC-001	localhost SSRF	P0	Security	pass

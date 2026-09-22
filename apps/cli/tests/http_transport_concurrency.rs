@@ -42,7 +42,12 @@ async fn start_mock_server() -> String {
 #[tokio::test(flavor = "multi_thread")]
 async fn mock_http_transport_concurrency_smoke() {
     let base_url = start_mock_server().await;
-    let client = reqwest::Client::new();
+    // WHY: this smoke targets the loopback fixture; inherited host proxies
+    // can route requests elsewhere and turn the check into an environment test.
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("loopback client");
     let concurrency = 500;
     let total = 500;
 

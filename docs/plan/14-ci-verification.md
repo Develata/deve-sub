@@ -17,6 +17,28 @@ locked/all-targets/all-features Cargo command, without conditions, filters,
 error suppression or additional shell commands. Doctests remain a separate gate.
 Selective CI and shadow impact planning are not enabled.
 
+Repository-only `deve-sub-ci` owns static inventory and final result evaluation.
+It is a small Rust workspace binary with no application dependencies, not a
+production subcommand or a second scheduler. GitHub Actions still owns process
+execution. Artifact transfer and OS/browser-specific tooling retain their
+existing Python/TypeScript entrypoints.
+
+Browser execution has four static lanes: legacy UI (including process lifecycle
+checks), functional API, functional desktop and functional mobile. All lanes
+must run, with `fail-fast: false` and at most four runners. The shared-state
+legacy suite remains serial; isolated functional lanes use two workers each on
+CI to bound simultaneous servers and password-hashing memory on each runner.
+Inventory rejects missing/duplicate lanes and weakened commands. Each lane
+uploads a uniquely named diagnostic artifact; the job aggregate blocks the
+final gate if any lane fails or is cancelled.
+
+Only superseded runs for the same PR share a workflow concurrency group and
+cancel one another. Non-PR groups include the unique workflow run ID: using a
+branch-only group would replace pending main/release baselines even when
+`cancel-in-progress` is false. Every job has an explicit 5–60 minute timeout;
+inventory rejects missing or unbounded deadlines. Runtime consumers continue
+to use their finer request/test/startup/teardown deadlines.
+
 Static checks and candidate builds may run concurrently. Runtime consumers
 wait for their exact artifacts; Docker still builds from source. Distribution
 builds, signing and publication wait for the entire reusable CI workflow.
@@ -86,9 +108,12 @@ not only a failed consumer with a previous attempt's candidate artifact.
 
 ## Verification
 
-`python3 -m unittest discover -s scripts/ci/tests` checks missing/duplicate
-members, weakened commands, unexpected skips and artifact corruption.
-`python3 scripts/ci/inventory.py` verifies the real metadata/workflow partition.
+`cargo test --locked -p deve-sub-ci` checks missing/duplicate members and browser
+lanes, weakened commands, deadlines, cancellation policy and unexpected skips.
+`cargo run --locked -p deve-sub-ci -- inventory` verifies the real metadata and
+workflow partition; its Cargo metadata child has a 60-second deadline and is
+killed/reaped on timeout. `python3 -m unittest discover -s scripts/ci/tests`
+retains artifact corruption and release-policy tests.
 Existing Rust, docs, compatibility, browser, soak and Docker gates remain.
 The docs gate checks that historical pass cases have existing proof references.
 

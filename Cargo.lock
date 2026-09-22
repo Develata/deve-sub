@@ -1145,6 +1145,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "deve-sub-ci"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+]
+
+[[package]]
 name = "deve-sub-cli"
 version = "0.1.0"
 dependencies = [

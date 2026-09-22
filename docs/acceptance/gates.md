@@ -69,7 +69,8 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
 
 - CI static topology: `plan/14-ci-verification.md`; evidence format:
   `contracts/ci-evidence.md`. Run `python3 -m unittest discover -s scripts/ci/tests`
-  and `python3 scripts/ci/inventory.py`. The matrix covers every workspace member
+  and `cargo test --locked -p deve-sub-ci`, then
+  `cargo run --locked -p deve-sub-ci -- inventory`. The matrix covers every workspace member
   and must run the exact full Cargo command. GitHub job results feed the final
   gate; artifacts retain separate source/run/content provenance. There is no
   shadow planner or Rust execution receipt protocol.
@@ -78,6 +79,8 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
   optional OpenAPI dependency, source fuse and immutable Action references.
   Reviewed legacy source-size exceptions live only in
   `scripts/architecture-exceptions.json`; they cannot grow silently.
+  `python3 scripts/tests/test_architecture.py` verifies forbidden layer edges,
+  target/build dependencies and permitted test-only adapters.
 - Native installer regression: `python3 scripts/tests/test_install.py --binary
   target/debug/deve-sub --web-dir apps/web/dist` requires bubblewrap and built
   assets. It isolates filesystem/PID state, uses real CLI/database/Web paths

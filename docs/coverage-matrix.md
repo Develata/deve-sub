@@ -15,7 +15,7 @@ This matrix keeps the live documentation layers aligned:
 | `00-engineering-constitution` | — | repository `AGENTS.md`, `tasks/module-work-policy.md` | `acceptance/gates.md` |
 | `01-terminology` | all feature vocabulary | `contracts/data-models.md` | matrix vocabulary |
 | `02-product-positioning` | — | — | — |
-| `03-architecture` | — | `contracts/module-boundaries.md` | — |
+| `03-architecture` | — | `contracts/module-boundaries.md` | `scripts/tests/test_architecture.py`, architecture gate |
 | `04-workspace-layout` | — | — | — |
 | `05-protocol-engine` | — | `contracts/data-models.md` | `PARSE-*`, `NODE-*` |
 | `06-output-profiles` | — | — | `OUT-*` |

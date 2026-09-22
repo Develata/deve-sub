@@ -7,30 +7,65 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Production edges are owned by docs/contracts/module-boundaries.md. Dev-only
+# adapters remain valid for integration tests; target-specific and build edges
+# must obey the same boundaries as other production dependencies.
+LAYERS = {
+    "kernel": set(),
+    "contract": set(),
+    "domain": {"kernel"},
+    "security": {"kernel"},
+    "observability": {"kernel"},
+    "protocol": {"kernel", "domain"},
+    "emitter": {"kernel", "domain"},
+    "compatibility": {"kernel", "domain"},
+    "application": {"kernel", "contract", "domain", "security", "protocol", "emitter", "compatibility"},
+    "storage-sqlite": {"kernel", "domain", "application", "security"},
+    "inmemory": {"kernel", "domain", "application", "security"},
+    "adapters": {"kernel", "domain", "application", "security"},
+    "server": {"kernel", "contract", "domain", "application", "security", "compatibility", "web"},
+    "web": {"contract"},
+    "cli": {"kernel", "contract", "domain", "application", "security", "protocol", "emitter", "compatibility", "storage-sqlite", "inmemory", "adapters", "observability", "server", "web"},
+    "ci": set(),
+}
+FRAMEWORKS = {"sqlx", "axum", "reqwest", "dioxus"}
 
-def main():
+
+def dependency_errors(packages):
     errors = []
-    metadata = json.loads(subprocess.check_output(
-        ["cargo", "metadata", "--format-version=1", "--no-deps", "--locked"], cwd=ROOT
-    ))
-    for package in metadata["packages"]:
+    for package in packages:
         name = package["name"]
+        layer = name.removeprefix("deve-sub-")
+        if not name.startswith("deve-sub-") or layer not in LAYERS:
+            errors.append(f"{name}: unclassified workspace package; declare its boundary")
+            continue
         production = {dep["name"] for dep in package["dependencies"] if dep["kind"] != "dev"}
         local = {dep for dep in production if dep.startswith("deve-sub-")}
-        if name == "deve-sub-domain":
-            forbidden = (local - {"deve-sub-kernel"}) | (production & {"sqlx", "axum", "reqwest", "anyhow"})
-        elif name == "deve-sub-server":
-            forbidden = local - {"deve-sub-domain", "deve-sub-kernel", "deve-sub-application", "deve-sub-contract", "deve-sub-compatibility", "deve-sub-security", "deve-sub-web"}
+        forbidden = local - {f"deve-sub-{allowed}" for allowed in LAYERS[layer]}
+        if layer in {"kernel", "contract", "domain", "protocol", "emitter", "compatibility", "application"}:
+            forbidden |= production & FRAMEWORKS
+        if layer in {"kernel", "contract", "domain"}:
+            forbidden |= production & {"tokio"}
+        if layer == "server":
             forbidden |= production & {"sqlx", "reqwest"}
-        elif name == "deve-sub-contract":
-            forbidden = local | (production & {"sqlx", "axum", "tokio", "reqwest"})
-            utoipa = next((d for d in package["dependencies"] if d["name"] == "utoipa"), None)
-            if utoipa and not utoipa["optional"]:
+        if layer == "web":
+            forbidden |= production & {"sqlx", "axum", "reqwest"}
+        if layer not in {"cli", "ci"}:
+            forbidden |= production & {"anyhow"}
+        if layer == "contract":
+            if any(d["name"] == "utoipa" and d["kind"] != "dev" and not d["optional"]
+                   for d in package["dependencies"]):
                 errors.append("contract: utoipa must remain optional for WASM")
-        else:
-            forbidden = set()
         if forbidden:
             errors.append(f"{name}: forbidden production dependencies {sorted(forbidden)}")
+    return errors
+
+
+def main():
+    metadata = json.loads(subprocess.check_output(
+        ["cargo", "metadata", "--format-version=1", "--no-deps", "--locked"], cwd=ROOT, timeout=60
+    ))
+    errors = dependency_errors(metadata["packages"])
 
     exceptions = json.loads((ROOT / "scripts/architecture-exceptions.json").read_text())
     files = subprocess.check_output(
@@ -39,7 +74,7 @@ def main():
     encountered = set()
     for name in set(files):
         path = ROOT / name
-        if not name.endswith(".rs") or not path.is_file() or not name.startswith(("apps/", "crates/")):
+        if not name.endswith(".rs") or not path.is_file() or not name.startswith(("apps/", "crates/", "tools/")):
             continue
         text = path.read_text()
         if name.startswith("apps/server/src/") and re.search(r"State\s*<\s*AppState\s*>", text):

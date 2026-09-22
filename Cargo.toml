@@ -15,6 +15,7 @@ members = [
     "crates/deve-sub-emitter",
     "crates/deve-sub-compatibility",
     "crates/deve-sub-adapters",
+    "tools/ci",
 ]
 exclude = ["spikes/*"]
 resolver = "3"

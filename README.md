@@ -3,10 +3,10 @@
 <p align="center"><strong>把分散的节点，整理成自己的长期订阅。</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Develata/deve-sub/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/Develata/deve-sub?display_name=tag&amp;color=b76b35&amp;label=release"></a>
-  <a href="https://github.com/Develata/deve-sub/actions/workflows/ci.yml"><img alt="main CI" src="https://github.com/Develata/deve-sub/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/Develata/deve-sub/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Develata/deve-sub?display_name=tag&amp;color=b76b35&amp;label=latest%20release"></a>
+  <a href="https://github.com/Develata/deve-sub/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Develata/deve-sub/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-657b64"></a>
-  <img alt="Linux amd64 和 arm64" src="https://img.shields.io/badge/Linux-amd64%20%7C%20arm64-64748b">
+  <img alt="Linux amd64 / arm64" src="https://img.shields.io/badge/Linux-amd64%20%7C%20arm64-64748b">
 </p>
 
 <p align="center">
@@ -17,9 +17,9 @@
   <a href="https://github.com/Develata/deve-sub/issues">反馈问题</a>
 </p>
 
-![Deve Sub 节点管理：在统一列表中搜索、筛选、选择和维护节点](assets/readme/nodes-light.png)
+![Deve Sub 节点管理：手动分类、搜索筛选和节点操作](assets/readme/nodes-light.png)
 
-<p align="center"><sub>真实应用截图 · 本地虚构演示数据 · 节点地址使用保留地址段</sub></p>
+<p align="center"><sub>真实浏览器截图 · 本地虚构演示数据 · 节点地址使用保留地址段</sub></p>
 
 Deve Sub 是一个用 **Rust** 构建的自托管代理订阅管理平台。导入机场订阅、分享链接或配置文件，
 在统一节点池中整理、检测和编排，再为不同设备生成长期订阅 URL。

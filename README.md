@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Develata/deve-sub/releases/tag/v0.1.1">下载 v0.1.1</a> ·
+  <a href="https://github.com/Develata/deve-sub/releases/tag/v0.1.2">下载 v0.1.2</a> ·
   <a href="#quick-start">开始部署</a> ·
   <a href="#features">功能一览</a> ·
   <a href="docs/README.md">项目文档</a> ·
@@ -27,7 +27,7 @@ Deve Sub 是一个用 **Rust** 构建的自托管代理订阅管理平台。导�
 一个服务、一份 SQLite 数据库，配合 Web 管理界面和 CLI。你掌握订阅源、模板、用户权限与数据，
 客户端只需保留自己的订阅地址。
 
-**当前稳定版：[`v0.1.1`](https://github.com/Develata/deve-sub/releases/tag/v0.1.1)。**
+**当前稳定版：[`v0.1.2`](https://github.com/Develata/deve-sub/releases/tag/v0.1.2)。**
 本页的部署命令固定该版本；`main` 后续改动以各自的 release tag 为准。
 已执行证据和未完成项目见[验收矩阵](docs/acceptance/matrix.tsv)。
 
@@ -53,15 +53,15 @@ Deve Sub 是一个用 **Rust** 构建的自托管代理订阅管理平台。导�
 
 ```bash
 curl -fsSL --connect-timeout 15 --max-time 60 \
-  https://raw.githubusercontent.com/Develata/deve-sub/v0.1.1/scripts/install.sh \
-  -o install-deve-sub-v0.1.1.sh
+  https://raw.githubusercontent.com/Develata/deve-sub/v0.1.2/scripts/install.sh \
+  -o install-deve-sub-v0.1.2.sh
 ```
 
-审阅 `install-deve-sub-v0.1.1.sh` 后执行；先让服务只监听本机：
+审阅 `install-deve-sub-v0.1.2.sh` 后执行；先让服务只监听本机：
 
 ```bash
-sudo env DEVE_SUB_VERSION=v0.1.1 DEVE_SUB_BIND=127.0.0.1:8080 \
-  sh install-deve-sub-v0.1.1.sh
+sudo env DEVE_SUB_VERSION=v0.1.2 DEVE_SUB_BIND=127.0.0.1:8080 \
+  sh install-deve-sub-v0.1.2.sh
 ```
 
 打开 **http://127.0.0.1:8080**，按引导创建首个管理员。远程服务器可先通过 SSH 隧道访问：
@@ -78,16 +78,16 @@ ssh -L 8080:127.0.0.1:8080 user@your-server
 <summary><strong>Docker Compose · 拉取发布镜像</strong></summary>
 
 需要 Docker 和 Compose 插件。发布镜像包含 binary 与 Web，支持 Linux `amd64` / `arm64`。
-下载 [`v0.1.1` 随附的 Compose 文件](https://raw.githubusercontent.com/Develata/deve-sub/v0.1.1/docker-compose.yml)，
+下载 [`v0.1.2` 随附的 Compose 文件](https://raw.githubusercontent.com/Develata/deve-sub/v0.1.2/docker-compose.yml)，
 用 `.env` 显式固定镜像版本；初始化前先将端口限制为本机。以下命令用于新目录，
 已有部署请按[升级说明](docs/features/deployment.md#docker-compose)保留原 Compose 项目和数据卷：
 
 ```bash
 mkdir -p deve-sub && cd deve-sub
 curl -fsSL --connect-timeout 15 --max-time 60 \
-  https://raw.githubusercontent.com/Develata/deve-sub/v0.1.1/docker-compose.yml \
+  https://raw.githubusercontent.com/Develata/deve-sub/v0.1.2/docker-compose.yml \
   -o docker-compose.yml
-printf 'DEVE_SUB_IMAGE_TAG=v0.1.1\n' > .env
+printf 'DEVE_SUB_IMAGE_TAG=v0.1.2\n' > .env
 chmod 600 .env
 sed -i 's/"8080:8080"/"127.0.0.1:8080:8080"/' docker-compose.yml
 docker compose pull
@@ -108,7 +108,7 @@ DEVE_SUB_ADMIN_PASSWORD='replace-with-your-own-strong-password'
 请替换示例密码，长度至少 8 字节；包含 `$` 时用单引号避免 Compose 插值，并限制 `.env`
 文件权限。两项均不设置时使用网页初始化；已有用户时不会覆盖原账号。
 
-`v0.1.1` 已发布 `latest` 别名。只有明确愿意跟随未来稳定版时，才将 `.env` 中的版本改为：
+稳定版发布流程会同步维护 `latest` 别名。只有明确愿意跟随未来稳定版时，才将 `.env` 中的版本改为：
 
 ```dotenv
 DEVE_SUB_IMAGE_TAG=latest
@@ -204,7 +204,7 @@ Deve Sub 管理的是**订阅配置分发**；实际代理流量仍由客户端�
 | **`deve-sub update`** | 仅更新 binary，默认验证 Ed25519 signed manifest。Web 模式下默认拒绝此操作；`--binary-only` 是显式接受版本偏差。 |
 | **Docker** | 替换完整版本镜像，保留数据卷；入口会执行数据库迁移，升级前同样需要备份。 |
 
-`v0.1.1` 的 `--force` 仅允许同版本重装，降级另需 `--allow-downgrade`。这些参数不关闭签名验证。
+`v0.1.2` 的 `--force` 仅允许同版本重装，降级另需 `--allow-downgrade`。这些参数不关闭签名验证。
 原生安装器的多文件替换**不是掉电原子事务**；如果出现 pending checkpoint，应按
 [部署说明](docs/features/deployment.md)检查并恢复，保留回滚所需材料。
 旧 release 的具体行为以其对应文档和产物为准。

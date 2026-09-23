@@ -105,7 +105,7 @@ M8 is delivered in five slices:
 ```yaml
 services:
   deve-sub:
-    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.1}
+    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.2}
     ports: ["8080:8080"]
     volumes: ["deve-sub-data:/app/data"]
     healthcheck:

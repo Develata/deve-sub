@@ -1075,7 +1075,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-adapters"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1115,7 +1115,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-application"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "base64",
@@ -1146,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-ci"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -1156,7 +1156,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "base64",
@@ -1190,7 +1190,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-compatibility"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "deve-sub-domain",
  "deve-sub-kernel",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-contract"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1209,7 +1209,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-domain"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "deve-sub-kernel",
@@ -1223,7 +1223,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-emitter"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64",
  "deve-sub-compatibility",
@@ -1240,7 +1240,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-inmemory"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "deve-sub-application",
@@ -1250,7 +1250,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-kernel"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1261,7 +1261,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-observability"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "thiserror 1.0.69",
  "tracing-subscriber",
@@ -1269,7 +1269,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-protocol"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64",
  "criterion",
@@ -1289,7 +1289,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-security"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "argon2",
  "base64",
@@ -1309,7 +1309,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-server"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "axum",
@@ -1343,7 +1343,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-storage-sqlite"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "deve-sub-application",
@@ -1363,7 +1363,7 @@ dependencies = [
 
 [[package]]
 name = "deve-sub-web"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "deve-sub-contract",
  "dioxus",

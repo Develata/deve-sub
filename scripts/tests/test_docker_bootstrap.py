@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import time
@@ -44,7 +45,10 @@ def scenario(image, configured=True, invalid=None):
         source = (ROOT / "docker-compose.yml").read_text()
         # Use the actual Compose interpolation and entrypoint, changing only
         # the test image, host port and restart policy for bounded bad-input runs.
-        source = source.replace("ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}", image)
+        source, image_replacements = re.subn(
+            r"ghcr\.io/develata/deve-sub:\$\{DEVE_SUB_IMAGE_TAG:-v\d+\.\d+\.\d+\}",
+            lambda _: image, source, count=1)
+        assert image_replacements == 1, "Compose release image was not replaced"
         source = source.replace('"8080:8080"', '"127.0.0.1:0:8080"')
         source = source.replace("restart: unless-stopped", 'restart: "no"')
         compose_file = root / "docker-compose.yml"

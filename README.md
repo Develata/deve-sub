@@ -10,14 +10,16 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Develata/deve-sub/releases/tag/v0.1.1">下载 v0.1.1</a> ·
   <a href="#quick-start">开始部署</a> ·
   <a href="#features">功能一览</a> ·
-  <a href="#formats">格式与兼容性</a> ·
   <a href="docs/README.md">项目文档</a> ·
   <a href="https://github.com/Develata/deve-sub/issues">反馈问题</a>
 </p>
 
-![Many sources. One place. 从订阅源、统一节点池到多客户端订阅的流程示意](assets/readme/flow.svg)
+![Deve Sub 节点管理：在统一列表中搜索、筛选、选择和维护节点](assets/readme/nodes-light.png)
+
+<p align="center"><sub>真实应用截图 · 本地虚构演示数据 · 节点地址使用保留地址段</sub></p>
 
 Deve Sub 是一个用 **Rust** 构建的自托管代理订阅管理平台。导入机场订阅、分享链接或配置文件，
 在统一节点池中整理、检测和编排，再为不同设备生成长期订阅 URL。
@@ -25,16 +27,13 @@ Deve Sub 是一个用 **Rust** 构建的自托管代理订阅管理平台。导�
 一个服务、一份 SQLite 数据库，配合 Web 管理界面和 CLI。你掌握订阅源、模板、用户权限与数据，
 客户端只需保留自己的订阅地址。
 
-> 本页描述当前 `main`；下载包的能力以对应 release tag 为准。项目已进入部署验收阶段，
-> 已执行证据与未完成项目见[验收矩阵](docs/acceptance/matrix.tsv)，不以功能列表代替生产验收。
+**当前稳定版：[`v0.1.1`](https://github.com/Develata/deve-sub/releases/tag/v0.1.1)。**
+本页的部署命令固定该版本；`main` 后续改动以各自的 release tag 为准。
+已执行证据和未完成项目见[验收矩阵](docs/acceptance/matrix.tsv)。
 
 <a id="preview"></a>
 
 ## 界面预览
-
-![Deve Sub 节点管理：在统一列表中搜索、筛选、选择和维护节点](assets/readme/nodes-light.png)
-
-<p align="center"><sub>真实应用截图 · 本地虚构演示数据 · 节点地址使用保留地址段</sub></p>
 
 <details>
 <summary>查看深色主题</summary>
@@ -42,6 +41,104 @@ Deve Sub 是一个用 **Rust** 构建的自托管代理订阅管理平台。导�
 ![Deve Sub 深色主题下的节点管理界面](assets/readme/nodes-dark.png)
 
 </details>
+
+<a id="quick-start"></a>
+
+## 开始部署
+
+### Linux · 安装 binary、Web 与 systemd 服务
+
+适用于带 systemd 的 Linux `amd64` / `arm64`。需要 `curl`、`tar`、`sha256sum`、`timeout`、
+`flock` 及管理员权限。先下载并审阅与目标版本对应的安装器：
+
+```bash
+curl -fsSL --connect-timeout 15 --max-time 60 \
+  https://raw.githubusercontent.com/Develata/deve-sub/v0.1.1/scripts/install.sh \
+  -o install-deve-sub-v0.1.1.sh
+```
+
+审阅 `install-deve-sub-v0.1.1.sh` 后执行；先让服务只监听本机：
+
+```bash
+sudo env DEVE_SUB_VERSION=v0.1.1 DEVE_SUB_BIND=127.0.0.1:8080 \
+  sh install-deve-sub-v0.1.1.sh
+```
+
+打开 **http://127.0.0.1:8080**，按引导创建首个管理员。远程服务器可先通过 SSH 隧道访问：
+
+```bash
+ssh -L 8080:127.0.0.1:8080 user@your-server
+```
+
+安装器会配置服务账户、数据目录和与 binary 匹配的 Web 文件。它校验下载文件的 checksum，
+初始信任来自 HTTPS；checksum 本身不验证发布者签名。对外提供服务前配置 HTTPS 反向代理
+和 Secure Cookie。完整操作见[部署与更新](docs/features/deployment.md)。
+
+<details>
+<summary><strong>Docker Compose · 拉取发布镜像</strong></summary>
+
+需要 Docker 和 Compose 插件。发布镜像包含 binary 与 Web，支持 Linux `amd64` / `arm64`。
+下载 [`v0.1.1` 随附的 Compose 文件](https://raw.githubusercontent.com/Develata/deve-sub/v0.1.1/docker-compose.yml)，
+用 `.env` 显式固定镜像版本；初始化前先将端口限制为本机。以下命令用于新目录，
+已有部署请按[升级说明](docs/features/deployment.md#docker-compose)保留原 Compose 项目和数据卷：
+
+```bash
+mkdir -p deve-sub && cd deve-sub
+curl -fsSL --connect-timeout 15 --max-time 60 \
+  https://raw.githubusercontent.com/Develata/deve-sub/v0.1.1/docker-compose.yml \
+  -o docker-compose.yml
+printf 'DEVE_SUB_IMAGE_TAG=v0.1.1\n' > .env
+chmod 600 .env
+sed -i 's/"8080:8080"/"127.0.0.1:8080:8080"/' docker-compose.yml
+docker compose pull
+docker compose up -d --wait
+```
+
+打开 **http://127.0.0.1:8080** 创建首个管理员；远程主机可使用上面的 SSH 隧道。
+Compose 使用 named volume 保存数据库与主密钥。仓库的 [Compose 文件](docker-compose.yml)
+默认映射所有网卡的 `8080`；公开端口前应配置 HTTPS 入口、Secure Cookie 和可信代理边界。
+
+可在 `.env` 中预设管理员，容器首次启动时自动创建：
+
+```dotenv
+DEVE_SUB_ADMIN_USERNAME=admin
+DEVE_SUB_ADMIN_PASSWORD='replace-with-your-own-strong-password'
+```
+
+请替换示例密码，长度至少 8 字节；包含 `$` 时用单引号避免 Compose 插值，并限制 `.env`
+文件权限。两项均不设置时使用网页初始化；已有用户时不会覆盖原账号。
+
+`v0.1.1` 已发布 `latest` 别名。只有明确愿意跟随未来稳定版时，才将 `.env` 中的版本改为：
+
+```dotenv
+DEVE_SUB_IMAGE_TAG=latest
+```
+
+改动版本后执行 `docker compose pull && docker compose up -d --wait`。
+升级前备份数据库与主密钥，保持目录和 Compose 项目名；普通升级不要使用
+`docker compose down --volumes`，它会删除数据卷。完整说明见[部署与更新](docs/features/deployment.md#docker-compose)。
+
+</details>
+
+日志查询、手动清理、自动保留和 Docker 日志轮转，见[日志管理](docs/features/logging.md)。
+
+登录与链接安全配置、Token 轮换及泄漏后的处理方式，见[认证与订阅链接](docs/features/authentication-and-links.md)。
+
+### 第一次使用
+
+1. **添加节点**：创建订阅源并刷新，或在节点管理中粘贴分享链接。
+2. **整理节点池**：通过可见的手动分类入口查看每个标签下的节点（含空分类和未分类），再按协议、地区等筛选，按需检测连接或设置 override。详见[节点整理](docs/features/node-organization.md)。
+3. **准备模板**：使用默认 Clash/Mihomo 分流示例，或粘贴自己的规则和代理组；节点由节点池注入。其他输出目标仍可使用 V3 模板，详见[订阅模板](docs/features/subscription-templates.md)。
+4. **创建长期订阅**：绑定模板，设置到期和额度，把对应订阅 URL 导入客户端。
+
+## 适合这些场景
+
+- 把多个订阅源和手动节点汇入一个可检查、可整理的节点池。
+- 为不同客户端维护各自的模板和长期订阅地址。
+- 在自己的 Linux 主机上管理用户权限、到期、备份与更新。
+
+Deve Sub 管理的是**订阅配置分发**；实际代理流量仍由客户端和节点承担。
+流量观测来自上游响应头、外部面板或人工输入，不由下载次数推算。
 
 <a id="features"></a>
 
@@ -56,129 +153,13 @@ Deve Sub 是一个用 **Rust** 构建的自托管代理订阅管理平台。导�
 | **05 · 分发** | 多客户端配置、长期 Token URL、Token 轮换、ETag 缓存、用户到期与流量配额控制。 |
 | **06 · 管理** | 管理员与普通用户权限、TOTP 两步验证及恢复码、审计日志、备份恢复、Web 与 CLI 双入口。 |
 
+![从订阅源、统一节点池到多客户端订阅的流程示意](assets/readme/flow.svg)
+
 界面支持中英文、亮色与深色模式、Minimal Warm / Fantasy Violet 主题、自定义强调色与品牌名称，
 并提供移动端布局、键盘导航和减少动画选项。
 
-**流量统计有明确来源。** Nezha、DStatus、Komari、上游订阅响应头或人工输入提供流量观测；
-订阅下载次数不会被当作真实代理流量。额度超限控制的是订阅分发，不会撤回客户端已经获取的节点配置。
-
-<a id="quick-start"></a>
-
-## 开始部署
-
-### Linux · binary + Web + systemd
-
-适用于带 systemd 的 Linux `amd64` / `arm64`。需要 `curl`、`tar`、`sha256sum`、`timeout`、`flock`
-及管理员权限。安装器会配置服务账户、数据目录、匹配的 Web 文件和 systemd 服务。
-
-```bash
-# 下载并审阅当前安装器；固定 release 版本，避免两次安装使用不同产物。
-curl -fsSL --connect-timeout 15 --max-time 60 \
-  https://raw.githubusercontent.com/Develata/deve-sub/main/scripts/install.sh \
-  -o install-deve-sub.sh
-
-# 先仅监听本机，完成初始化后再配置正式访问入口。
-sudo env DEVE_SUB_VERSION=v0.1.0 DEVE_SUB_BIND=127.0.0.1:8080 \
-  sh install-deve-sub.sh
-```
-
-打开 **http://127.0.0.1:8080**，按引导创建首个管理员。远程服务器可先通过 SSH 隧道访问：
-
-```bash
-ssh -L 8080:127.0.0.1:8080 user@your-server
-```
-
-安装器校验下载文件的 checksum，bootstrap 信任来自 HTTPS；这不等同于验证发布者签名。
-对外提供服务前配置 HTTPS 反向代理、Secure Cookie 和可信代理边界。完整行为见[部署与更新](docs/features/deployment.md)。
-
-<details>
-<summary><strong>Docker Compose · 拉取发布镜像</strong></summary>
-
-需要 Docker 和 Compose 插件。GitHub Actions 已发布包含 binary 与 Web 的
-`ghcr.io/develata/deve-sub:v0.1.0`，支持 Linux `amd64` / `arm64`，无需克隆源码或本地编译。
-创建 `deve-sub` 目录，将以下内容保存为 `deve-sub/docker-compose.yml`（与[仓库 Compose](docker-compose.yml)一致）：
-
-```yaml
-services:
-  deve-sub:
-    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
-    environment:
-      DEVE_SUB_ADMIN_USERNAME: ${DEVE_SUB_ADMIN_USERNAME:-}
-      DEVE_SUB_ADMIN_PASSWORD: ${DEVE_SUB_ADMIN_PASSWORD:-}
-      DEVE_SUB_AUDIT_RETENTION_DAYS: ${DEVE_SUB_AUDIT_RETENTION_DAYS:-90}
-      RUST_LOG: ${RUST_LOG:-info}
-    logging:
-      driver: local
-      options:
-        max-size: "10m"
-        max-file: "3"
-        compress: "true"
-    ports:
-      - "8080:8080"
-    volumes:
-      - deve-sub-data:/app/data
-    healthcheck:
-      test: ["CMD", "/app/deve-sub", "health", "live"]
-      interval: 30s
-      timeout: 3s
-      start_period: 30s
-      retries: 3
-    restart: unless-stopped
-
-volumes:
-  deve-sub-data:
-```
-
-```bash
-cd deve-sub
-docker compose pull
-docker compose up -d
-docker compose logs -f deve-sub
-```
-
-Compose 使用 named volume 保存 `/app/data` 中的数据库与主密钥，入口会迁移数据库后启动服务。
-默认映射宿主机 `8080` 端口；只供本机访问时，把 `ports` 改成 `127.0.0.1:8080:8080`。
-可在同目录 `.env` 中预设管理员，容器首次启动时自动创建，随后打开
-**http://127.0.0.1:8080** 直接登录；远程访问与 HTTPS 配置同上：
-
-```dotenv
-DEVE_SUB_ADMIN_USERNAME=admin
-DEVE_SUB_ADMIN_PASSWORD='replace-with-your-own-strong-password'
-```
-
-请替换示例密码，长度至少 8 字节；`.env` 中含 `$` 的密码使用单引号包裹，避免变量展开。
-两项均不设置时保留网页初始化。已有用户时不会覆盖账号、密码或启用状态；
-空数据库只设置一项或凭据不合法会启动失败。初始化成功后可以移除这两项配置。
-此功能需要包含本次改动的新版镜像，已发布的 `v0.1.0` 不支持；发布前可按下述源码构建方式使用。
-
-默认固定 `v0.1.0`。如需跟随最新稳定版，在同目录的 `.env` 中设置：
-
-> `latest` 将在首次包含此发布流程的稳定版本发布后生成；现有 `v0.1.0` 尚未补发该别名。
-> 仅推送此配置不会创建镜像标签，首次发布完成前请继续使用 `v0.1.0`。
-
-```dotenv
-DEVE_SUB_IMAGE_TAG=latest
-```
-
-然后执行 `docker compose pull && docker compose up -d`。也可以直接
-`docker pull ghcr.io/develata/deve-sub:latest`；这只下载镜像，不会替换运行中的容器。
-`latest` 随稳定 release 更新；需要固定版本时，把 `.env` 中的值改为具体 tag（如 `v0.1.0`）。
-升级前先备份数据库与主密钥，保留原目录及 Compose 项目名，以继续使用原数据卷。
-停止容器可用 `docker compose down`；不要为普通升级附加 `--volumes`，它会删除持久化数据卷。
-需要自行编译时，见[源码构建方式](docs/features/deployment.md#docker-compose)。
-
-</details>
-
-日志查询、手动清理、自动保留和 Docker 日志轮转，见[日志管理](docs/features/logging.md)。
-
-登录与链接安全配置、Token 轮换及泄漏后的处理方式，见[认证与订阅链接](docs/features/authentication-and-links.md)。
-
-### 第一次使用
-
-1. **添加节点**：创建订阅源并刷新，或在节点管理中粘贴分享链接。
-2. **整理节点池**：通过可见的手动分类入口查看每个标签下的节点（含空分类和未分类），再按协议、地区等筛选，按需检测连接或设置 override。详见[节点整理](docs/features/node-organization.md)。
-3. **准备模板**：使用默认 Clash/Mihomo 分流示例，或粘贴自己的规则和代理组；节点由节点池注入。其他输出目标仍可使用 V3 模板，详见[订阅模板](docs/features/subscription-templates.md)。
-4. **创建长期订阅**：绑定模板，设置到期和额度，把对应订阅 URL 导入客户端。
+**流量统计有明确来源。** Nezha、DStatus、Komari、上游订阅响应头或人工输入提供观测；
+额度超限控制的是后续订阅分发，不会撤回客户端已经获取的配置。
 
 <a id="formats"></a>
 
@@ -220,13 +201,13 @@ DEVE_SUB_IMAGE_TAG=latest
 | 路径 | 更新范围与注意事项 |
 | :--- | :--- |
 | **原生安装器** | 同时安装 binary 和匹配 Web；失败时尝试恢复旧文件与服务。现有数据库需要 schema 迁移时，先备份、再显式迁移。 |
-| **`deve-sub update`** | 仅更新 binary，默认验证 Ed25519 signed manifest。当前 `main` 在 Web 模式下默认拒绝此操作；`--binary-only` 是显式接受版本偏差。 |
+| **`deve-sub update`** | 仅更新 binary，默认验证 Ed25519 signed manifest。Web 模式下默认拒绝此操作；`--binary-only` 是显式接受版本偏差。 |
 | **Docker** | 替换完整版本镜像，保留数据卷；入口会执行数据库迁移，升级前同样需要备份。 |
 
-`main` 的 `--force` 仅允许同版本重装，降级另需 `--allow-downgrade`。这些参数不关闭签名验证。
+`v0.1.1` 的 `--force` 仅允许同版本重装，降级另需 `--allow-downgrade`。这些参数不关闭签名验证。
 原生安装器的多文件替换**不是掉电原子事务**；如果出现 pending checkpoint，应按
 [部署说明](docs/features/deployment.md)检查并恢复，保留回滚所需材料。
-安装旧 release 时不要假定它已经包含 `main` 的更新防护。
+旧 release 的具体行为以其对应文档和产物为准。
 
 <a id="engineering"></a>
 
@@ -262,6 +243,7 @@ bash scripts/build-web-release.sh
 当前 CI 包含 Rust 检查、兼容性验证、架构与文档守卫、真实进程 soak、浏览器与容器测试。
 此外已有 disposable Debian/systemd VM 的安装、reboot、升级与故障恢复记录，
 以及 30 分钟真实进程资源测量。短期通过不等于长期无泄漏，VM installer 验收也不等于 signed updater 验收。
+`v0.1.1` 发布流程已通过双架构容器启动检查；两项签名更新与两项 10k 节点预算仍标为未运行。
 
 - [验收方法与实际边界](docs/acceptance/gates.md)
 - [逐项验收状态](docs/acceptance/matrix.tsv)
@@ -280,6 +262,7 @@ bash scripts/build-web-release.sh
 | 备份或迁移数据 | [备份与恢复](docs/guides/backup-restore.md) |
 | 接入 API | [生成的 OpenAPI](docs/openapi/openapi.json) |
 | 了解发布包和验证方式 | [Release artifact contract](docs/contracts/release-artifacts.md) |
+| 查看 `v0.1.1` 的实际发布证据 | [Release](https://github.com/Develata/deve-sub/releases/tag/v0.1.1) · [发布 CI](https://github.com/Develata/deve-sub/actions/runs/35777461173) |
 | 理解架构与参与开发 | [文档导航](docs/README.md) · [贡献指南](docs/guides/contributing.md) |
 
 欢迎提供带版本、复现步骤和预期行为的 [Issue](https://github.com/Develata/deve-sub/issues)。

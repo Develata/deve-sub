@@ -14,7 +14,7 @@
 
 services:
   deve-sub:
-    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.0}
+    image: ghcr.io/develata/deve-sub:${DEVE_SUB_IMAGE_TAG:-v0.1.1}
     environment:
       DEVE_SUB_ADMIN_USERNAME: ${DEVE_SUB_ADMIN_USERNAME:-}
       DEVE_SUB_ADMIN_PASSWORD: ${DEVE_SUB_ADMIN_PASSWORD:-}

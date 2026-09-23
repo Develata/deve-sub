@@ -1,7 +1,9 @@
 # Deploying and Updating Deve Sub
 
-The release provides Linux amd64/arm64 binaries, matching Web assets and a
-multi-platform Docker image. Pin the release version for repeatable deployment.
+The current stable release is
+[`v0.1.1`](https://github.com/Develata/deve-sub/releases/tag/v0.1.1). It provides
+Linux amd64/arm64 binaries, matching Web assets and a multi-platform Docker
+image. Pin the release version for repeatable deployment.
 See the [M8 blueprint](../plan/milestones/M8-deployment-and-hardening.md) and
 [artifact contract](../contracts/release-artifacts.md) for the authoritative
 behavior and file formats.
@@ -57,11 +59,11 @@ no-op, including changed credentials on container recreation; this cannot
 reset passwords or re-enable disabled accounts. The shared application command
 hashes the password with Argon2id and atomically permits only the first user.
 The [artifact contract](../contracts/release-artifacts.md#container-administrator-bootstrap)
-owns exact CLI and environment semantics. Existing `v0.1.0` images do not
-implement this feature; use a source build until a containing release ships.
+owns exact CLI and environment semantics. `v0.1.1` includes this feature;
+the older `v0.1.0` image does not.
 
-The [repository Compose file](../../docker-compose.yml) pulls
-`ghcr.io/develata/deve-sub:v0.1.0`, including the binary and Web UI. Save it in a
+The [repository Compose file](../../docker-compose.yml) defaults to
+`ghcr.io/develata/deve-sub:v0.1.1`, including the binary and Web UI. Save it in a
 `deve-sub` directory and run `docker compose pull` followed by
 `docker compose up -d` there. No source checkout or local build is required.
 Compose selects `linux/amd64` or `linux/arm64` for the host. The image entrypoint
@@ -83,17 +85,17 @@ tag in `.env` to pin again. `docker pull ghcr.io/develata/deve-sub:latest` also
 works independently of Compose but does not replace running containers.
 The alias advances only after the current stable release's versioned image
 has been published; prereleases and old-release reruns do not advance it.
-Initial rollout: the existing `v0.1.0` image has not yet received this alias.
-It becomes available after the first stable tag release using the new workflow
-or an authorized registry backfill. A source push, merge or manual preflight
-alone does not publish it; keep the default fixed version until then.
+The `v0.1.1` release published the `latest` alias; both references pointed to
+the same multi-platform digest when checked on 2026-09-23. A source push,
+merge or manual preflight alone does not publish a new alias. Pin `v0.1.1`
+unless following future stable releases is intentional.
 
-For a source build, check out the desired release tag, or a branch/commit that
-contains the administrator bootstrap changes while they are unreleased
-(`fix/compose-published-image` currently contains them; `v0.1.0` does not).
+For a source build, check out the desired release tag or an explicitly selected
+branch/commit.
 Replace the Compose service's `image: ...` line with `build: .`
 (older tags may already use `build: .`), then run
 `docker compose up -d --build`. This compiles Rust and Web assets locally and
-requires the full checkout. Release-tag Compose files are historical snapshots;
-the standalone image example in [README](../../README.md#quick-start) also works
-when an older tag's Compose file still defaults to a build.
+requires the full checkout. Release-tag Compose files are immutable snapshots
+and may retain an older default image tag. Set `DEVE_SUB_IMAGE_TAG` in a local
+`.env` to pin the intended image, as shown in the
+[README Docker instructions](../../README.md#quick-start).

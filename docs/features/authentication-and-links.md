@@ -53,5 +53,5 @@ routine way to revoke one subscription; it affects other persisted secrets.
 The owning semantics are in the [M2 blueprint](../plan/milestones/M2-auth-and-users.md),
 [M6 blueprint](../plan/milestones/M6-subscription-distribution.md) and
 [HTTP boundary contract](../contracts/module-boundaries.md). Verification maps
-to AUTH-004/009, SEC-007/009/010 and OUT-013. These changes require a containing
-build; the published `v0.1.0` image does not include this hardening.
+to AUTH-004/009, SEC-007/009/010 and OUT-013. Release `v0.1.1` contains this
+hardening; the older `v0.1.0` image does not.

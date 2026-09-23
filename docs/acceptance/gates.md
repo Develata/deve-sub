@@ -107,6 +107,40 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
 
 ## Published-image Compose smoke (DEPLOY-001)
 
+### Current `v0.1.1` release (2026-09-23)
+
+The [`v0.1.1` tag workflow](https://github.com/Develata/deve-sub/actions/runs/35777461173)
+completed successfully after full CI, native amd64/arm64 builds, signed asset
+assembly and the multi-platform image push. The public
+[Release](https://github.com/Develata/deve-sub/releases/tag/v0.1.1) contains
+both binaries, the Web archive, checksums, the signed manifest and two SBOMs.
+The GHCR `v0.1.1` and `latest` references were independently inspected on
+2026-09-23; both resolved to OCI index
+`sha256:eb79e8313c55104a2b1d027600632dfaa9a3ee0653072b5e9c0aecbda916e93f`
+with Linux amd64 and arm64 manifests. The `latest` observation is a point-in-time
+result; it is an opt-in moving alias, not the Compose default.
+
+The published amd64 image passed `test_docker_health.py` in 5.704 seconds;
+the published arm64 manifest passed in 6.853 seconds under local QEMU/binfmt.
+Each isolated run checked the image's built-in healthcheck, UID 1000, a healthy
+container, 200 responses for `/`, `/health/live` and `/health/ready`, and
+removed its own container. The arm64 run used its immutable manifest digest
+because the local multi-platform tag's default `docker image inspect` selected
+the host's amd64 variant. Native ARM hardware was not tested here.
+
+The published `v0.1.1` image also passed
+`python3 scripts/tests/test_docker_bootstrap.py --image
+ghcr.io/develata/deve-sub:v0.1.1`: environment and Web administrator setup,
+login, recreation preserving the existing administrator, and three invalid
+credential cases. The tests used isolated Compose projects and removed their
+own containers and volumes. The repository Compose default now pins `v0.1.1`;
+the immutable `v0.1.1` tag's older Compose file needs an explicit
+`DEVE_SUB_IMAGE_TAG=v0.1.1` in `.env`, as shown in the current README.
+
+This release proof does not promote UPDATE-001/002 or PERF-001/002 from
+`not-run` in the acceptance matrix. The dated `v0.1.0` evidence below remains
+historical and does not describe the current registry alias.
+
 On 2026-09-13, the published `ghcr.io/develata/deve-sub:v0.1.0` image passed
 on Linux amd64 with Docker Engine 29.7.2 and Compose 5.5.0. Anonymous manifest
 inspection and `docker compose pull` used an empty Docker config directory.

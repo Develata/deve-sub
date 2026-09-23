@@ -29,7 +29,7 @@ publication.
 
 Docker publishes the same version as a lowercase GHCR reference containing
 both `linux/amd64` and `linux/arm64`: `ghcr.io/develata/deve-sub:<release-tag>`
-(for example, `ghcr.io/develata/deve-sub:v0.1.0`). The optional
+(for example, `ghcr.io/develata/deve-sub:v0.1.1`). The optional
 `ghcr.io/develata/deve-sub:latest` alias points to the same multi-platform
 digest as the current stable GitHub release. After publishing the versioned
 image, the serialized Docker release job checks that its tag is stable

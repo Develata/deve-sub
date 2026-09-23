@@ -107,7 +107,7 @@ Hand-maintaining `docs/openapi/openapi.json` is forbidden (ADR-0004).
 
 ## Published-image Compose smoke (DEPLOY-001)
 
-### Current `v0.1.1` release (2026-09-23)
+### Published `v0.1.1` release evidence (2026-09-23)
 
 The [`v0.1.1` tag workflow](https://github.com/Develata/deve-sub/actions/runs/35777461173)
 completed successfully after full CI, native amd64/arm64 builds, signed asset
@@ -133,9 +133,9 @@ The published `v0.1.1` image also passed
 ghcr.io/develata/deve-sub:v0.1.1`: environment and Web administrator setup,
 login, recreation preserving the existing administrator, and three invalid
 credential cases. The tests used isolated Compose projects and removed their
-own containers and volumes. The repository Compose default now pins `v0.1.1`;
+own containers and volumes. The repository Compose default at the time pinned `v0.1.1`;
 the immutable `v0.1.1` tag's older Compose file needs an explicit
-`DEVE_SUB_IMAGE_TAG=v0.1.1` in `.env`, as shown in the current README.
+`DEVE_SUB_IMAGE_TAG=v0.1.1` in `.env`, as used in that release's smoke.
 
 This release proof does not promote UPDATE-001/002 or PERF-001/002 from
 `not-run` in the acceptance matrix. The dated `v0.1.0` evidence below remains

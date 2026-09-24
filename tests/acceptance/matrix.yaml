@@ -2365,6 +2365,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/backup_key_validation.rs::backup001_invalid_explicit_key_preserves_previous_archive"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
       status: pass
   - id: BACKUP-002

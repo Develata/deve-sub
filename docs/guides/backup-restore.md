@@ -93,5 +93,8 @@ For automated backups, use cron or systemd timers:
 Retain old backups according to your recovery point objective. Back up the
 master key separately and provide the matching key when restoring encrypted
 data; the archive contains its reference/fingerprint, not the secret key.
+When supplying `--key-path` or `DEVE_SUB_KEY_PATH`, backup refuses a missing,
+unreadable or invalid key and preserves any existing output archive. Check the
+key path before retrying; omitting it is not a substitute for correcting it.
 A downgrade needs the pre-upgrade archive and the corresponding older binary.
 Lifetime traffic projections remain in a backup after recent raw rows expire.

@@ -35,7 +35,7 @@ UI 乱序用受控响应释放顺序，不依赖固定 sleep。
 ## 场景
 
 API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运行一次，
-共 77 项（15 API + 31 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
+共 83 项（15 API + 34 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
 不能只把 HTTP 请求发出当成通过。
 
 | 场景标识 | 绑定 | 维度/操作 | 必须成立的结果 |
@@ -63,6 +63,8 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 | FUNC-CATEGORY-NODE-RECOVERY | NODE-005 | 下一页及刷新各失败一次，再重试 | 已加载行、勾选和重试入口保留，成功后错误清除 |
 | FUNC-OVERRIDE | NODE-010 | 重开覆盖编辑器，只改名称 | 其他覆盖字段完整保留 |
 | FUNC-TEMPLATE-ROLLBACK | GEN-004 | v2 回滚确认到 v1 | 实际 POST 成功，活动版本及内容恢复 |
+| FUNC-SUB-QUOTA | OUT-016 | 非整数、负值、零、i64边界、清空额度 | 非法草稿保留且不发送；最大值精确存取；仅空白取消限制 |
+| FUNC-FORM-PENDING | OUT-016/UI-010 | 用户及订阅表单挂起、取消/切换尝试、503后重试 | 等待期间不切换草稿，失败保留输入，重试真实保存 |
 | FUNC-SUB-CREATE | OUT-016 | Web 默认表单创建订阅 | 201，返回链接可获取内容 |
 | FUNC-DELIVERY-RETENTION | OUT-014 | 12个不同selector并发生成，共用模板；全部节点不可用后并发下载 | 每个订阅仍返回各自最后成功内容，不能被其他selector挤掉或串用 |
 | FUNC-PAGINATION | SRC-001/GEN-001/OUT-016 | 21 源、51 模板和订阅 | 后续记录可操作，模板选项完整 |
@@ -73,16 +75,18 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 | FUNC-LIST-ORDER | SRC-013 | 新列表成功后旧列表失败 | 旧错误不能隐藏当前数据 |
 | FUNC-TEMPLATE-ORDER | GEN-003 | A加载挂起、关闭、B加载完成、再释放A | B编辑器及实际保存均保持B内容 |
 
-`refresh_source/hardening.rs::refresh_failure_preserves_concurrent_source_edits_and_current_policy`
-另以可控屏障覆盖 SRC-005：抓取失败前更新源名称/URL/周期和两种 keep_on_fail
-策略，失败后新字段保留，enabled 按当前策略处理。
+`refresh_source/hardening.rs::reclaimed_refresh_failure_preserves_source_edits_and_current_policy`
+另以可控屏障覆盖 SRC-005：回收旧任务租约后更新源名称/URL/周期和两种
+keep_on_fail 策略，旧任务失败不能覆盖新字段或禁用源。有效刷新租约期间编辑返回
+409；快照和任务完成状态同事务发布，配置更新清除旧 ETag。
 
 ## 证据边界
 
 标签、覆盖、分页、模板和订阅使用真实 CLI、REST、SQLite 与生产 WASM。
 仅 FUNC-SOURCE-JOBS 的刷新/任务传输被控制，用于 UI 状态验证；真实刷新失败和
 并发配置保护由 Rust 集成测试补充。超时和乱序测试同样只控制传输，使用真实
-页面代码。订阅获取成功不等于已导入真实代理客户端。
+页面代码。用户和订阅表单用受控 503 验证失败恢复，重试通过真实 API 保存。
+订阅获取成功不等于已导入真实代理客户端。
 
 分类分页用例用真实节点响应构造小页，专门验证 Web 的目录与分页边界；目录
 仍由真实 API 提供。目录错误和乱序只控制传输。参考项目的展开分类入口予以

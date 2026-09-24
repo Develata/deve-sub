@@ -205,6 +205,7 @@ fn map_source_error(e: SourceError) -> SourceAppError {
 fn map_mutation_error(e: SourceError) -> SourceAppError {
     match e {
         SourceError::SourceNotFound => SourceAppError::SourceNotFound,
+        SourceError::RefreshInProgress(id) => SourceAppError::RefreshInProgress(id),
         SourceError::NameExists => SourceAppError::NameExists,
         other => SourceAppError::Source(other),
     }

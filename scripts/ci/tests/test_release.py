@@ -80,5 +80,106 @@ class LatestImageTests(unittest.TestCase):
         self.assertIn("steps.publish.outputs.digest", self.step["env"]["PUBLISHED_DIGEST"])
 
 
+class ReleasePolicyTests(unittest.TestCase):
+    def test_semver_prerelease_classification_and_tag_mismatch(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
+        step = next(s for s in jobs["version-check"]["steps"] if s.get("id") == "version")
+        for version, expected in [("1.2.3", "false"), ("1.2.3-rc.1", "true")]:
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "Cargo.toml").write_text(f'[workspace.package]\nversion = "{version}"\n')
+                output = root / "output"
+                env = {**os.environ, "GITHUB_REF_NAME": "v" + version,
+                       "GITHUB_EVENT_NAME": "push", "GITHUB_OUTPUT": str(output)}
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+                                        cwd=root, env=env, capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_text(), f"prerelease={expected}\n")
+                env["GITHUB_REF_NAME"] = "v0.0.0"
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+                                        cwd=root, env=env, capture_output=True, text=True, timeout=5)
+                self.assertNotEqual(result.returncode, 0)
+        release = jobs["release"]
+        self.assertIn("version-check", release["needs"])
+        publish = next(s for s in release["steps"] if s.get("name") == "Create GitHub Release")
+        self.assertEqual(publish["with"]["prerelease"],
+                         "${{ needs.version-check.outputs.prerelease == 'true' }}")
+
+    def test_oci_incompatible_build_metadata_fails_before_publication(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
+        step = next(s for s in jobs["version-check"]["steps"] if s.get("id") == "version")
+        for event in ("push", "workflow_dispatch"):
+            for version in ("1.2.3+build.1", "1.2.3-rc.1+build.1"):
+                with self.subTest(event=event, version=version), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    (root / "Cargo.toml").write_text(f'[workspace.package]\nversion = "{version}"\n')
+                    output = root / "output"
+                    env = {**os.environ, "GITHUB_REF_NAME": "v" + version,
+                           "GITHUB_EVENT_NAME": event, "GITHUB_OUTPUT": str(output)}
+                    result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+                                            cwd=root, env=env, capture_output=True, text=True, timeout=5)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("cannot contain build metadata", result.stdout)
+                    self.assertFalse(output.exists())
+
+    def test_manual_candidate_upload_has_only_complete_release_assets(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
+        steps = jobs["release"]["steps"]
+        upload = next(s for s in steps if s.get("name") == "Upload release candidate")
+        verify = next(s for s in steps if s.get("name") == "Verify candidate asset completeness")
+        publish = next(s for s in steps if s.get("name") == "Create GitHub Release")
+        expected = {
+            "deve-sub-linux-amd64", "deve-sub-linux-arm64", "deve-sub-web.tar.gz",
+            "checksums.txt", "deve-sub-manifest.json", "deve-sub-manifest.json.sig",
+            "deve-sub-sbom.json", "deve-sub-web-sbom.json",
+        }
+        paths = upload["with"]["path"].splitlines()
+        self.assertEqual(len(paths), len(expected))
+        self.assertEqual(set(paths), {"${{ runner.temp }}/release/" + a for a in expected})
+        self.assertEqual(set(paths), set(publish["with"]["files"].splitlines()))
+        self.assertEqual(upload["uses"],
+                         "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02")
+        self.assertEqual(upload["with"]["name"], "release-candidate")
+        self.assertEqual(upload["with"]["if-no-files-found"], "error")
+        self.assertTrue(1 <= upload["with"]["retention-days"] <= 7)
+        for step in (verify, upload):
+            self.assertEqual(step["if"], "github.event_name == 'workflow_dispatch'")
+        signing = next(s for s in steps if s.get("name") == "Sign release manifest")
+        sbom = next(s for s in steps if s.get("name") == "Generate SBOM")
+        self.assertLess(steps.index(signing), steps.index(verify))
+        self.assertLess(steps.index(sbom), steps.index(verify))
+        self.assertLess(steps.index(verify), steps.index(upload))
+        # upload-artifact's no-files policy does not reject one missing path.
+        # Execute the completeness guard for every partial/empty asset set.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release = root / "release"
+            release.mkdir()
+            for asset in expected:
+                (release / asset).write_bytes(b"fixture")
+            env = {**os.environ, "RUNNER_TEMP": str(root)}
+
+            def check():
+                return subprocess.run(["bash", "-euo", "pipefail", "-c", verify["run"]],
+                                      env=env, capture_output=True, text=True, timeout=5)
+
+            self.assertEqual(check().returncode, 0)
+            for asset in expected:
+                with self.subTest(asset=asset):
+                    path = release / asset
+                    path.unlink()
+                    self.assertNotEqual(check().returncode, 0)
+                    path.touch()
+                    self.assertNotEqual(check().returncode, 0)
+                    path.write_bytes(b"fixture")
+
+    def test_release_execution_jobs_have_bounded_deadlines(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
+        for name, job in jobs.items():
+            if "uses" not in job:  # Reusable CI declares its own job deadlines.
+                with self.subTest(job=name):
+                    self.assertTrue(1 <= job["timeout-minutes"] <= 60)
+
+
 if __name__ == "__main__":
     unittest.main()

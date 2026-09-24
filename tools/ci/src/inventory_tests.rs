@@ -256,3 +256,23 @@ fn multiarch_must_load_both_matching_images_for_runtime_verification() {
         }
     }
 }
+
+#[test]
+fn installer_smoke_cannot_skip_or_suppress_failures() {
+    for (key, value) in [
+        ("if", json!("false")),
+        ("run", json!("true")),
+        ("continue-on-error", json!(true)),
+    ] {
+        rejected(|workflow| {
+            let steps = workflow["jobs"]["browser-e2e"]["steps"]
+                .as_array_mut()
+                .expect("steps");
+            let step = steps
+                .iter_mut()
+                .find(|step| step["name"] == "Verify native installer lifecycle")
+                .expect("installer step");
+            step[key] = value;
+        });
+    }
+}

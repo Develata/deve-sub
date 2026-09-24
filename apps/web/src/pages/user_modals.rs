@@ -43,15 +43,15 @@ pub fn UserModals(mut props: UserModalsProps) -> Element {
                     div { class: "mt-4 space-y-4",
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "users.username")} }
-                            input { class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "text", value: "{props.f_username}", oninput: move |e| props.f_username.set(e.value()) }
+                            input { disabled: *props.saving.read(), class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "text", value: "{props.f_username}", oninput: move |e| props.f_username.set(e.value()) }
                         }
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "users.password")} }
-                            input { class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "password", value: "{props.f_password}", oninput: move |e| props.f_password.set(e.value()) }
+                            input { disabled: *props.saving.read(), class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "password", value: "{props.f_password}", oninput: move |e| props.f_password.set(e.value()) }
                         }
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "users.role")} }
-                            select {
+                            select { disabled: *props.saving.read(),
                                 class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
                                 value: "{props.f_role}",
                                 onchange: move |e| props.f_role.set(e.value()),
@@ -62,10 +62,10 @@ pub fn UserModals(mut props: UserModalsProps) -> Element {
                         }
                     }
                     if !props.form_error.read().is_empty() {
-                        div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
+                        div { role: "alert", class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
+                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", disabled: *props.saving.read(), onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
                         button { class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50", disabled: *props.saving.read(), onclick: move |_| props.on_submit.call(()),
                             if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
                         }
@@ -87,10 +87,10 @@ pub fn UserModals(mut props: UserModalsProps) -> Element {
                         span { class: "font-medium", " {target_name}" }
                     }
                     if !props.form_error.read().is_empty() {
-                        div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
+                        div { role: "alert", class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
+                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", disabled: *props.saving.read(), onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
                         button { class: "rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50", disabled: *props.saving.read(), onclick: move |_| props.on_submit.call(()),
                             if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "users.disable")} }
                         }
@@ -112,10 +112,10 @@ pub fn UserModals(mut props: UserModalsProps) -> Element {
                         span { class: "font-medium", " {target_name}" }
                     }
                     if !props.form_error.read().is_empty() {
-                        div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
+                        div { role: "alert", class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
+                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", disabled: *props.saving.read(), onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
                         button { class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50", disabled: *props.saving.read(), onclick: move |_| props.on_submit.call(()),
                             if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "users.force_logout")} }
                         }

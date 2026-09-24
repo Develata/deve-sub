@@ -277,6 +277,23 @@ the pool revision in the same transaction. It must not read a whole source in
 Application and later write back stale secrets. SRC-001 covers omission, null,
 replacement, validation failure, concurrent replacement and rollback.
 
+Configuration edits first obtain SQLite write admission and reject an existing
+Running refresh lease with HTTP 409 `refresh_in_progress`; the form retains its
+draft for retry. Successful edits clear the active snapshot's ETag in the same
+transaction, preserving last-good content while forcing a body fetch so changed
+URL, format or filters take effect. The legacy full-source update uses the same
+guard. Failure-policy disabling is a targeted operation and does not use this
+administrator edit guard; it only applies while the failed job still owns the
+Running lease, so reclaimed failures cannot disable newly edited sources.
+
+Refresh publication checks the job's Running lease and source ownership and
+commits the Completed outcome with snapshot reconciliation. A reclaimed runner
+cannot publish after an edit or replacement refresh; failure of the outcome write
+rolls back the snapshot and node changes. A 304 similarly advances fetched_at and
+completes its live job in one transaction. No fallible phase write occurs after
+publication. SRC-001/002/004/005 regressions cover edit conflicts, validator
+invalidation, reclaimed jobs and injected terminal-write failure.
+
 Deleting a source withdraws its contribution, not just its binding. Within the
 source repository's write transaction, mark its previously bound nodes missing
 only if they have neither another source binding nor independent import label;

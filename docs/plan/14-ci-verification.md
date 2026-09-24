@@ -28,6 +28,8 @@ checks), functional API, functional desktop and functional mobile. All lanes
 must run, with `fail-fast: false` and at most four runners. The shared-state
 legacy suite remains serial; isolated functional lanes use two workers each on
 CI to bound simultaneous servers and password-hashing memory on each runner.
+The legacy lane also runs isolated native installer smoke against its verified
+binary and Web artifacts; missing bubblewrap or build inputs fail the lane.
 Inventory rejects missing/duplicate lanes and weakened commands. Each lane
 uploads a uniquely named diagnostic artifact; the job aggregate blocks the
 final gate if any lane fails or is cancelled.
@@ -35,8 +37,9 @@ final gate if any lane fails or is cancelled.
 Only superseded runs for the same PR share a workflow concurrency group and
 cancel one another. Non-PR groups include the unique workflow run ID: using a
 branch-only group would replace pending main/release baselines even when
-`cancel-in-progress` is false. Every job has an explicit 5–60 minute timeout;
-inventory rejects missing or unbounded deadlines. Runtime consumers continue
+`cancel-in-progress` is false. Baseline and release execution jobs have explicit
+5–60 minute timeouts; inventory and release-policy tests reject missing or
+unbounded deadlines. Runtime consumers continue
 to use their finer request/test/startup/teardown deadlines.
 
 Static checks and candidate builds may run concurrently. Runtime consumers

@@ -8,7 +8,12 @@ identity is owned by `ci-evidence.md`.
 
 ## Version and assets
 
-A release tag is `v` followed by the workspace Cargo SemVer. One release contains:
+A release tag is `v` followed by the workspace Cargo SemVer. A SemVer
+prerelease is explicitly marked as a GitHub prerelease and cannot become
+the stable latest release. Stable and prerelease versions must omit SemVer
+build metadata (`+...`), which is invalid in OCI tags; tag runs and manual
+preflight both reject it before building or publishing distribution artifacts.
+One release contains:
 
 - `deve-sub-linux-amd64` and `deve-sub-linux-arm64`: executable native binaries.
 - `deve-sub-web.tar.gz`: the same invocation's verified frontend, with
@@ -24,8 +29,12 @@ A release tag is `v` followed by the workspace Cargo SemVer. One release contain
 
 Manual `workflow_dispatch` runs full CI, both native build/smoke jobs and
 artifact assembly, including signature and SBOM generation, without creating
-a tag, Release or image publication. Tag pushes repeat those gates before
-publication.
+a tag, Release or image publication. Successful manual runs retain exactly the
+eight distribution assets listed above as the `release-candidate` Actions
+artifact for seven days, after checking every asset is nonempty. This explicit
+allowlist excludes signing secrets and intermediate files. Download this
+artifact for signed updater acceptance; it is not a stable release channel.
+Tag pushes repeat those gates before publication.
 
 Docker publishes the same version as a lowercase GHCR reference containing
 both `linux/amd64` and `linux/arm64`: `ghcr.io/develata/deve-sub:<release-tag>`
@@ -70,7 +79,11 @@ keeps rejecting repeated initialization. No database migration is added.
 
 The installer resolves a release tag once, verifies both downloaded payloads,
 installs the binary and frontend, and passes the absolute frontend directory to
-systemd. Success requires readiness plus the expected running version. An
+systemd. Success requires readiness plus the expected running version.
+Readiness probes use the configured listener address (wildcards map to the
+corresponding loopback), bypass environment proxies, and use the saved unit
+address when verifying recovery. Upgrading an active service requires an
+installer-managed unit with an explicit `--bind` argument. An
 installation failure stops the new process, restores the previous binary,
 frontend and unit, and restarts a previously active service. Failed recovery
 retains the backups for operator repair. The installer

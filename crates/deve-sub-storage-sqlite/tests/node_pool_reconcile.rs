@@ -149,6 +149,7 @@ async fn first_refresh_inserts_new_nodes() {
 
     let result = pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snapshot,
             entries: &entries,
@@ -200,6 +201,7 @@ async fn duplicate_node_does_not_create_pool_entry() {
 
     let result = pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snapshot,
             entries: &entries,
@@ -242,6 +244,7 @@ async fn reconcile_preserves_distinct_credentials_at_same_endpoint() {
 
     let result = pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snapshot,
             entries: &entries,
@@ -276,6 +279,7 @@ async fn missing_nodes_marked_on_subsequent_refresh() {
     let snap_v1 = make_snapshot(source.id, 1, 2);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v1,
             entries: &entries_v1,
@@ -287,6 +291,7 @@ async fn missing_nodes_marked_on_subsequent_refresh() {
     let snap_v2 = make_snapshot(source.id, 2, 1);
     let result = pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v2,
             entries: &entries_v2,
@@ -323,6 +328,7 @@ async fn missing_node_reactivated_on_reappearance() {
     let snap_v1 = make_snapshot(source.id, 1, 2);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v1,
             entries: &entries_v1,
@@ -334,6 +340,7 @@ async fn missing_node_reactivated_on_reappearance() {
     let snap_v2 = make_snapshot(source.id, 2, 1);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v2,
             entries: &entries_v2,
@@ -345,6 +352,7 @@ async fn missing_node_reactivated_on_reappearance() {
     let snap_v3 = make_snapshot(source.id, 3, 2);
     let result = pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v3,
             entries: &entries_v3,
@@ -385,6 +393,7 @@ async fn new_snapshot_replaces_active() {
     let snap_v1 = make_snapshot(source.id, 1, 1);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v1,
             entries: &[entry(trojan_node(TROJAN_A))],
@@ -395,6 +404,7 @@ async fn new_snapshot_replaces_active() {
     let snap_v2 = make_snapshot(source.id, 2, 1);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v2,
             entries: &[entry(trojan_node(TROJAN_A))],
@@ -442,6 +452,7 @@ async fn failed_reconcile_preserves_old_snapshot() {
     let snap_v1 = make_snapshot(source.id, 1, 1);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v1,
             entries: &[entry(trojan_node(TROJAN_A))],
@@ -453,6 +464,7 @@ async fn failed_reconcile_preserves_old_snapshot() {
     let snap_v2 = make_snapshot(fake_source_id, 2, 1);
     let result = pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: fake_source_id,
             snapshot: &snap_v2,
             entries: &[entry(trojan_node(TROJAN_A))],
@@ -499,6 +511,7 @@ async fn node_bound_by_two_sources_not_missing_when_one_drops() {
     let snap_a1 = make_snapshot(source_a.id, 1, 1);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source_a.id,
             snapshot: &snap_a1,
             entries: &[entry(trojan_node(TROJAN_A))],
@@ -509,6 +522,7 @@ async fn node_bound_by_two_sources_not_missing_when_one_drops() {
     let snap_b1 = make_snapshot(source_b.id, 1, 1);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source_b.id,
             snapshot: &snap_b1,
             entries: &[entry(trojan_node(TROJAN_A))],
@@ -519,6 +533,7 @@ async fn node_bound_by_two_sources_not_missing_when_one_drops() {
     let snap_b2 = make_snapshot(source_b.id, 2, 0);
     let result = pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source_b.id,
             snapshot: &snap_b2,
             entries: &[],

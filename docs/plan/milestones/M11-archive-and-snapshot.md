@@ -123,6 +123,10 @@ restore(backup_path):
 
 ## Failure/recovery
 
+- An explicitly supplied `--key-path` (including `DEVE_SUB_KEY_PATH`) must
+  load successfully before snapshot creation. A missing, unreadable or malformed
+  key fails the backup without replacing an existing archive; it must never
+  silently remove manifest fingerprint protection. Verify under BACKUP-001.
 - Backup failure (disk full, permission denied): the partial backup file is
   deleted. The error is reported. The running server is unaffected.
 - Restore failure (corrupt backup, wrong format): the existing database is

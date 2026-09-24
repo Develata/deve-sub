@@ -108,6 +108,7 @@ async fn node_credentials_encrypted_at_rest() {
 
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snapshot,
             entries: &entries,
@@ -175,6 +176,7 @@ async fn read_decrypts_node_credentials() {
 
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snapshot,
             entries: &entries,
@@ -214,6 +216,7 @@ async fn no_key_read_fails_closed() {
 
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snapshot,
             entries: &entries,
@@ -250,6 +253,7 @@ async fn raw_uri_encrypted_in_items_and_bindings() {
 
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snapshot,
             entries: &entries,

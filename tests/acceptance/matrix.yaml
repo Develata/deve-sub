@@ -144,6 +144,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/subscription-forms.ui.spec.ts"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-DELETE"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-FORM"
         - "tests/e2e/specs/ui-010-keyboard-nav.spec.ts::UI-010"
@@ -323,6 +324,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/source_management/secret_update.rs::src001_running_refresh_rejects_edit_with_retryable_conflict"
+        - "crates/deve-sub-application/tests/refresh_source/lease_publication.rs::running_refresh_excludes_configuration_edits_then_releases_lease"
         - "crates/deve-sub-storage-sqlite/tests/source_config_update.rs::src001_config_update_and_revision_failure_roll_back_together"
         - "crates/deve-sub-storage-sqlite/tests/source_config_update.rs::src001_concurrent_omission_never_reverts_explicit_url_replacement"
         - "crates/deve-sub-storage-sqlite/tests/source_config_update.rs::src001_omitted_url_preserves_exact_secret_ciphertexts_and_current_transport"
@@ -351,6 +354,8 @@ cases:
     fixtures: ["apps/server/tests/source_refresh.rs"]
     evidence:
       tests:
+        - "crates/deve-sub-application/tests/refresh_source/lease_publication.rs::terminal_write_failure_rolls_back_publication"
+        - "crates/deve-sub-application/tests/refresh_source/lease_publication.rs::publication_has_no_fallible_running_phase_write_after_commit"
         - "apps/server/tests/source_refresh.rs::admin_can_refresh_source"
         - "apps/server/tests/source_refresh.rs::refresh_nonexistent_returns_404"
         - "apps/server/tests/source_refresh.rs::refresh_fetch_failure_marks_job_failed"
@@ -385,6 +390,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/tests/refresh_source/lease_publication.rs::config_edits_clear_validator_and_preserve_last_snapshot"
+        - "crates/deve-sub-application/tests/refresh_source/lease_publication.rs::reclaimed_not_modified_run_cannot_touch_snapshot"
         - "crates/deve-sub-application/tests/refresh_source.rs::refresh_304_not_modified_preserves_old_snapshot"
       status: pass
   - id: SRC-005
@@ -398,7 +405,8 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "crates/deve-sub-application/tests/refresh_source/hardening.rs::refresh_failure_preserves_concurrent_source_edits_and_current_policy"
+        - "crates/deve-sub-application/tests/refresh_source/lease_publication.rs::reclaimed_runner_cannot_publish_after_configuration_edit"
+        - "crates/deve-sub-application/tests/refresh_source/hardening.rs::reclaimed_refresh_failure_preserves_source_edits_and_current_policy"
         - "apps/server/tests/source_refresh.rs::refresh_fetch_failure_marks_job_failed"
         - "crates/deve-sub-application/tests/refresh_source.rs::fetch_failure_disables_source_when_keep_on_fail_false"
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile.rs::failed_reconcile_preserves_old_snapshot"
@@ -1756,6 +1764,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "scripts/tests/test_install.py"
         - "scripts/tests/native_vm.py"
       status: pass
   - id: DEPLOY-003
@@ -1816,6 +1825,7 @@ cases:
         - "apps/cli/src/update_manifest.rs::embedded_key_verifies_fixture_signature"
         - "apps/cli/tests/update.rs::update001_unsigned_release_rejected_by_default"
         - "apps/cli/tests/update.rs::update001_unsigned_opt_in_never_bypasses_invalid_signature"
+        - "scripts/tests/test_signed_update.py"
       status: not-run
   - id: UPDATE-002
     title: 更新失败
@@ -1829,6 +1839,7 @@ cases:
     evidence:
       tests:
         - "apps/cli/tests/update.rs::update002_bad_binary_rejected_before_swap"
+        - "scripts/tests/test_signed_update.py"
       status: not-run
   - id: SEC-001
     title: localhost SSRF
@@ -2358,6 +2369,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/backup_key_validation.rs::backup001_invalid_explicit_key_preserves_previous_archive"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
       status: pass
   - id: BACKUP-002
@@ -2415,10 +2427,12 @@ cases:
     dimensions: [desktop, mobile, pagination]
     preconditions: ["隔离数据库、管理员、合成节点与模板"]
     steps: ["Web表单使用默认选择创建订阅", "获取生成链接", "加载第51条订阅及模板选项"]
-    assertions: ["创建成功且返回内容可获取", "后续订阅记录与模板选择可达"]
+    assertions: ["创建成功且返回内容可获取", "后续订阅记录与模板选择可达", "额度仅空白表示不限，正整数不超过i64最大值，非法输入不丢失草稿或改写旧值"]
     fixtures: ["tests/e2e/functional/fixture.ts"]
     evidence:
       tests:
+        - "apps/server/tests/subscription_management/integer_bounds.rs::out016_integer_bounds_reject_overflow_without_mutation"
+        - "tests/e2e/functional/subscription-forms.ui.spec.ts"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-SUB-CREATE"
         - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
       status: pass

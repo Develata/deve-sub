@@ -1,7 +1,7 @@
 # Deploying and Updating Deve Sub
 
 The current stable release is
-[`v0.1.2`](https://github.com/Develata/deve-sub/releases/tag/v0.1.2). It provides
+[`v0.1.3`](https://github.com/Develata/deve-sub/releases/tag/v0.1.3). It provides
 Linux amd64/arm64 binaries, matching Web assets and a multi-platform Docker
 image. Pin the release version for repeatable deployment.
 See the [M8 blueprint](../plan/milestones/M8-deployment-and-hardening.md) and
@@ -63,7 +63,7 @@ owns exact CLI and environment semantics. `v0.1.1` includes this feature;
 the older `v0.1.0` image does not.
 
 The [repository Compose file](../../docker-compose.yml) defaults to
-`ghcr.io/develata/deve-sub:v0.1.2`, including the binary and Web UI. Save it in a
+`ghcr.io/develata/deve-sub:v0.1.3`, including the binary and Web UI. Save it in a
 `deve-sub` directory and run `docker compose pull` followed by
 `docker compose up -d` there. No source checkout or local build is required.
 Compose selects `linux/amd64` or `linux/arm64` for the host. The image entrypoint
@@ -87,7 +87,7 @@ The alias advances only after the current stable release's versioned image
 has been published; prereleases and old-release reruns do not advance it.
 The `v0.1.1` release published the `latest` alias; both references pointed to
 the same multi-platform digest when checked on 2026-09-23. A source push,
-merge or manual preflight alone does not publish a new alias. Pin `v0.1.2`
+merge or manual preflight alone does not publish a new alias. Pin `v0.1.3`
 unless following future stable releases is intentional.
 
 For a source build, check out the desired release tag or an explicitly selected

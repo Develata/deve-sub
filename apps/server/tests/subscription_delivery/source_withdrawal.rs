@@ -31,6 +31,7 @@ async fn remote(app: &TestApp) -> (SourceId, NodeId) {
     app.state
         .pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &SourceSnapshot {
                 id: SourceSnapshotId::new(),

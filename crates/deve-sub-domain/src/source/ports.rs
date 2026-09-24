@@ -2,7 +2,9 @@
 
 use async_trait::async_trait;
 
-use deve_sub_kernel::{NodeId, Revision, SourceId, SourceSnapshotId, Timestamp};
+use deve_sub_kernel::{
+    NodeId, Revision, SourceId, SourceRefreshJobId, SourceSnapshotId, Timestamp,
+};
 
 use super::error::SourceError;
 use super::refresh_job::{RefreshPhase, SourceRefreshJob};
@@ -15,8 +17,13 @@ use crate::{Node, ProtocolKind};
 #[async_trait]
 pub trait SourceRepository: Send + Sync {
     /// Disable after failure only if the current persisted keep-on-fail policy
-    /// requires it. Never overwrite concurrently updated source configuration.
-    async fn disable_after_failure(&self, id: SourceId) -> Result<(), SourceError>;
+    /// requires it and this job still owns the Running lease. A reclaimed
+    /// runner cannot disable configuration edited after its lease expired.
+    async fn disable_after_failure(
+        &self,
+        id: SourceId,
+        job_id: SourceRefreshJobId,
+    ) -> Result<(), SourceError>;
 
     /// Create a new source. Returns [`SourceError::NameExists`] if the name
     /// is already taken.
@@ -35,12 +42,15 @@ pub trait SourceRepository: Send + Sync {
     async fn list(&self, cursor: Option<SourceId>, limit: u32) -> Result<Vec<Source>, SourceError>;
 
     /// Update an existing source. Returns [`SourceError::SourceNotFound`]
-    /// if the source does not exist.
+    /// if the source does not exist, or `RefreshInProgress` while a Running
+    /// job owns the source. Success invalidates the active fetch validator.
     async fn update(&self, source: &Source) -> Result<(), SourceError>;
 
     /// Atomically edit current configuration without replacing omitted secrets
     /// or transport settings. The returned source and cache invalidation share
     /// the write transaction. Missing sources return [`SourceError::SourceNotFound`].
+    /// A Running refresh returns `RefreshInProgress`; successful edits invalidate
+    /// the active fetch validator while preserving last-good snapshot contents.
     async fn update_config(&self, update: &SourceConfigUpdate) -> Result<Source, SourceError>;
 
     /// Delete a source and all its snapshots, items, and source bindings.
@@ -89,10 +99,13 @@ pub trait SourceSnapshotRepository: Send + Sync {
     /// so `fetched_at` never advances and a source that consistently returns
     /// 304 is re-fetched every tick (60s) instead of every
     /// `update_interval_secs`. This method resets the due timer on 304 so
-    /// the interval is honored (SRC-014).
+    /// the interval is honored (SRC-014). The write transaction validates the
+    /// job's Running lease and source ownership and commits Completed together
+    /// with fetched_at; a stale runner cannot touch newer configuration.
     async fn touch_fetched_at(
         &self,
         source_id: SourceId,
+        job_id: SourceRefreshJobId,
         now: Timestamp,
     ) -> Result<(), SourceError>;
 }
@@ -119,6 +132,9 @@ pub struct ReconcileEntry {
 pub struct ReconcileInput<'a> {
     /// The source being refreshed.
     pub source_id: SourceId,
+    /// Running job whose lease and completion commit with publication.
+    /// Direct repository imports may omit this; refresh runners must supply it.
+    pub job_id: Option<SourceRefreshJobId>,
     /// The new snapshot to create (deactivates the previous active one).
     pub snapshot: &'a SourceSnapshot,
     /// Parsed entries from the fetched content.
@@ -264,7 +280,8 @@ pub enum ImportOutcome {
 pub trait NodePoolRepository: Send + Sync {
     /// Reconcile a source refresh: create snapshot, insert items, upsert
     /// nodes, mark missing. Atomic — either the entire refresh commits or
-    /// nothing changes.
+    /// nothing changes. With `job_id`, validate its Running lease and source
+    /// ownership and commit its Completed outcome in this same transaction.
     async fn reconcile(&self, input: ReconcileInput<'_>) -> Result<ReconcileResult, SourceError>;
 
     /// List nodes from the pool, optionally filtered, with cursor

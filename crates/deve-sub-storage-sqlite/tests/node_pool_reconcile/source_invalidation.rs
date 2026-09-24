@@ -12,6 +12,7 @@ async fn src001_source_changes_invalidate_pool_and_rollback_together() {
     let mut source = make_source("before");
     repo.create(&source).await.expect("source");
     pool.reconcile(ReconcileInput {
+        job_id: None,
         source_id: source.id,
         snapshot: &make_snapshot(source.id, 1, 1),
         entries: &[entry(trojan_node(TROJAN_A))],

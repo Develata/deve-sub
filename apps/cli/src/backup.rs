@@ -171,6 +171,32 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
         bail!("database file not found: {db_path} — run `deve-sub migrate` first");
     }
 
+    // WHY: explicit key intent must fail closed before snapshot or archive I/O.
+    let cli_key_path = args.key_path.as_deref().map(Path::new);
+    let key_path = cli_key_path.or_else(|| Some(Path::new(&config.security.master_key_path)));
+    let master_key_fingerprint = match key_path {
+        Some(p) if cli_key_path.is_some() || p.exists() => match MasterKey::load(p) {
+            Ok(k) => {
+                let fp = k.fingerprint()?;
+                tracing::info!(key_fingerprint = %fp, "master key fingerprint recorded in manifest");
+                Some(fp)
+            }
+            Err(e) => {
+                if cli_key_path.is_some() {
+                    bail!(
+                        "master key at {} was explicitly requested via --key-path but \
+                         could not be loaded: {e}. Refusing backup to prevent creating \
+                         an archive without key-fingerprint protection (DS-AUD-034).",
+                        p.display()
+                    );
+                }
+                tracing::warn!(error = %e, "failed to load master key for fingerprint; manifest will omit fingerprint");
+                None
+            }
+        },
+        _ => None,
+    };
+
     tracing::info!(db_path = %db_path, output = %args.output.display(), "starting backup");
 
     let pool = open_db(&db_path, 1).await?;
@@ -219,31 +245,6 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
             missing.join(", ")
         );
     }
-
-    let cli_key_path = args.key_path.as_deref().map(Path::new);
-    let key_path = cli_key_path.or_else(|| Some(Path::new(&config.security.master_key_path)));
-    let master_key_fingerprint = match key_path {
-        Some(p) if p.exists() => match MasterKey::load(p) {
-            Ok(k) => {
-                let fp = k.fingerprint()?;
-                tracing::info!(key_fingerprint = %fp, "master key fingerprint recorded in manifest");
-                Some(fp)
-            }
-            Err(e) => {
-                if cli_key_path.is_some() {
-                    bail!(
-                        "master key at {} was explicitly requested via --key-path but \
-                         could not be loaded: {e}. Refusing backup to prevent creating \
-                         an archive without key-fingerprint protection (DS-AUD-034).",
-                        p.display()
-                    );
-                }
-                tracing::warn!(error = %e, "failed to load master key for fingerprint; manifest will omit fingerprint");
-                None
-            }
-        },
-        _ => None,
-    };
 
     let manifest = BackupManifest {
         version: BACKUP_FORMAT_VERSION,

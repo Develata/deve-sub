@@ -9,8 +9,8 @@
 //! - Checks the cancel flag before each phase (SRC-009: "取消后
 //!   不发布半成品"). No check after reconcile — once the snapshot is
 //!   committed, the refresh must proceed to Completed (P0-09).
-//! - Writes a terminal status (Completed / Failed / Cancelled) on every exit
-//!   path so no job is left in Pending or Running.
+//! - Commits Completed with publication. Failed/Cancelled writes are best-effort;
+//!   startup recovery and lease expiry recover jobs after storage failure.
 //! - The snapshot publish (deactivate old + insert new) remains the final
 //!   atomic step — a cancelled refresh never publishes a half-built snapshot.
 
@@ -108,11 +108,11 @@ pub async fn start_refresh_job(
 /// status (created via [`start_refresh_job`]).
 ///
 /// Checks `cancelled` before each phase. On cancel, writes
-/// `Cancelled` terminal status and returns [`SourceAppError::Cancelled`].
+/// `Cancelled` terminal status best-effort and returns [`SourceAppError::Cancelled`].
 /// No cancel check after the reconcile commit — once the snapshot is
 /// published, the job must be marked Completed (P0-09).
-/// On any other error, writes `Failed` terminal status with the error
-/// message and returns the error.
+/// On any other error, writes `Failed` terminal status best-effort with the error
+/// message and returns the error. Lease recovery handles failed terminal writes.
 ///
 /// # Errors
 /// - [`SourceAppError::SourceNotFound`] — source does not exist.
@@ -130,19 +130,7 @@ pub async fn execute_refresh_job(
     let result = execute_refresh_inner(deps, job_id, source_id, cancelled).await;
 
     match &result {
-        Ok(r) => {
-            let _ = deps
-                .job_repo
-                .mark_completed(
-                    job_id,
-                    r.reconcile.new_nodes,
-                    r.reconcile.duplicate_nodes,
-                    r.reconcile.reactivated_nodes,
-                    r.reconcile.missing_nodes,
-                    r.not_modified,
-                )
-                .await;
-        }
+        Ok(_) => {} // Publication and Completed commit together in the storage boundary.
         Err(SourceAppError::Cancelled) => {
             let _ = deps.job_repo.mark_cancelled(job_id).await;
         }
@@ -186,7 +174,7 @@ async fn execute_refresh_inner(
     let fetch = match deps.fetcher.fetch(&source.url, etag.as_deref()).await {
         Ok(f) => f,
         Err(e) => {
-            disable_on_failure(deps.source_repo, &source).await;
+            disable_on_failure(deps.source_repo, &source, job_id).await;
             return Err(e.into());
         }
     };
@@ -205,10 +193,9 @@ async fn execute_refresh_inner(
         // forever and the source is re-fetched every tick. Bump the active
         // snapshot's `fetched_at` so the configured interval is honored
         // (SRC-014).
-        let _ = deps
-            .snapshot_repo
-            .touch_fetched_at(source_id, Timestamp::now())
-            .await;
+        deps.snapshot_repo
+            .touch_fetched_at(source_id, job_id, Timestamp::now())
+            .await?;
         return Ok(RefreshResult {
             snapshot,
             reconcile: ReconcileResult::default(),
@@ -240,7 +227,7 @@ async fn execute_refresh_inner(
     let mut entries = match parse_content(source.source_type, content_type.as_deref(), &body) {
         Ok(e) => e,
         Err(e) => {
-            disable_on_failure(deps.source_repo, &source).await;
+            disable_on_failure(deps.source_repo, &source, job_id).await;
             return Err(e.into());
         }
     };
@@ -311,6 +298,7 @@ async fn execute_refresh_inner(
     };
 
     let input = ReconcileInput {
+        job_id: Some(job_id),
         source_id,
         snapshot: &snapshot,
         entries: &entries,
@@ -321,21 +309,8 @@ async fn execute_refresh_inner(
         .await
         .map_err(map_source_error)?;
 
-    // ── Phase: Publishing ──
-    // WHY (P0-09): no cancel check after reconcile. The reconcile call
-    // atomically commits the new snapshot and node pool changes. If a
-    // cancel signal arrives during or after the commit, the data is
-    // already published — returning Cancelled would mark the job as
-    // Cancelled while the refresh was actually applied, a lie. Once
-    // reconcile has committed, the refresh must proceed to Completed.
-    // Cancel checks before each phase (lines above) are sufficient to
-    // prevent unwanted refreshes; a cancel that arrives after the last
-    // pre-reconcile check (line 257) is too late to stop the commit.
-    deps.job_repo
-        .update_phase(job_id, RefreshPhase::Publishing)
-        .await
-        .map_err(SourceAppError::Source)?;
-
+    // WHY: reconcile publishes the snapshot and Completed outcome atomically.
+    // No fallible post-commit write may misreport durable publication as Failed.
     Ok(RefreshResult {
         snapshot,
         reconcile,
@@ -351,8 +326,12 @@ pub fn signal_cancel(cancelled: &AtomicBool) {
 }
 
 /// Consult current policy without rewriting a stale source snapshot.
-async fn disable_on_failure(repo: &dyn SourceRepository, source: &Source) {
-    if let Err(e) = repo.disable_after_failure(source.id).await {
+async fn disable_on_failure(
+    repo: &dyn SourceRepository,
+    source: &Source,
+    job_id: SourceRefreshJobId,
+) {
+    if let Err(e) = repo.disable_after_failure(source.id, job_id).await {
         tracing::warn!(error = %e, "failed to disable source after refresh failure");
     }
 }

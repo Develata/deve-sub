@@ -48,6 +48,7 @@ pub fn UsersPage(props: UsersProps) -> Element {
     });
 
     let open_create = move |_| {
+        if *saving.read() { return; }
         f_username.set(String::new());
         f_password.set(String::new());
         f_role.set("user".to_string());
@@ -56,20 +57,25 @@ pub fn UsersPage(props: UsersProps) -> Element {
     };
 
     let mut open_disable = move |u: UserDto| {
+        if *saving.read() { return; }
         form_error.set(String::new());
         modal.set(Modal::Disable(u));
     };
 
     let mut open_force_logout = move |u: UserDto| {
+        if *saving.read() { return; }
         form_error.set(String::new());
         modal.set(Modal::ForceLogout(u));
     };
 
     let close_modal = move |_| {
+        if *saving.read() { return; }
         modal.set(Modal::None);
     };
 
     let do_submit = move |_| {
+        if *saving.read() { return; }
+        form_error.set(String::new());
         let state = (*modal.read()).clone();
         match state {
             Modal::Create => {

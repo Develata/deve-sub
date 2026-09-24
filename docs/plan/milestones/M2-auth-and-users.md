@@ -212,3 +212,8 @@ HTML is also no-store; all responses prohibit framing and MIME sniffing and
 send Referrer-Policy: no-referrer. Public subscription responses retain their
 existing private/no-cache ETag semantics. Login UI suppresses repeated submits
 while a request is pending and clears the password upon entering 2FA.
+
+User-management dialogs keep one pending command attached to its draft:
+closing, switching targets, editing and repeated submission are blocked until
+the request settles. Failures retain the draft and re-enable correction/retry.
+AUTH-007 browser coverage controls delayed responses to verify this behavior.

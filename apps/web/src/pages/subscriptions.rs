@@ -41,7 +41,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     let mut f_slug = use_signal(String::new);
     let mut f_template = use_signal(String::new);
     let mut f_profile = use_signal(|| "mihomo".to_string());
-    let mut f_traffic = use_signal(|| Option::<u64>::None);
+    let mut f_traffic = use_signal(String::new);
     let mut f_expires = use_signal(|| Option::<String>::None);
     let mut f_enabled = use_signal(|| true);
     let mut f_node_sel = use_signal(|| serde_json::json!({"mode": "dynamic"}));
@@ -126,11 +126,12 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     };
 
     let open_create = move |_| {
+        if *saving.read() { return; }
         f_name.set(String::new());
         f_slug.set(String::new());
         f_template.set(templates.read().first().map(|t| t.id.clone()).unwrap_or_default());
         f_profile.set("mihomo".to_string());
-        f_traffic.set(None);
+        f_traffic.set(String::new());
         f_expires.set(None);
         f_enabled.set(true);
         f_node_sel.set(serde_json::json!({"mode": "dynamic"}));
@@ -139,11 +140,12 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     };
 
     let mut open_edit = move |s: SubscriptionDto| {
+        if *saving.read() { return; }
         f_name.set(s.name.clone());
         f_slug.set(s.slug.clone());
         f_template.set(s.template_id.clone());
         f_profile.set(s.profile.clone());
-        f_traffic.set(s.traffic_limit);
+        f_traffic.set(s.traffic_limit.map(|limit| limit.to_string()).unwrap_or_default());
         f_expires.set(s.expires_at.clone());
         f_enabled.set(s.enabled);
         f_node_sel.set(s.node_selection.clone());
@@ -152,21 +154,25 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     };
 
     let mut open_delete = move |s: SubscriptionDto| {
+        if *saving.read() { return; }
         form_error.set(String::new());
         modal.set(Modal::Delete(s));
     };
 
     let mut open_temp_link = move |s: SubscriptionDto| {
+        if *saving.read() { return; }
         f_temp_expiry.set(String::new());
         form_error.set(String::new());
         modal.set(Modal::TempLink(s));
     };
 
-    let close_modal = move |_: Event<MouseData>| {
+    let close_modal = move |_| {
+        if *saving.read() { return; }
         modal.set(Modal::None);
     };
 
     let mut do_rotate = move |sub: SubscriptionDto| {
+        if *saving.read() { return; }
         form_error.set(String::new());
         modal.set(Modal::Rotate(sub));
     };
@@ -188,7 +194,25 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     };
 
     let do_submit = move |_| {
+        if *saving.read() { return; }
         let state = (*modal.read()).clone();
+        // WHY: preserve invalid input as a draft; parse failures must never
+        // become None, which the API treats as an unlimited quota.
+        let traffic_limit = if matches!(state, Modal::Create | Modal::Edit(_)) {
+            let draft = f_traffic.read();
+            if draft.is_empty() {
+                None
+            } else {
+                match draft.parse::<u64>() {
+                    Ok(limit) if limit > 0 && limit <= i64::MAX as u64 && draft.bytes().all(|b| b.is_ascii_digit()) => Some(limit),
+                    _ => {
+                        form_error.set(t(l, "subs.invalid_traffic_limit").to_string());
+                        return;
+                    }
+                }
+            }
+        } else { None };
+        form_error.set(String::new());
         match state {
             Modal::Create => {
                 let name = f_name.read().clone();
@@ -204,7 +228,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                     template_id,
                     profile: f_profile.read().clone(),
                     node_selection: f_node_sel.read().clone(),
-                    traffic_limit: *f_traffic.read(),
+                    traffic_limit,
                     expires_at: f_expires.read().clone(),
                 };
                 saving.set(true);
@@ -237,7 +261,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                     template_version_pin: s.template_version_pin,
                     profile: f_profile.read().clone(),
                     node_selection: f_node_sel.read().clone(),
-                    traffic_limit: *f_traffic.read(),
+                    traffic_limit,
                     expires_at: f_expires.read().clone(),
                     enabled: Some(*f_enabled.read()),
                 };
@@ -446,7 +470,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
             f_temp_expiry,
             form_error,
             saving,
-            on_close: move |_| modal.set(Modal::None),
+            on_close: close_modal,
             on_submit: do_submit,
         }
     }

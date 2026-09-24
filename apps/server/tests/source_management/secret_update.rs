@@ -92,3 +92,74 @@ async fn src001_edit_preserves_omitted_secret_and_accepts_explicit_replacement()
         "rejected update must retain URL"
     );
 }
+
+#[tokio::test]
+async fn src001_running_refresh_rejects_edit_with_retryable_conflict() {
+    let app = TestApp::new().await;
+    let router = app.router();
+    let cookie = setup_and_login(&router).await;
+    let created = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json("/api/v1/sources", VALID_SOURCE_BODY),
+            &cookie,
+        ))
+        .await
+        .expect("create");
+    let created = body_to_json(created).await;
+    let id = created["source"]["id"].as_str().expect("ID");
+    let source_id = deve_sub_kernel::SourceId::parse(id).expect("source ID");
+    let job = deve_sub_domain::SourceRefreshJob {
+        id: deve_sub_kernel::SourceRefreshJobId::new(),
+        source_id,
+        status: deve_sub_domain::SourceRefreshJobStatus::Pending,
+        phase: deve_sub_domain::RefreshPhase::Idle,
+        started_at: deve_sub_kernel::Timestamp::now(),
+        finished_at: None,
+        error_message: None,
+        new_nodes: 0,
+        duplicate_nodes: 0,
+        reactivated_nodes: 0,
+        missing_nodes: 0,
+        not_modified: false,
+    };
+    app.state.refresh_job_repo.create(&job).await.expect("job");
+    app.state
+        .refresh_job_repo
+        .mark_running(job.id)
+        .await
+        .expect("lease");
+    let uri = format!("/api/v1/sources/{id}");
+    let response = router
+        .clone()
+        .oneshot(with_cookie(
+            put_json(&uri, &update_body(None).to_string()),
+            &cookie,
+        ))
+        .await
+        .expect("update");
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = body_to_json(response).await;
+    assert_eq!(body["error"], "refresh_in_progress");
+    let stored = app
+        .state
+        .source_repo
+        .find_by_id(source_id)
+        .await
+        .expect("get")
+        .expect("exists");
+    assert_eq!(stored.name, "my-sub");
+    app.state
+        .refresh_job_repo
+        .mark_cancelled(job.id)
+        .await
+        .expect("finish");
+    let response = router
+        .oneshot(with_cookie(
+            put_json(&uri, &update_body(None).to_string()),
+            &cookie,
+        ))
+        .await
+        .expect("retry");
+    assert_eq!(response.status(), StatusCode::OK);
+}

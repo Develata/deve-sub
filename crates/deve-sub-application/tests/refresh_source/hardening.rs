@@ -18,7 +18,7 @@ impl SubscriptionFetcher for PausedFailure {
 }
 
 #[tokio::test]
-async fn refresh_failure_preserves_concurrent_source_edits_and_current_policy() {
+async fn reclaimed_refresh_failure_preserves_source_edits_and_current_policy() {
     for keep_on_fail in [true, false] {
         let db = TestDb::new().await;
         let repo = SqliteSourceRepository::new_with_key(db.pool.clone(), db.master_key.clone());
@@ -47,6 +47,15 @@ async fn refresh_failure_preserves_concurrent_source_edits_and_current_policy() 
             )
             .await
             .expect("fetch entered");
+            // WHY: normal edits now conflict with a live refresh lease. A stale
+            // runner may still fail after recovery releases that lease.
+            sqlx::query(
+                "UPDATE source_refresh_jobs SET status = 'F' WHERE source_id = ? AND status = 'R'",
+            )
+            .bind(original.id.to_string())
+            .execute(&db.pool)
+            .await
+            .expect("reclaim");
             let mut changed = original.clone();
             changed.name = "edited during fetch".into();
             changed.url = "https://new.example.com/sub".into();
@@ -65,6 +74,9 @@ async fn refresh_failure_preserves_concurrent_source_edits_and_current_policy() 
         assert_eq!(after.url, "https://new.example.com/sub");
         assert_eq!(after.update_interval_secs, 7200);
         assert_eq!(after.keep_on_fail, keep_on_fail);
-        assert_eq!(after.enabled, keep_on_fail);
+        assert!(
+            after.enabled,
+            "reclaimed failure cannot disable newly edited source"
+        );
     }
 }

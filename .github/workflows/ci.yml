@@ -365,6 +365,12 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
         working-directory: tests/e2e
+      - name: Verify native installer lifecycle
+        if: matrix.suite == 'legacy'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          sudo python3 scripts/tests/test_install.py --required --binary target/release/deve-sub --web-dir apps/web/dist
       - name: Verify browser process lifecycle
         if: matrix.suite == 'legacy'
         run: npx playwright test --config lifecycle.config.ts

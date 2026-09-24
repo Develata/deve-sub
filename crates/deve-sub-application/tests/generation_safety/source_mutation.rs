@@ -28,6 +28,7 @@ async fn source_mutation(action: &str) {
         .expect("node");
     nodes
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &SourceSnapshot {
                 id: SourceSnapshotId::new(),

@@ -219,6 +219,7 @@ async fn import_reactivates_missing_node() {
     let snap_v1 = make_snapshot(source.id, 1, 2);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v1,
             entries: &entries_v1,
@@ -231,6 +232,7 @@ async fn import_reactivates_missing_node() {
     let snap_v2 = make_snapshot(source.id, 2, 1);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v2,
             entries: &entries_v2,
@@ -360,6 +362,7 @@ async fn list_nodes_active_only_excludes_missing() {
     let snap_v1 = make_snapshot(source.id, 1, 2);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v1,
             entries: &entries_v1,
@@ -371,6 +374,7 @@ async fn list_nodes_active_only_excludes_missing() {
     let snap_v2 = make_snapshot(source.id, 2, 1);
     pool_repo
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &snap_v2,
             entries: &entries_v2,

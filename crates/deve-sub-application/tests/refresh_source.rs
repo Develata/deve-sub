@@ -1107,3 +1107,6 @@ async fn refresh_all_filtered_preserves_active_snapshot() {
 
 #[path = "refresh_source/hardening.rs"]
 mod hardening;
+
+#[path = "refresh_source/lease_publication.rs"]
+mod lease_publication;

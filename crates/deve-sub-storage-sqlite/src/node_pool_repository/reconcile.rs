@@ -267,6 +267,19 @@ impl SqliteNodePoolRepository {
         .await
         .map_err(|e| SourceError::Storage(e.to_string()))?;
 
+        // WHY: a reclaimed lease must not publish stale configuration, and a
+        // durable snapshot cannot precede its durable Completed outcome.
+        if let Some(job_id) = input.job_id {
+            crate::source_refresh_transaction::complete(
+                &mut tx,
+                input.source_id,
+                job_id,
+                &result,
+                false,
+            )
+            .await?;
+        }
+
         tx.commit()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;

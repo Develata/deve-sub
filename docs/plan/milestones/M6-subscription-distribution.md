@@ -441,3 +441,12 @@ OUT-016 owns Web subscription creation and management pagination. The default
 node selection is dynamic; created links must return subscription content.
 Records beyond the first list page and all template choices remain reachable.
 This management proof is distinct from OUT-008 conditional ETag delivery.
+
+The Web quota field retains its text until submission: only an empty field
+means unlimited, and a nonempty value must be a positive decimal byte count
+no greater than `9223372036854775807` (the persisted SQLite integer range; zero
+is invalid). Invalid input preserves the draft and must not send a
+mutation. While a subscription command is pending, the dialog cannot be closed,
+replaced, edited or submitted again. A failed command leaves the same draft
+available for correction and retry. OUT-016 browser coverage exercises invalid
+quotas, intentional clearing, delayed responses and failure recovery.

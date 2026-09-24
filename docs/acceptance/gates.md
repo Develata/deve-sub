@@ -981,3 +981,107 @@ Logs use `/tmp/deve-sub-arm64-authorized-*` and
 is retained. This does not establish native ARM performance or remote CI timing;
 signed-update VM checks and 10k-node performance budgets remain not-run.
 No push, image publication or GitHub settings change occurred.
+
+
+## 2026-09-24 — global review and regression closure
+
+Scope: M4 source leases/validator invalidation/publication, M6 subscription
+integer bounds and pending drafts, M11 explicit backup keys, and installer /
+release workflow boundaries. Findings, ownership and limits are recorded in
+[the review report](../report/2026-09-24-global-review.md). No remote CI,
+release, new Docker build or native VM run is claimed in this round.
+
+Executed against the final review workspace:
+
+- `cargo test --locked --workspace --all-targets --all-features`: 1,113 passed,
+  0 failed, 8 explicitly ignored; 21 Criterion test-mode scenarios succeeded.
+  After the final private helper extraction, refresh_source 21/21 and server
+  source_management + subscription_management 29/29 passed again.
+- fmt, all-target/all-feature check, strict Clippy, doc tests, architecture,
+  and `cargo deny --locked check` passed. Generated OpenAPI was exported from
+  CLI; docs gate verified 157 cases and 508 symbol/file references.
+- Rust CI tests 20/20; `python3 -m unittest discover -s scripts/ci/tests` 14/14;
+  architecture, Docker deadline and soak harness regressions 12/12. Inventory:
+  9 Rust shards, 16 packages, 4 browser lanes. Installer shell syntax passed.
+- Final optimized native binary and production WASM with unmodified Chromium
+  configs: functional 83/83 (80.785s, 2 workers), legacy 16/16 (30.1s), lifecycle
+  3/3 (0.585s). Zero retries/flaky/skipped, original deadlines. Desktop/mobile
+  screenshots of invalid and failed drafts were inspected. Run identifiers:
+  `review-global-20260924-final` and `review-ui-boundary-20260924`.
+- `python3 scripts/tests/test_install.py --required --binary
+  target/release/deve-sub --web-dir apps/web/dist`: 13/13 in 79.446s. bubblewrap
+  owns filesystem/PID isolation; service account and systemd are simulated,
+  with actual CLI/Web/HTTP. This supplements DEPLOY-002 historical native-VM
+  evidence and does not repeat that VM claim.
+- Explicit emitter validator tests 7/7 with Mihomo 1.19.0, sing-box 1.13.14,
+  Xray 26.3.27 on PATH (`--ignored --test-threads=1`). Fixture format loading
+  and rejection do not establish live proxy connectivity.
+- `python3 scripts/perf/soak.py --binary target/release/deve-sub --seconds 90
+  --require-telemetry`: PASS, 90.027s, 2,698 cycles, 12,691 requests, zero
+  unexpected failures/error logs/task panics, tracked jobs zero after shutdown.
+  RSS 40.18→46.86 MiB and FD 16→24; the final FD interval stayed at 24 while
+  RSS still grew slightly. This short run does not prove absence of long-term
+  leaks. History rows grow with test operations; WAL peaked at about 4.07 MiB.
+
+Normal Cargo invocation still reports eight ignores honestly; the seven client
+checks and the real-process soak were run separately above. Local actionlint
+rejects the existing `concurrency.queue: max` field because its schema is older;
+all other checks passed with only that exact diagnostic excluded. No workflow
+field was weakened to satisfy the older tool.
+
+Matrix remains 153 historically evidenced pass and 4 not-run; this is not a
+claim that every historical deployment/platform test ran again. Local logs use
+`/tmp/deve-sub-review-*`; the report retains durable conditions/results.
+
+## Signed updater process acceptance (2026-09-24)
+
+`scripts/tests/test_signed_update.py` supplements UPDATE-001/002 with real
+released binaries and the unchanged embedded production verification key.
+The signed v0.1.2 assets downloaded from GitHub passed all three paths from the
+released v0.1.1 binary: authenticated replacement and running v0.1.2 health;
+HTTP 200 from a stale v0.1.1 process causing actual file rollback and a healthy
+v0.1.1 restart; and a tampered signature refusing before replacement/restart.
+The harness verifies exact binary hashes, running versions and restart counts.
+It never accepts unsigned assets or requires a private signing key.
+
+```sh
+python3 scripts/tests/test_signed_update.py \
+  --assets /path/to/signed-release-assets \
+  --previous-binary /path/to/previous-release/deve-sub-linux-amd64
+```
+
+Use `--updater /path/to/candidate/deve-sub` to exercise the candidate CLI itself;
+the default exercises the previous release's real upgrade path. The asset
+folder requires the native binary, `deve-sub-manifest.json` and its raw `.sig`.
+Use different old/target versions so a stale process cannot satisfy the target
+version check. Headless server processes and files live in a temporary
+bubblewrap mount/PID namespace; `systemctl` is a controlled shim. This does not
+prove real systemd job behavior, Web asset replacement or database rollback.
+UPDATE-001/002 therefore retain `not-run` at their original VM layer. No QEMU,
+qemu-img, cloud-localds or genisoimage executable was available on this host;
+no tools or host services were installed or changed for this supplemental check.
+
+
+## v0.1.3 release preparation — installer CI isolation follow-up
+
+The versioned 0.1.3 workspace passed the complete local Rust baseline again:
+1,113 tests, 8 explicit ignores, strict Clippy, doc tests, docs/architecture and
+inventory gates. Native and Web release builds passed; source/subscription
+form smoke passed 10/10 and the new updater passed all three signed historical
+asset paths. No third-party dependency or database migration changed.
+
+The first remote PR run [35992549529](https://github.com/Develata/deve-sub/actions/runs/35992549529)
+and preflight [35992577933](https://github.com/Develata/deve-sub/actions/runs/35992577933)
+failed the legacy lane before executing the installer: bubblewrap could not
+traverse the runner-owned checkout after sudo/user-namespace setup. The harness
+now copies the actual install script alongside its other inputs into its owned
+`/tmp` fixture before namespace entry and does not mount the checkout. It does
+not relax host permissions, remove isolation, or skip installer assertions.
+
+The new checkout-independence regression failed on the old harness and the
+fixed complete installer suite passed 14/14 in 91.204s. This local regression
+proves independence from checkout access; the precise UID permission failure
+was observed in the remote logs. Independent review confirmed the mount/input
+boundary. Remote follow-up results remain attached to
+[PR #13](https://github.com/Develata/deve-sub/pull/13) and its release preflight;
+local success alone does not promote the candidate to a release.

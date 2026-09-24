@@ -37,8 +37,9 @@ final gate if any lane fails or is cancelled.
 Only superseded runs for the same PR share a workflow concurrency group and
 cancel one another. Non-PR groups include the unique workflow run ID: using a
 branch-only group would replace pending main/release baselines even when
-`cancel-in-progress` is false. Every job has an explicit 5–60 minute timeout;
-inventory rejects missing or unbounded deadlines. Runtime consumers continue
+`cancel-in-progress` is false. Baseline and release execution jobs have explicit
+5–60 minute timeouts; inventory and release-policy tests reject missing or
+unbounded deadlines. Runtime consumers continue
 to use their finer request/test/startup/teardown deadlines.
 
 Static checks and candidate builds may run concurrently. Runtime consumers

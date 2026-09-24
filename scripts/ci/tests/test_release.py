@@ -80,5 +80,55 @@ class LatestImageTests(unittest.TestCase):
         self.assertIn("steps.publish.outputs.digest", self.step["env"]["PUBLISHED_DIGEST"])
 
 
+class ReleasePolicyTests(unittest.TestCase):
+    def test_semver_prerelease_classification_and_tag_mismatch(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
+        step = next(s for s in jobs["version-check"]["steps"] if s.get("id") == "version")
+        for version, expected in [("1.2.3", "false"), ("1.2.3-rc.1", "true")]:
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "Cargo.toml").write_text(f'[workspace.package]\nversion = "{version}"\n')
+                output = root / "output"
+                env = {**os.environ, "GITHUB_REF_NAME": "v" + version,
+                       "GITHUB_EVENT_NAME": "push", "GITHUB_OUTPUT": str(output)}
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+                                        cwd=root, env=env, capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_text(), f"prerelease={expected}\n")
+                env["GITHUB_REF_NAME"] = "v0.0.0"
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+                                        cwd=root, env=env, capture_output=True, text=True, timeout=5)
+                self.assertNotEqual(result.returncode, 0)
+        release = jobs["release"]
+        self.assertIn("version-check", release["needs"])
+        publish = next(s for s in release["steps"] if s.get("name") == "Create GitHub Release")
+        self.assertEqual(publish["with"]["prerelease"],
+                         "${{ needs.version-check.outputs.prerelease == 'true' }}")
+
+    def test_oci_incompatible_build_metadata_fails_before_publication(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
+        step = next(s for s in jobs["version-check"]["steps"] if s.get("id") == "version")
+        for event in ("push", "workflow_dispatch"):
+            for version in ("1.2.3+build.1", "1.2.3-rc.1+build.1"):
+                with self.subTest(event=event, version=version), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    (root / "Cargo.toml").write_text(f'[workspace.package]\nversion = "{version}"\n')
+                    output = root / "output"
+                    env = {**os.environ, "GITHUB_REF_NAME": "v" + version,
+                           "GITHUB_EVENT_NAME": event, "GITHUB_OUTPUT": str(output)}
+                    result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+                                            cwd=root, env=env, capture_output=True, text=True, timeout=5)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("cannot contain build metadata", result.stdout)
+                    self.assertFalse(output.exists())
+
+    def test_release_execution_jobs_have_bounded_deadlines(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
+        for name, job in jobs.items():
+            if "uses" not in job:  # Reusable CI declares its own job deadlines.
+                with self.subTest(job=name):
+                    self.assertTrue(1 <= job["timeout-minutes"] <= 60)
+
+
 if __name__ == "__main__":
     unittest.main()

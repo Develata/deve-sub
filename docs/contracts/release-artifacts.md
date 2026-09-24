@@ -8,7 +8,12 @@ identity is owned by `ci-evidence.md`.
 
 ## Version and assets
 
-A release tag is `v` followed by the workspace Cargo SemVer. One release contains:
+A release tag is `v` followed by the workspace Cargo SemVer. A SemVer
+prerelease is explicitly marked as a GitHub prerelease and cannot become
+the stable latest release. Stable and prerelease versions must omit SemVer
+build metadata (`+...`), which is invalid in OCI tags; tag runs and manual
+preflight both reject it before building or publishing distribution artifacts.
+One release contains:
 
 - `deve-sub-linux-amd64` and `deve-sub-linux-arm64`: executable native binaries.
 - `deve-sub-web.tar.gz`: the same invocation's verified frontend, with

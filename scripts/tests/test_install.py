@@ -16,6 +16,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 BINARY = ROOT / 'target/debug/deve-sub'
@@ -105,9 +106,12 @@ class InstallerTests(unittest.TestCase):
         cls.tag = 'v' + subprocess.check_output([str(BINARY), '--version'], text=True, timeout=5).split()[-1]
 
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix='deve-sub-installer-')
+        self.temp = tempfile.TemporaryDirectory(prefix='deve-sub-installer-', dir='/tmp')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        # Copy inputs before namespace entry: CI's runner home may be private
+        # to another UID even when this harness was launched through sudo.
+        shutil.copyfile(ROOT / 'scripts/install.sh', self.root / 'install.sh')
         for directory in ('assets', 'tools', 'state', 'local/bin', 'local/share/deve-sub/web', 'data', 'systemd'):
             (self.root / directory).mkdir(parents=True, exist_ok=True)
         dispatch = self.root / 'tools/dispatch.py'
@@ -152,14 +156,14 @@ class InstallerTests(unittest.TestCase):
                    '--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib',
                    '--ro-bind', '/lib64', '/lib64', '--ro-bind', '/bin', '/bin',
                    '--ro-bind', '/sbin', '/sbin', '--ro-bind', '/etc', '/etc',
-                   '--ro-bind', str(ROOT), '/repo', '--ro-bind', str(self.root), '/fixture',
+                   '--ro-bind', str(self.root), '/fixture',
                    '--tmpfs', '/tmp', '--tmpfs', '/var/tmp', '--tmpfs', '/run', '--tmpfs', '/var/lib',
                    '--bind', str(self.root / 'local'), '/usr/local',
                    '--bind', str(self.root / 'data'), '/var/lib/deve-sub',
                    '--bind', str(self.root / 'state'), '/state',
                    '--bind', str(self.root / 'systemd'), '/etc/systemd/system',
                    '--setenv', 'PATH', '/fixture/tools:/usr/bin:/bin',
-                   '--chdir', '/', '/bin/sh', '-c', 'umask 077; exec /bin/sh /repo/scripts/install.sh']
+                   '--chdir', '/', '/bin/sh', '-c', 'umask 077; exec /bin/sh /fixture/install.sh']
         result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
         (self.root / 'state/installer.log').write_text(result.stdout)
         return result
@@ -179,6 +183,20 @@ class InstallerTests(unittest.TestCase):
         requests = (self.root / 'state/requests').read_text().splitlines()
         self.assertEqual(len(requests), 4)
         self.assertTrue(all(f'/download/{self.tag}/' in url for url in requests[1:]))
+
+    def test_staged_inputs_do_not_require_checkout(self):
+        # The fixture is already staged. Subsequent namespace setup and script
+        # execution must not depend on access to the original checkout.
+        private = self.root / 'private-checkout'
+        checkout = private / 'repo'
+        checkout.mkdir(parents=True)
+        private.chmod(0)
+        try:
+            with patch(__name__ + '.ROOT', checkout):
+                result = self.run_installer()
+        finally:
+            private.chmod(0o700)
+        self.assertEqual(result.returncode, 0, result.stdout)
 
     def test_explicit_ipv4_bind_reaches_readiness(self):
         result = self.run_installer(bind_host='127.0.0.2')

@@ -1060,3 +1060,28 @@ prove real systemd job behavior, Web asset replacement or database rollback.
 UPDATE-001/002 therefore retain `not-run` at their original VM layer. No QEMU,
 qemu-img, cloud-localds or genisoimage executable was available on this host;
 no tools or host services were installed or changed for this supplemental check.
+
+
+## v0.1.3 release preparation — installer CI isolation follow-up
+
+The versioned 0.1.3 workspace passed the complete local Rust baseline again:
+1,113 tests, 8 explicit ignores, strict Clippy, doc tests, docs/architecture and
+inventory gates. Native and Web release builds passed; source/subscription
+form smoke passed 10/10 and the new updater passed all three signed historical
+asset paths. No third-party dependency or database migration changed.
+
+The first remote PR run [35992549529](https://github.com/Develata/deve-sub/actions/runs/35992549529)
+and preflight [35992577933](https://github.com/Develata/deve-sub/actions/runs/35992577933)
+failed the legacy lane before executing the installer: bubblewrap could not
+traverse the runner-owned checkout after sudo/user-namespace setup. The harness
+now copies the actual install script alongside its other inputs into its owned
+`/tmp` fixture before namespace entry and does not mount the checkout. It does
+not relax host permissions, remove isolation, or skip installer assertions.
+
+The new checkout-independence regression failed on the old harness and the
+fixed complete installer suite passed 14/14 in 91.204s. This local regression
+proves independence from checkout access; the precise UID permission failure
+was observed in the remote logs. Independent review confirmed the mount/input
+boundary. Remote follow-up results remain attached to
+[PR #13](https://github.com/Develata/deve-sub/pull/13) and its release preflight;
+local success alone does not promote the candidate to a release.

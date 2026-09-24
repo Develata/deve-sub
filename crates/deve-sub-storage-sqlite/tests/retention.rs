@@ -113,6 +113,7 @@ async fn reconcile_prunes_snapshots_beyond_retention() {
         };
         pool_repo
             .reconcile(ReconcileInput {
+                job_id: None,
                 source_id: source.id,
                 snapshot: &snapshot,
                 entries: &[trojan_entry(TROJAN_A)],

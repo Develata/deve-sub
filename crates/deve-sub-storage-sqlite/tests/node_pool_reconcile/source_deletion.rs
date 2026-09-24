@@ -6,6 +6,7 @@ use deve_sub_storage_sqlite::{SqliteNodeOverrideRepository, SqlitePoolMetaReposi
 async fn reconcile(repo: &SqliteNodePoolRepository, source: SourceId, uris: &[&str]) {
     let entries: Vec<_> = uris.iter().map(|uri| entry(trojan_node(uri))).collect();
     repo.reconcile(ReconcileInput {
+        job_id: None,
         source_id: source,
         snapshot: &make_snapshot(source, 1, entries.len() as u64),
         entries: &entries,

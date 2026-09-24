@@ -291,7 +291,7 @@ async fn get_source(
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 404, description = "Source not found", body = ErrorResponse),
-        (status = 409, description = "Name already exists", body = ErrorResponse),
+        (status = 409, description = "Name already exists or refresh in progress", body = ErrorResponse),
         (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
@@ -337,6 +337,11 @@ async fn update_source(
             StatusCode::CONFLICT,
             "name_exists",
             "source name is already taken",
+        ),
+        source::SourceAppError::RefreshInProgress(_) => err(
+            StatusCode::CONFLICT,
+            "refresh_in_progress",
+            "source is refreshing; retry after it completes",
         ),
         other => {
             tracing::warn!(error = %other, "update_source failed");

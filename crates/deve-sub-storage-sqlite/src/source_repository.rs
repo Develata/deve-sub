@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use deve_sub_domain::{Source, SourceConfigUpdate, SourceError, SourceRepository, SourceType};
-use deve_sub_kernel::SourceId;
+use deve_sub_kernel::{SourceId, SourceRefreshJobId};
 use deve_sub_security::{MasterKey, envelope};
 use sqlx::sqlite::SqlitePool;
 use std::str::FromStr;
@@ -169,13 +169,12 @@ impl SourceRow {
 
 #[async_trait]
 impl SourceRepository for SqliteSourceRepository {
-    async fn disable_after_failure(&self, id: SourceId) -> Result<(), SourceError> {
-        sqlx::query("UPDATE sources SET enabled = 0 WHERE id = ? AND keep_on_fail = 0")
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| SourceError::Storage(e.to_string()))?;
-        Ok(())
+    async fn disable_after_failure(
+        &self,
+        id: SourceId,
+        job_id: SourceRefreshJobId,
+    ) -> Result<(), SourceError> {
+        self.apply_failure_policy(id, job_id).await
     }
 
     async fn create(&self, source: &Source) -> Result<(), SourceError> {
@@ -273,6 +272,7 @@ impl SourceRepository for SqliteSourceRepository {
             .begin()
             .await
             .map_err(|e| SourceError::Storage(e.to_string()))?;
+        config_update::guard_config_edit(&mut tx, source.id).await?;
         let result = sqlx::query(
             "UPDATE sources SET \
                name = ?, \
@@ -319,6 +319,7 @@ impl SourceRepository for SqliteSourceRepository {
         }
         // WHY: source names contribute to the effective node view and filters.
         // The mutation cannot become visible before its cache invalidation.
+        config_update::invalidate_fetch_validator(&mut tx, source.id).await?;
         crate::pool_meta_repository::bump_revision_tx(&mut tx).await?;
         tx.commit()
             .await

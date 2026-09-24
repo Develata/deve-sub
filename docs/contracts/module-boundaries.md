@@ -104,6 +104,21 @@ method and headers from the current row. It returns the updated source and
 commits its pool-revision invalidation together; concurrent URL replacement
 cannot be reverted by an unrelated edit that omitted the URL.
 
+Both configuration update paths obtain write admission before checking for a
+Running refresh. A live lease rejects the edit with `RefreshInProgress` (HTTP
+409 `refresh_in_progress`). Successful edits clear the active snapshot ETag
+inside the source transaction; cached raw response validators must not bypass
+new parsing/filtering settings. Last-good snapshot contents remain available.
+
+`ReconcileInput.job_id` is required for application refreshes. Reconcile validates
+the Running lease's source ownership and commits Completed with all published
+data; a lost lease or terminal-write failure rolls the transaction back. Direct
+repository reconciliation fixtures may omit the job. The 304 touch operation
+requires its job ID and atomically commits fetched_at plus Completed. Terminal
+failure/cancellation handling must never relabel a committed refresh. Failure-policy
+disabling also checks the matching Running lease inside its update statement;
+a late reclaimed failure has no authority over newly edited configuration.
+
 `SourceRepository::update` and `delete` commit their pool-revision invalidation
 atomically with the source mutation. Prior
 generation semantics are not trusted as direct hits or last-good fallback.

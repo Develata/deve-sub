@@ -22,6 +22,7 @@ pub mod recovery_code_repository;
 pub mod session_repository;
 pub mod short_code_repository;
 pub mod source_refresh_job_repository;
+mod source_refresh_transaction;
 pub mod source_repository;
 pub mod source_snapshot_repository;
 pub mod subscription_repository;

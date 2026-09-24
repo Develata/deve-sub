@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use deve_sub_domain::{SourceError, SourceSnapshot, SourceSnapshotRepository};
-use deve_sub_kernel::{SourceId, SourceSnapshotId, Timestamp};
+use deve_sub_kernel::{SourceId, SourceRefreshJobId, SourceSnapshotId, Timestamp};
 use sqlx::sqlite::SqlitePool;
 
 use crate::timestamp::{format_ts, parse_ts};
@@ -184,18 +184,37 @@ impl SourceSnapshotRepository for SqliteSourceSnapshotRepository {
     async fn touch_fetched_at(
         &self,
         source_id: SourceId,
+        job_id: SourceRefreshJobId,
         now: Timestamp,
     ) -> Result<(), SourceError> {
         let ts = format_ts(now).map_err(SourceError::Storage)?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
+        // WHY: obtain write admission and validate the lease before touching
+        // the snapshot. Configuration edits cannot interleave with completion.
+        crate::source_refresh_transaction::complete(
+            &mut tx,
+            source_id,
+            job_id,
+            &Default::default(),
+            true,
+        )
+        .await?;
         sqlx::query(
             "UPDATE source_snapshots SET fetched_at = ? \
              WHERE source_id = ? AND is_active = 1",
         )
         .bind(ts)
         .bind(source_id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| SourceError::Storage(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| SourceError::Storage(e.to_string()))?;
         Ok(())
     }
 }

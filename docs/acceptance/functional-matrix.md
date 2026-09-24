@@ -73,9 +73,10 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 | FUNC-LIST-ORDER | SRC-013 | 新列表成功后旧列表失败 | 旧错误不能隐藏当前数据 |
 | FUNC-TEMPLATE-ORDER | GEN-003 | A加载挂起、关闭、B加载完成、再释放A | B编辑器及实际保存均保持B内容 |
 
-`refresh_source/hardening.rs::refresh_failure_preserves_concurrent_source_edits_and_current_policy`
-另以可控屏障覆盖 SRC-005：抓取失败前更新源名称/URL/周期和两种 keep_on_fail
-策略，失败后新字段保留，enabled 按当前策略处理。
+`refresh_source/hardening.rs::reclaimed_refresh_failure_preserves_source_edits_and_current_policy`
+另以可控屏障覆盖 SRC-005：回收旧任务租约后更新源名称/URL/周期和两种
+keep_on_fail 策略，旧任务失败不能覆盖新字段或禁用源。有效刷新租约期间编辑返回
+409；快照和任务完成状态同事务发布，配置更新清除旧 ETag。
 
 ## 证据边界
 

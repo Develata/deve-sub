@@ -28,6 +28,7 @@ async fn fixture_named(spec: &str, name: &str) -> (TestDb, SourceId) {
     node.display_name = name.into();
     SqliteNodePoolRepository::new_with_key(db.pool.clone(), db.master_key.clone())
         .reconcile(ReconcileInput {
+            job_id: None,
             source_id: source.id,
             snapshot: &SourceSnapshot {
                 id: SourceSnapshotId::new(),

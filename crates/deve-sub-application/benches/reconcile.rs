@@ -80,6 +80,7 @@ fn bench_reconcile(c: &mut Criterion) {
                             let start = Instant::now();
                             let result = repo
                                 .reconcile(ReconcileInput {
+                                    job_id: None,
                                     source_id: source.id,
                                     snapshot: &snapshot,
                                     entries: &entries,

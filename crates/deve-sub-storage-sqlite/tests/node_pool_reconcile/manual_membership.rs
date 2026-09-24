@@ -15,6 +15,7 @@ async fn refresh(
         entries.push(entry(trojan_node(TROJAN_A)));
     }
     repo.reconcile(ReconcileInput {
+        job_id: None,
         source_id: source,
         snapshot: &make_snapshot(source, version, entries.len() as u64),
         entries: &entries,

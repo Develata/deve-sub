@@ -981,3 +981,54 @@ Logs use `/tmp/deve-sub-arm64-authorized-*` and
 is retained. This does not establish native ARM performance or remote CI timing;
 signed-update VM checks and 10k-node performance budgets remain not-run.
 No push, image publication or GitHub settings change occurred.
+
+
+## 2026-09-24 — global review and regression closure
+
+Scope: M4 source leases/validator invalidation/publication, M6 subscription
+integer bounds and pending drafts, M11 explicit backup keys, and installer /
+release workflow boundaries. Findings, ownership and limits are recorded in
+[the review report](../report/2026-09-24-global-review.md). No remote CI,
+release, new Docker build or native VM run is claimed in this round.
+
+Executed against the final review workspace:
+
+- `cargo test --locked --workspace --all-targets --all-features`: 1,113 passed,
+  0 failed, 8 explicitly ignored; 21 Criterion test-mode scenarios succeeded.
+  After the final private helper extraction, refresh_source 21/21 and server
+  source_management + subscription_management 29/29 passed again.
+- fmt, all-target/all-feature check, strict Clippy, doc tests, architecture,
+  and `cargo deny --locked check` passed. Generated OpenAPI was exported from
+  CLI; docs gate verified 157 cases and 508 symbol/file references.
+- Rust CI tests 20/20; `python3 -m unittest discover -s scripts/ci/tests` 14/14;
+  architecture, Docker deadline and soak harness regressions 12/12. Inventory:
+  9 Rust shards, 16 packages, 4 browser lanes. Installer shell syntax passed.
+- Final optimized native binary and production WASM with unmodified Chromium
+  configs: functional 83/83 (80.785s, 2 workers), legacy 16/16 (30.1s), lifecycle
+  3/3 (0.585s). Zero retries/flaky/skipped, original deadlines. Desktop/mobile
+  screenshots of invalid and failed drafts were inspected. Run identifiers:
+  `review-global-20260924-final` and `review-ui-boundary-20260924`.
+- `python3 scripts/tests/test_install.py --required --binary
+  target/release/deve-sub --web-dir apps/web/dist`: 13/13 in 79.446s. bubblewrap
+  owns filesystem/PID isolation; service account and systemd are simulated,
+  with actual CLI/Web/HTTP. This supplements DEPLOY-002 historical native-VM
+  evidence and does not repeat that VM claim.
+- Explicit emitter validator tests 7/7 with Mihomo 1.19.0, sing-box 1.13.14,
+  Xray 26.3.27 on PATH (`--ignored --test-threads=1`). Fixture format loading
+  and rejection do not establish live proxy connectivity.
+- `python3 scripts/perf/soak.py --binary target/release/deve-sub --seconds 90
+  --require-telemetry`: PASS, 90.027s, 2,698 cycles, 12,691 requests, zero
+  unexpected failures/error logs/task panics, tracked jobs zero after shutdown.
+  RSS 40.18→46.86 MiB and FD 16→24; the final FD interval stayed at 24 while
+  RSS still grew slightly. This short run does not prove absence of long-term
+  leaks. History rows grow with test operations; WAL peaked at about 4.07 MiB.
+
+Normal Cargo invocation still reports eight ignores honestly; the seven client
+checks and the real-process soak were run separately above. Local actionlint
+rejects the existing `concurrency.queue: max` field because its schema is older;
+all other checks passed with only that exact diagnostic excluded. No workflow
+field was weakened to satisfy the older tool.
+
+Matrix remains 153 historically evidenced pass and 4 not-run; this is not a
+claim that every historical deployment/platform test ran again. Local logs use
+`/tmp/deve-sub-review-*`; the report retains durable conditions/results.

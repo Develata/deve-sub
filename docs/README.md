@@ -10,7 +10,7 @@ Deve Sub 的文档按用途和权威层级组织。首次部署请先看用户�
 | 安装或升级当前稳定版 `v0.1.2` | [README 快速开始](../README.md#quick-start) · [部署与更新](features/deployment.md) · [Release](https://github.com/Develata/deve-sub/releases/tag/v0.1.2) |
 | 第一次创建订阅 | [节点整理](features/node-organization.md) · [模板与规则](features/subscription-templates.md) · [认证与订阅链接](features/authentication-and-links.md) |
 | 备份、恢复或排查日志 | [备份与恢复](guides/backup-restore.md) · [日志管理](features/logging.md) |
-| 判断功能是否已验证 | [验收矩阵](acceptance/matrix.tsv) · [验收方法](acceptance/gates.md) · [2026-09-22 全局质量报告](report/2026-09-22-global-quality.md) |
+| 判断功能是否已验证 | [验收矩阵](acceptance/matrix.tsv) · [验收方法](acceptance/gates.md) · [2026-09-24 全局审查报告](report/2026-09-24-global-review.md) · [2026-09-22 质量与部署证据](report/2026-09-22-global-quality.md) |
 | 接入 API 或参与开发 | [OpenAPI](openapi/openapi.json) · [开发指南](guides/development.md) · [贡献指南](guides/contributing.md) |
 
 ## 工程阅读顺序

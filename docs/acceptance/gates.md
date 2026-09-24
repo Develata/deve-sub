@@ -1032,3 +1032,31 @@ field was weakened to satisfy the older tool.
 Matrix remains 153 historically evidenced pass and 4 not-run; this is not a
 claim that every historical deployment/platform test ran again. Local logs use
 `/tmp/deve-sub-review-*`; the report retains durable conditions/results.
+
+## Signed updater process acceptance (2026-09-24)
+
+`scripts/tests/test_signed_update.py` supplements UPDATE-001/002 with real
+released binaries and the unchanged embedded production verification key.
+The signed v0.1.2 assets downloaded from GitHub passed all three paths from the
+released v0.1.1 binary: authenticated replacement and running v0.1.2 health;
+HTTP 200 from a stale v0.1.1 process causing actual file rollback and a healthy
+v0.1.1 restart; and a tampered signature refusing before replacement/restart.
+The harness verifies exact binary hashes, running versions and restart counts.
+It never accepts unsigned assets or requires a private signing key.
+
+```sh
+python3 scripts/tests/test_signed_update.py \
+  --assets /path/to/signed-release-assets \
+  --previous-binary /path/to/previous-release/deve-sub-linux-amd64
+```
+
+Use `--updater /path/to/candidate/deve-sub` to exercise the candidate CLI itself;
+the default exercises the previous release's real upgrade path. The asset
+folder requires the native binary, `deve-sub-manifest.json` and its raw `.sig`.
+Use different old/target versions so a stale process cannot satisfy the target
+version check. Headless server processes and files live in a temporary
+bubblewrap mount/PID namespace; `systemctl` is a controlled shim. This does not
+prove real systemd job behavior, Web asset replacement or database rollback.
+UPDATE-001/002 therefore retain `not-run` at their original VM layer. No QEMU,
+qemu-img, cloud-localds or genisoimage executable was available on this host;
+no tools or host services were installed or changed for this supplemental check.

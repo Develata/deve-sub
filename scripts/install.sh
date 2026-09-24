@@ -56,6 +56,15 @@ case "$DATA_DIR" in
         err "unsupported data directory for the hardened systemd unit" ;;
 esac
 case "$BIND_ADDR" in *[!a-zA-Z0-9.:\[\]-]*) err "invalid bind address" ;; esac
+# Map wildcard listeners to loopback; retain explicit IPv4/IPv6 addresses.
+health_url() {
+    case "$1" in
+        0.0.0.0:*) printf 'http://127.0.0.1:%s' "${1##*:}" ;;
+        \[::\]:*) printf 'http://[::1]:%s' "${1##*:}" ;;
+        *) printf 'http://%s' "$1" ;;
+    esac
+}
+HEALTH_URL=$(health_url "$BIND_ADDR")
 exec 9> "$BIN_PATH.deve-sub.update.lock"
 flock -n 9 || err "another install/update is in progress"
 PENDING=/var/tmp/deve-sub-install.pending
@@ -158,6 +167,7 @@ BINARY_BACKUP=""
 PREVIOUS_VERSION=""
 WEB_BACKUP=""
 SERVICE_BACKUP=""
+PREVIOUS_HEALTH_URL=""
 BINARY_INSTALLED=0
 WEB_INSTALLED=0
 UNIT_INSTALLED=0
@@ -178,6 +188,12 @@ fi
 if [ -f "$SERVICE_FILE" ]; then
     SERVICE_BACKUP="$TMPDIR/service.bak"
     cp -a "$SERVICE_FILE" "$SERVICE_BACKUP"
+    if [ "$WAS_ACTIVE" -eq 1 ]; then
+        # Recovery must probe the restored unit, which may use a different port.
+        previous_bind=$(awk '/^ExecStart=/ {for (i=1;i<=NF;i++) if ($i == "--bind") print $(i+1)}' "$SERVICE_BACKUP")
+        [ -n "$previous_bind" ] || err "cannot determine active service bind address from $SERVICE_FILE"
+        PREVIOUS_HEALTH_URL=$(health_url "$previous_bind")
+    fi
 fi
 
 # Stop the new process before restoring its assets, then restore the previous
@@ -214,8 +230,8 @@ rollback_install() {
         # checkpoint until the old process actually serves ready + its version.
         for attempt in $(seq 1 10); do
             if systemctl is-active --quiet deve-sub && \
-                curl --max-time 2 --max-filesize 4096 -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/ready" >/dev/null 2>&1; then
-                restored=$(curl --max-time 2 --max-filesize 4096 -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/live" 2>/dev/null || echo "")
+                curl --noproxy '*' --max-time 2 --max-filesize 4096 -sf "$PREVIOUS_HEALTH_URL/health/ready" >/dev/null 2>&1; then
+                restored=$(curl --noproxy '*' --max-time 2 --max-filesize 4096 -sf "$PREVIOUS_HEALTH_URL/health/live" 2>/dev/null || echo "")
                 if printf '%s' "$restored" | grep -qF "\"version\":\"$PREVIOUS_VERSION\""; then return 0; fi
             fi
             sleep 1
@@ -356,10 +372,10 @@ systemctl restart deve-sub
 
 info "waiting for healthy state..."
 for i in $(seq 1 60); do
-    if curl --max-time 2 --max-filesize 4096 -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/ready" >/dev/null 2>&1; then
+    if curl --noproxy '*' --max-time 2 --max-filesize 4096 -sf "$HEALTH_URL/health/ready" >/dev/null 2>&1; then
         info "service is healthy"
         # Verify the running binary matches the installed version (DS-AUD-006).
-        RUNNING_VERSION=$(curl --max-time 2 --max-filesize 4096 -sf "http://127.0.0.1:${BIND_ADDR##*:}/health/live" 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+        RUNNING_VERSION=$(curl --noproxy '*' --max-time 2 --max-filesize 4096 -sf "$HEALTH_URL/health/live" 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
         if [ "$RUNNING_VERSION" != "$INSTALLED_VERSION" ]; then
             err "version mismatch: installed $INSTALLED_VERSION but service reports $RUNNING_VERSION — restart may have failed"
         fi

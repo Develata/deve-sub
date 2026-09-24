@@ -20,6 +20,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 BINARY = ROOT / 'target/debug/deve-sub'
 WEB = ROOT / 'apps/web/dist'
+REQUIRED = False
 
 # Filesystem writes are limited by bwrap to the test's temporary directories.
 DISPATCH = r'''#!/usr/bin/python3
@@ -32,13 +33,14 @@ if name == 'curl':
         with open('/state/requests', 'a') as log:
             log.write(url + '\n')
         if url == 'https://api.github.com/repos/Develata/deve-sub/releases/latest':
-            print(json.dumps({'tag_name': 'v0.1.0'}))
-        elif url.startswith('https://github.com/Develata/deve-sub/releases/download/v0.1.0/'):
+            print(json.dumps({'tag_name': os.environ['INSTALL_SMOKE_TAG']}))
+        elif url.startswith('https://github.com/Develata/deve-sub/releases/download/' + os.environ['INSTALL_SMOKE_TAG'] + '/'):
             asset = pathlib.Path(url).name
             shutil.copyfile('/fixture/assets/' + asset, args[args.index('-o') + 1])
         else:
             raise SystemExit('unexpected release URL')
     elif pathlib.Path('/state/restored.json').exists() and url.endswith(('/health/ready', '/health/live')):
+        assert url.startswith('http://127.0.0.1:54321/'), url
         if os.environ.get('INSTALL_SMOKE_FAIL_ROLLBACK_READY') == '1':
             raise SystemExit(22)
         print('{"version":"0.0.9"}' if url.endswith('/health/live') else '{}')
@@ -95,10 +97,12 @@ class InstallerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not shutil.which('bwrap'):
-            raise unittest.SkipTest('bubblewrap is required for isolated installer smoke')
+            raise (RuntimeError if REQUIRED else unittest.SkipTest)('bubblewrap is required for isolated installer smoke')
         if not BINARY.is_file() or not (WEB / 'index.html').is_file():
-            raise unittest.SkipTest('build the CLI and Web dist before running installer smoke')
+            raise (RuntimeError if REQUIRED else unittest.SkipTest)('build the CLI and Web dist before running installer smoke')
         subprocess.run(['bwrap', '--ro-bind', '/', '/', '--unshare-user', '--uid', '0', '--gid', '0', '/usr/bin/true'], check=True)
+
+        cls.tag = 'v' + subprocess.check_output([str(BINARY), '--version'], text=True, timeout=5).split()[-1]
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='deve-sub-installer-')
@@ -115,7 +119,7 @@ class InstallerTests(unittest.TestCase):
         (self.root / 'local/bin/deve-sub').write_bytes(self.old_binary)
         (self.root / 'local/bin/deve-sub').chmod(0o755)
         (self.root / 'local/share/deve-sub/web/index.html').write_text('previous frontend')
-        (self.root / 'systemd/deve-sub.service').write_text('previous service unit')
+        (self.root / 'systemd/deve-sub.service').write_text('ExecStart=/usr/local/bin/deve-sub serve --bind 127.0.0.1:54321\n')
         shutil.copyfile(BINARY, self.root / 'assets/deve-sub-linux-amd64')
         with tarfile.open(self.root / 'assets/deve-sub-web.tar.gz', 'w:gz') as archive:
             for path in sorted(WEB.rglob('*')):
@@ -130,11 +134,14 @@ class InstallerTests(unittest.TestCase):
             lines.append(hashlib.sha256((assets / name).read_bytes()).hexdigest() + '  ' + name)
         (assets / 'checksums.txt').write_text('\n'.join(lines) + '\n')
 
-    def run_installer(self, fail_restart=False, latest=False, missing_version=False, fail_enable=False, fail_rollback_ready=False):
-        with socket.socket() as listener:
-            listener.bind(('127.0.0.1', 0))
+    def run_installer(self, fail_restart=False, latest=False, missing_version=False, fail_enable=False, fail_rollback_ready=False, bind_host='127.0.0.1'):
+        family = socket.AF_INET6 if ':' in bind_host else socket.AF_INET
+        with socket.socket(family) as listener:
+            listener.bind((bind_host, 0))
             port = listener.getsockname()[1]
-        env = dict(os.environ, DEVE_SUB_BIND=f'127.0.0.1:{port}', DEVE_SUB_VERSION='latest' if latest else 'v0.1.0',
+        bind = f'[{bind_host}]:{port}' if family == socket.AF_INET6 else f'{bind_host}:{port}'
+        env = dict(os.environ, DEVE_SUB_BIND=bind, DEVE_SUB_VERSION='latest' if latest else self.tag,
+                   INSTALL_SMOKE_TAG=self.tag,
                    DEVE_SUB_DATA_DIR='/var/lib/deve-sub', INSTALL_SMOKE_FAIL_RESTART='1' if fail_restart else '0',
                    INSTALL_SMOKE_MISSING_VERSION='1' if missing_version else '0',
                    INSTALL_SMOKE_FAIL_ENABLE='1' if fail_enable else '0',
@@ -171,7 +178,23 @@ class InstallerTests(unittest.TestCase):
         self.assertIn('--web-dist-dir /usr/local/share/deve-sub/web', unit)
         requests = (self.root / 'state/requests').read_text().splitlines()
         self.assertEqual(len(requests), 4)
-        self.assertTrue(all('/download/v0.1.0/' in url for url in requests[1:]))
+        self.assertTrue(all(f'/download/{self.tag}/' in url for url in requests[1:]))
+
+    def test_explicit_ipv4_bind_reaches_readiness(self):
+        result = self.run_installer(bind_host='127.0.0.2')
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_ipv6_loopback_reaches_readiness(self):
+        result = self.run_installer(bind_host='::1')
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_ipv4_wildcard_reaches_readiness(self):
+        result = self.run_installer(bind_host='0.0.0.0')
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_ipv6_wildcard_reaches_readiness(self):
+        result = self.run_installer(bind_host='::')
+        self.assertEqual(result.returncode, 0, result.stdout)
 
     def test_restart_failure_restores_previous_binary_and_frontend(self):
         result = self.run_installer(fail_restart=True)
@@ -194,7 +217,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(actions[-4:], ['stop deve-sub', 'daemon-reload', 'start deve-sub', 'is-active --quiet deve-sub'])
         restored = json.loads((self.root / 'state/restored.json').read_text())
         self.assertEqual(restored, {'binary': hashlib.sha256(self.old_binary).hexdigest(),
-                                    'web': 'previous frontend', 'unit': 'previous service unit'})
+                                    'web': 'previous frontend', 'unit': 'ExecStart=/usr/local/bin/deve-sub serve --bind 127.0.0.1:54321\n'})
         self.assertFalse((self.root / 'state/server.pid').exists())
 
     def test_started_but_unhealthy_previous_service_retains_backups(self):
@@ -247,8 +270,10 @@ class InstallerTests(unittest.TestCase):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--required', action='store_true')
     parser.add_argument('--binary', type=Path, default=BINARY)
     parser.add_argument('--web-dir', type=Path, default=WEB)
     args = parser.parse_args()
+    REQUIRED = args.required
     BINARY, WEB = args.binary.resolve(), args.web_dir.resolve()
     unittest.main(argv=['test_install.py'])

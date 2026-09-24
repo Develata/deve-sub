@@ -70,7 +70,11 @@ keeps rejecting repeated initialization. No database migration is added.
 
 The installer resolves a release tag once, verifies both downloaded payloads,
 installs the binary and frontend, and passes the absolute frontend directory to
-systemd. Success requires readiness plus the expected running version. An
+systemd. Success requires readiness plus the expected running version.
+Readiness probes use the configured listener address (wildcards map to the
+corresponding loopback), bypass environment proxies, and use the saved unit
+address when verifying recovery. Upgrading an active service requires an
+installer-managed unit with an explicit `--bind` argument. An
 installation failure stops the new process, restores the previous binary,
 frontend and unit, and restarts a previously active service. Failed recovery
 retains the backups for operator repair. The installer

@@ -230,6 +230,15 @@ fn browser_lanes(browser: &Value) -> Result<()> {
             }),
         "browser command cannot be filtered, skipped or error-suppressed"
     );
+    let installer = named_step(browser, "Verify native installer lifecycle")?;
+    ensure!(
+        installer
+            == &json!({
+                "name": "Verify native installer lifecycle", "if": "matrix.suite == 'legacy'",
+                "run": "sudo apt-get update\nsudo apt-get install -y bubblewrap\nsudo python3 scripts/tests/test_install.py --required --binary target/release/deve-sub --web-dir apps/web/dist\n",
+            }),
+        "legacy lane must verify the native installer without skipping prerequisites"
+    );
     let lifecycle = steps
         .iter()
         .find(|step| step["name"] == "Verify browser process lifecycle")

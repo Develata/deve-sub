@@ -1764,6 +1764,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "scripts/tests/test_install.py"
         - "scripts/tests/native_vm.py"
       status: pass
   - id: DEPLOY-003

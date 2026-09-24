@@ -28,6 +28,8 @@ checks), functional API, functional desktop and functional mobile. All lanes
 must run, with `fail-fast: false` and at most four runners. The shared-state
 legacy suite remains serial; isolated functional lanes use two workers each on
 CI to bound simultaneous servers and password-hashing memory on each runner.
+The legacy lane also runs isolated native installer smoke against its verified
+binary and Web artifacts; missing bubblewrap or build inputs fail the lane.
 Inventory rejects missing/duplicate lanes and weakened commands. Each lane
 uploads a uniquely named diagnostic artifact; the job aggregate blocks the
 final gate if any lane fails or is cancelled.

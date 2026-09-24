@@ -207,6 +207,33 @@ jobs:
           cargo cyclonedx --manifest-path apps/web/Cargo.toml --features frontend --format json --describe binaries --target wasm32-unknown-unknown
           cp apps/web/deve-sub-web_bin.cdx.json "$RUNNER_TEMP/release/deve-sub-web-sbom.json"
 
+      - name: Verify candidate asset completeness
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cd "$RUNNER_TEMP/release"
+          for asset in deve-sub-linux-amd64 deve-sub-linux-arm64 deve-sub-web.tar.gz \
+            checksums.txt deve-sub-manifest.json deve-sub-manifest.json.sig \
+            deve-sub-sbom.json deve-sub-web-sbom.json; do
+            test -s "$asset" || { echo "Missing or empty candidate asset: $asset"; exit 1; }
+          done
+
+      - name: Upload release candidate
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-candidate
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/release/deve-sub-linux-amd64
+            ${{ runner.temp }}/release/deve-sub-linux-arm64
+            ${{ runner.temp }}/release/deve-sub-web.tar.gz
+            ${{ runner.temp }}/release/checksums.txt
+            ${{ runner.temp }}/release/deve-sub-manifest.json
+            ${{ runner.temp }}/release/deve-sub-manifest.json.sig
+            ${{ runner.temp }}/release/deve-sub-sbom.json
+            ${{ runner.temp }}/release/deve-sub-web-sbom.json
+
       - name: Create GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2

@@ -122,6 +122,57 @@ class ReleasePolicyTests(unittest.TestCase):
                     self.assertIn("cannot contain build metadata", result.stdout)
                     self.assertFalse(output.exists())
 
+    def test_manual_candidate_upload_has_only_complete_release_assets(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
+        steps = jobs["release"]["steps"]
+        upload = next(s for s in steps if s.get("name") == "Upload release candidate")
+        verify = next(s for s in steps if s.get("name") == "Verify candidate asset completeness")
+        publish = next(s for s in steps if s.get("name") == "Create GitHub Release")
+        expected = {
+            "deve-sub-linux-amd64", "deve-sub-linux-arm64", "deve-sub-web.tar.gz",
+            "checksums.txt", "deve-sub-manifest.json", "deve-sub-manifest.json.sig",
+            "deve-sub-sbom.json", "deve-sub-web-sbom.json",
+        }
+        paths = upload["with"]["path"].splitlines()
+        self.assertEqual(len(paths), len(expected))
+        self.assertEqual(set(paths), {"${{ runner.temp }}/release/" + a for a in expected})
+        self.assertEqual(set(paths), set(publish["with"]["files"].splitlines()))
+        self.assertEqual(upload["uses"],
+                         "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02")
+        self.assertEqual(upload["with"]["name"], "release-candidate")
+        self.assertEqual(upload["with"]["if-no-files-found"], "error")
+        self.assertTrue(1 <= upload["with"]["retention-days"] <= 7)
+        for step in (verify, upload):
+            self.assertEqual(step["if"], "github.event_name == 'workflow_dispatch'")
+        signing = next(s for s in steps if s.get("name") == "Sign release manifest")
+        sbom = next(s for s in steps if s.get("name") == "Generate SBOM")
+        self.assertLess(steps.index(signing), steps.index(verify))
+        self.assertLess(steps.index(sbom), steps.index(verify))
+        self.assertLess(steps.index(verify), steps.index(upload))
+        # upload-artifact's no-files policy does not reject one missing path.
+        # Execute the completeness guard for every partial/empty asset set.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release = root / "release"
+            release.mkdir()
+            for asset in expected:
+                (release / asset).write_bytes(b"fixture")
+            env = {**os.environ, "RUNNER_TEMP": str(root)}
+
+            def check():
+                return subprocess.run(["bash", "-euo", "pipefail", "-c", verify["run"]],
+                                      env=env, capture_output=True, text=True, timeout=5)
+
+            self.assertEqual(check().returncode, 0)
+            for asset in expected:
+                with self.subTest(asset=asset):
+                    path = release / asset
+                    path.unlink()
+                    self.assertNotEqual(check().returncode, 0)
+                    path.touch()
+                    self.assertNotEqual(check().returncode, 0)
+                    path.write_bytes(b"fixture")
+
     def test_release_execution_jobs_have_bounded_deadlines(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]
         for name, job in jobs.items():

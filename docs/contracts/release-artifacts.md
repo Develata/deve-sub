@@ -29,8 +29,12 @@ One release contains:
 
 Manual `workflow_dispatch` runs full CI, both native build/smoke jobs and
 artifact assembly, including signature and SBOM generation, without creating
-a tag, Release or image publication. Tag pushes repeat those gates before
-publication.
+a tag, Release or image publication. Successful manual runs retain exactly the
+eight distribution assets listed above as the `release-candidate` Actions
+artifact for seven days, after checking every asset is nonempty. This explicit
+allowlist excludes signing secrets and intermediate files. Download this
+artifact for signed updater acceptance; it is not a stable release channel.
+Tag pushes repeat those gates before publication.
 
 Docker publishes the same version as a lowercase GHCR reference containing
 both `linux/amd64` and `linux/arm64`: `ghcr.io/develata/deve-sub:<release-tag>`

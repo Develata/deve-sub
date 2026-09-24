@@ -27,7 +27,7 @@ pub struct CreateSubscriptionRequest {
     /// Node selection configuration as a JSON object matching the V3
     /// `nodeSelector` schema (`mode`, `filters`, `nodeIds`, `nodeRevision`).
     pub node_selection: serde_json::Value,
-    /// Traffic limit in bytes. `null` = unlimited. Enforced at delivery.
+    /// Traffic limit: 1–9223372036854775807 bytes. `null` = unlimited. Enforced at delivery.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub traffic_limit: Option<u64>,
     /// Subscription expiry as an ISO 8601 string. `null` = never expires.
@@ -44,14 +44,14 @@ pub struct UpdateSubscriptionRequest {
     pub name: String,
     /// URL-safe slug, unique per owner.
     pub slug: String,
-    /// Pinned template version. `null` follows the template's active version.
+    /// Pinned template version, at most 9223372036854775807. `null` follows the active version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_version_pin: Option<u64>,
     /// Target output profile (kebab-case).
     pub profile: String,
     /// Node selection configuration as a JSON object.
     pub node_selection: serde_json::Value,
-    /// Traffic limit in bytes. `null` = unlimited.
+    /// Traffic limit: 1–9223372036854775807 bytes. `null` = unlimited.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub traffic_limit: Option<u64>,
     /// Subscription expiry as an ISO 8601 string. `null` = never expires.
@@ -76,14 +76,14 @@ pub struct SubscriptionDto {
     pub owner_id: String,
     /// The bound template ULID.
     pub template_id: String,
-    /// Pinned template version. `null` follows the template's active version.
+    /// Pinned template version, at most 9223372036854775807. `null` follows the active version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_version_pin: Option<u64>,
     /// Target output profile (kebab-case).
     pub profile: String,
     /// Node selection configuration as a JSON object.
     pub node_selection: serde_json::Value,
-    /// Traffic limit in bytes. `null` = unlimited.
+    /// Traffic limit: 1–9223372036854775807 bytes. `null` = unlimited.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub traffic_limit: Option<u64>,
     /// Subscription expiry (ISO 8601). `null` = never expires.

@@ -127,10 +127,13 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
         .bind(&subscription.slug)
         .bind(subscription.owner_id.to_string())
         .bind(subscription.template_id.to_string())
-        .bind(subscription.template_version_pin.map(|v| v as i64))
+        .bind(stored_integer(
+            subscription.template_version_pin,
+            "template_version_pin",
+        )?)
         .bind(&subscription.profile)
         .bind(&node_selection)
-        .bind(subscription.traffic_limit.map(|v| v as i64))
+        .bind(stored_integer(subscription.traffic_limit, "traffic_limit")?)
         .bind(expires_at)
         .bind(subscription.token_id.to_string())
         .bind(subscription.enabled as i64)
@@ -194,10 +197,13 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
         .bind(&subscription.slug)
         .bind(subscription.owner_id.to_string())
         .bind(subscription.template_id.to_string())
-        .bind(subscription.template_version_pin.map(|v| v as i64))
+        .bind(stored_integer(
+            subscription.template_version_pin,
+            "template_version_pin",
+        )?)
         .bind(&subscription.profile)
         .bind(&node_selection)
-        .bind(subscription.traffic_limit.map(|v| v as i64))
+        .bind(stored_integer(subscription.traffic_limit, "traffic_limit")?)
         .bind(sub_expires_at)
         .bind(subscription.token_id.to_string())
         .bind(subscription.enabled as i64)
@@ -329,10 +335,13 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
         )
         .bind(&subscription.name)
         .bind(&subscription.slug)
-        .bind(subscription.template_version_pin.map(|v| v as i64))
+        .bind(stored_integer(
+            subscription.template_version_pin,
+            "template_version_pin",
+        )?)
         .bind(&subscription.profile)
         .bind(&node_selection)
-        .bind(subscription.traffic_limit.map(|v| v as i64))
+        .bind(stored_integer(subscription.traffic_limit, "traffic_limit")?)
         .bind(expires_at)
         .bind(subscription.enabled as i64)
         .bind(updated_at)
@@ -384,4 +393,12 @@ impl SubscriptionRepository for SqliteSubscriptionRepository {
         }
         Ok(())
     }
+}
+
+// WHY: public u64 values must never wrap into negative SQLite INTEGERs, even
+// when an internal caller bypasses application validation.
+fn stored_integer(value: Option<u64>, field: &str) -> Result<Option<i64>, SubscriptionError> {
+    value.map(i64::try_from).transpose().map_err(|_| {
+        SubscriptionError::Storage(format!("{field} exceeds the signed 64-bit storage range"))
+    })
 }

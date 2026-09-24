@@ -42,6 +42,11 @@ copies `/s/{code}/{profile}`. If no short code exists, generate one first.
 Creation, token rotation and temporary-link dialogs display an importable
 `/sub/{token}/{profile}` URL once. The slug is only a name, never a credential.
 
+Subscription traffic limits accept positive whole-byte counts; blank means
+unlimited. Invalid values remain visible with an error and are never saved as
+unlimited. Subscription and user dialogs keep their draft locked while saving;
+a failed request restores editing and retry without discarding the draft.
+
 Web token rotation asks for confirmation and immediately invalidates the old
 token URL. Update clients to use the new URL. The API still supports an
 explicit grace period, including permanent grace with `null`/`-1`; the CLI's

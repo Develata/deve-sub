@@ -144,6 +144,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/subscription-forms.ui.spec.ts"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-DELETE"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-FORM"
         - "tests/e2e/specs/ui-010-keyboard-nav.spec.ts::UI-010"
@@ -2423,10 +2424,12 @@ cases:
     dimensions: [desktop, mobile, pagination]
     preconditions: ["隔离数据库、管理员、合成节点与模板"]
     steps: ["Web表单使用默认选择创建订阅", "获取生成链接", "加载第51条订阅及模板选项"]
-    assertions: ["创建成功且返回内容可获取", "后续订阅记录与模板选择可达"]
+    assertions: ["创建成功且返回内容可获取", "后续订阅记录与模板选择可达", "额度仅空白表示不限，正整数不超过i64最大值，非法输入不丢失草稿或改写旧值"]
     fixtures: ["tests/e2e/functional/fixture.ts"]
     evidence:
       tests:
+        - "apps/server/tests/subscription_management/integer_bounds.rs::out016_integer_bounds_reject_overflow_without_mutation"
+        - "tests/e2e/functional/subscription-forms.ui.spec.ts"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-SUB-CREATE"
         - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-PAGINATION"
       status: pass

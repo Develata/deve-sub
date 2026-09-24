@@ -191,6 +191,8 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::En, "subs.profile") => "Profile",
         (Language::Zh, "subs.traffic_limit") => "流量限制（字节，留空=不限）",
         (Language::En, "subs.traffic_limit") => "Traffic Limit (bytes, empty=unlimited)",
+        (Language::Zh, "subs.invalid_traffic_limit") => "流量限制须为 1–9223372036854775807 的正整数；留空表示不限量",
+        (Language::En, "subs.invalid_traffic_limit") => "Traffic limit must be a positive integer from 1 to 9223372036854775807; leave blank for unlimited",
         (Language::Zh, "subs.expires_at") => "过期时间（留空=永不过期）",
         (Language::En, "subs.expires_at") => "Expires At (empty=never)",
         (Language::Zh, "subs.delivery_link") => "订阅链接",

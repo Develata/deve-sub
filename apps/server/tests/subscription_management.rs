@@ -34,6 +34,9 @@ use deve_sub_storage_sqlite::{
     SqliteTrafficDailySnapshotRepository, SqliteTrafficRepository, SqliteUserRepository,
 };
 
+#[path = "subscription_management/integer_bounds.rs"]
+mod integer_bounds;
+
 struct TestApp {
     state: deve_sub_server::AppState,
     _dir: tempfile::TempDir,

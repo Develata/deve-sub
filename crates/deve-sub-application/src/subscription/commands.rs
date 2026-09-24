@@ -12,16 +12,18 @@
 //! and never appears in logs. See `docs/plan/00-engineering-constitution.md`
 //! §"Data and security".
 
-use deve_sub_compatibility::ProfileKind;
 use deve_sub_domain::{
-    NodeSelector, ShortCode, ShortCodeRepository, Subscription, SubscriptionRepository,
-    SubscriptionToken, SubscriptionTokenRepository, TempLink, TempLinkRepository,
+    ShortCode, ShortCodeRepository, Subscription, SubscriptionRepository, SubscriptionToken,
+    SubscriptionTokenRepository, TempLink, TempLinkRepository,
 };
 use deve_sub_kernel::{SubscriptionId, TempLinkId, TemplateId, Timestamp, UserId};
 use deve_sub_security::{MasterKey, generate_session_token, generate_short_code, hmac_digest};
-use time::format_description::well_known::Rfc3339;
 
 use super::error::{SubscriptionAppError, map_subscription_error};
+use super::validation::{
+    parse_iso8601, parse_node_selection, validate_name, validate_profile, validate_slug,
+    validate_template_version_pin, validate_traffic_limit,
+};
 
 /// HMAC purpose for subscription delivery token hashing.
 ///
@@ -30,75 +32,8 @@ use super::error::{SubscriptionAppError, map_subscription_error};
 /// versa. See `deve-sub-security/src/hmac.rs`.
 pub(super) const PURPOSE_SUBSCRIPTION_TOKEN: &str = "subscription_token";
 
-/// Maximum subscription name length.
-const MAX_NAME_LEN: usize = 128;
-
-/// Maximum slug length.
-const MAX_SLUG_LEN: usize = 128;
-
 /// Default page size for list queries.
 const DEFAULT_LIST_LIMIT: u32 = 50;
-
-/// Parse an ISO 8601 (RFC 3339) timestamp string into a [`Timestamp`].
-fn parse_iso8601(s: &str) -> Result<Timestamp, SubscriptionAppError> {
-    time::OffsetDateTime::parse(s, &Rfc3339)
-        .map(Timestamp::from_offset_date_time)
-        .map_err(|e| SubscriptionAppError::InvalidInput(format!("invalid expires_at: {e}")))
-}
-
-/// Validate a subscription name at the application boundary.
-fn validate_name(name: &str) -> Result<(), SubscriptionAppError> {
-    if name.is_empty() {
-        return Err(SubscriptionAppError::InvalidInput(
-            "name must not be empty".to_owned(),
-        ));
-    }
-    if name.len() > MAX_NAME_LEN {
-        return Err(SubscriptionAppError::InvalidInput(format!(
-            "name must not exceed {MAX_NAME_LEN} characters"
-        )));
-    }
-    Ok(())
-}
-
-/// Validate a subscription slug at the application boundary.
-fn validate_slug(slug: &str) -> Result<(), SubscriptionAppError> {
-    if slug.is_empty() {
-        return Err(SubscriptionAppError::InvalidInput(
-            "slug must not be empty".to_owned(),
-        ));
-    }
-    if slug.len() > MAX_SLUG_LEN {
-        return Err(SubscriptionAppError::InvalidInput(format!(
-            "slug must not exceed {MAX_SLUG_LEN} characters"
-        )));
-    }
-    Ok(())
-}
-
-/// Validate a profile string and return the parsed [`ProfileKind`].
-fn validate_profile(profile: &str) -> Result<ProfileKind, SubscriptionAppError> {
-    ProfileKind::from_kebab(profile)
-        .ok_or_else(|| SubscriptionAppError::UnknownProfile(profile.to_owned()))
-}
-
-/// Parse a [`NodeSelector`] from a raw JSON value.
-fn parse_node_selection(value: serde_json::Value) -> Result<NodeSelector, SubscriptionAppError> {
-    serde_json::from_value(value)
-        .map_err(|e| SubscriptionAppError::InvalidInput(format!("invalid node_selection: {e}")))
-}
-
-/// Validate a traffic limit. `None` = unlimited; `Some(0)` is rejected.
-fn validate_traffic_limit(limit: Option<u64>) -> Result<(), SubscriptionAppError> {
-    // WHY: `is_traffic_exceeded` treats `Some(0)` as unlimited, so accepting it
-    // would persist state that contradicts delivered behavior (F-003).
-    if limit == Some(0) {
-        return Err(SubscriptionAppError::InvalidInput(
-            "traffic_limit must be > 0; use null for unlimited".to_owned(),
-        ));
-    }
-    Ok(())
-}
 
 /// Parameters for [`create_subscription`].
 pub struct CreateSubscriptionParams {
@@ -112,7 +47,7 @@ pub struct CreateSubscriptionParams {
     pub template_id: TemplateId,
     /// Target output profile (kebab-case, e.g. `"mihomo"`).
     pub profile: String,
-    /// Node selection configuration as raw JSON (parsed into [`NodeSelector`]).
+    /// Node selection configuration as raw JSON (parsed into [`deve_sub_domain::NodeSelector`]).
     pub node_selection: serde_json::Value,
     /// Traffic limit in bytes. `None` = unlimited.
     pub traffic_limit: Option<u64>,
@@ -242,6 +177,7 @@ pub async fn update_subscription(
     validate_slug(&params.slug)?;
     validate_profile(&params.profile)?;
     validate_traffic_limit(params.traffic_limit)?;
+    validate_template_version_pin(params.template_version_pin)?;
     let node_selection = parse_node_selection(params.node_selection)?;
     let expires_at = params
         .expires_at

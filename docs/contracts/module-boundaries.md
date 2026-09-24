@@ -5,6 +5,14 @@
 This contract defines the typed module boundaries, dependency direction, and
 inter-module communication rules for Deve Sub.
 
+### Subscription integer bounds (M6)
+
+Subscription traffic limits are either null (unlimited) or 1 through
+9223372036854775807 bytes, inclusive. Template version pins must also fit the
+nonnegative signed 64-bit storage range. Create/update validate these bounds
+before persistence and return 400 on invalid input; adapter conversions must
+reject overflow rather than wrap values into negative SQLite integers.
+
 ### Audit lifecycle boundary (M10)
 
 `AuditLogRepository` owns bounded candidate selection and atomic delete plus

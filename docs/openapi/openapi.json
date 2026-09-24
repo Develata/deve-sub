@@ -7052,7 +7052,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Traffic limit in bytes. `null` = unlimited. Enforced at delivery.",
+            "description": "Traffic limit: 1–9223372036854775807 bytes. `null` = unlimited. Enforced at delivery.",
             "minimum": 0
           }
         },
@@ -9084,7 +9084,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Pinned template version. `null` follows the template's active version.",
+            "description": "Pinned template version, at most 9223372036854775807. `null` follows the active version.",
             "minimum": 0
           },
           "traffic_limit": {
@@ -9093,7 +9093,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Traffic limit in bytes. `null` = unlimited.",
+            "description": "Traffic limit: 1–9223372036854775807 bytes. `null` = unlimited.",
             "minimum": 0
           },
           "updated_at": {
@@ -9791,7 +9791,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Pinned template version. `null` follows the template's active version.",
+            "description": "Pinned template version, at most 9223372036854775807. `null` follows the active version.",
             "minimum": 0
           },
           "traffic_limit": {
@@ -9800,7 +9800,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Traffic limit in bytes. `null` = unlimited.",
+            "description": "Traffic limit: 1–9223372036854775807 bytes. `null` = unlimited.",
             "minimum": 0
           }
         },

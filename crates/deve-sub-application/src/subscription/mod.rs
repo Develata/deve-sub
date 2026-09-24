@@ -12,6 +12,7 @@ pub mod error;
 pub mod scheduler;
 pub mod traffic;
 pub mod traffic_history;
+mod validation;
 
 pub use commands::{
     CreateSubscriptionParams, CreateSubscriptionResult, CreateTempLinkParams, CreateTempLinkResult,

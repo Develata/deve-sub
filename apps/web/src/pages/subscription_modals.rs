@@ -18,7 +18,7 @@ pub struct SubscriptionModalsProps {
     f_slug: Signal<String>,
     f_template: Signal<String>,
     f_profile: Signal<String>,
-    f_traffic: Signal<Option<u64>>,
+    f_traffic: Signal<String>,
     f_expires: Signal<Option<String>>,
     f_enabled: Signal<bool>,
     f_temp_expiry: Signal<String>,
@@ -55,11 +55,11 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                     div { class: "mt-4 space-y-4",
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", "名称" }
-                            input { class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "text", value: "{props.f_name}", oninput: move |e| props.f_name.set(e.value()) }
+                            input { disabled: *props.saving.read(), class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "text", value: "{props.f_name}", oninput: move |e| props.f_name.set(e.value()) }
                         }
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "subs.slug")} }
-                            input { class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "text", value: "{props.f_slug}", oninput: move |e| props.f_slug.set(e.value()) }
+                            input { disabled: *props.saving.read(), class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "text", value: "{props.f_slug}", oninput: move |e| props.f_slug.set(e.value()) }
                         }
                         if !is_edit {
                             div {
@@ -67,7 +67,7 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                                 if props.templates.read().is_empty() {
                                     p { class: "mt-1 text-sm text-red-500", {t(l, "subs.no_template")} }
                                 } else {
-                                    select {
+                                    select { disabled: *props.saving.read(),
                                         class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
                                         value: "{props.f_template}",
                                         onchange: move |e| props.f_template.set(e.value()),
@@ -80,7 +80,7 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                         }
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "subs.profile")} }
-                            select {
+                            select { disabled: *props.saving.read(),
                                 class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
                                 value: "{props.f_profile}",
                                 onchange: move |e| props.f_profile.set(e.value()),
@@ -91,19 +91,18 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                         }
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "subs.traffic_limit")} }
-                            input {
+                            input { disabled: *props.saving.read(),
                                 class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
-                                r#type: "number",
-                                value: "{(*props.f_traffic.read()).map(|v| v.to_string()).unwrap_or_default()}",
-                                oninput: move |e| {
-                                    let v = e.value();
-                                    props.f_traffic.set(if v.is_empty() { None } else { v.parse::<u64>().ok() });
-                                },
+                                r#type: "text",
+                                inputmode: "numeric",
+                                aria_label: t(l, "subs.traffic_limit"),
+                                value: "{props.f_traffic}",
+                                oninput: move |e| props.f_traffic.set(e.value()),
                             }
                         }
                         div {
                             label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "subs.expires_at")} }
-                            input {
+                            input { disabled: *props.saving.read(),
                                 class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
                                 r#type: "text",
                                 placeholder: "2025-12-31T23:59:59Z",
@@ -116,16 +115,16 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                         }
                         if is_edit {
                             label { class: "flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300",
-                                input { r#type: "checkbox", checked: *props.f_enabled.read(), onchange: move |e| props.f_enabled.set(e.checked()) }
+                                input { disabled: *props.saving.read(), r#type: "checkbox", checked: *props.f_enabled.read(), onchange: move |e| props.f_enabled.set(e.checked()) }
                                 {t(l, "nodes.enabled")}
                             }
                         }
                     }
                     if !props.form_error.read().is_empty() {
-                        div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
+                        div { role: "alert", class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
+                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", disabled: *props.saving.read(), onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
                         button { class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50", disabled: *props.saving.read(), onclick: move |_| props.on_submit.call(()),
                             if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
                         }
@@ -144,7 +143,7 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                     h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "subs.delivery_link")} }
                     p { class: "mt-2 text-sm font-medium text-red-600 dark:text-red-400", {t(l, "subs.token_warning")} }
                     div { class: "mt-4 flex items-center gap-2",
-                        input {
+                        input { disabled: *props.saving.read(),
                             class: "block w-full rounded-md border border-stone-300 px-3 py-2 font-mono text-sm dark:border-stone-700 dark:bg-stone-800",
                             r#type: "text",
                             readonly: true,
@@ -176,7 +175,7 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                     h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "subs.temp_link")} }
                     div { class: "mt-4",
                         label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "subs.temp_link_expiry")} }
-                        input {
+                        input { disabled: *props.saving.read(),
                             class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
                             r#type: "text",
                             placeholder: "2025-12-31T23:59:59Z",
@@ -185,10 +184,10 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                         }
                     }
                     if !props.form_error.read().is_empty() {
-                        div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
+                        div { role: "alert", class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
+                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", disabled: *props.saving.read(), onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
                         button { class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50", disabled: *props.saving.read(), onclick: move |_| props.on_submit.call(()),
                             if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
                         }
@@ -207,10 +206,10 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                     h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", if is_rotate_modal { {t(l, "subs.rotate_token")} } else { {t(l, "common.delete")} } }
                     p { class: "mt-3 text-sm text-stone-600 dark:text-stone-400", if is_rotate_modal { {t(l, "subs.rotate_confirm")} } else { {t(l, "subs.delete_confirm")} } }
                     if !props.form_error.read().is_empty() {
-                        div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
+                        div { role: "alert", class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
+                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", disabled: *props.saving.read(), onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
                         button { class: "rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50", disabled: *props.saving.read(), onclick: move |_| props.on_submit.call(()),
                             if *props.saving.read() { {t(l, "common.loading")} } else if is_rotate_modal { {t(l, "subs.rotate_token")} } else { {t(l, "common.delete")} }
                         }

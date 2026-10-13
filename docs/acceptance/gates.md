@@ -1085,3 +1085,91 @@ was observed in the remote logs. Independent review confirmed the mount/input
 boundary. Remote follow-up results remain attached to
 [PR #13](https://github.com/Develata/deve-sub/pull/13) and its release preflight;
 local success alone does not promote the candidate to a release.
+
+## Bounded dependency and import review (2026-10-13)
+
+Starting `main` was verified against the remote at
+`0afc5c15d6f0b724c8799f712fde4841e1972b6c`; work is on
+`fix/bounded-quality-2026-10-13`. Scope: Quinn advisory remediation, M4 manual
+import (NODE-001, UI-009/010), UI-001 product title, and the existing SQLite
+index/restore regression. Main owner implemented and verified; independent
+`bounded_review` (GPT-6-astra, max) reviewed the changed slice and real browser
+paths. Its pending-result focus finding was reproduced, fixed, and rechecked;
+there are no unresolved code review findings. No remote write or deployment
+was performed.
+
+Existing defects and bounded changes:
+
+- `quinn-proto` 0.11.16 hit RUSTSEC-2026-0338 through 0342 in
+  [scheduled CI 38330711644](https://github.com/Develata/deve-sub/actions/runs/38330711644).
+  The lockfile now pins 0.11.18, meeting the combined patched-version minimum.
+  No unrelated dependency edge or policy exception changed.
+- Whitespace imports previously returned 200 for some formats. They now return
+  400 `invalid_input` before persistence. The regression checks ASCII/Unicode
+  whitespace, four formats, unchanged pool revision, an empty pool, and a
+  subsequent valid import. Import dialogs now retain pending drafts, reject
+  repeated submission/dismissal, recover after errors, refresh the list on
+  success, and preserve keyboard focus in a bounded scrolling viewport.
+- The SQLite test failed on the third baseline repetition and again with a
+  deliberately retained pre-migration reader. `EXPLAIN` on that pooled
+  connection observed stale schema/statement state. The test now executes a
+  real lookup to synchronize schema and prepares an uncached `EXPLAIN`, while
+  retaining the exact covering-index assertion on both upgrade and restore.
+  This is a test correction, not a database implementation or performance fix.
+- The generated page title appended the Dioxus default to `Deve Sub`.
+  `index.html` remains its single owner; the build config suppresses the
+  appended default and UI-001 asserts the exact resulting title.
+
+Executed evidence (logs retained in the handoff, initially under
+`/tmp/deve-sub-review-20261013`):
+
+| Gate | Actual result |
+| --- | --- |
+| `cargo fmt --all -- --check` | pass |
+| `cargo check --locked --workspace --all-targets --all-features` | pass |
+| `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` | pass |
+| `cargo test --locked --workspace --all-targets --all-features` | 1,114 passed, 0 failed, 8 ignored; 99 suites |
+| `cargo test --locked --workspace --all-features --doc` | pass; 14 library suites, zero runnable examples |
+| Node API integration target | 16/16 passed, including the new whitespace regression |
+| Final compiled SQLite index regression repeated | 30/30 passed |
+| Native debug/release and production WASM builds | pass; existing WASM warnings remain |
+| Functional Playwright suite, desktop/mobile/API | 89/89 passed, 3.8 minutes, zero retries |
+| Final import/source browser regressions | 10/10 passed, 10.4 seconds, zero retries |
+| Existing browser setup/auth/theme/mobile/10k-node suite | 16/16 passed, 32.6 seconds, zero retries |
+| Final UI-001 exact-title regression | 1/1 passed, 3.9 seconds |
+| Browser process lifecycle suite | 3/3 passed |
+| Docs / architecture / generated OpenAPI | pass; 157 cases, 512 references, 16 crates; exported OpenAPI matches byte-for-byte |
+| `cargo run --locked -p deve-sub-ci -- inventory` | pass; 9 Rust shards, 16 packages, 4 browser lanes |
+| `python3 -m unittest discover -s scripts/ci/tests` | 15/15 passed |
+| `cargo deny --locked check` with cargo-deny 0.20.2 | **fail**: RUSTSEC-2024-0449 only; bans, licenses and sources pass |
+
+The 89-case run preceded the final mounted-focus/title changes. The final
+production WASM build, 10 affected browser cases, and separate UI-001 run cover
+those last changes; the earlier full run is not represented as an exact-final
+tree rerun. Functional fixtures assert zero uncaught JavaScript exceptions;
+controlled 503/other error responses remain expected fault-injection evidence.
+The first legacy attempt with the debug server timed out while seeding 10,000
+nodes; the unchanged suite passed with the optimized binary and original
+deadlines. This does not establish a performance guarantee.
+
+Environment and remaining non-pass states:
+
+- Official Playwright Chromium installation reached `cdn.playwright.dev` but
+  redirected to `storage.googleapis.com`, which returned a domain-policy 403.
+  No network permission was expanded. Browser evidence uses existing system
+  Chromium 154.0.8037.57 with Playwright 1.62.0 via temporary configs; bundled
+  Chromium 151, other engines and screen readers were not tested. Desktop,
+  Pixel 5 and a 390×420 CSS-pixel viewport were exercised and screenshots
+  inspected; no blank page or framework error overlay was observed.
+- [RUSTSEC-2024-0449](https://rustsec.org/advisories/RUSTSEC-2024-0449.html)
+  reports `unsafe-libyaml` unmaintained with no patched release. It enters via
+  `serde_yaml`; changing to `serde_yaml_ng` alone retains that dependency.
+  YAML parsing/emission spans 16 Rust source files, including mapping order,
+  aliases/merge keys, and size/depth defenses. A compatible migration needs a
+  separate reviewed slice. This round adds no advisory ignore, disables no
+  check, and does **not** satisfy the dependency/merge gate.
+- Eight normal Rust ignores remain: seven external Mihomo/sing-box/Xray
+  validator cases and one real-process soak. They were not run separately.
+  Installer/updater isolation, Docker/ARM64, native VM, remote CI and live proxy
+  connectivity were not rerun for this slice. The matrix's 153 historical pass
+  and 4 not-run states are not claims of fresh execution.

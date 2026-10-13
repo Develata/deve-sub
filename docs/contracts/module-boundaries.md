@@ -5,6 +5,33 @@
 This contract defines the typed module boundaries, dependency direction, and
 inter-module communication rules for Deve Sub.
 
+### 2FA generation boundary (M2)
+
+`TotpSecretRepository::upsert` admits setup only while 2FA is disabled.
+`enable_if_current`, `disable_if_current` and
+`replace_recovery_codes_if_current` compare the existing ciphertext and nonce
+to the generation verified by Application. SQLite owns the flag, secret and
+recovery-code transaction, including rollback on any failed statement. Recovery
+codes must belong to that user. Conditional writes acquire admission before
+reading other state; stale operations cannot mutate a later enrollment.
+Already-enabled enrollment retains the existing 409 response; replacement of
+the verified secret retains the invalid-code response. No REST DTO changes.
+
+### Import parsing and outcomes (M3/M4)
+
+Automatic JSON detection uses outbound shape: a `type` field selects sing-box,
+including mixed or unknown types; `protocol` without `type` selects Xray.
+Empty or unmarked outbound lists retain the existing sing-box fallback.
+Supported-node counts do not determine format, so unknown protocols remain
+inspectable rather than being accidentally reparsed as another format.
+
+`ImportNodesResponse.outcomes` contains every extracted entry in input order,
+including parser failures and storage outcomes. Blank/comment-only URI lines
+are omitted. Container formats report extracted nodes. `failed` and the Failed
+entries agree; duplicate/reactivated results retain their repository identity.
+Raw failed input is returned only in the authorized management response; parser
+diagnostics written to tracing do not include source or credential text.
+
 ### Subscription integer bounds (M6)
 
 Subscription traffic limits are either null (unlimited) or 1 through
@@ -36,6 +63,13 @@ Clash/Mihomo routing YAML (`rules`, `proxy-groups`, `rule-providers`, `dns`,
 templates generate for `mihomo` only. No UI parsing or client conversion is
 permitted. The optional internal `TemplateSpec.clash` stores validated native
 sections as YAML text with mapping order preserved; absent means existing V3 behavior.
+YAML diagnostics expose static categories and locations without authored values.
+Literal NEL/LS/PS characters are rejected even in comments; double-quoted
+Unicode escapes remain supported. The M5 plan records the migration grammar
+boundaries and remediation for historical stored YAML.
+Compact question-mark flow syntax is rejected when parser versions disagree on
+its meaning; explicit entries need a separating space and literal text can be
+quoted. The M5 blueprint records the narrow grammar compatibility limits.
 
 `TemplateRepository::update_with_version` allocates and returns the committed
 history number atomically; it must exceed every existing version, including
@@ -246,10 +280,12 @@ explicit classification. The permitted local dependencies are:
 
 | Package family (`deve-sub-*`) | Permitted production dependencies |
 |---|---|
-| kernel, contract, ci tooling | No other workspace package |
+| kernel, contract, yaml | No other workspace package |
+| ci tooling | yaml |
 | domain, security, observability | kernel |
-| protocol, emitter, compatibility | kernel, domain |
-| application | kernel, contract, domain, security, protocol, emitter, compatibility |
+| protocol, emitter | kernel, domain, yaml |
+| compatibility | kernel, domain |
+| application | kernel, contract, domain, security, protocol, emitter, compatibility, yaml |
 | storage-sqlite, inmemory, adapters | kernel, domain, application, security |
 | server | kernel, contract, domain, application, security, compatibility, web |
 | web | contract |

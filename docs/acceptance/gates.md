@@ -1157,7 +1157,7 @@ Environment and remaining non-pass states:
 - Official Playwright Chromium installation reached `cdn.playwright.dev` but
   redirected to `storage.googleapis.com`, which returned a domain-policy 403.
   No network permission was expanded. Browser evidence uses existing system
-  Chromium 154.0.8037.57 with Playwright 1.62.0 via temporary configs; bundled
+  Chromium 154.0.8037.57 with Playwright 1.62.1 via temporary configs; bundled
   Chromium 151, other engines and screen readers were not tested. Desktop,
   Pixel 5 and a 390×420 CSS-pixel viewport were exercised and screenshots
   inspected; no blank page or framework error overlay was observed.
@@ -1173,3 +1173,139 @@ Environment and remaining non-pass states:
   Installer/updater isolation, Docker/ARM64, native VM, remote CI and live proxy
   connectivity were not rerun for this slice. The matrix's 153 historical pass
   and 4 not-run states are not claims of fresh execution.
+
+## Reviewed frontend, backend and YAML follow-up (2026-10-13)
+
+This authorized follow-up retains the five commits from the preceding bounded
+round on `fix/bounded-quality-2026-10-13`. Starting and rechecked remote `main`
+remain `0afc5c15d6f0b724c8799f712fde4841e1972b6c`. The passing dependency gate
+below supersedes the preceding checkpoint's unresolved YAML advisory; the old
+record remains historical evidence, not the current dependency status.
+
+Confirmed existing defects and resulting behavior:
+
+- 2FA enable/disable/recovery-code changes now compare the stored enrollment
+  generation and commit user state, secret state and recovery codes together.
+  Ten deterministic interleaving/rollback tests cover stale setup, duplicate
+  enable, stale disable/regeneration and owner mismatch. DTOs and schema are
+  unchanged.
+- Auto JSON imports select the outbound schema by structural keys. Unsupported
+  Xray entries no longer make a successful sing-box parse mask the real format.
+  Parse failures and persisted outcomes retain original input order; handler
+  logs do not echo raw parser diagnostics. OpenAPI is regenerated from code.
+- Dashboard sections distinguish loading, failure and empty success and retry
+  independently. Dates, IEC units and a text alternative explain the existing
+  traffic data. Subscription actions expose consequences before destructive
+  requests, maintain pending/completion focus, and keep primary actions visible.
+  Virtual node rows retain keyboard scrolling and row-count/index semantics.
+- The lockfile retains `quinn-proto` 0.11.18 and removes `serde_yaml` and
+  `unsafe-libyaml`. No advisory ignore or other policy exemption was added.
+
+YAML migration scope and maintenance cost:
+
+The new technical leaf crate contains 1,582 source lines in nine modules.
+It uses `granit-parser` 1.3.0 for syntax events and `serde-saphyr` 1.3.0 with
+only its serialization feature. It does not copy a lexer or enable includes,
+environment interpolation or source-snippet errors. The owned compatibility
+surface is ordered Value/Number/Serde semantics, legacy scalar resolution,
+pre-expansion alias cost/depth checks, separate source JSON projection and
+complete generated-document validation. Those contracts carry continuing
+maintenance cost; passing test counts alone do not establish compatibility.
+
+Independent probes compared old bounded parsing, old source JSON projection
+and old `serde_yaml::from_value` with their corresponding new entry points.
+The corpus covers scalar/tag/range boundaries, duplicate and complex keys,
+merge ordering, anchor rebinding, resource limits, collection/enum conversion,
+serialization and complete publication output. It explicitly preserves raw
+source keys, last-key-wins source objects, ordinary source `<<`, and ordered
+template merge behavior. Both reviewers found the concentrated boundary
+justified; no consumer duplicates its compatibility policy.
+
+Known compatibility differences are deliberate and documented in M5 and the
+template feature guide: ambiguous compact flow `?` entries fail with guidance
+to separate the indicator or quote literal text; Tab-only `{?\t}` and some
+unindented quoted continuations remain parser limitations. A bare `?` at end
+of input is also rejected. Literal NEL/LS/PS are rejected even inside comments,
+where changing line termination could swallow a following key. Double-quoted
+Unicode escapes preserve the intended characters. Historical serialized LS/PS
+text may need editing and resaving with escapes. Nonstandard URI tags that the
+old loader ignored are now rejected under the existing no-custom-tags contract.
+Omitted keys follow YAML 1.2 and rebound anchors use the latest definition,
+correcting a previous loader result. Normal quoted text, comments, URLs and
+password strings containing question marks or Tabs have positive regressions.
+
+Review and final-tree evidence:
+
+Two independent lanes reviewed the actual final diff in each of two rounds.
+R1 found Unicode line-break reinterpretation, including comment termination;
+the shared input guard and cross-entry regressions closed it. R2 found a
+connected omission in the hand-written Mihomo string emitter; escaping LS/PS
+closed native/V3 publication and exact-string round trips. Independent API
+probes verified that deep generated duplicate keys preserve last-good output
+for both template types. Final screenshot inspection then found the hidden
+table's intrinsic height adding blank page scroll. Its wrapper fix failed the
+new assertion on both old desktop/mobile builds and passed on both new builds;
+an independent Chromium accessibility-tree check retained the table and all
+30 rows. All accepted code findings are closed.
+
+The final reviewed implementation manifest covers 111 paths, SHA-256
+`38986a88179f92d256c606e07c2a503caf14a6c4eb5310c43916d0a1d450554b`.
+This appended evidence record is documentation-only and is checked separately.
+
+| Final local gate | Actual result |
+| --- | --- |
+| `cargo fmt --all -- --check` | pass |
+| `cargo clippy --locked --offline --all-targets --all-features -- -D warnings` | pass |
+| `cargo test --locked --offline --all-targets --all-features` | 1,192 passed, 0 failed, 8 ignored; 109 suites |
+| `cargo test --locked --offline --all-features --doc` | 15 suites passed; zero runnable examples |
+| Seven ignored Mihomo/sing-box/Xray validator tests, run explicitly | 7/7 passed with repository-pinned, checksum-verified clients |
+| Production backend/Web builds, WASM check, CSS regeneration | pass; generated CSS unchanged on regeneration |
+| Generated OpenAPI comparison | byte-for-byte match |
+| Playwright legacy / functional / lifecycle | 16/16, 103/103, 3/3; zero skips, retries or flaky results |
+| Functional project coverage | API 15, desktop 44, mobile 44 |
+| Release process soak, 90 seconds with required telemetry | pass: 2,870 cycles, 13,625 requests, zero unexpected failures/error logs |
+| Docs and acceptance bindings | 157 cases, 564 symbol references; all checks pass |
+| Architecture and CI inventory | 17 packages, 9 Rust shards, 4 browser lanes; pass |
+| Architecture / CI Python / soak-unit / health-deadline tests | 10/10, 15/15, 1/1, 2/2 |
+| `cargo deny --locked check` | advisories, bans, licenses and sources all pass |
+
+The release binary SHA-256 is
+`90d1f9044d2366498bf6356b710813b165614bf3885b2a9a7acba20b0c8c6a23`;
+the final Web file-manifest SHA-256 is
+`bd25ec31c07e5df99cdda565167b25a3045ca7ec71d0a64b6630fa45580b99c4`.
+Browser execution checks both identities before and after the suite. Real
+clients are Mihomo 1.19.0, sing-box 1.13.14 and Xray 26.3.27. Their config checks
+do not establish live proxy connectivity. The short soak checks the existing
+bounded envelopes and is not a performance improvement or long-term leak claim.
+
+Environment boundaries and non-pass states at this local checkpoint:
+
+- An initial complete Rust build exhausted the 32 GiB workspace volume. Only
+  rebuildable incremental output was removed; source and evidence were kept.
+  Final Rust gates use `CARGO_INCREMENTAL=0`, `CARGO_PROFILE_DEV_DEBUG=0` and
+  `CARGO_PROFILE_TEST_DEBUG=0`; no tests or assertions were disabled.
+- The first real Mihomo check failed before config parsing because its default
+  config directory was read-only. All seven checks subsequently passed with
+  `XDG_CONFIG_HOME` pointing to a temporary writable directory; no fixture or
+  assertion changed.
+- Official browser installation remains blocked by the previously recorded
+  redirect-domain restriction. Actual final evidence uses system Chromium
+  154.0.8037.57 and Playwright 1.62.1. Bundled Chromium 151, other engines and
+  real screen-reader software were not tested; no new domain was authorized.
+- Isolated installer smoke could not start under the default sandbox because
+  bubblewrap's UID mapping is read-only (zero test bodies ran). This is a local
+  environment blocker, not a passing check. Docker client and daemon read-only
+  queries return 28.4.0, but Docker acceptance checks were not run locally and
+  remain for the authorized work-branch CI. Native VM/systemd, signed-update
+  deployment, ARM64 runtime and long soak were not run locally for this follow-up.
+- The workflow additionally accepts only this exact work branch for push
+  events so an authorized branch push can run its existing complete baseline.
+  Permissions, required jobs and release triggers are unchanged. Remote branch
+  SHA and terminal CI evidence, if authorized and available, belong in the
+  external handoff; this local record does not assert remote CI completion.
+
+The final tracked and untracked change set passed a redacted, context-reviewed
+sensitive-information scan. Screenshots use disposable synthetic fixtures;
+no database, master key, storageState, real credential or production state is
+part of the patch. The matrix's historical 153 pass / 4 not-run statuses still
+do not claim every registered case was freshly executed.

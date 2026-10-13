@@ -669,6 +669,10 @@ cases:
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_vmess_packet_encoding"
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_invalid_json_errors"
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_missing_outbounds_errors"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::shape_errors_keep_the_existing_singbox_identity"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::any_type_value_wins_over_protocol_keys"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::duplicate_keys_keep_last_value_before_dialect_detection"
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_keeps_yaml_heuristics_ahead_of_json_detection"
       status: pass
   - id: PARSE-007
     title: Xray JSON
@@ -684,6 +688,7 @@ cases:
         - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_singbox_unknown_and_malformed_nodes_remain_lossless"
         - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_json_type_key_takes_precedence_over_protocol_key"
         - "crates/deve-sub-application/tests/refresh_source/json_detection.rs::auto_singbox_unknown_refresh_preserves_raw_data_with_existing_snapshot"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::auto_xray_and_explicit_v2ray_retain_their_frozen_format_identity"
         - "crates/deve-sub-protocol/tests/xray_v2ray.rs"
       status: pass
   - id: PARSE-008
@@ -700,6 +705,7 @@ cases:
         - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_xray_matches_explicit_trojan_and_vless_parsing"
         - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_xray_unknown_protocol_is_preserved_in_its_own_format"
         - "crates/deve-sub-application/tests/refresh_source/json_detection.rs::auto_xray_refresh_publishes_typed_nodes_and_preserves_identity"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::auto_xray_and_explicit_v2ray_retain_their_frozen_format_identity"
         - "crates/deve-sub-protocol/tests/xray_v2ray.rs"
       status: pass
   - id: PARSE-009
@@ -1956,6 +1962,10 @@ cases:
         - "crates/deve-sub-yaml/tests/bounds.rs::alias_jumps_are_bounded_even_below_the_value_byte_budget"
         - "crates/deve-sub-yaml/tests/bounds.rs::value_depth_includes_aliased_subtrees_and_recursive_aliases_fail"
         - "crates/deve-sub-yaml/tests/bounds.rs::general_source_depth_keeps_the_128_container_boundary"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::raw_outbound_count_is_checked_before_shadowtls_absorption"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::complete_document_errors_precede_entry_count_and_mapping"
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_json_preserves_document_errors_before_wrapped_entry_limits"
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_json_keeps_byte_then_utf8_checks_before_dispatch"
         - "crates/deve-sub-yaml/tests/parsing.rs::custom_tags_and_all_extra_document_content_are_rejected"
         - "crates/deve-sub-application/src/source/parse.rs::too_many_nodes_rejected"
         - "crates/deve-sub-application/src/source/parse.rs::max_nodes_accepted"
@@ -2233,6 +2243,7 @@ cases:
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::mihomo_shadowtls_trojan_round_trip_semantic"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::mihomo_shadowtls_ss_round_trip_semantic"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::singbox_shadowtls_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::shared_shadowtls_wrapper_before_or_after_inners_keeps_order_credentials_and_tls"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_mihomo_accepts_shadowtls"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_singbox_accepts_shadowtls"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_xray_excludes_shadowtls"

@@ -21,7 +21,7 @@ M3 (Protocol Engine) must be complete. The `deve-sub-protocol` parsers
 and `deve-sub-emitter` are prerequisites: the source refresh job parses
 fetched subscription content into canonical `Node` values using
 `parse_uri`, `parse_uri_list`, `parse_base64_subscription`,
-`parse_mihomo_yaml`, `parse_singbox_json`, `parse_xray_json`, and
+`parse_mihomo_yaml`, `parse_auto_json`, `parse_singbox_json`, `parse_xray_json`, and
 `parse_v2ray_json`. The `deve-sub-domain` `Node` model is the unified
 node pool entity.
 

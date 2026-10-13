@@ -265,7 +265,7 @@ fn auto_detect_and_parse(
         return parse_container(text, deve_sub_protocol::container::parse_mihomo_yaml);
     }
     if ct.contains("json") || trimmed.starts_with('{') || trimmed.starts_with('[') {
-        return detect_and_parse_json(text);
+        return parse_container(text, deve_sub_protocol::container::parse_auto_json);
     }
     if let Some(decoded) = try_decode_base64(trimmed) {
         let decoded = std::str::from_utf8(&decoded)
@@ -273,37 +273,6 @@ fn auto_detect_and_parse(
         return parse_uri_list_text(decoded);
     }
     parse_uri_list_text(text)
-}
-
-/// Detect the outbound dialect before invoking its lossless node parser.
-fn detect_and_parse_json(text: &str) -> Result<Vec<ReconcileEntry>, ParseContentError> {
-    // WHY: both parsers preserve unrecognized entries as Unsupported, so an
-    // Ok result cannot identify the format. A `type` key keeps sing-box's
-    // existing precedence, including mixed/ambiguous and malformed entries;
-    // only a `protocol` key without any `type` selects Xray/V2Ray's schema.
-    // Drop the detection tree before constructing canonical nodes.
-    let is_xray = {
-        let value: serde_json::Value = serde_json::from_str(text).map_err(|e| {
-            ParseContentError::Parse(ParseError::InvalidJson(e.to_string()).to_string())
-        })?;
-        match value.get("outbounds").and_then(serde_json::Value::as_array) {
-            Some(outbounds) => {
-                if outbounds.len() > MAX_NODES {
-                    return Err(ParseContentError::TooManyNodes(outbounds.len()));
-                }
-                !outbounds.iter().any(|entry| entry.get("type").is_some())
-                    && outbounds
-                        .iter()
-                        .any(|entry| entry.get("protocol").is_some())
-            }
-            None => false,
-        }
-    };
-    if is_xray {
-        parse_container(text, deve_sub_protocol::container::parse_xray_json)
-    } else {
-        parse_container(text, deve_sub_protocol::container::parse_singbox_json)
-    }
 }
 
 #[cfg(test)]

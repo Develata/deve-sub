@@ -44,11 +44,11 @@
     "reason": "One input-format codec with field mappings and adjacent fidelity regressions."
   },
   "crates/deve-sub-protocol/src/container/xray_v2ray.rs": {
-    "max_lines": 507,
-    "reason": "One input-format codec with field mappings and adjacent fidelity regressions."
+    "max_lines": 514,
+    "reason": "One input-format codec with field mappings and adjacent fidelity regressions; a private borrowed-document entry shares the unchanged mapper with Auto detection."
   },
   "crates/deve-sub-protocol/src/container/singbox.rs": {
-    "max_lines": 822,
-    "reason": "One input-format codec with field mappings and adjacent fidelity regressions."
+    "max_lines": 826,
+    "reason": "One input-format codec with field mappings and adjacent fidelity regressions; a private borrowed-document entry retains the two-pass ShadowTLS mapper for Auto detection."
   }
 }

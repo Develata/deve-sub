@@ -48,7 +48,14 @@ pub fn parse_v2ray_json(text: &str) -> Result<Vec<Node>, ParseError> {
 fn parse_xray_v2ray(text: &str, raw_format: &str) -> Result<Vec<Node>, ParseError> {
     let value: Value =
         serde_json::from_str(text).map_err(|e| ParseError::InvalidJson(e.to_string()))?;
+    parse_xray_v2ray_value(&value, raw_format)
+}
 
+/// Preserve explicit Xray/V2Ray format identity while sharing the node mapper.
+pub(super) fn parse_xray_v2ray_value(
+    value: &Value,
+    raw_format: &str,
+) -> Result<Vec<Node>, ParseError> {
     let outbounds = value
         .get("outbounds")
         .ok_or(ParseError::MissingContainerKey("outbounds"))?

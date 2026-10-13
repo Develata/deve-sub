@@ -24,6 +24,10 @@ including mixed or unknown types; `protocol` without `type` selects Xray.
 Empty or unmarked outbound lists retain the existing sing-box fallback.
 Supported-node counts do not determine format, so unknown protocols remain
 inspectable rather than being accidentally reparsed as another format.
+Protocol owns JSON dialect dispatch and node mapping through `parse_auto_json`;
+Application retains the byte/UTF-8 guards and input-family heuristics. Dispatch
+reuses one completely parsed document. JSON syntax errors precede container
+checks, and the raw entry limit applies before ShadowTLS wrapper absorption.
 
 `ImportNodesResponse.outcomes` contains every extracted entry in input order,
 including parser failures and storage outcomes. Blank/comment-only URI lines

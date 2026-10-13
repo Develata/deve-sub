@@ -122,3 +122,52 @@ fn auto_json_keeps_container_limits_and_structural_errors() {
         assert!(parse_content(SourceType::Auto, None, body.as_bytes()).is_err());
     }
 }
+
+#[test]
+fn auto_json_preserves_document_errors_before_wrapped_entry_limits() {
+    let entries = vec![r#"{"protocol":"future"}"#; 10_001].join(",");
+    let body = format!("{{\"outbounds\":[{entries}]}} bad");
+    let error = parse_content(SourceType::Auto, Some("application/json"), body.as_bytes())
+        .expect_err("malformed complete document");
+    assert!(matches!(error, ParseContentError::Parse(_)));
+    assert_eq!(
+        error.to_string(),
+        "parse error: invalid JSON: trailing characters at line 1 column 220039"
+    );
+    let body = format!("{{\"outbounds\":[{entries}]}}");
+    assert!(matches!(
+        parse_content(SourceType::Auto, Some("application/json"), body.as_bytes()),
+        Err(ParseContentError::TooManyNodes(10_001))
+    ));
+}
+
+#[test]
+fn auto_json_keeps_byte_then_utf8_checks_before_dispatch() {
+    assert!(matches!(
+        parse_content(
+            SourceType::Auto,
+            Some("application/json"),
+            &vec![0xff; 10 * 1024 * 1024 + 1]
+        ),
+        Err(ParseContentError::TooLarge)
+    ));
+    assert!(matches!(
+        parse_content(SourceType::Auto, Some("application/json"), &[0xff]),
+        Err(ParseContentError::InvalidUtf8(_))
+    ));
+}
+
+#[test]
+fn auto_keeps_yaml_heuristics_ahead_of_json_detection() {
+    for (content_type, body) in [
+        ("application/yaml", r#"{"outbounds":[]}"#),
+        ("application/json", r#"{"outbounds":[],"note":"proxies:"}"#),
+    ] {
+        let error = parse_content(SourceType::Auto, Some(content_type), body.as_bytes())
+            .expect_err("existing YAML precedence");
+        assert_eq!(
+            error.to_string(),
+            "parse error: missing container key: proxies"
+        );
+    }
+}

@@ -1309,3 +1309,88 @@ sensitive-information scan. Screenshots use disposable synthetic fixtures;
 no database, master key, storageState, real credential or production state is
 part of the patch. The matrix's historical 153 pass / 4 not-run statuses still
 do not claim every registered case was freshly executed.
+
+### 2026-10-13 — bounded ownership and node-list follow-up
+
+This follow-up starts at `56e81b8fc8d6694962080a03cead98e824050c10`
+on its own work branch. It changes only Auto JSON dispatch, existing cache/node
+ownership, and node-page derived projections. Two design counter-review rounds
+preceded implementation; two actual-diff review rounds found no unresolved
+product blocker. R1 strengthened the existing cache activation/preview test and
+completed acceptance bindings. R2 corrected an external RSS summary label and
+retained adverse measurements rather than treating them as successful budgets.
+
+The new immediate-filter/select regression fails on the frozen old UI in both
+desktop and mobile: filtering to one node and selecting in the same event task
+sends the previous 50 IDs. The current UI sends the current single ID. Its other
+regressions cover list replacement, content changes with identical projected
+indices, empty-source subscriptions, all filter inputs, category clearing,
+pagination errors and loaded matches beyond the visible window. The previous
+design and server-owned state boundaries remain in place.
+
+| Final local gate | Actual follow-up result |
+| --- | --- |
+| Format, locked all-target check and Clippy with warnings denied | pass |
+| Locked all-target/all-feature Rust tests | 1,202 passed, 0 failed, 8 ignored; 110 suites; 21 Criterion test-mode checks |
+| Doc tests | 15 suites passed; zero runnable examples |
+| Explicit ignored Mihomo/sing-box/Xray validators | 7/7 passed with the previously pinned clients |
+| Production backend/Web builds and WASM check | pass; final production source/artifact identities unchanged through runtime checks |
+| CSS regeneration and generated OpenAPI | unchanged; byte-for-byte OpenAPI match |
+| Playwright functional / legacy / lifecycle | 111/111, 16/16, 3/3; no skips, retries or flaky results |
+| Functional project coverage | API 15, desktop 48, mobile 48 |
+| Release process soak, 90 seconds with required telemetry | 3,114 cycles, 14,766 requests, zero unexpected failures/error logs |
+| Docs / architecture / inventory | 157 cases, 580 symbol references; 17 packages, 9 Rust shards, 4 browser lanes; pass |
+| Architecture / CI Python / soak-unit / health-deadline tests | 10/10, 15/15, 1/1, 2/2 |
+| `cargo deny --locked check` | advisories, bans, licenses and sources pass; the same 11 tool workspace-span diagnostics remain |
+
+The frozen release binary SHA-256 is
+`58b36aad8450bdff0db5355b30a4c27645a27cc25516cef0eacd9190d3bf85a0`.
+No dependency or security exception changes are made in this follow-up.
+The exact work branch is added to the existing CI push filter; permissions,
+required jobs and release triggers are unchanged. Remote SHA and terminal CI
+proof, when available, are separate handoff evidence; this local checkpoint
+does not assert their completion.
+
+Performance evidence is bounded and descriptive. Three interleaved native
+rounds retain 288 process runs and 9,360 sample records, with uninstrumented
+latency separate from allocator instrumentation. All 120 complete normalized
+JSON outcomes agree. At 10k entries, Auto sing-box/Xray parse-plus-drop P50 is
+27.00/49.25 to 17.63/31.61 ms; cached generation is 2.163 to 1.571 ms, with
+cumulative Rust allocation traffic 3,455,273 to 1,181,732 bytes. These are not
+whole-request, live-heap or overall-memory claims.
+
+Costs remain explicit: 10k Auto Xray RSS after 40 operations and result drops
+rises from about 54.7 to 61.6 MB; at 1k it rises about 3.45 MB. Native 10k
+uncached pooled P50 rises 4.40%, and 1k cached rises 4.65%. Three HTTP AB/BA/AB
+pairs (312 timed samples, 552 requests, 48 clean server lifecycles) preserve
+same-input/output checks but do not cancel those observations: 1k uncached
+pooled P50 rises 18.79%, and 10k duplicate import rises 13.51%, with mixed
+per-round directions and variable unchanged controls. Stable cross-entry
+uncached or complete-import acceleration is not established; a real regression
+is not excluded. Ownership changes are retained for their narrow, reviewed
+removal of copies, with no extra query, cache or transaction policy changes.
+
+UI-only ABBA runs pass 16/16 and verify all 112 replayed response bodies. For
+10k desktop small-step scrolling, Script/Task duration is 632.98/701.83 to
+42.15/121.79 ms per fixed sequence; rAF p95 stays about 16.8 ms. Small searches
+can be slower by 0.05–0.60 ms, and 10k desktop post-GC renderer RSS is about
+0.53–0.80 MiB higher. This is not an FPS, physical-phone, API-load or overall
+memory improvement claim. Renderer RSS, JS heap and WASM capacity stay separate.
+
+Raw native counters also contain 332 non-monotonic reported VmHWM transitions
+across 113 of 288 runs, including both variants and controls. The largest is
+663,552 bytes; the cause remains unexplained. The handoff retains these counters
+and the audit script, but does not infer precise peak live memory from them.
+RSS after warmup, after samples and after pool/runtime close are separately
+labeled. No long-term leak or statistical-significance claim is made.
+
+All three measurement lanes use serial isolated windows and synthetic data;
+no sample is silently rerun or removed. A transient executor transport loss did
+not restart the native comparison process. The original incomplete seed-export
+pilot remains excluded with its harness correction documented. Local browser
+evidence uses system Chromium 154; the previously blocked official-download
+redirect was not newly authorized. Other browser engines, real assistive
+technology, physical mobile hardware, installer/Docker acceptance, native VM,
+signed deployment and long-duration soak were not run locally for this follow-up.
+The historical PERF budget rows remain not-run; these measurements do not
+promote them to pass or justify broader rewrites.

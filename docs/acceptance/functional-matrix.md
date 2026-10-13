@@ -35,7 +35,7 @@ UI 乱序用受控响应释放顺序，不依赖固定 sleep。
 ## 场景
 
 API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运行一次，
-当前清单共 103 项（15 API + 44 × 2 浏览器，可用 `test --list` 核对）。
+当前清单共 111 项（15 API + 48 × 2 浏览器，可用 `test --list` 核对）。
 清单数量不是单轮执行结果。每项检查最终状态或用户实际可执行的操作，不能只把
 HTTP 请求发出当成通过。
 
@@ -98,6 +98,10 @@ Web 证据，不改变 TRAFFIC-002 的历史查询语义或 OUT-016 的订阅管
 | `tests/e2e/functional/subscription-actions.ui.spec.ts::FUNC-SUB-DIALOG` | OUT-016/UI-009/010 | 390×420，注入链接、summary、tabindex、可编辑与不可编辑内容及隐藏/禁用项 | 窗口有界，Tab/Shift+Tab 边界正确，禁用 fieldset、关闭 details、inert 与不可见内容不进入顺序，Escape 返回编辑入口 |
 | `tests/e2e/functional/subscription-focus.ui.spec.ts::FUNC-SUB-COMPLETION` | OUT-016/UI-009/010 | 创建、轮转、临时链接各自挂起、503、键盘重试与复制；420px 高视口 | 等待、失败和一次性链接均接收窗口内焦点；草稿保留、键盘重试真实保存，链接可获取内容，复制值正确，关闭返回入口 |
 | `tests/e2e/functional/node-table.ui.spec.ts::FUNC-NODE-TABLE` | UI-008/009/010 | 真实导入 10,000 节点，首尾虚拟行、窄屏键盘滚动、行内操作与筛选 | 六列语义完整，含表头总数为 10,001、首末位置为 2/10,001；渲染不超过 24 行、元素少于 500；筛选后总数/位置更新，操作可达，页面无横向溢出 |
+| `tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SOURCE` | NODE-004/005 | 列表换源和缩短、刷新 503 后沿非空 cursor 续页 | 已加载行和选择保留，失败不丢 cursor；索引位置变化后批量请求仍只包含当前匹配 ID |
+| `tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-CONTENT` | NODE-005 | 相同索引、相同分类统计，行内容变化且目录响应延迟 | 名称、状态、地区和标签即时更新；分类身份和目录更新独立，计数一致 |
+| `tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SELECT-NOW` | UI-008/NODE-004 | 同一任务内输入再点击选择；选择 50 个已加载节点 | 批量请求使用点击时筛选结果；全选覆盖全部匹配节点，超过虚拟窗口的部分也包含 |
+| `tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-FILTERS` | NODE-004/005 | 空源后加载、Unicode 搜索、协议/分类/地区/状态交集 | 每个依赖更新结果；普通筛选保留显式选择，切换分类清空选择，统计基于全部已加载节点 |
 
 功能投影见 [仪表盘流量](../features/dashboard.md) 与
 [节点整理与管理操作](../features/node-organization.md)。
@@ -118,6 +122,11 @@ TRAFFIC-002 的服务端测试证明。虚拟表格记录浏览器可访问性�
 分类分页用例用真实节点响应构造小页，专门验证 Web 的目录与分页边界；目录
 仍由真实 API 提供。目录错误和乱序只控制传输。参考项目的展开分类入口予以
 采用；拖拽重排和点击即自动勾选不在本次范围，Deve Sub 保持显式批量选择。
+
+节点派生状态用例通过受控列表快照复现换源、相同索引内容更新和空源恢复，
+使用真实节点身份检查提交的批量目标。SELECT-NOW 使用真实列表和批量接口；
+同一页面任务内的相邻事件专门覆盖下次渲染前的窗口。它们验证状态一致性，
+不代替服务端筛选或性能预算测试。
 
 既有 Playwright 生命周期、鉴权、主题、键盘、移动端和 10,000 节点套件继续保留。
 协议兼容、长时间 soak、Docker/arm64 和其他浏览器引擎不由本组测试代替。

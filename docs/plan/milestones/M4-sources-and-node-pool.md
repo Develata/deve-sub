@@ -330,6 +330,8 @@ create/rename/delete; assignment forms load existing membership and permit
 empty replacement. Batch forms default to add and explain replace/remove.
 Override and region editors load persisted values before enabling save.
 Background refresh must not overwrite a newer list request or selection.
+Selecting the filtered set uses the current filters and loaded nodes at the
+click; a pending render must not target an earlier result set.
 
 Manual tags are also the node page's visible categories. The complete `/tags`
 catalog owns category identity, including empty categories; loaded node

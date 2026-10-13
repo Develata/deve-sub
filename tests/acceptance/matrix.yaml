@@ -114,6 +114,7 @@ cases:
     evidence:
       tests:
         - "tests/e2e/specs/ui-008-10k-nodes.spec.ts::UI-008"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SELECT-NOW"
       status: pass
   - id: UI-009
     title: 移动端
@@ -934,6 +935,8 @@ cases:
     evidence:
       tests:
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-NODE-FILTER"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SOURCE"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SELECT-NOW"
         - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-ORDER"
         - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-RESELECT"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_004_batch_enable_disable"
@@ -957,6 +960,8 @@ cases:
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-VISIBLE"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LIFECYCLE"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-INLINE"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-CONTENT"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-FILTERS"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-PAGES"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-ORDER"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-RECOVERY"

@@ -359,22 +359,22 @@ spec:
 
     #[test]
     fn validate_accepts_valid_document() {
-        let doc: TemplateDocument = serde_yaml::from_str(VALID_YAML).expect("parse");
+        let doc: TemplateDocument = deve_sub_yaml::from_str(VALID_YAML).expect("parse");
         validate_document(&doc, VALID_YAML).expect("should pass");
     }
 
     #[test]
     fn validate_rejects_wrong_api_version() {
         let yaml = VALID_YAML.replace("deve-sub.io/v1", "v2");
-        let doc: TemplateDocument = serde_yaml::from_str(&yaml).expect("parse");
+        let doc: TemplateDocument = deve_sub_yaml::from_str(&yaml).expect("parse");
         let err = validate_document(&doc, &yaml).expect_err("should fail");
         assert!(matches!(err, TemplateAppError::InvalidInput(_)));
     }
 
     #[test]
     fn validate_rejects_empty_name() {
-        let yaml = VALID_YAML.replace("default-mihomo", "");
-        let doc: TemplateDocument = serde_yaml::from_str(&yaml).expect("parse");
+        let yaml = VALID_YAML.replace("default-mihomo", "''");
+        let doc: TemplateDocument = deve_sub_yaml::from_str(&yaml).expect("parse");
         let err = validate_document(&doc, &yaml).expect_err("should fail");
         assert!(matches!(err, TemplateAppError::InvalidInput(_)));
     }
@@ -385,7 +385,7 @@ spec:
             "  proxyGroups: []",
             "  proxyGroups: []\n  script: \"require('child_process').exec('rm -rf /')\"",
         );
-        let doc: TemplateDocument = serde_yaml::from_str(&yaml).expect("parse");
+        let doc: TemplateDocument = deve_sub_yaml::from_str(&yaml).expect("parse");
         let err = validate_document(&doc, &yaml).expect_err("should fail");
         assert!(matches!(err, TemplateAppError::ForbiddenScript(_)));
     }
@@ -396,7 +396,7 @@ spec:
             "  proxyGroups: []",
             "  proxyGroups:\n    - name: proxy\n      type: select\n      members: []\n    - name: proxy\n      type: url-test\n      members: []",
         );
-        let doc: TemplateDocument = serde_yaml::from_str(&yaml).expect("parse");
+        let doc: TemplateDocument = deve_sub_yaml::from_str(&yaml).expect("parse");
         let err = validate_document(&doc, &yaml).expect_err("should fail");
         assert!(matches!(err, TemplateAppError::InvalidInput(_)));
     }
@@ -407,7 +407,7 @@ spec:
             "  proxyGroups: []",
             "  proxyGroups:\n    - name: proxy\n      type: relay\n      members:\n        - kind: group\n          name: nonexistent",
         );
-        let doc: TemplateDocument = serde_yaml::from_str(&yaml).expect("parse");
+        let doc: TemplateDocument = deve_sub_yaml::from_str(&yaml).expect("parse");
         let err = validate_document(&doc, &yaml).expect_err("should fail");
         assert!(matches!(err, TemplateAppError::InvalidInput(_)));
     }
@@ -417,7 +417,7 @@ spec:
         // Build a YAML doc that exceeds 1 MiB by padding the description.
         let pad = "x".repeat(MAX_SPEC_BYTES + 100);
         let yaml = format!("{VALID_YAML}\n# padding\n# {pad}\n");
-        let doc: TemplateDocument = serde_yaml::from_str(VALID_YAML).expect("parse");
+        let doc: TemplateDocument = deve_sub_yaml::from_str(VALID_YAML).expect("parse");
         let err = validate_document(&doc, &yaml).expect_err("should fail");
         assert!(matches!(err, TemplateAppError::SpecTooLarge(_, _)));
     }

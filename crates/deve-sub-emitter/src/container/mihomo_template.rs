@@ -4,19 +4,36 @@ use super::ir::AssembledTemplate;
 use super::mihomo::yaml_dq;
 use crate::error::EmitError;
 use deve_sub_domain::GroupType;
+use std::collections::BTreeMap;
 
 pub fn emit_full(template: &AssembledTemplate) -> Result<String, EmitError> {
     if let Some(config) = &template.clash {
-        let mut output: serde_yaml::Mapping =
-            serde_yaml::from_str(config).map_err(|e| EmitError::Encode(e.to_string()))?;
-        let proxies: serde_yaml::Value =
-            serde_yaml::from_str(&super::mihomo::emit(&template.nodes)?)
-                .map_err(|e| EmitError::Encode(e.to_string()))?;
-        output.insert(
-            serde_yaml::Value::String("proxies".into()),
-            proxies["proxies"].clone(),
-        );
-        return serde_yaml::to_string(&output).map_err(|e| EmitError::Encode(e.to_string()));
+        // WHY: application validation already bounded the authored template.
+        // This server-serialized config also contains expanded group members,
+        // so its generated size must not inherit the authored input limits.
+        let mut native = deve_sub_yaml::parse_generated_value(config)
+            .map_err(|e| EmitError::Encode(e.to_string()))?;
+        let mapping = native
+            .as_mapping_mut()
+            .ok_or_else(|| EmitError::Encode("native routing template must be a mapping".into()))?;
+        mapping.shift_remove(&deve_sub_yaml::Value::String("proxies".into()));
+        // WHY: the pool owns proxies. Append its known root block directly:
+        // reparsing generated output would impose input limits on large node
+        // pools and duplicate the whole proxy tree. Skip an empty native map
+        // because a leading `{}` would form a separate YAML root value.
+        let mut output = if mapping.is_empty() {
+            String::new()
+        } else {
+            deve_sub_yaml::to_string(&native).map_err(|e| EmitError::Encode(e.to_string()))?
+        };
+        if !output.is_empty() && !output.ends_with('\n') {
+            output.push('\n');
+        }
+        output.push_str(&super::mihomo::emit(&template.nodes)?);
+        if !output.ends_with('\n') {
+            output.push('\n');
+        }
+        return Ok(output);
     }
     let mut out = super::mihomo::emit(&template.nodes)?;
 
@@ -26,17 +43,23 @@ pub fn emit_full(template: &AssembledTemplate) -> Result<String, EmitError> {
     }
 
     if !template.rules.is_empty() {
-        out.push('\n');
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
         emit_rules(&template.rules, &mut out)?;
     }
 
     if !template.dns.is_null() {
-        out.push('\n');
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
         emit_json_block("dns", &template.dns, &mut out)?;
     }
 
     if !template.tun.is_null() {
-        out.push('\n');
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
         emit_json_block("tun", &template.tun, &mut out)?;
     }
 
@@ -74,19 +97,9 @@ fn emit_groups(
 }
 
 fn emit_rules(rules: &[serde_json::Value], out: &mut String) -> Result<(), EmitError> {
-    out.push_str("rules:");
-    for rule in rules {
-        let yaml = json_to_yaml_line(rule)?;
-        for (i, l) in yaml.lines().enumerate() {
-            if i == 0 {
-                out.push_str("\n  - ");
-                out.push_str(l);
-            } else {
-                out.push_str("\n    ");
-                out.push_str(l);
-            }
-        }
-    }
+    let yaml = deve_sub_yaml::to_string(&BTreeMap::from([("rules", rules)]))
+        .map_err(|e| EmitError::Encode(e.to_string()))?;
+    out.push_str(&yaml);
     Ok(())
 }
 
@@ -95,29 +108,11 @@ fn emit_json_block(
     value: &serde_json::Value,
     out: &mut String,
 ) -> Result<(), EmitError> {
-    let yaml =
-        serde_yaml::to_string(value).map_err(|e| EmitError::Encode(format!("serde_yaml: {e}")))?;
-    // WHY: serde_yaml emits a leading "---\n" document marker and column-0
-    // content; we strip the marker and re-indent under the section key.
-    let body = yaml
-        .strip_prefix("---\n")
-        .unwrap_or(&yaml)
-        .trim_end_matches('\n');
-    out.push_str(key);
-    out.push(':');
-    for l in body.lines() {
-        out.push_str("\n  ");
-        out.push_str(l);
-    }
+    // WHY: serialize the section root together with its value. Trimming or
+    // re-indenting a serialized child can remove meaningful trailing newlines
+    // from `|+` scalars; borrowed wrappers avoid cloning the JSON tree.
+    let yaml = deve_sub_yaml::to_string(&BTreeMap::from([(key, value)]))
+        .map_err(|e| EmitError::Encode(e.to_string()))?;
+    out.push_str(&yaml);
     Ok(())
-}
-
-fn json_to_yaml_line(value: &serde_json::Value) -> Result<String, EmitError> {
-    let yaml =
-        serde_yaml::to_string(value).map_err(|e| EmitError::Encode(format!("serde_yaml: {e}")))?;
-    Ok(yaml
-        .strip_prefix("---\n")
-        .unwrap_or(&yaml)
-        .trim_end()
-        .to_owned())
 }

@@ -20,29 +20,28 @@ pub(super) fn invalid(message: impl Into<String>) -> TemplateAppError {
     TemplateAppError::InvalidInput(message.into())
 }
 
-pub(super) fn parse(raw: serde_yaml::Value) -> Result<TemplateDocument, TemplateAppError> {
+pub(super) fn parse(raw: deve_sub_yaml::Value) -> Result<TemplateDocument, TemplateAppError> {
     let mut value = raw;
     if value.is_sequence() {
-        let mut map = serde_yaml::Mapping::new();
-        map.insert(serde_yaml::Value::String("rules".into()), value);
-        value = serde_yaml::Value::Mapping(map);
+        let mut map = deve_sub_yaml::Mapping::new();
+        map.insert(deve_sub_yaml::Value::String("rules".into()), value);
+        value = deve_sub_yaml::Value::Mapping(map);
     }
     let map = value
         .as_mapping_mut()
         .ok_or_else(|| invalid("expected Clash routing YAML with rules, or a YAML rule list"))?;
-    let groups = serde_yaml::Value::String("proxy-groups".into());
+    let groups = deve_sub_yaml::Value::String("proxy-groups".into());
     if !map.contains_key(&groups) {
         map.insert(
             groups,
-            serde_yaml::to_value(json!([{
+            deve_sub_yaml::from_json(json!([{
                 "name": "PROXY", "type": "select", "include-all-proxies": true
-            }]))
-            .map_err(|e| invalid(e.to_string()))?,
+            }])),
         );
     }
     // JSON is a temporary validation view only. The retained YAML mapping
     // preserves DNS policy insertion order through storage and emission.
-    let native = serde_yaml::to_string(&value).map_err(|e| invalid(e.to_string()))?;
+    let native = deve_sub_yaml::to_string(&value).map_err(|e| invalid(e.to_string()))?;
     let map = config(&native)?;
     validate(&map, None)?;
     serde_json::from_value(json!({

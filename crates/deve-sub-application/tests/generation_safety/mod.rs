@@ -11,6 +11,7 @@ use deve_sub_domain::{
 use deve_sub_kernel::{GenerationCacheId, NodeId};
 use serde_json::{Value, json};
 
+mod generated_yaml;
 mod source_mutation;
 mod withdrawal_groups;
 
@@ -62,7 +63,7 @@ async fn gen006_groups_cannot_expand_fixed_or_dynamic_selection() {
         let result = run(&db, request.clone(), "generate")
             .await
             .expect("selected config");
-        let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+        let output: deve_sub_yaml::Value = deve_sub_yaml::from_str(&result.content).expect("yaml");
         assert_eq!(
             output["proxies"].as_sequence().expect("proxies").len(),
             1,
@@ -104,10 +105,11 @@ async fn gen006_empty_selection_and_resolved_group_preserve_scope() {
         if !empty {
             let result = result.expect("safe blocked group with selected A");
             assert!(!result.content.contains("bravo-node"));
-            let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+            let output: deve_sub_yaml::Value =
+                deve_sub_yaml::from_str(&result.content).expect("yaml");
             assert_eq!(
                 output["proxy-groups"][0]["proxies"],
-                serde_yaml::to_value(["REJECT"]).expect("members")
+                deve_sub_yaml::from_json(serde_json::json!(["REJECT"]))
             );
             continue;
         }

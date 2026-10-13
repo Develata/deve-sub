@@ -3,7 +3,8 @@
 use super::*;
 
 fn workflow() -> Value {
-    serde_yaml::from_str(include_str!("../../../.github/workflows/ci.yml")).expect("workflow YAML")
+    deve_sub_yaml::parse_source_json(include_str!("../../../.github/workflows/ci.yml"))
+        .expect("workflow YAML")
 }
 
 fn packages(workflow: &Value) -> BTreeSet<String> {

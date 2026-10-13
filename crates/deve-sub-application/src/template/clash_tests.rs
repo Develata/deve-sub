@@ -39,7 +39,7 @@ tun: {enable: false}
         .spec
         .clash
         .expect("native");
-    let original: serde_json::Value = serde_yaml::from_str(raw).expect("yaml");
+    let original = deve_sub_yaml::parse_source_json(raw).expect("yaml");
     assert_eq!(
         serde_json::Value::Object(super::clash::config(&native).expect("config")),
         original

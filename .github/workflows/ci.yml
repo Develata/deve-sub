@@ -3,7 +3,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, fix/bounded-quality-2026-10-13]
   # WHY (ADR-0008): nightly full baseline detects drift before a release.
   schedule:
     - cron: "0 19 * * *"
@@ -99,7 +99,7 @@ jobs:
           - shard: adapters
             crates: "-p deve-sub-adapters"
           - shard: infra
-            crates: "-p deve-sub-security -p deve-sub-observability -p deve-sub-inmemory -p deve-sub-ci"
+            crates: "-p deve-sub-security -p deve-sub-observability -p deve-sub-inmemory -p deve-sub-ci -p deve-sub-yaml"
           - shard: server
             crates: "-p deve-sub-server"
           - shard: cli
@@ -419,7 +419,7 @@ jobs:
         run: python3 scripts/tests/test_docker_health.py --image deve-sub:ci --platform linux/amd64
 
   # Multi-arch build verification (DEPLOY-003/004).
-  # WHY: runs on push to main and on the nightly schedule, not on PRs.
+  # WHY: runs on supported branch pushes and the nightly schedule, not on PRs.
   # The arm64 runtime stage still needs QEMU for apt-get on
   # debian:trixie-slim; the builder stage uses cross-compile (not QEMU) per
   # Dockerfile line 9 --platform=$BUILDPLATFORM. Schedule inclusion keeps

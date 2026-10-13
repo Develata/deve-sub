@@ -4,9 +4,9 @@
 //! constraints before persistence. The checks are:
 //!
 //! - Size: serialized YAML ≤ 1 MiB (SEC-005 parity).
-//! - Structural nesting depth: ≤ 10 (SEC-005 parity). serde_yaml 0.9
-//!   resolves YAML aliases during parsing, so this checks raw nesting
-//!   depth as a defense against pathologically deep documents.
+//! - Structural nesting depth: ≤ 10 (SEC-005 parity). The shared YAML
+//!   parser bounds alias expansion; this retains the application depth
+//!   convention for the resolved tree.
 //! - No script tags: forbidden keys `script`, `script_str`, `shell`,
 //!   `exec`, `eval`, `javascript`, `lua` anywhere in the document
 //!   (constraint #10).
@@ -18,7 +18,7 @@
 //! Schema validation runs before persistence; no partial template is stored
 //! (GEN-002).
 
-use serde_yaml::Value;
+use deve_sub_yaml::Value;
 
 use deve_sub_domain::{
     API_VERSION, ChainGraph, GroupMember, KIND, MAX_ALIAS_DEPTH, MAX_SPEC_BYTES, TemplateDocument,
@@ -47,7 +47,7 @@ const FORBIDDEN_SCRIPT_KEYS: &[&str] = &[
 pub fn parse_template_document(spec_yaml: &str) -> Result<TemplateDocument, TemplateAppError> {
     let raw = checked_yaml(spec_yaml)?;
     if raw.get("apiVersion").is_some() || raw.get("kind").is_some() || raw.get("spec").is_some() {
-        let doc: TemplateDocument = serde_yaml::from_value(raw)
+        let doc: TemplateDocument = deve_sub_yaml::from_value(raw)
             .map_err(|e| TemplateAppError::SpecYamlParse(e.to_string()))?;
         if doc.spec.clash.is_some() {
             return Err(TemplateAppError::InvalidInput(
@@ -177,12 +177,10 @@ pub fn validate_document(doc: &TemplateDocument, spec_yaml: &str) -> Result<(), 
     Ok(())
 }
 
-/// Recursively check structural nesting depth. WHY: serde_yaml 0.9 resolves
-/// YAML aliases during parsing, so the `Value` tree contains no `Alias`
-/// variant. We check raw nesting depth (mappings/sequences/each tag level)
-/// as a defense against pathologically deep documents that could exhaust
-/// stack space during downstream processing. The limit mirrors the SEC-005
-/// alias-depth parity requirement.
+/// Retain the application depth convention after bounded alias expansion.
+/// WHY: the application counts each visited value at `depth + 1`, while map
+/// keys remain at their parent's depth. Parser limits alone use a different
+/// root convention and cannot replace this existing SEC-005 boundary.
 fn check_depth(value: &Value, depth: u32) -> Result<(), TemplateAppError> {
     let next_depth = depth + 1;
     if next_depth > MAX_ALIAS_DEPTH {
@@ -202,9 +200,6 @@ fn check_depth(value: &Value, depth: u32) -> Result<(), TemplateAppError> {
             for v in seq {
                 check_depth(v, next_depth)?;
             }
-        }
-        Value::Tagged(tagged) => {
-            check_depth(&tagged.value, next_depth)?;
         }
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
@@ -229,9 +224,6 @@ fn check_forbidden_scripts(value: &Value) -> Result<(), TemplateAppError> {
                 check_forbidden_scripts(v)?;
             }
         }
-        Value::Tagged(tagged) => {
-            check_forbidden_scripts(&tagged.value)?;
-        }
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
     Ok(())
@@ -246,3 +238,7 @@ pub(super) fn map_template_error(e: TemplateError) -> TemplateAppError {
         other => TemplateAppError::Template(other),
     }
 }
+
+#[cfg(test)]
+#[path = "validation_tests.rs"]
+mod tests;

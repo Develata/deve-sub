@@ -148,6 +148,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arraydeque"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1128,11 +1134,11 @@ dependencies = [
  "deve-sub-protocol",
  "deve-sub-security",
  "deve-sub-storage-sqlite",
+ "deve-sub-yaml",
  "fancy-regex",
  "futures-util",
  "serde",
  "serde_json",
- "serde_yaml",
  "sha2 0.11.0",
  "sqlx",
  "subtle",
@@ -1149,8 +1155,8 @@ name = "deve-sub-ci"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "deve-sub-yaml",
  "serde_json",
- "serde_yaml",
  "tempfile",
 ]
 
@@ -1230,9 +1236,9 @@ dependencies = [
  "deve-sub-domain",
  "deve-sub-kernel",
  "deve-sub-protocol",
+ "deve-sub-yaml",
  "percent-encoding",
  "serde_json",
- "serde_yaml",
  "tempfile",
  "thiserror 1.0.69",
  "time",
@@ -1277,11 +1283,11 @@ dependencies = [
  "deve-sub-domain",
  "deve-sub-emitter",
  "deve-sub-kernel",
+ "deve-sub-yaml",
  "percent-encoding",
  "proptest",
  "serde",
  "serde_json",
- "serde_yaml",
  "thiserror 1.0.69",
  "time",
  "url",
@@ -1373,6 +1379,18 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "deve-sub-yaml"
+version = "0.1.3"
+dependencies = [
+ "granit-parser",
+ "indexmap",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2304,6 +2322,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "granit-parser"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e20f99e46474f56bd905c56e817ebddcf377a611f94c53ac4649e4d3fa3c0cd0"
+dependencies = [
+ "arraydeque",
+ "smallvec",
+]
+
+[[package]]
 name = "h3"
 version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3161,6 +3189,12 @@ checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
 ]
+
+[[package]]
+name = "nohash-hasher"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 
 [[package]]
 name = "nu-ansi-term"
@@ -4052,6 +4086,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-saphyr"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8050abb251097357e24aff63ba2c52a6309ecb7d23a5474023df960a02694d8"
+dependencies = [
+ "base64",
+ "nohash-hasher",
+ "num-traits",
+ "serde_core",
+ "zmij",
+]
+
+[[package]]
 name = "serde-wasm-bindgen"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4127,19 +4174,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
 ]
 
 [[package]]
@@ -5164,12 +5198,6 @@ dependencies = [
  "crypto-common 0.1.7",
  "subtle",
 ]
-
-[[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"

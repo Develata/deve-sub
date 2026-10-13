@@ -145,7 +145,7 @@ fn yaml_dq_escapes_special_characters_in_name() {
         output.contains(r#"evil\"name\\back"#),
         "name must be yaml-escaped"
     );
-    serde_yaml::from_str::<serde_yaml::Value>(&output).expect("output must be valid YAML");
+    deve_sub_yaml::from_str::<deve_sub_yaml::Value>(&output).expect("output must be valid YAML");
 }
 
 #[test]
@@ -168,7 +168,7 @@ fn yaml_dq_escapes_special_characters_in_password() {
         output.contains(r#"p\"w\\d"#),
         "password must be yaml-escaped"
     );
-    serde_yaml::from_str::<serde_yaml::Value>(&output).expect("output must be valid YAML");
+    deve_sub_yaml::from_str::<deve_sub_yaml::Value>(&output).expect("output must be valid YAML");
 }
 
 #[test]

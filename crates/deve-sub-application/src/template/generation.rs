@@ -710,18 +710,28 @@ fn validate_output(content: &str, profile: ProfileKind) -> Result<(), TemplateAp
     }
     match profile {
         ProfileKind::Mihomo => {
-            let v: serde_yaml::Value =
-                serde_yaml::from_str(content).map_err(|_| TemplateAppError::EmptyOutput)?;
-            let proxies = v.get("proxies").ok_or_else(|| {
-                TemplateAppError::InvalidStructure("missing 'proxies' key".into())
-            })?;
-            let arr = proxies.as_sequence().ok_or_else(|| {
-                TemplateAppError::InvalidStructure("'proxies' is not an array".into())
-            })?;
-            if arr.is_empty() {
-                return Err(TemplateAppError::InvalidStructure(
-                    "'proxies' array is empty".into(),
-                ));
+            // WHY: emission still needs a complete syntax check before
+            // publication, but its already-generated values must not be
+            // expanded again or inherit the source-download byte budgets.
+            match deve_sub_yaml::inspect_generated_sequence(content, "proxies")
+                .map_err(|_| TemplateAppError::EmptyOutput)?
+            {
+                deve_sub_yaml::SequenceState::Missing => {
+                    return Err(TemplateAppError::InvalidStructure(
+                        "missing 'proxies' key".into(),
+                    ));
+                }
+                deve_sub_yaml::SequenceState::NotSequence => {
+                    return Err(TemplateAppError::InvalidStructure(
+                        "'proxies' is not an array".into(),
+                    ));
+                }
+                deve_sub_yaml::SequenceState::Empty => {
+                    return Err(TemplateAppError::InvalidStructure(
+                        "'proxies' array is empty".into(),
+                    ));
+                }
+                deve_sub_yaml::SequenceState::NonEmpty => {}
             }
         }
         ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray | ProfileKind::Json => {

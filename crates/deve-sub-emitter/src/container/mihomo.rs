@@ -38,7 +38,8 @@ pub(super) fn yaml_dq(s: &str) -> String {
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
             '\0' => out.push_str("\\0"),
-            c if c.is_control() => {
+            // LS/PS are YAML 1.1 line breaks, but not Rust control characters.
+            c if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') => {
                 out.push_str(&format!("\\u{ch:04X}", ch = c as u32));
             }
             c => out.push(c),

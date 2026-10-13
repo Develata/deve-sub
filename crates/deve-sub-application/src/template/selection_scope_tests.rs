@@ -15,7 +15,7 @@ fn entry(index: u8, active: bool, missing: bool) -> NodePoolEntry {
 }
 
 fn document(selector: NodeSelector, group: ProxyGroup) -> TemplateDocument {
-    let mut doc: TemplateDocument = serde_yaml::from_str(
+    let mut doc: TemplateDocument = deve_sub_yaml::from_str(
         "apiVersion: deve-sub.io/v1\nkind: SubscriptionTemplate\nmetadata:\n  name: scope\nspec: {}",
     )
     .expect("valid document");

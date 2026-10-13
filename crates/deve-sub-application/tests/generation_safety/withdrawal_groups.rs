@@ -85,16 +85,16 @@ async fn gen015_native_retained_node_alias_survives_withdrawn_name_collision() {
         let result = run(&db, make_request(db.template_id, "mihomo"), "generate")
             .await
             .expect("retained manual node");
-        let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+        let output: deve_sub_yaml::Value = deve_sub_yaml::from_str(&result.content).expect("yaml");
         assert_eq!(
             group(&output, "Retained")["proxies"],
-            serde_yaml::to_value(["alpha-node"]).expect("members")
+            deve_sub_yaml::from_json(serde_json::json!(["alpha-node"]))
         );
         assert!(!result.content.contains("remote.example.com"));
         if secondary_collision {
             assert_eq!(
                 group(&output, "Exact")["proxies"],
-                serde_yaml::to_value([base_alias]).expect("exact name wins over aliases")
+                deve_sub_yaml::from_json(serde_json::json!([base_alias]))
             );
         }
     }
@@ -129,15 +129,15 @@ async fn gen015_native_withdrawn_secondary_alias_is_removed_without_losing_survi
     let result = run(&db, make_request(db.template_id, "mihomo"), "generate")
         .await
         .expect("withdrawn alias removed");
-    let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+    let output: deve_sub_yaml::Value = deve_sub_yaml::from_str(&result.content).expect("yaml");
     assert_eq!(
         group(&output, "Mixed")["proxies"],
-        serde_yaml::to_value(["bravo-node"]).expect("members")
+        deve_sub_yaml::from_json(serde_json::json!(["bravo-node"]))
     );
     assert!(!result.content.contains("remote.example.com"));
 }
 
-fn group<'a>(output: &'a serde_yaml::Value, name: &str) -> &'a serde_yaml::Value {
+fn group<'a>(output: &'a deve_sub_yaml::Value, name: &str) -> &'a deve_sub_yaml::Value {
     output["proxy-groups"]
         .as_sequence()
         .expect("groups")
@@ -166,16 +166,16 @@ async fn gen015_withdrawn_v3_leaf_blocks_without_breaking_parent() {
         let result = run(&db, request, "generate")
             .await
             .expect("remaining branches");
-        let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+        let output: deve_sub_yaml::Value = deve_sub_yaml::from_str(&result.content).expect("yaml");
         assert!(!result.content.contains("remote.example.com"));
         assert_eq!(group(&output, "Remote")["type"].as_str(), Some("select"));
         assert_eq!(
             group(&output, "Remote")["proxies"],
-            serde_yaml::to_value(["REJECT"]).expect("members")
+            deve_sub_yaml::from_json(serde_json::json!(["REJECT"]))
         );
         assert_eq!(
             group(&output, "Main")["proxies"],
-            serde_yaml::to_value(["Remote", "alpha-node"]).expect("members")
+            deve_sub_yaml::from_json(serde_json::json!(["Remote", "alpha-node"]))
         );
         assert!(result.warnings.iter().any(|w| w.contains("REJECT")));
     }
@@ -199,10 +199,10 @@ async fn gen015_native_withdrawn_members_preserve_routes_and_options() {
             .iter()
             .any(|w| w.contains("last successful"))
     );
-    let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+    let output: deve_sub_yaml::Value = deve_sub_yaml::from_str(&result.content).expect("yaml");
     assert_eq!(
         group(&output, "Remote")["proxies"],
-        serde_yaml::to_value(["REJECT"]).expect("members")
+        deve_sub_yaml::from_json(serde_json::json!(["REJECT"]))
     );
     assert_eq!(group(&output, "Main")["hidden"].as_bool(), Some(true));
     let policy: Vec<_> = output["dns"]["nameserver-policy"]
@@ -218,7 +218,10 @@ async fn gen015_native_withdrawn_members_preserve_routes_and_options() {
     );
     assert_eq!(
         output["rules"],
-        serde_yaml::to_value(["DOMAIN-SUFFIX,example.com,Remote", "MATCH,Main"]).expect("rules")
+        deve_sub_yaml::from_json(serde_json::json!([
+            "DOMAIN-SUFFIX,example.com,Remote",
+            "MATCH,Main"
+        ]))
     );
 }
 
@@ -237,10 +240,10 @@ async fn gen015_native_exclusion_uses_client_adapter_types() {
     let result = run(&db, make_request(db.template_id, "mihomo"), "generate")
         .await
         .expect("generate");
-    let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+    let output: deve_sub_yaml::Value = deve_sub_yaml::from_str(&result.content).expect("yaml");
     assert_eq!(
         group(&output, "Types")["proxies"],
-        serde_yaml::to_value(["DIRECT", "REJECT"]).expect("members")
+        deve_sub_yaml::from_json(serde_json::json!(["DIRECT", "REJECT"]))
     );
 }
 
@@ -259,11 +262,11 @@ async fn gen015_native_auto_groups_cannot_fall_back_to_direct_when_empty() {
         let result = run(&db, make_request(db.template_id, "mihomo"), "generate")
             .await
             .expect("safe empty group");
-        let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+        let output: deve_sub_yaml::Value = deve_sub_yaml::from_str(&result.content).expect("yaml");
         let auto = group(&output, "Auto");
         assert_eq!(
             auto["proxies"],
-            serde_yaml::to_value(["REJECT"]).expect("members")
+            deve_sub_yaml::from_json(serde_json::json!(["REJECT"]))
         );
         assert_eq!(auto["type"].as_str(), Some("select"));
         for key in [
@@ -289,10 +292,10 @@ async fn gen015_native_auto_groups_resolve_lookaround_and_explicit_members() {
     let result = run(&db, make_request(db.template_id, "mihomo"), "generate")
         .await
         .expect("materialize");
-    let output: serde_yaml::Value = serde_yaml::from_str(&result.content).expect("yaml");
+    let output: deve_sub_yaml::Value = deve_sub_yaml::from_str(&result.content).expect("yaml");
     assert_eq!(
         group(&output, "Auto")["proxies"],
-        serde_yaml::to_value(["bravo-node", "alpha-node"]).expect("members"),
+        deve_sub_yaml::from_json(serde_json::json!(["bravo-node", "alpha-node"])),
         "inclusion filters apply to auto nodes; exclusion filters also apply to explicit members"
     );
 }

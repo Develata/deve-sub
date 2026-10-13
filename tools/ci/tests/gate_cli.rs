@@ -4,8 +4,9 @@ use serde_json::{Value, json};
 use std::{fs, process::Command};
 
 fn needs() -> Value {
-    let workflow: Value = serde_yaml::from_str(include_str!("../../../.github/workflows/ci.yml"))
-        .expect("workflow YAML");
+    let workflow =
+        deve_sub_yaml::parse_source_json(include_str!("../../../.github/workflows/ci.yml"))
+            .expect("workflow YAML");
     workflow["jobs"]["acceptance-gate"]["needs"]
         .as_array()
         .expect("required jobs")

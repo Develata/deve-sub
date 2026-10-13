@@ -19,7 +19,51 @@ This internal field cannot be supplied inside a V3 wrapper. Aliases and merge
 keys are decoded under an 8 MiB value budget before constructing a full tree;
 custom tags, duplicate mapping keys and excessive depth are rejected. Merge
 processing moves already-budgeted values and preserves explicit key order.
-Existing V3 documents remain valid. Native input targets Mihomo only; other
+The shared YAML adapter retains the source syntax in a bounded, acyclic anchor
+DAG and charges each alias's complete pre-merge value cost and height before
+materializing it. Input stays bounded to 1 MiB, expanded values to 8 MiB, and
+nesting to the existing depth checks. The legacy alias repetition guard remains
+in force. Mapping equality does not reorder iteration; explicit keys precede
+inherited keys, including when a quoted `<<` supplies the merge. Parser errors
+expose only a static category and location, never scalar text or snippets.
+Source-container JSON projection keeps its separate existing behavior: scalar
+mapping keys preserve their original spelling, duplicate keys use the last
+value, and `<<` is an ordinary key. This distinction must not be collapsed by
+a parser-library migration. Includes, interpolation and custom tags are not
+new input capabilities.
+Standard YAML namespace tags retain their previous scalar/container behavior.
+Nonstandard namespaces and local custom tags are now uniformly rejected,
+including full URI tags that the previous loader silently ignored. Rebinding an
+anchor name resolves subsequent aliases to that name's latest definition.
+The parser migration has an explicit syntax boundary: compact unquoted `?foo`
+inside a flow collection is rejected rather than reinterpreting legacy keys or
+values. Use `? foo` for an explicit entry or quote `'?foo'` for literal text.
+Block plain scalars are unaffected. Omitted mapping keys follow YAML 1.2 empty
+key semantics; a Tab-only separator in `{?\t}` remains a parser limitation and
+must be written with a space. This is a recorded compatibility restriction,
+not a claim that the two parsers accept identical grammars.
+Literal NEL (U+0085), LS (U+2028) and PS (U+2029) are rejected throughout the
+document, including comments: the previous backend treats them as line breaks,
+whereas the new parser treats them as content, potentially changing scalar types
+or swallowing a following key into a comment. Use LF for syntax or double-quoted
+Unicode escapes for string contents. Serialization emits safe escapes. Historical
+stored YAML containing literal LS/PS may need editing and saving with those
+escapes; generation fails explicitly until then and retains eligible last-good
+output. Multiline quoted scalars also require indented continuation lines; the
+previous parser accepted some unindented continuations. Ordinary question marks
+and Tabs inside strings or comments are not rejected by these compatibility checks.
+
+Input budgets do not apply again after the server materializes proxy-group
+membership. Trusted serialized configuration is read with the existing depth
+and duplicate checks and with aliases forbidden. Node emission is appended as
+one known root `proxies` section without reparsing or cloning the generated node
+list. Publication still scans the entire single document, including every
+nested mapping's duplicate keys, and requires a nonempty `proxies` sequence.
+This scan builds no full value tree and does not impose an incoming-source byte
+limit on generated output. Root-section serialization preserves multiline and
+trailing-newline scalar contents when assembling rules, DNS and TUN.
+Existing V3 typed semantics are retained within these stated YAML syntax
+boundaries. Native input targets Mihomo only; other
 profiles fail explicitly in both strict and lenient mode. Rule order, flags,
 provider definitions, DNS/TUN and group options survive emission. Save checks
 rule structure, policy/provider references, duplicate/reserved group names and

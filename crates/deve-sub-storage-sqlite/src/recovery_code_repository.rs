@@ -7,6 +7,7 @@
 use async_trait::async_trait;
 use deve_sub_domain::{IdentityError, RecoveryCode, RecoveryCodeRepository, Session};
 use deve_sub_kernel::{RecoveryCodeId, UserId};
+use sqlx::SqliteConnection;
 use sqlx::sqlite::SqlitePool;
 
 /// SQLite-backed recovery code repository.
@@ -63,33 +64,7 @@ impl RecoveryCodeRepository for SqliteRecoveryCodeRepository {
             .await
             .map_err(|e| IdentityError::Storage(e.to_string()))?;
 
-        sqlx::query("DELETE FROM recovery_codes WHERE user_id = ?")
-            .bind(user_id.to_string())
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| IdentityError::Storage(e.to_string()))?;
-
-        for code in codes {
-            // WHY: defense-in-depth — the DELETE uses the `user_id` parameter
-            // but the INSERT binds `code.user_id`. Current callers always
-            // construct codes with the matching user_id, but this assertion
-            // catches a future caller that might mismatch.
-            debug_assert_eq!(code.user_id, user_id);
-            let created_at =
-                crate::timestamp::format_ts(code.created_at).map_err(IdentityError::Storage)?;
-            sqlx::query(
-                "INSERT INTO recovery_codes (id, user_id, code_hash, used, created_at) \
-                 VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(code.id.to_string())
-            .bind(code.user_id.to_string())
-            .bind(&code.code_hash)
-            .bind(code.used as i64)
-            .bind(created_at)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| IdentityError::Storage(e.to_string()))?;
-        }
+        replace_in_transaction(&mut tx, user_id, codes).await?;
 
         tx.commit()
             .await
@@ -175,4 +150,43 @@ impl RecoveryCodeRepository for SqliteRecoveryCodeRepository {
             .map_err(|e| IdentityError::Storage(e.to_string()))?;
         Ok(())
     }
+}
+
+/// Replace codes inside the caller's transaction so enrollment changes and
+/// their recovery batch share one rollback boundary.
+pub(crate) async fn replace_in_transaction(
+    connection: &mut SqliteConnection,
+    user_id: UserId,
+    codes: &[RecoveryCode],
+) -> Result<(), IdentityError> {
+    // WHY: reject a mismatched owner in release builds too; enrollment must
+    // never enable one user while issuing recovery codes to another.
+    if codes.iter().any(|code| code.user_id != user_id) {
+        return Err(IdentityError::Storage(
+            "recovery code owner does not match enrollment".to_owned(),
+        ));
+    }
+    sqlx::query("DELETE FROM recovery_codes WHERE user_id = ?")
+        .bind(user_id.to_string())
+        .execute(&mut *connection)
+        .await
+        .map_err(|e| IdentityError::Storage(e.to_string()))?;
+
+    for code in codes {
+        let created_at =
+            crate::timestamp::format_ts(code.created_at).map_err(IdentityError::Storage)?;
+        sqlx::query(
+            "INSERT INTO recovery_codes (id, user_id, code_hash, used, created_at) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(code.id.to_string())
+        .bind(code.user_id.to_string())
+        .bind(&code.code_hash)
+        .bind(code.used as i64)
+        .bind(created_at)
+        .execute(&mut *connection)
+        .await
+        .map_err(|e| IdentityError::Storage(e.to_string()))?;
+    }
+    Ok(())
 }

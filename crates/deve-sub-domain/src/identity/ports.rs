@@ -74,14 +74,43 @@ pub trait SessionRepository: Send + Sync {
     async fn revoke_all_for_user(&self, user_id: UserId) -> Result<(), IdentityError>;
 }
 
-/// Storage boundary for encrypted TOTP secrets.
+/// Storage boundary for encrypted TOTP secrets and atomic 2FA lifecycle changes.
 #[async_trait]
 pub trait TotpSecretRepository: Send + Sync {
-    /// Upsert the TOTP secret for a user. Replaces any existing secret.
+    /// Store a pending secret only while 2FA is disabled. The enabled check
+    /// and replacement must be atomic; an active secret must never change.
+    /// Returns [`IdentityError::TwoFactorAlreadyEnabled`] if 2FA is active.
     async fn upsert(&self, secret: &TotpSecret) -> Result<(), IdentityError>;
 
     /// Find the TOTP secret for a user.
     async fn find_by_user(&self, user_id: UserId) -> Result<Option<TotpSecret>, IdentityError>;
+
+    /// Enable 2FA and replace recovery codes in one transaction, only if the
+    /// pending secret still matches `expected`'s ciphertext and nonce.
+    /// Returns `false` without writes if that secret was replaced or removed,
+    /// or [`IdentityError::TwoFactorAlreadyEnabled`] if another call enabled
+    /// 2FA first. Storage failure must roll back the entire operation.
+    async fn enable_if_current(
+        &self,
+        expected: &TotpSecret,
+        codes: &[RecoveryCode],
+    ) -> Result<bool, IdentityError>;
+
+    /// Disable 2FA and delete its secret and recovery codes atomically, only
+    /// while `expected`'s ciphertext and nonce identify the active enrollment.
+    /// Returns `false` without writes if it is no longer active, so a delayed
+    /// password-verified command cannot delete a newer enrollment.
+    async fn disable_if_current(&self, expected: &TotpSecret) -> Result<bool, IdentityError>;
+
+    /// Atomically replace recovery codes only for the still-active enrollment
+    /// identified by `expected`'s ciphertext and nonce. Returns `false` without
+    /// writes if it changed or was disabled. Concurrent replacements for the
+    /// same enrollment take effect in commit order.
+    async fn replace_recovery_codes_if_current(
+        &self,
+        expected: &TotpSecret,
+        codes: &[RecoveryCode],
+    ) -> Result<bool, IdentityError>;
 
     /// Atomically record the timestep of an accepted TOTP code (replay
     /// protection, RFC 6238 §5.2). Returns `Ok(false)` — without mutating

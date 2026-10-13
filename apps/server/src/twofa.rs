@@ -98,7 +98,6 @@ async fn verify(
     let result = auth::verify_2fa(
         state.user_repo.as_ref(),
         state.totp_secret_repo.as_ref(),
-        state.recovery_code_repo.as_ref(),
         &state.master_key,
         auth_session.user.id,
         code,
@@ -163,7 +162,6 @@ async fn disable(
     auth::disable_2fa(
         state.user_repo.as_ref(),
         state.totp_secret_repo.as_ref(),
-        state.recovery_code_repo.as_ref(),
         auth_session.user.id,
         &req.password,
     )
@@ -217,7 +215,7 @@ async fn recovery_codes(
 ) -> Result<Json<RegenerateRecoveryCodesResponse>, (StatusCode, Json<ErrorResponse>)> {
     let codes = auth::regenerate_recovery_codes(
         state.user_repo.as_ref(),
-        state.recovery_code_repo.as_ref(),
+        state.totp_secret_repo.as_ref(),
         &state.master_key,
         auth_session.user.id,
         &req.password,

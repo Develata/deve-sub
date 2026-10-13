@@ -119,19 +119,31 @@ AUTH-009 (Token 重置 — "旧订阅 Token 失效") depends on subscription tok
 - Cross-site write requests are rejected by CSRF protection.
 - Acceptance: `AUTH-001` through `AUTH-008`, `AUTH-010`, `SEC-009`, `SEC-010`.
 
+## 2FA enrollment consistency (D3)
+
+Setup may replace a pending secret only while the user is still disabled for
+2FA. Verification enables exactly the ciphertext/nonce generation whose TOTP
+was checked, and commits its recovery-code batch in the same storage transaction.
+Two concurrent verifications have one winner. A delayed setup cannot replace an
+enabled secret, and a stale verification cannot enable a replacement secret.
+
+Disable and recovery-code regeneration also compare the generation read before
+password verification. Disable atomically clears the flag, secret and codes;
+regeneration atomically replaces the batch only for that active generation.
+A stale operation cannot affect a later enrollment. Concurrent regenerations
+for the same enrollment commit in order; only the last committed batch remains
+valid. A failed write rolls back the whole operation.
+
+The TOTP Port owns these operations, with SQLite obtaining write admission in
+its first conditional statement. Application does not compose repository writes
+or compensate after a partial commit. No new schema, HTTP operation or token
+format is introduced. AUTH-005/006 bind deterministic interleavings, rollback
+failure injection and the existing HTTP flows.
+
 ## Deferred items
 
 The following items are acknowledged limitations from M2, registered for
 later-milestone action:
-
-- **Cross-repository 2FA orchestration (D3)**: 2FA enable/disable spans the
-  user repository and the 2FA repository (TOTP secrets + recovery codes)
-  without a cross-repository transaction. Reliability is maintained via
-  compensating actions (eager delete on failure, tolerant queries that only
-  read when `two_factor_enabled` is set) and documented with WHY comments.
-  This is an architectural constraint of the modular monolith; deferred to a
-  future transactional outbox or saga pattern if reliability requirements
-  escalate.
 
 - **Application-layer `is_active` guard (D4)**: 2FA commands
   (`setup_2fa`, `disable_2fa`, `regenerate_recovery_codes`) rely on the

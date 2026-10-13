@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 test('UI-001: first launch shows admin setup wizard with no default weak password', async ({ page }) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
+  await expect(page).toHaveTitle('Deve Sub');
 
   // Setup wizard heading appears (Chinese or English).
   const heading = page.locator('h1').filter({ hasText: /初始化管理员|Admin Setup/ });

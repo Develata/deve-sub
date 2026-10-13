@@ -132,6 +132,7 @@ cases:
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LAYOUT"
         - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-REQUEST-TIMEOUT"
         - "tests/e2e/specs/ui-009-mobile.spec.ts::UI-009"
+        - "tests/e2e/functional/import.ui.spec.ts::FUNC-IMPORT-LAYOUT"
       status: pass
   - id: UI-010
     title: 键盘导航
@@ -148,6 +149,7 @@ cases:
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-DELETE"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-FORM"
         - "tests/e2e/specs/ui-010-keyboard-nav.spec.ts::UI-010"
+        - "tests/e2e/functional/import.ui.spec.ts::FUNC-IMPORT-RETURN"
       status: pass
   - id: AUTH-001
     title: 初始化管理员
@@ -856,6 +858,8 @@ cases:
         - "apps/server/tests/node_pool.rs::admin_can_import_nodes"
         - "apps/server/tests/node_pool.rs::import_duplicate_is_counted_not_overwritten"
         - "apps/server/tests/node_pool.rs::import_empty_content_returns_400"
+        - "apps/server/tests/node_pool/input_validation.rs::whitespace_import_returns_400_without_changing_pool_revision"
+        - "tests/e2e/functional/import.ui.spec.ts::FUNC-IMPORT-PENDING"
         - "apps/server/tests/node_pool.rs::import_unparseable_returns_400"
         - "apps/server/tests/node_pool.rs::list_returns_imported_nodes"
       status: pass

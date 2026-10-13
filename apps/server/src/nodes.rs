@@ -241,7 +241,7 @@ async fn import_nodes(
     admin: AdminUser,
     Json(req): Json<ImportNodesRequest>,
 ) -> Result<Json<ImportNodesResponse>, (StatusCode, Json<ErrorResponse>)> {
-    if req.content.is_empty() {
+    if req.content.trim().is_empty() {
         return Err(err(
             StatusCode::BAD_REQUEST,
             "invalid_input",

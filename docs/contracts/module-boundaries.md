@@ -301,6 +301,10 @@ tracing. Exact operational limits belong to the M2 and M6 blueprints.
 
 ### Node organization boundary
 
+`POST /nodes/import` rejects whitespace-only content with 400 `invalid_input`
+before parsing or persistence, independent of the selected input format.
+Successful imports retain the existing new/duplicate/failed count response.
+
 `GET /tags` returns the complete user-authored tag catalog, including tags with
 no node assignments. Web categories render this catalog independently of node
 pagination; their counts describe loaded node membership, not server totals.

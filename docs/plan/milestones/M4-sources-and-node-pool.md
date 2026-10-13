@@ -368,6 +368,13 @@ The controlled refresh regression binds SRC-005; concurrent import binds NODE-00
 
 ## Source form interaction (SRC-001, UI-009/010)
 
+Manual node imports share the native form dialog's focus isolation, Escape
+cancellation and viewport-bounded scrolling (NODE-001, UI-009/010). A pending
+import locks its draft and dismissal and ignores duplicate submission. Failure
+preserves input for retry; successful completion starts a node-list refresh
+that continues after any exit from the result view. Whitespace-only content is
+invalid at the REST boundary and cannot mutate the pool or its revision.
+
 On narrow screens, each source table row stacks its details and actions within
 the viewport, retaining the same controls and table semantics. Desktop keeps
 separate data columns. Long names/URLs wrap without pushing actions off screen.

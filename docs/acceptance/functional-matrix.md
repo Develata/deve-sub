@@ -46,6 +46,9 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 | FUNC-CHAIN-RACE | NODE-017/018 | A→B 与 B→A 并发写入 | 一个成功、一个冲突，最终图无环 |
 | FUNC-NODE-FILTER | NODE-004/006 | 并发启停与地区修改、筛选 | 两字段均保留；计数按唯一节点；筛选与有效值一致 |
 | FUNC-IMPORT-RACE | NODE-001/003 | 四次同时导入同样节点 | 相同身份，池内数量不增殖，无 SQLite 517 错误 |
+| FUNC-IMPORT-PENDING | NODE-001 | 导入挂起、重复提交、Escape、503 后重试 | 锁定草稿和取消；只发一次请求；失败保留输入，重试实际保存 |
+| FUNC-IMPORT-RETURN | NODE-001/UI-010 | 成功后 Escape 返回 | 节点列表已刷新，焦点返回导入入口 |
+| FUNC-IMPORT-LAYOUT | NODE-001/UI-009/010 | 390×420、空白内容、Tab 循环及 Escape | 面板不超出视口、错误可见、焦点留在窗口内并可返回 |
 | FUNC-TAG-MODES | NODE-005 | Web 批量移除与空替换 | 移除保留其余标签，空替换清空 |
 | FUNC-TAG-EDIT | NODE-005 | 打开已有成员并清空 | 预选与存储一致，清空真正持久化 |
 | FUNC-TAG-MANAGE | NODE-005/UI-009 | 创建、改名/色标、批量添加、筛选、删除 | 列表与持久成员一致，色标可见，页面不横向溢出 |

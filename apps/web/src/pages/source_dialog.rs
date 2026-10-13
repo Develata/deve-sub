@@ -1,14 +1,16 @@
-//! Native modal behavior for source forms: focus isolation and bounded scrolling.
+//! Native modal behavior for source and import forms: focus isolation and scrolling.
 
 use dioxus::prelude::*;
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
 
-/// Source dialogs use the browser's modal focus and background-inert semantics.
+/// Form dialogs use the browser's modal focus and background-inert semantics.
 #[component]
 pub fn SourceDialog(
     title: String,
     busy: bool,
+    #[props(default)]
+    wide: bool,
     on_close: EventHandler<()>,
     children: Element,
 ) -> Element {
@@ -33,7 +35,7 @@ pub fn SourceDialog(
     });
     rsx! {
         dialog {
-            class: "source-dialog rounded-xl bg-white p-6 text-stone-900 shadow-xl dark:bg-stone-900 dark:text-stone-100",
+            class: if wide { "source-dialog source-dialog-wide rounded-xl bg-white p-6 text-stone-900 shadow-xl dark:bg-stone-900 dark:text-stone-100" } else { "source-dialog rounded-xl bg-white p-6 text-stone-900 shadow-xl dark:bg-stone-900 dark:text-stone-100" },
             aria_label: "{title}",
             aria_busy: busy,
             onmounted: move |event| {
@@ -49,7 +51,7 @@ pub fn SourceDialog(
                 let Some(dialog) = keyboard_dialog.borrow().clone() else { return; };
                 // WHY: native modal focus excludes page controls but Chromium
                 // can still tab into browser chrome at the boundary.
-                let Ok(controls) = dialog.query_selector_all("input:not(:disabled), select:not(:disabled), button:not(:disabled)") else { return; };
+                let Ok(controls) = dialog.query_selector_all("input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)") else { return; };
                 let Some(first) = controls.item(0) else { return; };
                 let Some(last) = controls.item(controls.length().saturating_sub(1)) else { return; };
                 let active = dialog.owner_document().and_then(|document| document.active_element());

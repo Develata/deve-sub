@@ -632,12 +632,37 @@ async fn generate_activates_inactive_cache_from_delivery() {
         "first delivery must not be a cache hit"
     );
 
+    let prewarmed_id: String =
+        sqlx::query_scalar("SELECT id FROM generation_cache WHERE template_id = ?")
+            .bind(db.template_id.to_string())
+            .fetch_one(&db.pool)
+            .await
+            .expect("prewarmed entry");
+    let preview_result = deve_sub_application::template::preview(
+        &template_repo,
+        &version_repo,
+        &pool_repo,
+        &cache_repo,
+        &pool_meta_repo,
+        request.clone(),
+    )
+    .await
+    .expect("preview prewarmed entry");
+    assert_eq!(preview_result.content, delivery_result.content);
+    assert_eq!(preview_result.profile, "mihomo");
+    assert!(
+        preview_result
+            .warnings
+            .iter()
+            .any(|w| w == "served from cache")
+    );
+
     let active_before = get_active_generation(&cache_repo, db.template_id, "mihomo")
         .await
         .expect("find_active before");
     assert!(
         active_before.is_none(),
-        "delivery must not activate the entry"
+        "delivery and a cached preview must not activate the entry"
     );
 
     let admin_result = generate(
@@ -660,11 +685,12 @@ async fn generate_activates_inactive_cache_from_delivery() {
 
     let active_after = get_active_generation(&cache_repo, db.template_id, "mihomo")
         .await
-        .expect("find_active after");
-    assert!(
-        active_after.is_some(),
-        "admin generate must activate the entry (B-11)"
-    );
+        .expect("find_active after")
+        .expect("admin generate must activate the entry (B-11)");
+    assert_eq!(active_after.id.to_string(), prewarmed_id);
+    assert_eq!(active_after.content, delivery_result.content);
+    assert_eq!(admin_result.content, delivery_result.content);
+    assert_eq!(active_after.profile, "mihomo");
 }
 
 // WHY: sing-box supports GroupType::Select, so a `select` group passes the

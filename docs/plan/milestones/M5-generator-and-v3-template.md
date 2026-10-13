@@ -324,6 +324,10 @@ includes a 16-node fixed selector against 100/1,000/10,000-node encrypted pools
 
 ```text
 GenerationRequest
+  → validate template/version/profile, resolve selector parameters and pool revision
+  → cache lookup (key = hash of request params)
+      hit: return cached content; admin generate first activates an inactive hit
+      miss: continue below
   → resolve NodeSelection
       dynamic: apply filters to pool → NodeSet
       fixed: lookup nodeIds against the live pool (node_revision is
@@ -340,12 +344,14 @@ GenerationRequest
   → emit to target profile format (full IR for mihomo; proxy-only for
     other profiles, with a warning when groups/rules/dns/tun are present)
   → validate output (non-empty, well-formed; zero compatible nodes → error)
-  → cache lookup (key = hash of request params)
-      hit: return cached content
-      miss: store, then publish
-  → atomic publish (activate new generation, deactivate old)
+  → store generated content
+  → admin atomic publish (activate new generation, deactivate old)
   → GenerationResult { content, included, excluded, excluded_nodes, warnings }
 ```
+
+Preview shares cache lookup and generation but never stores or activates.
+Delivery may store inactive content without replacing the admin's active entry.
+The cache-hit branch skips node resolution and emission, as specified below.
 
 ### Compatibility matrix
 

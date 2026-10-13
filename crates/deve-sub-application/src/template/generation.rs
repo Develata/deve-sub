@@ -81,7 +81,7 @@ pub async fn generate(
                 .activate(cached.template_id, &cached.profile, cached.id)
                 .await?;
         }
-        return Ok(cached_result(&cached));
+        return Ok(cached_result(cached));
     }
 
     let result = run_pipeline(
@@ -120,7 +120,7 @@ pub async fn generate(
                     .activate(cached.template_id, &cached.profile, cached.id)
                     .await?;
             }
-            return Ok(cached_result(&cached));
+            return Ok(cached_result(cached));
         }
         return Err(store_err.into());
     }
@@ -158,7 +158,7 @@ pub async fn generate_for_delivery(
     let ctx = resolve_context(template_repo, version_repo, pool_meta_repo, &request).await?;
 
     if let Some(cached) = cache_repo.find_by_key(&ctx.cache_key).await? {
-        return Ok(cached_result(&cached));
+        return Ok(cached_result(cached));
     }
 
     // WHY (constraint #19): on-demand regeneration after a pool revision
@@ -195,7 +195,7 @@ pub async fn generate_for_delivery(
                         error = %pipeline_err,
                         "delivery generation failed; serving last good cached version"
                     );
-                    let mut result = cached_result(&last_good);
+                    let mut result = cached_result(last_good);
                     result
                         .warnings
                         .push("generation failed; served last successful version".to_owned());
@@ -234,7 +234,7 @@ pub async fn generate_for_delivery(
     // complete version). Any non-UNIQUE store error propagates.
     if let Err(store_err) = cache_repo.store(&entry).await {
         if let Some(cached) = cache_repo.find_by_key(&entry.cache_key).await? {
-            return Ok(cached_result(&cached));
+            return Ok(cached_result(cached));
         }
         return Err(store_err.into());
     }
@@ -261,7 +261,7 @@ pub async fn preview(
     let ctx = resolve_context(template_repo, version_repo, pool_meta_repo, &request).await?;
 
     if let Some(cached) = cache_repo.find_by_key(&ctx.cache_key).await? {
-        return Ok(cached_result(&cached));
+        return Ok(cached_result(cached));
     }
 
     run_pipeline(
@@ -391,7 +391,7 @@ async fn run_pipeline(
     // alongside the report; run_pipeline reuses them for emission instead of
     // re-fetching via get_nodes (PERF-17: previously three get_nodes calls per
     // generation — selection, compatibility, and emit fetch).
-    let (report, entry_by_id) = check_compatibility(&all_ids, profile, pool_repo).await?;
+    let (report, mut entry_by_id) = check_compatibility(&all_ids, profile, pool_repo).await?;
 
     if mode == GenerationMode::Strict && !report.excluded.is_empty() {
         return Err(TemplateAppError::Generation(
@@ -413,11 +413,13 @@ async fn run_pipeline(
     }
 
     let mut nodes: Vec<(Node, i64)> = Vec::with_capacity(report.included_node_ids.len());
+    // WHY: deduplicated all_ids makes included IDs unique; retaining their order
+    // preserves stable sort ties without cloning each owned node.
     for id in &report.included_node_ids {
-        match entry_by_id.get(id) {
+        match entry_by_id.remove(id) {
             Some(entry) if entry.is_active && !entry.missing_from_source => {
                 let sort_order = entry.override_info.as_ref().map_or(0, |o| o.sort_order);
-                nodes.push((entry.node.clone(), sort_order));
+                nodes.push((entry.node, sort_order));
             }
             Some(_) => {
                 warnings.push(format!("node {} became unavailable during generation", id));
@@ -427,6 +429,7 @@ async fn run_pipeline(
             }
         }
     }
+    drop(entry_by_id);
 
     sort_and_dedup(&mut nodes);
     super::clash_generation::prepare_nodes(&mut nodes, &mut doc.spec, pool_repo, &mut warnings)
@@ -584,14 +587,14 @@ fn has_json_content(v: &serde_json::Value) -> bool {
     }
 }
 
-fn cached_result(cached: &GenerationCacheEntry) -> GenerationResult {
+fn cached_result(cached: GenerationCacheEntry) -> GenerationResult {
     // WHY: the cache stores only `content`, not the CompatibilityReport.
     // Returning empty `included_node_ids`/`excluded` without explanation
     // would imply "zero nodes included, zero excluded" — a false report.
     // The warning honestly states the report is unavailable from cache.
     GenerationResult {
-        content: cached.content.clone(),
-        profile: cached.profile.clone(),
+        content: cached.content,
+        profile: cached.profile,
         included_node_ids: Vec::new(),
         excluded: Vec::new(),
         warnings: vec![

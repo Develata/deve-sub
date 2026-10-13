@@ -3,6 +3,12 @@ use super::Language;
 
 pub(super) fn t(lang: Language, key: &str) -> &str {
     match (lang, key) {
+        (Language::Zh, "nodes.scroll_hint") => {
+            "表格内可上下滚动；左右滑动查看全部列，也可聚焦表格后使用方向键。"
+        }
+        (Language::En, "nodes.scroll_hint") => {
+            "Scroll within the table for more rows and columns, or focus it and use the arrow keys."
+        }
         (Language::Zh, "nodes.title") => "节点管理",
         (Language::En, "nodes.title") => "Node Management",
         (Language::Zh, "nodes.search") => "搜索节点名称…",
@@ -28,7 +34,9 @@ pub(super) fn t(lang: Language, key: &str) -> &str {
         (Language::Zh, "nodes.load_more") => "加载更多",
         (Language::En, "nodes.load_more") => "Load More",
         (Language::Zh, "nodes.load_retained") => "节点加载失败，已保留上次结果。可重试加载或刷新。",
-        (Language::En, "nodes.load_retained") => "Could not load nodes. Previous results are kept; retry loading or refreshing.",
+        (Language::En, "nodes.load_retained") => {
+            "Could not load nodes. Previous results are kept; retry loading or refreshing."
+        }
         (Language::Zh, "nodes.clear_selection") => "清除选择",
         (Language::En, "nodes.clear_selection") => "Clear Selection",
         (Language::Zh, "nodes.import_btn") => "导入节点",
@@ -68,7 +76,9 @@ pub(super) fn t(lang: Language, key: &str) -> &str {
         (Language::Zh, "nodes.manage_tags") => "管理标签",
         (Language::En, "nodes.manage_tags") => "Manage tags",
         (Language::Zh, "nodes.manage_tags_hint") => "修改名称会保留节点关联；删除会同时解除关联。",
-        (Language::En, "nodes.manage_tags_hint") => "Renaming preserves membership; deleting removes assignments.",
+        (Language::En, "nodes.manage_tags_hint") => {
+            "Renaming preserves membership; deleting removes assignments."
+        }
         (Language::Zh, "nodes.tag_delete_confirm") => "删除此标签及所有节点关联？",
         (Language::En, "nodes.tag_delete_confirm") => "Delete this tag and all its assignments?",
         (Language::Zh, "nodes.tag_color") => "标签颜色",
@@ -92,9 +102,13 @@ pub(super) fn t(lang: Language, key: &str) -> &str {
         (Language::Zh, "nodes.refresh_categories") => "刷新分类与节点",
         (Language::En, "nodes.refresh_categories") => "Refresh categories and nodes",
         (Language::Zh, "nodes.category_load_error") => "分类加载失败，请点击“刷新分类与节点”重试。",
-        (Language::En, "nodes.category_load_error") => "Categories could not load. Use Refresh categories and nodes to retry.",
+        (Language::En, "nodes.category_load_error") => {
+            "Categories could not load. Use Refresh categories and nodes to retry."
+        }
         (Language::Zh, "nodes.categories_empty") => "还没有手动分类，可通过“管理标签”创建。",
-        (Language::En, "nodes.categories_empty") => "No manual categories yet. Create one with Manage tags.",
+        (Language::En, "nodes.categories_empty") => {
+            "No manual categories yet. Create one with Manage tags."
+        }
         (Language::Zh, "nodes.matching_count") => "匹配 {n} 个",
         (Language::En, "nodes.matching_count") => "{n} matching",
         (Language::Zh, "nodes.loaded_count") => "已加载 {n} 个",
@@ -111,8 +125,12 @@ pub(super) fn t(lang: Language, key: &str) -> &str {
         (Language::En, "nodes.tag_remove") => "Remove selected tags",
         (Language::Zh, "nodes.tag_replace") => "替换全部标签（未选中项会移除）",
         (Language::En, "nodes.tag_replace") => "Replace all tags (remove unselected)",
-        (Language::Zh, "nodes.tag_batch_hint") => "对选中节点执行同一操作；添加和移除不会改动其他标签。",
-        (Language::En, "nodes.tag_batch_hint") => "Apply one operation to selected nodes. Add/remove preserves other tags.",
+        (Language::Zh, "nodes.tag_batch_hint") => {
+            "对选中节点执行同一操作；添加和移除不会改动其他标签。"
+        }
+        (Language::En, "nodes.tag_batch_hint") => {
+            "Apply one operation to selected nodes. Add/remove preserves other tags."
+        }
         (Language::Zh, "nodes.tag_title") => "标签管理",
         (Language::En, "nodes.tag_title") => "Manage Tags",
         (Language::Zh, "nodes.tag_empty") => "暂无标签，请在下方创建",
@@ -148,13 +166,17 @@ pub(super) fn t(lang: Language, key: &str) -> &str {
         (Language::Zh, "nodes.region_title") => "设置手动地区",
         (Language::En, "nodes.region_title") => "Set Manual Region",
         (Language::Zh, "nodes.region_hint") => "留空则清除手动地区，恢复自动检测",
-        (Language::En, "nodes.region_hint") => "Leave empty to clear manual region and restore auto-detection",
+        (Language::En, "nodes.region_hint") => {
+            "Leave empty to clear manual region and restore auto-detection"
+        }
         (Language::Zh, "nodes.region_label") => "地区代码",
         (Language::En, "nodes.region_label") => "Region Code",
         (Language::Zh, "nodes.chain_title") => "代理链编辑",
         (Language::En, "nodes.chain_title") => "Proxy Chain Editor",
         (Language::Zh, "nodes.chain_hint") => "流量将按顺序经过以下节点，空列表表示直连",
-        (Language::En, "nodes.chain_hint") => "Traffic will traverse these nodes in order; empty means direct connection",
+        (Language::En, "nodes.chain_hint") => {
+            "Traffic will traverse these nodes in order; empty means direct connection"
+        }
         (Language::Zh, "nodes.chain_current") => "当前链",
         (Language::En, "nodes.chain_current") => "Current Chain",
         (Language::Zh, "nodes.chain_empty") => "无链（直连）",

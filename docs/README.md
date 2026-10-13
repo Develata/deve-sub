@@ -52,5 +52,6 @@ Deve Sub 的文档按用途和权威层级组织。首次部署请先看用户�
 ## 详细用户路径
 
 - [节点管理与分类](features/node-organization.md)
+- [流量仪表盘](features/dashboard.md)
 - [订阅模板与 Clash 分流规则](features/subscription-templates.md)
 - [并发功能验收范围](acceptance/functional-matrix.md)

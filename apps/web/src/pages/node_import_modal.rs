@@ -6,8 +6,8 @@ use dioxus::prelude::*;
 
 use crate::api::send;
 use crate::i18n::{Language, format_t, t};
+use crate::pages::modal_dialog::ModalDialog;
 use crate::pages::node_types::{ImportNodesRequest, ImportNodesResponse, SourceTypeDto};
-use crate::pages::source_dialog::SourceDialog;
 use crate::pages::source_types::SourceTypePresentation;
 
 #[derive(Props, Clone, PartialEq)]
@@ -62,7 +62,7 @@ pub fn ImportModal(props: ImportModalProps) -> Element {
     };
 
     rsx! {
-        SourceDialog { title: t(l, "nodes.import_title").to_string(), busy: *saving.read(), wide: true, on_close: close,
+        ModalDialog { title: t(l, "nodes.import_title").to_string(), busy: *saving.read(), wide: true, on_close: close,
             if let Some(r) = result.read().as_ref() {
                 div { class: "mt-4 space-y-3", role: "status",
                     div { class: "rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400",

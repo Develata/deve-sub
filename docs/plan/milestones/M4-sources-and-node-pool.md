@@ -353,6 +353,17 @@ same IDs. Batch enable/disable completion clears selection only if that revision
 later choices are preserved. Node-page and refresh failures retain the last
 loaded rows, selection and cursor, show an error, and allow a bounded retry.
 
+The virtual node table retains a fixed-height viewport and locally scrollable
+columns on narrow screens. Its focusable table surface supports keyboard
+horizontal scrolling and exposes six column headers, row headers and the
+filtered loaded-row total through table semantics. The row count includes the
+header; virtual row indices describe their positions in the filtered list,
+not their positions in the small rendered window. Filtering resets/clamps the
+window without rendering the entire pool. FUNC-NODE-TABLE verifies 10,000
+nodes, the first/last indices, bounded DOM size and reachable row actions on
+desktop/mobile (UI-008/009/010); browser semantics are not a screen-reader
+compatibility certification.
+
 Design reference: miaomiaowu v0.8.5 node management uses visible tag badges,
 filter groups and grouped actions. Deve Sub retains its own brand and virtual
 list, with a compact toolbar, visible selection count, responsive dialogs and
@@ -385,6 +396,13 @@ to the initiating control if it still exists. Escape cancels an idle dialog.
 The panel scrolls within the viewport; associated labels, visible focus and
 44px controls support keyboard and touch use. Delete confirmation identifies
 the source by name and retains the withdrawal explanation.
+
+Source, import and subscription dialogs share this native modal behavior.
+Sequential focus includes links, summary controls, editable content and
+explicit tab stops as well as form controls; hidden, inert, disabled and
+collapsed-details content is excluded. FUNC-SUB-DIALOG exercises these focus
+boundaries, a short viewport and focus return through the shared component;
+the source/import cases retain their own workflow assertions.
 
 Source forms submit through a single typed REST command, including Enter.
 Edit URL drafts start empty to preserve the existing secret; redacted URLs are

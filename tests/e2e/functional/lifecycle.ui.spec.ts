@@ -15,7 +15,7 @@ test('FUNC-PAGINATION sources, templates and subscriptions remain reachable beyo
     await expect(page.locator('tbody tr')).toHaveCount(count);
   }
   await page.getByRole('button', { name: /^添加订阅$|^Add Subscription$/ }).click();
-  await expect(page.locator('div.fixed select').first().locator('option')).toHaveCount(51);
+  await expect(page.getByRole('dialog').locator('select').first().locator('option')).toHaveCount(51);
 });
 
 test('FUNC-SOURCE-JOBS overlapping refreshes retain independent state and failure recovery', async ({ api, page }) => {

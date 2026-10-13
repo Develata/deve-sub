@@ -94,7 +94,7 @@ test('FUNC-SUB-CREATE Web form creates a retrievable subscription', async ({ api
   await createTemplate(api);
   await navigate(page, /^长期订阅$|^Subscriptions$/);
   await page.getByRole('button', { name: /^添加订阅$|^Add Subscription$/ }).click();
-  const modal = page.locator('div.fixed');
+  const modal = page.getByRole('dialog');
   await modal.locator('input[type=text]').nth(0).fill('Web subscription');
   await modal.locator('input[type=text]').nth(1).fill('web-subscription');
   const response = page.waitForResponse(r => r.url().endsWith('/api/v1/subscriptions') && r.request().method() === 'POST');

@@ -6,11 +6,13 @@
 use dioxus::prelude::*;
 
 use crate::i18n::{Language, t};
-use crate::pages::subscription_modals::{SubscriptionModals, SubscriptionModalsProps};
+use crate::pages::subscription_modals::SubscriptionModals;
+use crate::pages::subscription_row::SubscriptionRow;
 use crate::pages::subscription_types::{
-    CreateSubscriptionRequest, CreateTempLinkRequest, CreateTempLinkResponse, GetSubscriptionResponse,
-    ListSubscriptionsResponse, Modal, PROFILES, RotateTokenRequest, ShortCodeResponse, SubscriptionDto,
-    SubscriptionResponse, TokenRotationResponse, UpdateSubscriptionRequest,
+    CreateSubscriptionRequest, CreateTempLinkRequest, CreateTempLinkResponse,
+    GetSubscriptionResponse, ListSubscriptionsResponse, Modal, RotateTokenRequest,
+    ShortCodeResponse, SubscriptionDto, SubscriptionResponse, TokenRotationResponse,
+    UpdateSubscriptionRequest,
 };
 use crate::pages::template_types::{ListTemplatesResponse, TemplateDto};
 use crate::pages::util::copy_to_clipboard;
@@ -53,7 +55,9 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         spawn(async move {
             loading.set(true);
             let result = crate::api::get::<ListSubscriptionsResponse>("/subscriptions").await;
-            if revision != *list_revision.read() { return; }
+            if revision != *list_revision.read() {
+                return;
+            }
             match result {
                 Ok(resp) => {
                     next_cursor.set(resp.next_cursor);
@@ -67,14 +71,24 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     };
 
     let load_more = move |_| {
-        if *page_busy.read() || *loading.read() { return; }
-        let Some(cursor) = next_cursor.read().clone() else { return; };
+        if *page_busy.read() || *loading.read() {
+            return;
+        }
+        let Some(cursor) = next_cursor.read().clone() else {
+            return;
+        };
         let revision = *list_revision.read();
-        page_busy.set(true); page_error.set(String::new());
+        page_busy.set(true);
+        page_error.set(String::new());
         spawn(async move {
-            match crate::api::get::<ListSubscriptionsResponse>(&format!("/subscriptions?cursor={cursor}")).await {
+            match crate::api::get::<ListSubscriptionsResponse>(&format!(
+                "/subscriptions?cursor={cursor}"
+            ))
+            .await
+            {
                 Ok(resp) if revision == *list_revision.read() => {
-                    next_cursor.set(resp.next_cursor); subs.write().extend(resp.subscriptions);
+                    next_cursor.set(resp.next_cursor);
+                    subs.write().extend(resp.subscriptions);
                 }
                 Ok(_) => {}
                 Err(e) if revision == *list_revision.read() => page_error.set(e.message),
@@ -91,15 +105,21 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         let mut seen = std::collections::HashSet::new();
         loop {
             if js_sys::Date::now() >= deadline || !seen.insert(path.clone()) {
-                action_error.set("Template list did not complete; reload to retry".into());
+                action_error.set(t(l, "subs.templates_incomplete").into());
                 break;
             }
             match crate::api::get::<ListTemplatesResponse>(&path).await {
                 Ok(resp) => {
                     templates.write().extend(resp.templates);
-                    match resp.next_cursor { Some(cursor) => path = format!("/templates?limit=100&cursor={cursor}"), None => break }
+                    match resp.next_cursor {
+                        Some(cursor) => path = format!("/templates?limit=100&cursor={cursor}"),
+                        None => break,
+                    }
                 }
-                Err(e) => { action_error.set(e.message); break; }
+                Err(e) => {
+                    action_error.set(e.message);
+                    break;
+                }
             }
         }
     });
@@ -112,7 +132,11 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
             match crate::api::get::<GetSubscriptionResponse>(&path).await {
                 Ok(resp) => match resp.subscription.short_code {
                     Some(code) => {
-                        let link = crate::pages::subscription_types::delivery_url("s", &code, &resp.subscription.profile);
+                        let link = crate::pages::subscription_types::delivery_url(
+                            "s",
+                            &code,
+                            &resp.subscription.profile,
+                        );
                         match copy_to_clipboard(&link).await {
                             Ok(()) => copied_id.set(id),
                             Err(_) => action_error.set(t(l, "subs.copy_failed").to_string()),
@@ -126,10 +150,18 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     };
 
     let open_create = move |_| {
-        if *saving.read() { return; }
+        if *saving.read() {
+            return;
+        }
         f_name.set(String::new());
         f_slug.set(String::new());
-        f_template.set(templates.read().first().map(|t| t.id.clone()).unwrap_or_default());
+        f_template.set(
+            templates
+                .read()
+                .first()
+                .map(|t| t.id.clone())
+                .unwrap_or_default(),
+        );
         f_profile.set("mihomo".to_string());
         f_traffic.set(String::new());
         f_expires.set(None);
@@ -140,12 +172,18 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     };
 
     let mut open_edit = move |s: SubscriptionDto| {
-        if *saving.read() { return; }
+        if *saving.read() {
+            return;
+        }
         f_name.set(s.name.clone());
         f_slug.set(s.slug.clone());
         f_template.set(s.template_id.clone());
         f_profile.set(s.profile.clone());
-        f_traffic.set(s.traffic_limit.map(|limit| limit.to_string()).unwrap_or_default());
+        f_traffic.set(
+            s.traffic_limit
+                .map(|limit| limit.to_string())
+                .unwrap_or_default(),
+        );
         f_expires.set(s.expires_at.clone());
         f_enabled.set(s.enabled);
         f_node_sel.set(s.node_selection.clone());
@@ -154,64 +192,61 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     };
 
     let mut open_delete = move |s: SubscriptionDto| {
-        if *saving.read() { return; }
+        if *saving.read() {
+            return;
+        }
         form_error.set(String::new());
         modal.set(Modal::Delete(s));
     };
 
     let mut open_temp_link = move |s: SubscriptionDto| {
-        if *saving.read() { return; }
+        if *saving.read() {
+            return;
+        }
         f_temp_expiry.set(String::new());
         form_error.set(String::new());
         modal.set(Modal::TempLink(s));
     };
 
     let close_modal = move |_| {
-        if *saving.read() { return; }
+        if *saving.read() {
+            return;
+        }
         modal.set(Modal::None);
     };
 
     let mut do_rotate = move |sub: SubscriptionDto| {
-        if *saving.read() { return; }
+        if *saving.read() {
+            return;
+        }
         form_error.set(String::new());
         modal.set(Modal::Rotate(sub));
     };
 
-    let mut do_regen_short_code = move |id: String| {
-        info_msg.set(String::new());
-        spawn(async move {
-            let path = format!("/subscriptions/{id}/regenerate-short-code");
-            match crate::api::send::<ShortCodeResponse, serde_json::Value>("POST", &path, None)
-                .await
-            {
-                Ok(resp) => {
-                    info_msg.set(format!("{}: {}", t(l, "subs.short_code"), resp.code));
-                    fetch_subs();
-                }
-                Err(e) => error.set(e.message),
-            }
-        });
+    let mut open_regenerate = move |sub: SubscriptionDto| {
+        if *saving.read() {
+            return;
+        }
+        form_error.set(String::new());
+        modal.set(Modal::Regenerate(sub));
     };
 
     let do_submit = move |_| {
-        if *saving.read() { return; }
+        if *saving.read() {
+            return;
+        }
         let state = (*modal.read()).clone();
-        // WHY: preserve invalid input as a draft; parse failures must never
-        // become None, which the API treats as an unlimited quota.
         let traffic_limit = if matches!(state, Modal::Create | Modal::Edit(_)) {
-            let draft = f_traffic.read();
-            if draft.is_empty() {
-                None
-            } else {
-                match draft.parse::<u64>() {
-                    Ok(limit) if limit > 0 && limit <= i64::MAX as u64 && draft.bytes().all(|b| b.is_ascii_digit()) => Some(limit),
-                    _ => {
-                        form_error.set(t(l, "subs.invalid_traffic_limit").to_string());
-                        return;
-                    }
+            match crate::pages::subscription_types::parse_traffic_limit(&f_traffic.read()) {
+                Ok(value) => value,
+                Err(_) => {
+                    form_error.set(t(l, "subs.invalid_traffic_limit").to_string());
+                    return;
                 }
             }
-        } else { None };
+        } else {
+            None
+        };
         form_error.set(String::new());
         match state {
             Modal::Create => {
@@ -219,7 +254,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 let slug = f_slug.read().clone();
                 let template_id = f_template.read().clone();
                 if name.is_empty() || slug.is_empty() || template_id.is_empty() {
-                    form_error.set("Name, slug, and template are required".to_string());
+                    form_error.set(t(l, "subs.required_create").to_string());
                     return;
                 }
                 let req = CreateSubscriptionRequest {
@@ -234,12 +269,20 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 saving.set(true);
                 spawn(async move {
                     match crate::api::send::<SubscriptionResponse, CreateSubscriptionRequest>(
-                        "POST", "/subscriptions", Some(&req),
+                        "POST",
+                        "/subscriptions",
+                        Some(&req),
                     )
                     .await
                     {
                         Ok(resp) => {
-                            modal.set(Modal::TokenDisplay(crate::pages::subscription_types::delivery_url("sub", &resp.token_plaintext, &resp.subscription.profile)));
+                            modal.set(Modal::TokenDisplay(
+                                crate::pages::subscription_types::delivery_url(
+                                    "sub",
+                                    &resp.token_plaintext,
+                                    &resp.subscription.profile,
+                                ),
+                            ));
                             fetch_subs();
                         }
                         Err(e) => form_error.set(e.message),
@@ -252,7 +295,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 let name = f_name.read().clone();
                 let slug = f_slug.read().clone();
                 if name.is_empty() || slug.is_empty() {
-                    form_error.set("Name and slug are required".to_string());
+                    form_error.set(t(l, "subs.required_edit").to_string());
                     return;
                 }
                 let req = UpdateSubscriptionRequest {
@@ -269,7 +312,9 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 spawn(async move {
                     let path = format!("/subscriptions/{id}");
                     match crate::api::send::<GetSubscriptionResponse, UpdateSubscriptionRequest>(
-                        "PUT", &path, Some(&req),
+                        "PUT",
+                        &path,
+                        Some(&req),
                     )
                     .await
                     {
@@ -283,14 +328,45 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 });
             }
             Modal::Rotate(s) => {
-                if *saving.read() { return; }
                 saving.set(true);
                 spawn(async move {
                     let path = format!("/subscriptions/{}/rotate-token", s.id);
                     match crate::api::send::<TokenRotationResponse, RotateTokenRequest>(
-                        "POST", &path, Some(&RotateTokenRequest { grace_seconds: Some(0) }),
-                    ).await {
-                        Ok(resp) => modal.set(Modal::TokenDisplay(crate::pages::subscription_types::delivery_url("sub", &resp.token_plaintext, &s.profile))),
+                        "POST",
+                        &path,
+                        Some(&RotateTokenRequest {
+                            grace_seconds: Some(0),
+                        }),
+                    )
+                    .await
+                    {
+                        Ok(resp) => modal.set(Modal::TokenDisplay(
+                            crate::pages::subscription_types::delivery_url(
+                                "sub",
+                                &resp.token_plaintext,
+                                &s.profile,
+                            ),
+                        )),
+                        Err(e) => form_error.set(e.message),
+                    }
+                    saving.set(false);
+                });
+            }
+            Modal::Regenerate(s) => {
+                saving.set(true);
+                spawn(async move {
+                    let path = format!("/subscriptions/{}/regenerate-short-code", s.id);
+                    match crate::api::send::<ShortCodeResponse, serde_json::Value>(
+                        "POST", &path, None,
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            action_error.set(String::new());
+                            info_msg.set(t(l, "subs.regenerated").to_string());
+                            modal.set(Modal::None);
+                            fetch_subs();
+                        }
                         Err(e) => form_error.set(e.message),
                     }
                     saving.set(false);
@@ -315,7 +391,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 let id = s.id.clone();
                 let expiry = f_temp_expiry.read().clone();
                 if expiry.is_empty() {
-                    form_error.set("Expiry is required".to_string());
+                    form_error.set(t(l, "subs.required_expiry").to_string());
                     return;
                 }
                 let req = CreateTempLinkRequest { expires_at: expiry };
@@ -323,11 +399,19 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 spawn(async move {
                     let path = format!("/subscriptions/{id}/temp-links");
                     match crate::api::send::<CreateTempLinkResponse, CreateTempLinkRequest>(
-                        "POST", &path, Some(&req),
+                        "POST",
+                        &path,
+                        Some(&req),
                     )
                     .await
                     {
-                        Ok(resp) => modal.set(Modal::TokenDisplay(crate::pages::subscription_types::delivery_url("sub", &resp.token_plaintext, &s.profile))),
+                        Ok(resp) => modal.set(Modal::TokenDisplay(
+                            crate::pages::subscription_types::delivery_url(
+                                "sub",
+                                &resp.token_plaintext,
+                                &s.profile,
+                            ),
+                        )),
                         Err(e) => form_error.set(e.message),
                     }
                     saving.set(false);
@@ -342,17 +426,17 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
             div { class: "flex items-center justify-between",
                 h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "nav.subscriptions")} }
                 button {
-                    class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700",
+                    class: "ui-button ui-button-accent",
                     onclick: open_create,
                     {t(l, "subs.add")}
                 }
             }
 
             if !action_error.read().is_empty() {
-                div { class: "rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", role: "alert", "{action_error}" }
+                div { class: "ui-error text-sm", role: "alert", "{action_error}" }
             }
             if !info_msg.read().is_empty() {
-                div { class: "rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400", "{info_msg}" }
+                div { class: "ui-success text-sm", role: "status", "{info_msg}" }
             }
 
             if *loading.read() {
@@ -363,90 +447,27 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
                 div { class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{error}" }
             } else if subs.read().is_empty() {
                 div { class: "rounded-md border border-stone-200 p-8 text-center dark:border-stone-800",
-                    p { class: "text-sm text-stone-500 dark:text-stone-400", "暂无订阅" }
+                    p { class: "text-sm text-stone-500 dark:text-stone-400", {t(l, "subs.empty")} }
                 }
             } else {
                 div { class: "overflow-x-auto rounded-lg border border-stone-200 dark:border-stone-800",
-                    table { class: "w-full text-sm",
-                        thead {
-                            tr { class: "border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", "名称" }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", "Slug" }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", "Profile" }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "subs.short_code")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.status")} }
-                                th { class: "px-4 py-3 text-right font-medium text-stone-500 dark:text-stone-400", "" }
+                    table { class: "subscription-table text-sm", role: "table", aria_label: t(l, "nav.subscriptions"),
+                        thead { role: "rowgroup",
+                            tr { role: "row", class: "border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "subs.name")} }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", "Slug" }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "subs.profile")} }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "subs.short_code")} }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.status")} }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-right font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.actions")} }
                             }
                         }
-                        tbody {
+                        tbody { role: "rowgroup",
                             for sub in subs.read().iter() {
-                                {
-                                    let id = sub.id.clone();
-
-                                    let is_copied = *copied_id.read() == id;
-                                    let edit_sub = sub.clone();
-                                    let del_sub = sub.clone();
-                                    let temp_sub = sub.clone();
-                                    let rot_sub = sub.clone();
-                                    let regen_id = id.clone();
-                                    rsx! {
-                                        tr {
-                                            key: "{id}",
-                                            class: "border-b border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-800/50",
-                                            td { class: "px-4 py-3 font-medium text-stone-900 dark:text-stone-100", "{sub.name}" }
-                                            td { class: "px-4 py-3 text-stone-500 dark:text-stone-400", "{sub.slug}" }
-                                            td { class: "px-4 py-3 text-stone-500 dark:text-stone-400", "{sub.profile}" }
-                                            td { class: "px-4 py-3 text-stone-500 dark:text-stone-400",
-                                                if let Some(code) = &sub.short_code {
-                                                    span { class: "font-mono text-xs", "{code}" }
-                                                } else {
-                                                    span { class: "text-stone-400", "—" }
-                                                }
-                                            }
-                                            td { class: "px-4 py-3",
-                                                if sub.enabled {
-                                                    span { class: "inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300", {t(l, "nodes.enabled")} }
-                                                } else {
-                                                    span { class: "inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-400", {t(l, "nodes.disabled")} }
-                                                }
-                                            }
-                                            td { class: "px-4 py-3 text-right",
-                                                div { class: "flex flex-wrap justify-end gap-1",
-                                                    button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                                                        onclick: move |_| copy_link(id.clone()),
-                                                        if is_copied { "✓" } else { {t(l, "common.copy")} }
-                                                    }
-                                                    button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                                                        onclick: move |_| open_edit(edit_sub.clone()),
-                                                        {t(l, "common.edit")}
-                                                    }
-                                                    button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                                                        onclick: move |_| do_rotate(rot_sub.clone()),
-                                                        {t(l, "subs.rotate_token")}
-                                                    }
-                                                    button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                                                        onclick: move |_| do_regen_short_code(regen_id.clone()),
-                                                        {t(l, "subs.regenerate_short_code")}
-                                                    }
-                                                    button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
-                                                        onclick: move |_| open_temp_link(temp_sub.clone()),
-                                                        {t(l, "subs.temp_link")}
-                                                    }
-                                                    button {
-                                                        class: "rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20",
-                                                        onclick: move |_| open_delete(del_sub.clone()),
-                                                        {t(l, "common.delete")}
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                SubscriptionRow { key: "{sub.id}", lang: l, sub: sub.clone(), copied: *copied_id.read() == sub.id,
+                                    on_copy: move |id| copy_link(id), on_edit: move |sub| open_edit(sub),
+                                    on_rotate: move |sub| do_rotate(sub), on_regenerate: move |sub| open_regenerate(sub),
+                                    on_temp_link: move |sub| open_temp_link(sub), on_delete: move |sub| open_delete(sub) }
                             }
                         }
                     }

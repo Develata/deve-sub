@@ -71,12 +71,12 @@ body {
 .node-category-name { min-width: 0; overflow-wrap: anywhere; }
 .node-category-count { @apply text-xs text-stone-600 dark:text-stone-400; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
-/* Native source dialogs stay usable in short viewports and at large text sizes. */
-.source-dialog { width: min(32rem, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; overflow-y: auto; overscroll-behavior: contain; }
-.source-dialog::backdrop { background: rgb(0 0 0 / 40%); }
-.source-dialog-wide { width: min(42rem, calc(100vw - 32px)); }
+/* Native dialogs stay usable in short viewports and at large text sizes. */
+.modal-dialog { width: min(32rem, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; overflow-y: auto; overscroll-behavior: contain; }
+.modal-dialog::backdrop { background: rgb(0 0 0 / 40%); }
+.modal-dialog-wide { width: min(42rem, calc(100vw - 32px)); }
 .source-input { @apply mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800; min-height: 44px; }
-.source-dialog :is(input, select, textarea, button):focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.modal-dialog :is(input, select, textarea, button, a, summary, [tabindex], [contenteditable]):focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
 /* Keep source actions on screen without duplicating the table's data/controls. */
 @media (width < 768px) {
@@ -90,3 +90,68 @@ body {
   .source-actions > div { gap: 8px; margin-top: 4px; }
   .source-actions button { flex: 1; min-width: 44px; min-height: 44px; }
 }
+
+/* Shared surface and feedback roles preserve the existing warm brand. */
+:root {
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-success: #166534;
+  --color-success-soft: #f0fdf4;
+  --color-chart-upload: #57534e;
+  --color-chart-upload-stripe: #a8a29e;
+  --color-chart-download: var(--color-accent);
+}
+.dark {
+  --color-danger: #fca5a5;
+  --color-danger-soft: #450a0a;
+  --color-success: #86efac;
+  --color-success-soft: #052e16;
+  --color-chart-upload: #a8a29e;
+  --color-chart-upload-stripe: #57534e;
+}
+.ui-button {
+  @apply inline-flex items-center justify-center rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-stone-800;
+  min-width: 44px; min-height: 44px;
+}
+.ui-button-accent { border-color: var(--color-accent); background: var(--color-accent-soft); color: #292524; }
+.ui-button-danger { color: var(--color-danger); border-color: var(--color-danger); }
+.ui-button:focus-visible, summary:focus-visible, .traffic-chart-scroll:focus-visible, .node-table:focus-visible {
+  outline: 2px solid var(--color-accent); outline-offset: 2px;
+}
+.ui-error { border: 1px solid var(--color-danger); color: var(--color-danger); background: var(--color-danger-soft); border-radius: 8px; padding: 16px; }
+.ui-success { color: var(--color-success); background: var(--color-success-soft); border-radius: 8px; padding: 12px 16px; }
+.dashboard-card { @apply min-w-0 rounded-lg border border-stone-200 bg-white p-5 dark:border-stone-800 dark:bg-stone-900; }
+.dashboard-state { @apply rounded-lg border border-stone-200 p-8 text-sm text-stone-600 dark:border-stone-800 dark:text-stone-400; }
+.traffic-chart-scroll { max-width: 100%; overflow-x: auto; }
+.traffic-chart { display: block; min-width: 760px; }
+.traffic-grid { stroke: currentColor; @apply text-stone-200 dark:text-stone-700; stroke-width: 1; }
+.traffic-axis { fill: currentColor; font-size: 12px; @apply text-stone-600 dark:text-stone-300; }
+.traffic-swatch { width: 16px; height: 12px; border-radius: 2px; }
+.traffic-upload { background: repeating-linear-gradient(135deg, var(--color-chart-upload) 0 3px, var(--color-chart-upload-stripe) 3px 5px); }
+.traffic-download { background: var(--color-chart-download); }
+.subscription-table { width: 100%; table-layout: fixed; }
+.subscription-table th, .subscription-table td { overflow-wrap: anywhere; }
+.subscription-table th:last-child { width: 300px; }
+.subscription-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.subscription-more { min-width: 0; }
+.subscription-more > summary { @apply cursor-pointer rounded-md px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800; min-height: 44px; }
+.subscription-more[open] { flex-basis: 100%; }
+.subscription-more[open] > summary { text-align: left; }
+.subscription-secondary-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.subscription-cell-label { display: none; }
+@media (width < 1024px) {
+  .subscription-table, .subscription-table tbody { display: block; }
+  .subscription-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .subscription-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; padding: 16px; }
+  .subscription-table td { min-width: 0; padding: 0; }
+  .subscription-identity, .subscription-slug, .subscription-action-cell { grid-column: 1 / -1; }
+  .subscription-identity { font-size: 16px; }
+  .subscription-cell-label { display: block; @apply mb-1 text-xs text-stone-600 dark:text-stone-400; }
+  .subscription-actions { margin-top: 4px; justify-content: flex-start; }
+  .subscription-actions > .ui-button { flex: 1; }
+  .subscription-more { flex-basis: 100%; }
+  .subscription-more > summary { padding-left: 0; }
+}
+
+.ui-button-accent:hover { background: var(--color-accent-soft); color: #292524; }
+.subscription-status-enabled { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 12px; color: var(--color-success); background: var(--color-success-soft); }

@@ -16,7 +16,7 @@ test('subscription quota preserves invalid drafts and only blank removes the lim
   const id = (await created.json()).subscription.id;
   await navigate(page, subscriptions);
   await page.locator('tr').filter({ hasText: 'Quota fixture' }).getByRole('button', { name: /编辑|Edit/ }).click();
-  const modal = page.locator('div.fixed').filter({ has: page.locator('input') });
+  const modal = page.getByRole('dialog');
   const quota = modal.locator('input').nth(2);
   let writes = 0;
   page.on('request', request => { if (request.method() === 'PUT') writes++; });
@@ -57,7 +57,7 @@ for (const kind of ['subscription', 'user'] as const) {
     await navigate(page, kind === 'subscription' ? subscriptions : /^用户$|^Users$/);
     const add = page.getByRole('button', { name: kind === 'subscription' ? addSubscription : /^新建用户$|^New User$/ });
     await add.click();
-    const modal = page.locator('div.fixed').filter({ has: page.locator('input') });
+    const modal = kind === 'subscription' ? page.getByRole('dialog') : page.locator('div.fixed').filter({ has: page.locator('input') });
     const inputs = modal.locator('input');
     await inputs.nth(0).fill('pending-fixture');
     await inputs.nth(1).fill(kind === 'subscription' ? 'pending-fixture' : 'FixturePassword12345');

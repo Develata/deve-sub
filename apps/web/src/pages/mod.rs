@@ -7,6 +7,7 @@ pub mod audit_cleanup;
 pub mod audit_table;
 pub mod audit_types;
 pub mod dashboard;
+mod dashboard_chart;
 pub mod login;
 pub mod node_categories;
 pub mod node_chain_modal;
@@ -21,6 +22,7 @@ pub mod setup;
 pub mod source_types;
 pub mod sources;
 pub mod subscription_modals;
+mod subscription_row;
 pub mod subscription_types;
 pub mod subscriptions;
 pub mod template_gen_modal;
@@ -39,4 +41,4 @@ pub mod node_tag_manager;
 
 pub mod source_modals;
 
-mod source_dialog;
+mod modal_dialog;

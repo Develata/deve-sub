@@ -1110,3 +1110,6 @@ mod hardening;
 
 #[path = "refresh_source/lease_publication.rs"]
 mod lease_publication;
+
+#[path = "refresh_source/json_detection.rs"]
+mod json_detection;

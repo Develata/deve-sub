@@ -99,7 +99,8 @@ pub struct ImportNodesResponse {
     pub duplicate_nodes: u64,
     /// Input lines that could not be parsed.
     pub failed: u64,
-    /// Per-line outcomes for diagnostics. Length equals the input line count.
+    /// Per-entry outcomes in input order. Blank and comment-only URI lines
+    /// are omitted; container formats report their extracted nodes.
     pub outcomes: Vec<ImportOutcomeDto>,
 }
 

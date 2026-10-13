@@ -238,7 +238,9 @@ async fn execute_refresh_inner(
 
     // WHY: SRC-006 — zero valid nodes with existing snapshot preserves the
     // old snapshot instead of marking all nodes as missing. This is the
-    // unified zero-node strategy: error out, do not publish.
+    // unified zero-node strategy: error out, do not publish. Intentionally
+    // preserved Unsupported nodes still count; lack of emitter support is
+    // not a parse failure and must not discard their raw data.
     let valid_after_parse = entries.iter().filter(|e| e.node.is_some()).count();
     if valid_after_parse == 0 && active.is_some() {
         return Err(SourceAppError::ZeroNodes);

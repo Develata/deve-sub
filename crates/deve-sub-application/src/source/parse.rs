@@ -119,8 +119,9 @@ pub fn parse_for_import(
     let entries = parse_content(source_type, content_type, body)?;
     let mut nodes = Vec::with_capacity(entries.len());
     let mut failed = Vec::new();
+    let mut failed_positions = Vec::new();
 
-    for entry in entries {
+    for (position, entry) in entries.into_iter().enumerate() {
         match entry.node {
             Some(mut node) => {
                 node.id = deve_sub_kernel::NodeId::new();
@@ -130,11 +131,18 @@ pub fn parse_for_import(
                 }
                 nodes.push(node);
             }
-            None => failed.push(entry.raw_uri),
+            None => {
+                failed.push(entry.raw_uri);
+                failed_positions.push(position);
+            }
         }
     }
 
-    Ok(ImportParseResult { nodes, failed })
+    Ok(ImportParseResult {
+        nodes,
+        failed,
+        failed_positions,
+    })
 }
 
 /// Outcome of parsing a manual import payload.
@@ -144,6 +152,10 @@ pub struct ImportParseResult {
     pub nodes: Vec<deve_sub_domain::Node>,
     /// Raw text of lines that could not be parsed.
     pub failed: Vec<String>,
+    /// Zero-based entry positions corresponding one-to-one with `failed`,
+    /// ascending after blank and comment-only URI lines have been skipped.
+    /// Allows merging failures with persistence outcomes without reparsing.
+    pub failed_positions: Vec<usize>,
 }
 
 /// Parse a URI list: one URI per line, skipping blanks and comments.
@@ -253,7 +265,7 @@ fn auto_detect_and_parse(
         return parse_container(text, deve_sub_protocol::container::parse_mihomo_yaml);
     }
     if ct.contains("json") || trimmed.starts_with('{') || trimmed.starts_with('[') {
-        return try_json_formats(text);
+        return detect_and_parse_json(text);
     }
     if let Some(decoded) = try_decode_base64(trimmed) {
         let decoded = std::str::from_utf8(&decoded)
@@ -263,15 +275,35 @@ fn auto_detect_and_parse(
     parse_uri_list_text(text)
 }
 
-/// Try JSON container formats in order: sing-box, Xray, V2Ray.
-fn try_json_formats(text: &str) -> Result<Vec<ReconcileEntry>, ParseContentError> {
-    if let Ok(entries) = parse_container(text, deve_sub_protocol::container::parse_singbox_json) {
-        return Ok(entries);
+/// Detect the outbound dialect before invoking its lossless node parser.
+fn detect_and_parse_json(text: &str) -> Result<Vec<ReconcileEntry>, ParseContentError> {
+    // WHY: both parsers preserve unrecognized entries as Unsupported, so an
+    // Ok result cannot identify the format. A `type` key keeps sing-box's
+    // existing precedence, including mixed/ambiguous and malformed entries;
+    // only a `protocol` key without any `type` selects Xray/V2Ray's schema.
+    // Drop the detection tree before constructing canonical nodes.
+    let is_xray = {
+        let value: serde_json::Value = serde_json::from_str(text).map_err(|e| {
+            ParseContentError::Parse(ParseError::InvalidJson(e.to_string()).to_string())
+        })?;
+        match value.get("outbounds").and_then(serde_json::Value::as_array) {
+            Some(outbounds) => {
+                if outbounds.len() > MAX_NODES {
+                    return Err(ParseContentError::TooManyNodes(outbounds.len()));
+                }
+                !outbounds.iter().any(|entry| entry.get("type").is_some())
+                    && outbounds
+                        .iter()
+                        .any(|entry| entry.get("protocol").is_some())
+            }
+            None => false,
+        }
+    };
+    if is_xray {
+        parse_container(text, deve_sub_protocol::container::parse_xray_json)
+    } else {
+        parse_container(text, deve_sub_protocol::container::parse_singbox_json)
     }
-    if let Ok(entries) = parse_container(text, deve_sub_protocol::container::parse_xray_json) {
-        return Ok(entries);
-    }
-    parse_container(text, deve_sub_protocol::container::parse_v2ray_json)
 }
 
 #[cfg(test)]

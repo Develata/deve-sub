@@ -42,6 +42,7 @@ fn parse_for_import_records_failed_lines() {
     assert_eq!(result.nodes.len(), 2, "two valid nodes parsed");
     assert_eq!(result.failed.len(), 1, "one failed line recorded");
     assert_eq!(result.failed[0], "this-is-not-a-valid-uri");
+    assert_eq!(result.failed_positions, vec![1]);
 }
 
 #[test]
@@ -49,6 +50,25 @@ fn parse_for_import_empty_input_yields_no_nodes() {
     let result = parse_for_import(SourceType::UriList, None, b"").expect("parse");
     assert!(result.nodes.is_empty());
     assert!(result.failed.is_empty());
+    assert!(result.failed_positions.is_empty());
+}
+
+#[test]
+fn parse_for_import_preserves_failure_positions_after_base64_decoding() {
+    use base64::Engine;
+
+    let text = format!("invalid-first\n\n# comment\n{MIXED_URIS}\ninvalid-last");
+    let encoded = base64::engine::general_purpose::STANDARD.encode(text);
+    for source_type in [SourceType::Auto, SourceType::Base64] {
+        let result = parse_for_import(source_type, None, encoded.as_bytes()).expect("base64");
+        assert_eq!(result.nodes.len(), 2);
+        assert_eq!(result.failed_positions, vec![0, 2, 4]);
+        assert_eq!(
+            result.failed,
+            vec!["invalid-first", "this-is-not-a-valid-uri", "invalid-last"]
+        );
+        assert_eq!(result.failed_positions.len(), result.failed.len());
+    }
 }
 
 #[test]

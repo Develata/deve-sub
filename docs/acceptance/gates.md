@@ -1394,3 +1394,79 @@ technology, physical mobile hardware, installer/Docker acceptance, native VM,
 signed deployment and long-duration soak were not run locally for this follow-up.
 The historical PERF budget rows remain not-run; these measurements do not
 promote them to pass or justify broader rewrites.
+
+### 2026-10-14 — bounded regression convergence
+
+This round starts at `57a7714e2be9f862f9d000418cc356cac3d7cf32` on a separate
+work branch. Production backend code remains at that revision after rejecting
+an experimental owned-Xray document implementation. Three independent public
+parser regressions remain: ordered mixed entries and raw/TLS fidelity, complete
+document/shape validation, and the exact 10,000-entry boundary with error
+precedence. The acceptance matrix binds these to PARSE-007/008 and SEC-005.
+
+The shared browser navigation helper now waits for responsive CSS before
+deciding whether to open the mobile menu. An unstyled aside is visible before
+Dioxus inserts its stylesheet. A source/artifact-bound controlled reproduction
+makes the old helper fail at the hidden navigation item, while the fixed helper
+creates a subscription (201) and retrieves it (200). This agrees with the old
+main scheduled CI log, but the unavailable remote trace prevents a definitive
+claim about that historical run's sole cause. No retry, action-timeout relaxation
+or forced hidden-element click was added.
+
+| Final local gate | Actual result |
+| --- | --- |
+| Format, locked/offline workspace all-target/all-feature check and Clippy | pass; warnings denied |
+| Full Rust tests with the same workspace/target/feature selection | 1,205 passed, 0 failed, 8 ignored; 111 suites; 21 Criterion test-mode checks |
+| Doc tests | 15 suites passed; zero runnable examples |
+| Explicit ignored native client-validator tests | 7/7 passed with pinned, checksum-verified tools |
+| CI Python / soak-unit / health-deadline / architecture tests | 15/15, 1/1, 2/2, 10/10 |
+| Docs / architecture / inventory | 157 cases, 582 symbol references; 17 packages, 9 Rust shards, 4 browser lanes; pass |
+| CSS regeneration / production Web / generated OpenAPI | unchanged CSS, successful Web build, byte-identical OpenAPI |
+| Playwright functional / legacy / lifecycle | 111/111, 16/16, 3/3; no skipped, retried or flaky tests |
+| Telemetry-required release soak, 90 seconds | 3,161 cycles, 14,972 requests, zero unexpected failures/error logs |
+| `cargo deny --locked check` | advisories, bans, licenses and sources pass; no new exception |
+
+The eight ignored Rust cases remain reported as ignored in that command. Seven
+validators ran separately; the Python-driven real-process soak above does not
+claim that the ignored Rust soak wrapper ran. An initial compile ran out of
+disk, and later helpers unable to open logs did not execute their commands.
+The full Rust recovery used a separate temporary target, disabled debug symbols
+and incremental output, and preserved assertions/features. An initial Mihomo
+attempt failed at its read-only default config directory; the identical seven
+tests passed with a temporary writable `XDG_CONFIG_HOME`. Both failed attempts
+remain in the handoff rather than being overwritten.
+
+The retained release binary SHA-256 remains
+`58b36aad8450bdff0db5355b30a4c27645a27cc25516cef0eacd9190d3bf85a0`.
+Final Rust gates bind tracked and untracked source before/after execution;
+runtime gates separately bind the selected binary, compiled source and 21 Web
+files. This appended documentation is checked afterward. Two independent
+actual-diff review rounds and their validation closures have no unresolved
+accepted product finding. Only the exact work branch is added to the existing
+push allowlist; terminal remote CI is separate evidence, not asserted here.
+
+New serial measurements retain 92 initial parser processes, 100 candidate
+parser processes, 220 native-generation processes and 128 HTTP server processes.
+The owned-Xray candidate regresses 1k parse/drop latency by about 15.8% versus
+the starting implementation and does not reduce its 10k current RSS, so it is
+excluded from the final code. The retained single-parse path is faster than the
+quality baseline but still has about 13.25% higher 10k current RSS; lower
+cumulative allocation traffic does not resolve that cost.
+
+Selected-node moves are retained for an approximately 11.8 MiB paired reduction
+in warmed 10k uncached resident memory versus their isolated reversion. This is
+not a lower subsequent growth rate or an established latency improvement.
+Cached ownership reduces allocation traffic, but cache-path resident costs and
+unchanged list-control drift remain visible. The HTTP experiment uses eight
+balanced pairs for each size/case, 1,280 timed requests and 384 warmups; it does
+not establish uncached equivalence or stable acceleration. Its 10k cached-200
+final RSS medians rise from about 28.7 to 37.0 MiB despite faster responses.
+All raw values, AB/BA splits, intervals and rejected candidates are retained.
+
+Current RSS/PSS/anonymous memory, requested-live bytes and raw VmHWM remain
+distinct. Non-monotonic VmHWM observations are unexplained; no exact physical
+peak, leak-freedom, overall-memory or production-throughput claim follows.
+Performance budgets are not promoted to pass. Local browser evidence uses
+system Chromium 154; no extra download domain was authorized. This round did
+not locally run installer, Docker, ARM64, physical mobile, other browser engines,
+real assistive technology, deployment or long-duration soak acceptance.

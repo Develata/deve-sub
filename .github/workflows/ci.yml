@@ -3,7 +3,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main, fix/bounded-quality-2026-10-13, perf/bounded-audit-2026-10-13]
+    branches: [main, fix/bounded-quality-2026-10-13, perf/bounded-audit-2026-10-13, perf/regression-convergence-2026-10-14]
   # WHY (ADR-0008): nightly full baseline detects drift before a release.
   schedule:
     - cron: "0 19 * * *"

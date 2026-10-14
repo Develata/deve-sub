@@ -94,6 +94,9 @@ export async function navigate(page: Page, label: RegExp) {
   await page.goto('/');
   await expect(page.locator('main')).toBeVisible();
   const sidebar = page.locator('aside');
+  // WHY: Dioxus inserts CSS after the shell. An unstyled aside is visible before
+  // mobile's `hidden` rule arrives, so visibility alone can skip the Menu click.
+  await expect(sidebar).toHaveCSS('display', /^(none|flex)$/);
   if (!(await sidebar.isVisible())) await page.getByRole('button', { name: /菜单|menu/i }).click();
   await sidebar.getByText(label, { exact: true }).click();
 }

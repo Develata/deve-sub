@@ -691,6 +691,7 @@ cases:
         - "crates/deve-sub-application/tests/refresh_source/json_detection.rs::auto_singbox_unknown_refresh_preserves_raw_data_with_existing_snapshot"
         - "crates/deve-sub-protocol/tests/auto_json.rs::auto_xray_and_explicit_v2ray_retain_their_frozen_format_identity"
         - "crates/deve-sub-protocol/tests/xray_v2ray.rs"
+        - "crates/deve-sub-protocol/tests/xray_document.rs"
       status: pass
   - id: PARSE-008
     title: V2Ray JSON
@@ -708,6 +709,7 @@ cases:
         - "crates/deve-sub-application/tests/refresh_source/json_detection.rs::auto_xray_refresh_publishes_typed_nodes_and_preserves_identity"
         - "crates/deve-sub-protocol/tests/auto_json.rs::auto_xray_and_explicit_v2ray_retain_their_frozen_format_identity"
         - "crates/deve-sub-protocol/tests/xray_v2ray.rs"
+        - "crates/deve-sub-protocol/tests/xray_document.rs"
       status: pass
   - id: PARSE-009
     title: Shadowrocket
@@ -1969,6 +1971,8 @@ cases:
         - "crates/deve-sub-yaml/tests/bounds.rs::general_source_depth_keeps_the_128_container_boundary"
         - "crates/deve-sub-protocol/tests/auto_json.rs::raw_outbound_count_is_checked_before_shadowtls_absorption"
         - "crates/deve-sub-protocol/tests/auto_json.rs::complete_document_errors_precede_entry_count_and_mapping"
+        - "crates/deve-sub-protocol/tests/xray_document.rs::explicit_family_preserves_shape_errors_and_validates_ignored_content"
+        - "crates/deve-sub-protocol/tests/xray_document.rs::xray_family_counts_every_raw_entry_after_complete_json_validation"
         - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_json_preserves_document_errors_before_wrapped_entry_limits"
         - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_json_keeps_byte_then_utf8_checks_before_dispatch"
         - "crates/deve-sub-yaml/tests/parsing.rs::custom_tags_and_all_extra_document_content_are_rejected"

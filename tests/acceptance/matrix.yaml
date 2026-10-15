@@ -1126,6 +1126,8 @@ cases:
     evidence:
       tests:
         - "crates/deve-sub-adapters/src/real_proxy/trojan.rs::certificate_verification_precedes_proxy_authentication"
+        - "crates/deve-sub-adapters/tests/rustls_session_cache.rs::key_exchange_hint_is_saved_only_after_authenticated_handshake"
+        - "crates/deve-sub-adapters/tests/rustls_session_cache.rs::rejected_certificate_does_not_persist_key_exchange_hint"
         - "apps/server/tests/probes.rs::real_proxy_probe_run_via_api_produces_results"
       status: pass
   - id: NODE-016

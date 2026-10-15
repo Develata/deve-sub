@@ -3,7 +3,8 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main, fix/bounded-quality-2026-10-13, perf/bounded-audit-2026-10-13, perf/regression-convergence-2026-10-14]
+    # WHY: this security candidate needs push CI for the ARM64 runtime gate.
+    branches: [main, fix/bounded-quality-2026-10-13, perf/bounded-audit-2026-10-13, perf/regression-convergence-2026-10-14, fix/rustls-security-2026-10-15]
   # WHY (ADR-0008): nightly full baseline detects drift before a release.
   schedule:
     - cron: "0 19 * * *"

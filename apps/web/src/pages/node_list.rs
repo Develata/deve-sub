@@ -1,6 +1,9 @@
 //! Bounded virtual rows with visible tag membership and scoped selection.
 #![cfg(target_family = "wasm")]
-use super::{node_selection::NodeSelection, node_types::{NodeDto, NodeModal}};
+use super::{
+    node_selection::NodeSelection,
+    node_types::{NodeDto, NodeModal},
+};
 use crate::i18n::{Language, t};
 use dioxus::prelude::*;
 
@@ -23,47 +26,53 @@ pub struct NodeListProps {
 pub fn NodeList(mut props: NodeListProps) -> Element {
     let l = *props.lang.read();
     rsx! {
+        p { id: "nodes-scroll-hint", class: "text-xs text-stone-600 dark:text-stone-400", {t(l, "nodes.scroll_hint")} }
         div { class: "node-table overflow-auto rounded-lg border border-stone-200 dark:border-stone-800",
+            role: "table", tabindex: "0", aria_label: t(l, "nodes.title"), aria_describedby: "nodes-scroll-hint",
+            aria_rowcount: props.total + 1, aria_colcount: "6",
             id: "nodes-scroll", "data-total-rows": "{props.total}", style: "height: {props.viewport_height}px;",
             onscroll: move |_| {
                 if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id("nodes-scroll")) {
                     props.scroll_top.set(el.scroll_top() as f64);
                 }
             },
-            div { class: "node-grid node-table-header bg-stone-50 dark:bg-stone-900", "data-node-header": "true",
-                span {} span { {t(l, "nodes.override_name")} } span { {t(l, "nodes.protocol")} }
-                span { {t(l, "nodes.region")} } span { {t(l, "nodes.status")} } span { {t(l, "nodes.actions")} }
+            div { role: "row", aria_rowindex: "1", class: "node-grid node-table-header bg-stone-50 dark:bg-stone-900", "data-node-header": "true",
+                span { role: "columnheader", aria_label: t(l, "nodes.select") }
+                span { role: "columnheader", {t(l, "nodes.override_name")} } span { role: "columnheader", {t(l, "nodes.protocol")} }
+                span { role: "columnheader", {t(l, "nodes.region")} } span { role: "columnheader", {t(l, "nodes.status")} } span { role: "columnheader", {t(l, "nodes.actions")} }
             }
-            div { style: "height: {props.total_height}px; position: relative; min-width: 760px;",
-                div { style: "position: absolute; top: {props.offset_y}px; left: 0; right: 0;",
-                    for node in &props.nodes {
+            div { role: "rowgroup", style: "height: {props.total_height}px; position: relative; min-width: 760px;",
+                div { role: "presentation", style: "position: absolute; top: {props.offset_y}px; left: 0; right: 0;",
+                    for (index, node) in props.nodes.iter().enumerate() {
                         {
                             let id = node.id.clone(); let checkbox_id = id.clone(); let row_id = id.clone();
                             let tags_id = id.clone(); let override_id = id.clone(); let region_id = id.clone();
                             let chain_id = id.clone(); let chain = node.chain.clone();
                             let checked = props.selected.read().ids().contains(&id);
                             rsx! {
-                                div { key: "{id}", "data-node-row": "{id}",
+                                div { role: "row", aria_rowindex: (props.offset_y / props.item_height) as usize + index + 2, key: "{id}", "data-node-row": "{id}",
                                     class: if checked { "node-grid node-row node-selected" } else { "node-grid node-row" },
                                     style: "height: {props.item_height}px;",
                                     onclick: move |_| props.selected.write().toggle(row_id.clone()),
+                                    div { role: "cell",
                                     input { r#type: "checkbox", checked, aria_label: format!("{} {}", t(l, "nodes.select"), node.display_name),
                                         onclick: move |e| e.stop_propagation(),
                                         onchange: move |e| props.selected.write().set(checkbox_id.clone(), e.checked()),
                                     }
-                                    div { class: "min-w-0",
+                                    }
+                                    div { role: "rowheader", class: "min-w-0",
                                         div { class: "truncate text-sm font-medium", title: "{node.display_name}", "{node.display_name}" }
                                         div { class: "flex items-center gap-1 overflow-hidden text-xs text-stone-500",
                                             span { class: "truncate", "{node.host}:{node.port}" }
                                             for tag in &node.tags { span { class: "node-tag", title: "{tag.name}", span { class: "node-tag-dot", style: format!("background-color: {}", tag.color.as_deref().unwrap_or("#b45309")), aria_hidden: "true" } "{tag.name}" } }
                                         }
                                     }
-                                    span { class: "text-xs font-medium", "{node.protocol}" }
-                                    span { class: "text-sm", {node.region.as_deref().unwrap_or("—")} }
-                                    span { class: if node.is_active { "text-xs text-green-700 dark:text-green-400" } else { "text-xs text-stone-500" },
+                                    span { role: "cell", class: "text-xs font-medium", "{node.protocol}" }
+                                    span { role: "cell", class: "text-sm", {node.region.as_deref().unwrap_or("—")} }
+                                    span { role: "cell", class: if node.is_active { "text-xs text-green-700 dark:text-green-400" } else { "text-xs text-stone-500" },
                                         if node.is_active { {t(l, "nodes.enabled")} } else { {t(l, "nodes.disabled")} }
                                     }
-                                    div { class: "flex items-center", onclick: move |e| e.stop_propagation(),
+                                    div { role: "cell", class: "flex items-center", onclick: move |e| e.stop_propagation(),
                                         button { class: "node-row-action", onclick: move |_| props.modal.set(NodeModal::Override(override_id.clone())), {t(l, "nodes.row_override")} }
                                         button { class: "node-row-action", onclick: move |_| props.modal.set(NodeModal::SetRegion(region_id.clone())), {t(l, "nodes.row_region")} }
                                         button { class: "node-row-action", onclick: move |_| props.modal.set(NodeModal::Tags(vec![tags_id.clone()])), {t(l, "nodes.row_tags")} }

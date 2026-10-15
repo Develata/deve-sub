@@ -7629,7 +7629,7 @@
             "items": {
               "$ref": "#/components/schemas/ImportOutcomeDto"
             },
-            "description": "Per-line outcomes for diagnostics. Length equals the input line count."
+            "description": "Per-entry outcomes in input order. Blank and comment-only URI lines\nare omitted; container formats report their extracted nodes."
           }
         }
       },

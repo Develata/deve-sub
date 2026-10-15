@@ -119,8 +119,9 @@ pub fn parse_for_import(
     let entries = parse_content(source_type, content_type, body)?;
     let mut nodes = Vec::with_capacity(entries.len());
     let mut failed = Vec::new();
+    let mut failed_positions = Vec::new();
 
-    for entry in entries {
+    for (position, entry) in entries.into_iter().enumerate() {
         match entry.node {
             Some(mut node) => {
                 node.id = deve_sub_kernel::NodeId::new();
@@ -130,11 +131,18 @@ pub fn parse_for_import(
                 }
                 nodes.push(node);
             }
-            None => failed.push(entry.raw_uri),
+            None => {
+                failed.push(entry.raw_uri);
+                failed_positions.push(position);
+            }
         }
     }
 
-    Ok(ImportParseResult { nodes, failed })
+    Ok(ImportParseResult {
+        nodes,
+        failed,
+        failed_positions,
+    })
 }
 
 /// Outcome of parsing a manual import payload.
@@ -144,6 +152,10 @@ pub struct ImportParseResult {
     pub nodes: Vec<deve_sub_domain::Node>,
     /// Raw text of lines that could not be parsed.
     pub failed: Vec<String>,
+    /// Zero-based entry positions corresponding one-to-one with `failed`,
+    /// ascending after blank and comment-only URI lines have been skipped.
+    /// Allows merging failures with persistence outcomes without reparsing.
+    pub failed_positions: Vec<usize>,
 }
 
 /// Parse a URI list: one URI per line, skipping blanks and comments.
@@ -253,7 +265,7 @@ fn auto_detect_and_parse(
         return parse_container(text, deve_sub_protocol::container::parse_mihomo_yaml);
     }
     if ct.contains("json") || trimmed.starts_with('{') || trimmed.starts_with('[') {
-        return try_json_formats(text);
+        return parse_container(text, deve_sub_protocol::container::parse_auto_json);
     }
     if let Some(decoded) = try_decode_base64(trimmed) {
         let decoded = std::str::from_utf8(&decoded)
@@ -261,17 +273,6 @@ fn auto_detect_and_parse(
         return parse_uri_list_text(decoded);
     }
     parse_uri_list_text(text)
-}
-
-/// Try JSON container formats in order: sing-box, Xray, V2Ray.
-fn try_json_formats(text: &str) -> Result<Vec<ReconcileEntry>, ParseContentError> {
-    if let Ok(entries) = parse_container(text, deve_sub_protocol::container::parse_singbox_json) {
-        return Ok(entries);
-    }
-    if let Ok(entries) = parse_container(text, deve_sub_protocol::container::parse_xray_json) {
-        return Ok(entries);
-    }
-    parse_container(text, deve_sub_protocol::container::parse_v2ray_json)
 }
 
 #[cfg(test)]

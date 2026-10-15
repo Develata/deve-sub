@@ -13,6 +13,12 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
+#[path = "node_pool/input_validation.rs"]
+mod input_validation;
+
+#[path = "node_pool/import_outcomes.rs"]
+mod import_outcomes;
+
 use deve_sub_application::{DbHealthPort, GeoIpPort, LoginRateLimiter, SubscriptionFetcher};
 use deve_sub_domain::{
     AuditLogRepository, GenerationCacheRepository, LatencyProbe, LatencyRecordRepository,

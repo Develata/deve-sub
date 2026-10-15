@@ -244,6 +244,33 @@ The query reads from `traffic_daily_snapshots`. For days with no snapshot
 (zero traffic), the API fills gaps with zero-value entries
 so the chart is continuous.
 
+### Dashboard presentation
+
+The Web dashboard requests the existing traffic summary and 30-day history
+independently. Each region owns loading, success and error state with a local
+retry. An unavailable summary must not appear as zero traffic; failed history
+must not appear as an empty successful result. Retrying one region preserves
+the other region's successful content. A successful zero summary still shows
+zero; an empty successful history shows its own empty message. API gap-filling
+and aggregation remain server-owned.
+
+The chart presents the existing upload/download values with UTC dates, IEC
+byte units, a text legend and a patterned upload series. A daily-value table
+provides the same data in document semantics. Chart labels and state messages
+follow the existing Chinese/English setting, and chart colors reuse theme
+tokens. Narrow screens scroll within the chart, preserving label size and
+the page width. The textual alternative does not extend the page's scroll
+range beyond its visible content. This adds no traffic metric or source breakdown.
+
+FUNC-DASHBOARD-STATES, FUNC-DASHBOARD-HISTORY and FUNC-DASHBOARD-CHART use
+controlled responses with production Web code to verify independent loading,
+failure/retry, true zero/empty results, labels, translation and responsive
+theme rendering. They supplement TRAFFIC-002 and UI-002/009/010; the history
+API tests remain the proof of aggregate values and gap-filling. See the
+[functional acceptance matrix](../../acceptance/functional-matrix.md) for
+test paths and evidence limits, and the [dashboard feature](../../features/dashboard.md)
+for the user-visible flow.
+
 ## Failure/recovery
 
 - Audit log write failure: the `record` call is best-effort. If the repository

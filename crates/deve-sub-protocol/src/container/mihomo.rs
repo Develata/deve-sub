@@ -31,8 +31,8 @@ use super::{
 /// Returns [`ParseError::InvalidYaml`] if the YAML is malformed.
 /// Returns [`ParseError::MissingContainerKey`] if the `proxies` key is absent.
 pub fn parse_mihomo_yaml(text: &str) -> Result<Vec<Node>, ParseError> {
-    let value: Value =
-        serde_yaml::from_str(text).map_err(|e| ParseError::InvalidYaml(e.to_string()))?;
+    let value = deve_sub_yaml::parse_source_json(text)
+        .map_err(|e| ParseError::InvalidYaml(e.to_string()))?;
 
     let proxies = value
         .get("proxies")

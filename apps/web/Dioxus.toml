@@ -1,3 +1,7 @@
 [application]
 name = "deve-sub-web"
 asset_dir = "assets"
+
+[web.app]
+# The custom index.html already owns the product title; do not append DX's default.
+title = ""

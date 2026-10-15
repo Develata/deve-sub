@@ -2,6 +2,7 @@
 //!
 //! UI-002: language switching with localStorage persistence.
 
+mod dashboard;
 mod nodes;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -29,6 +30,9 @@ impl Language {
 }
 
 pub fn t(lang: Language, key: &str) -> &str {
+    if key.starts_with("dashboard.") {
+        return dashboard::t(lang, key);
+    }
     if key.starts_with("nodes.") {
         return nodes::t(lang, key);
     }
@@ -142,7 +146,9 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::Zh, "common.done") => "完成",
         (Language::En, "common.done") => "Done",
         (Language::Zh, "sources.url_keep") => "留空保留当前 URL；填写新地址可替换",
-        (Language::En, "sources.url_keep") => "Leave blank to keep the current URL; enter a new URL to replace it",
+        (Language::En, "sources.url_keep") => {
+            "Leave blank to keep the current URL; enter a new URL to replace it"
+        }
         (Language::Zh, "sources.name_required") => "请填写名称",
         (Language::En, "sources.name_required") => "Name is required",
         (Language::Zh, "sources.required") => "请填写名称和 URL",
@@ -173,16 +179,50 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::En, "sources.keep_on_fail") => "Keep on Fail",
         (Language::Zh, "sources.edit_title") => "编辑订阅源",
         (Language::En, "sources.edit_title") => "Edit Source",
-        (Language::Zh, "sources.delete_confirm") => "确定删除此订阅源？仅由该源提供的节点将退出订阅，共有或手动导入的节点会保留。",
-        (Language::En, "sources.delete_confirm") => "Delete this source? Nodes provided only by it will leave subscriptions. Shared and manually imported nodes are retained.",
+        (Language::Zh, "sources.delete_confirm") => {
+            "确定删除此订阅源？仅由该源提供的节点将退出订阅，共有或手动导入的节点会保留。"
+        }
+        (Language::En, "sources.delete_confirm") => {
+            "Delete this source? Nodes provided only by it will leave subscriptions. Shared and manually imported nodes are retained."
+        }
         (Language::Zh, "sources.refresh_timeout") => "刷新超时，请稍后在任务列表查看结果",
         (Language::En, "sources.refresh_timeout") => "Refresh timed out, check the job list later",
+        (Language::Zh, "subs.name") => "名称",
+        (Language::En, "subs.name") => "Name",
+        (Language::Zh, "subs.empty") => "暂无订阅",
+        (Language::En, "subs.empty") => "No subscriptions yet",
+        (Language::Zh, "subs.more_actions") => "更多操作",
+        (Language::En, "subs.more_actions") => "More actions",
+        (Language::Zh, "subs.copied") => "已复制",
+        (Language::En, "subs.copied") => "Copied",
+        (Language::Zh, "subs.regenerated") => "短码已更新，可复制新链接。",
+        (Language::En, "subs.regenerated") => "Short code updated. Copy the new link.",
+        (Language::Zh, "subs.regenerate_confirm") => {
+            "现有短链接将立即失效，需要向客户端提供新链接。Token 链接和临时链接不受影响。是否继续？"
+        }
+        (Language::En, "subs.regenerate_confirm") => {
+            "Any existing short link will stop working immediately. Update your clients with the new link. Token and temporary links are unaffected. Continue?"
+        }
+        (Language::Zh, "subs.templates_incomplete") => "模板列表加载未完成，请重新加载页面重试。",
+        (Language::En, "subs.templates_incomplete") => {
+            "Template list did not complete. Reload the page to retry."
+        }
+        (Language::Zh, "subs.required_create") => "请填写名称、Slug 并选择模板",
+        (Language::En, "subs.required_create") => "Name, slug, and template are required",
+        (Language::Zh, "subs.required_edit") => "请填写名称和 Slug",
+        (Language::En, "subs.required_edit") => "Name and slug are required",
+        (Language::Zh, "subs.required_expiry") => "请填写过期时间",
+        (Language::En, "subs.required_expiry") => "Expiry is required",
         (Language::Zh, "subs.add") => "添加订阅",
         (Language::En, "subs.add") => "Add Subscription",
         (Language::Zh, "subs.edit_title") => "编辑订阅",
         (Language::En, "subs.edit_title") => "Edit Subscription",
-        (Language::Zh, "subs.delete_confirm") => "确定删除此订阅？",
-        (Language::En, "subs.delete_confirm") => "Delete this subscription?",
+        (Language::Zh, "subs.delete_confirm") => {
+            "删除后，此订阅的所有链接将停止分发，且无法撤销。确定删除？"
+        }
+        (Language::En, "subs.delete_confirm") => {
+            "All links for this subscription will stop delivering content. This cannot be undone. Delete?"
+        }
         (Language::Zh, "subs.slug") => "Slug",
         (Language::En, "subs.slug") => "Slug",
         (Language::Zh, "subs.template") => "模板",
@@ -191,18 +231,30 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::En, "subs.profile") => "Profile",
         (Language::Zh, "subs.traffic_limit") => "流量限制（字节，留空=不限）",
         (Language::En, "subs.traffic_limit") => "Traffic Limit (bytes, empty=unlimited)",
-        (Language::Zh, "subs.invalid_traffic_limit") => "流量限制须为 1–9223372036854775807 的正整数；留空表示不限量",
-        (Language::En, "subs.invalid_traffic_limit") => "Traffic limit must be a positive integer from 1 to 9223372036854775807; leave blank for unlimited",
+        (Language::Zh, "subs.invalid_traffic_limit") => {
+            "流量限制须为 1–9223372036854775807 的正整数；留空表示不限量"
+        }
+        (Language::En, "subs.invalid_traffic_limit") => {
+            "Traffic limit must be a positive integer from 1 to 9223372036854775807; leave blank for unlimited"
+        }
         (Language::Zh, "subs.expires_at") => "过期时间（留空=永不过期）",
         (Language::En, "subs.expires_at") => "Expires At (empty=never)",
         (Language::Zh, "subs.delivery_link") => "订阅链接",
         (Language::En, "subs.delivery_link") => "Subscription URL",
-        (Language::Zh, "subs.generate_code_first") => "尚未生成短链接，请先点击“重生成短码”；完整链接仅在创建或轮换时显示。",
-        (Language::En, "subs.generate_code_first") => "Generate a short code first. Full token URLs are shown only on creation or rotation.",
+        (Language::Zh, "subs.generate_code_first") => {
+            "尚未生成短链接，请先点击“重生成短码”；完整链接仅在创建或轮换时显示。"
+        }
+        (Language::En, "subs.generate_code_first") => {
+            "Generate a short code first. Full token URLs are shown only on creation or rotation."
+        }
         (Language::Zh, "subs.copy_failed") => "复制失败，请检查浏览器剪贴板权限",
         (Language::En, "subs.copy_failed") => "Copy failed. Check browser clipboard permissions.",
-        (Language::Zh, "subs.rotate_confirm") => "轮换后旧 Token 链接立即失效，需要更新客户端。短链接和临时链接不受影响，泄漏时请分别重生成或撤销。是否继续？",
-        (Language::En, "subs.rotate_confirm") => "The old token URL will stop working immediately. Update your clients. Short codes and temporary links are unaffected; regenerate or revoke those separately if leaked. Continue?",
+        (Language::Zh, "subs.rotate_confirm") => {
+            "轮换后旧 Token 链接立即失效，需要更新客户端。短链接和临时链接不受影响，泄漏时请分别重生成或撤销。是否继续？"
+        }
+        (Language::En, "subs.rotate_confirm") => {
+            "The old token URL will stop working immediately. Update your clients. Short codes and temporary links are unaffected; regenerate or revoke those separately if leaked. Continue?"
+        }
         (Language::Zh, "subs.short_code") => "短码",
         (Language::En, "subs.short_code") => "Short Code",
         (Language::Zh, "subs.rotate_token") => "轮换Token",
@@ -224,15 +276,21 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::Zh, "tpl.edit_title") => "编辑模板",
         (Language::En, "tpl.edit_title") => "Edit Template",
         (Language::Zh, "tpl.delete_confirm") => "确定删除此模板？请先解除相关订阅对它的引用。",
-        (Language::En, "tpl.delete_confirm") => "Delete this template? Unlink any subscriptions using it first.",
+        (Language::En, "tpl.delete_confirm") => {
+            "Delete this template? Unlink any subscriptions using it first."
+        }
         (Language::Zh, "tpl.name") => "名称",
         (Language::En, "tpl.name") => "Name",
         (Language::Zh, "tpl.description") => "描述",
         (Language::En, "tpl.description") => "Description",
         (Language::Zh, "tpl.spec_yaml") => "Clash / Mihomo 分流 YAML",
         (Language::En, "tpl.spec_yaml") => "Clash / Mihomo routing YAML",
-        (Language::Zh, "tpl.spec_help") => "填写 rules、proxy-groups、rule-providers、dns 或 tun；也可仅粘贴规则列表，自动使用 PROXY 组。节点从节点池注入，旧 V3 模板仍可编辑。",
-        (Language::En, "tpl.spec_help") => "Use rules, proxy-groups, rule-providers, dns or tun. A rule list alone gets a PROXY group. Nodes come from the pool; existing V3 templates remain supported.",
+        (Language::Zh, "tpl.spec_help") => {
+            "填写 rules、proxy-groups、rule-providers、dns 或 tun；也可仅粘贴规则列表，自动使用 PROXY 组。节点从节点池注入，旧 V3 模板仍可编辑。"
+        }
+        (Language::En, "tpl.spec_help") => {
+            "Use rules, proxy-groups, rule-providers, dns or tun. A rule list alone gets a PROXY group. Nodes come from the pool; existing V3 templates remain supported."
+        }
         (Language::Zh, "tpl.version") => "版本",
         (Language::En, "tpl.version") => "Version",
         (Language::Zh, "tpl.created_at") => "创建时间",
@@ -256,7 +314,9 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::Zh, "tpl.rollback_title") => "回滚到版本",
         (Language::En, "tpl.rollback_title") => "Rollback to Version",
         (Language::Zh, "tpl.rollback_confirm") => "确定回滚到此版本？活跃版本将被替换。",
-        (Language::En, "tpl.rollback_confirm") => "Rollback to this version? The active version will be replaced.",
+        (Language::En, "tpl.rollback_confirm") => {
+            "Rollback to this version? The active version will be replaced."
+        }
         (Language::Zh, "tpl.preview") => "预览",
         (Language::En, "tpl.preview") => "Preview",
         (Language::Zh, "tpl.preview_title") => "预览生成结果",
@@ -318,17 +378,23 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::Zh, "2fa.enabled_status") => "2FA 已启用",
         (Language::En, "2fa.enabled_status") => "2FA is enabled",
         (Language::Zh, "2fa.not_enabled") => "2FA 未启用。启用后登录需要验证码。",
-        (Language::En, "2fa.not_enabled") => "2FA is not enabled. Enabling requires a verification code on login.",
+        (Language::En, "2fa.not_enabled") => {
+            "2FA is not enabled. Enabling requires a verification code on login."
+        }
         (Language::Zh, "2fa.setup") => "启用 2FA",
         (Language::En, "2fa.setup") => "Enable 2FA",
         (Language::Zh, "2fa.setup_instructions") => "将密钥添加到验证器应用，然后输入 6 位验证码。",
-        (Language::En, "2fa.setup_instructions") => "Add the secret to your authenticator app, then enter the 6-digit code.",
+        (Language::En, "2fa.setup_instructions") => {
+            "Add the secret to your authenticator app, then enter the 6-digit code."
+        }
         (Language::Zh, "2fa.secret") => "密钥（Base32）",
         (Language::En, "2fa.secret") => "Secret (Base32)",
         (Language::Zh, "2fa.otpauth_uri") => "otpauth URI",
         (Language::En, "2fa.otpauth_uri") => "otpauth URI",
         (Language::Zh, "2fa.recovery_warning") => "恢复码仅显示一次，请立即安全保存。",
-        (Language::En, "2fa.recovery_warning") => "Recovery codes are shown once. Save them securely now.",
+        (Language::En, "2fa.recovery_warning") => {
+            "Recovery codes are shown once. Save them securely now."
+        }
         (Language::Zh, "2fa.disable") => "禁用 2FA",
         (Language::En, "2fa.disable") => "Disable 2FA",
         (Language::Zh, "2fa.regenerate") => "重新生成恢复码",

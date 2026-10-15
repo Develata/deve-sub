@@ -41,7 +41,7 @@ struct CacheRow {
 }
 
 impl CacheRow {
-    fn to_domain(&self) -> Result<GenerationCacheEntry, TemplateError> {
+    fn into_domain(self) -> Result<GenerationCacheEntry, TemplateError> {
         Ok(GenerationCacheEntry {
             id: GenerationCacheId::parse(&self.id)
                 .map_err(|e| TemplateError::Storage(e.to_string()))?,
@@ -49,14 +49,14 @@ impl CacheRow {
                 .map_err(|e| TemplateError::Storage(e.to_string()))?,
             template_version: u64::try_from(self.template_version)
                 .map_err(|_| TemplateError::Storage("negative template_version".to_owned()))?,
-            profile: self.profile.clone(),
-            mode: self.mode.clone(),
-            selection_mode: self.selection_mode.clone(),
-            selection_payload: self.selection_payload.clone(),
+            profile: self.profile,
+            mode: self.mode,
+            selection_mode: self.selection_mode,
+            selection_payload: self.selection_payload,
             pool_revision: u64::try_from(self.pool_revision)
                 .map_err(|_| TemplateError::Storage("negative pool_revision".to_owned()))?,
-            cache_key: self.cache_key.clone(),
-            content: self.content.clone(),
+            cache_key: self.cache_key,
+            content: self.content,
             is_active: self.is_active != 0,
         })
     }
@@ -78,7 +78,7 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| TemplateError::Storage(e.to_string()))?;
-        row.map(|r| r.to_domain()).transpose()
+        row.map(CacheRow::into_domain).transpose()
     }
 
     async fn find_active(
@@ -97,7 +97,7 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| TemplateError::Storage(e.to_string()))?;
-        row.map(|r| r.to_domain()).transpose()
+        row.map(CacheRow::into_domain).transpose()
     }
 
     async fn find_latest(
@@ -131,7 +131,7 @@ impl GenerationCacheRepository for SqliteGenerationCacheRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| TemplateError::Storage(e.to_string()))?;
-        row.map(|r| r.to_domain()).transpose()
+        row.map(CacheRow::into_domain).transpose()
     }
 
     async fn store(&self, entry: &GenerationCacheEntry) -> Result<(), TemplateError> {

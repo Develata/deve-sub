@@ -18,8 +18,9 @@ fn main() -> Result<()> {
     match args.as_slice() {
         [command] if command == "inventory" => {
             let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-            let workflow: Value =
-                serde_yaml::from_str(&fs::read_to_string(root.join(".github/workflows/ci.yml"))?)?;
+            let workflow = deve_sub_yaml::parse_source_json(&fs::read_to_string(
+                root.join(".github/workflows/ci.yml"),
+            )?)?;
             let packages = inventory::workspace(&metadata(&root)?)?;
             let shards = inventory::validate(&workflow, &packages)?;
             println!(

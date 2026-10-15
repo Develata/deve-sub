@@ -5,24 +5,36 @@
 #![cfg(target_family = "wasm")]
 
 use dioxus::prelude::*;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::api::{get, send};
 use crate::i18n::{Language, format_t, t};
 use crate::pages::node_categories::{NodeCategories, NodeCategory};
 use crate::pages::node_chain_modal::ChainModal;
 use crate::pages::node_import_modal::ImportModal;
+use crate::pages::node_list::NodeList;
 use crate::pages::node_override_modal::{OverrideModal, RegionModal};
 use crate::pages::node_selection::NodeSelection;
-use crate::pages::node_tag_modal::TagModal;
 use crate::pages::node_tag_manager::TagManager;
-use crate::pages::node_list::NodeList;
+use crate::pages::node_tag_modal::TagModal;
 use crate::pages::node_types::{
-    BatchEnabledRequest, BatchResultDto, ListNodesResponse, ListTagsResponse, NodeDto, NodeModal, TagDto,
+    BatchEnabledRequest, BatchResultDto, ListNodesResponse, ListTagsResponse, NodeDto, NodeModal,
+    TagDto,
 };
 
 const ITEM_HEIGHT: f64 = 72.0;
 const VIEWPORT_HEIGHT: f64 = 600.0;
 const BUFFER: usize = 5;
+
+#[derive(Default, PartialEq)]
+struct NodeFacets {
+    protocols: BTreeSet<String>,
+    regions: BTreeSet<String>,
+    tag_counts: HashMap<String, usize>,
+    untagged: usize,
+    total: usize,
+}
+
 #[derive(Props, Clone, PartialEq)]
 pub struct NodesProps {
     lang: Signal<Language>,
@@ -52,6 +64,32 @@ pub fn NodesPage(props: NodesProps) -> Element {
     let mut modal = use_signal(|| NodeModal::None);
     let mut batch_msg = use_signal(String::new);
 
+    let node_facets = use_memo(move || {
+        let source = nodes.read();
+        derive_node_facets(&source)
+    });
+    let filtered_indices = use_memo(move || {
+        let source = nodes.read();
+        let search_lower = search.read().to_lowercase();
+        let protocol = protocol_filter.read();
+        let active_category = category.read();
+        let region = region_filter.read();
+        let status = status_filter.read();
+        source
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| {
+                (search_lower.is_empty()
+                    || node.display_name.to_lowercase().contains(&search_lower))
+                    && (protocol.is_empty() || node.protocol == *protocol)
+                    && active_category.matches(node)
+                    && (region.is_empty() || node.region.as_deref() == Some(region.as_str()))
+                    && (status.is_empty() || node.is_active == (*status == "enabled"))
+            })
+            .map(|(index, _)| index)
+            .collect::<Vec<usize>>()
+    });
+
     let mut fetch_nodes = move || {
         *request_revision.write() += 1;
         let revision = *request_revision.read();
@@ -62,7 +100,9 @@ pub fn NodesPage(props: NodesProps) -> Element {
         // A failed or superseded read must never make an empty category disappear.
         spawn(async move {
             let result = get::<ListTagsResponse>("/tags").await;
-            if revision != *request_revision.read() { return; }
+            if revision != *request_revision.read() {
+                return;
+            }
             match result {
                 Ok(resp) => {
                     let deleted = matches!(&*category.read(), NodeCategory::Tag(id) if !resp.tags.iter().any(|tag| &tag.id == id));
@@ -81,16 +121,22 @@ pub fn NodesPage(props: NodesProps) -> Element {
         });
         spawn(async move {
             let result = get::<ListNodesResponse>("/nodes?include_inactive=true&limit=10000").await;
-        if revision != *request_revision.read() { return; }
-        refreshing.set(false);
-        match result {
+            if revision != *request_revision.read() {
+                return;
+            }
+            refreshing.set(false);
+            match result {
                 Ok(resp) => {
                     error.set(String::new());
                     // WHY: a first-page refresh can unload selected later-page
                     // nodes or reveal that membership moved to another category.
                     let active = category.read();
-                    let available = resp.nodes.iter().filter(|node| active.matches(node))
-                        .map(|node| node.id.as_str()).collect();
+                    let available = resp
+                        .nodes
+                        .iter()
+                        .filter(|node| active.matches(node))
+                        .map(|node| node.id.as_str())
+                        .collect();
                     selected.write().retain(&available);
                     nodes.set(resp.nodes);
                     nodes_loaded.set(true);
@@ -120,7 +166,9 @@ pub fn NodesPage(props: NodesProps) -> Element {
         spawn(async move {
             let path = format!("/nodes?include_inactive=true&limit=100&cursor={c}");
             let result = get::<ListNodesResponse>(&path).await;
-            if revision != *request_revision.read() { return; }
+            if revision != *request_revision.read() {
+                return;
+            }
             match result {
                 Ok(resp) => {
                     error.set(String::new());
@@ -137,7 +185,9 @@ pub fn NodesPage(props: NodesProps) -> Element {
     };
 
     let mut batch_set_enabled = move |enabled: bool| {
-        if *batch_busy.read() { return; }
+        if *batch_busy.read() {
+            return;
+        }
         let ids: Vec<String> = selected.read().ids().iter().cloned().collect();
         if ids.is_empty() {
             return;
@@ -172,34 +222,11 @@ pub fn NodesPage(props: NodesProps) -> Element {
         });
     };
 
+    // WHY: read refreshes dirty indices synchronously; the direct source read
+    // also updates visible content when refreshed nodes keep identical indices.
+    let filtered = filtered_indices.read();
     let all = nodes.read();
-    let filtered: Vec<&NodeDto> = {
-        let s = search.read().to_lowercase();
-        let p = protocol_filter.read().clone();
-        all.iter()
-            .filter(|n| s.is_empty() || n.display_name.to_lowercase().contains(&s))
-            .filter(|n| p.is_empty() || n.protocol == p)
-            .filter(|n| category.read().matches(n))
-            .filter(|n| region_filter.read().is_empty() || n.region.as_deref() == Some(region_filter.read().as_str()))
-            .filter(|n| status_filter.read().is_empty() || n.is_active == (*status_filter.read() == "enabled"))
-            .collect()
-    };
-
-    let protocols: Vec<String> = {
-        let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        for n in nodes.read().iter() {
-            set.insert(n.protocol.clone());
-        }
-        set.into_iter().collect()
-    };
-
-    let mut tag_counts = std::collections::HashMap::<String, usize>::new();
-    for node in all.iter() {
-        for tag in &node.tags { *tag_counts.entry(tag.id.clone()).or_default() += 1; }
-    }
-    let untagged = all.iter().filter(|node| node.tags.is_empty()).count();
-    let regions: std::collections::BTreeSet<String> = all.iter().filter_map(|n| n.region.clone()).collect();
-    let filtered_ids: Vec<String> = filtered.iter().map(|n| n.id.clone()).collect();
+    let facets = node_facets.read();
     let total = filtered.len();
     let total_height = total as f64 * ITEM_HEIGHT;
     let current_scroll = *scroll_top.read();
@@ -210,11 +237,9 @@ pub fn NodesPage(props: NodesProps) -> Element {
         .saturating_sub(BUFFER)
         .min(total.saturating_sub(visible_count));
     let end_idx = (start_idx + visible_count).min(total);
-    let visible_items: Vec<NodeDto> = filtered
+    let visible_items: Vec<NodeDto> = filtered[start_idx..end_idx]
         .iter()
-        .skip(start_idx)
-        .take(end_idx - start_idx)
-        .map(|node| (*node).clone())
+        .map(|&index| all[index].clone())
         .collect();
     let offset_y = start_idx as f64 * ITEM_HEIGHT;
 
@@ -239,7 +264,16 @@ pub fn NodesPage(props: NodesProps) -> Element {
                 }
                 button { class: "node-control", onclick: move |_| modal.set(NodeModal::ManageTags), {t(l, "nodes.manage_tags")} }
                 button { class: "node-control", disabled: total == 0 || *batch_busy.read(),
-                    onclick: move |_| selected.write().replace(filtered_ids.iter().cloned().collect()), {t(l, "nodes.select_filtered")} }
+                    onclick: move |_| {
+                        // WHY: a filter or source update may precede this click
+                        // before rendering; pair current indices and source here.
+                        let ids = {
+                            let filtered = filtered_indices.read();
+                            let all = nodes.read();
+                            filtered.iter().map(|&index| all[index].id.clone()).collect()
+                        };
+                        selected.write().replace(ids);
+                    }, {t(l, "nodes.select_filtered")} }
                 if has_selection {
                     button {
                         class: "rounded-md border border-green-300 px-3 py-2 text-sm text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-900/20",
@@ -272,8 +306,8 @@ pub fn NodesPage(props: NodesProps) -> Element {
             }
 
             // Filters.
-            NodeCategories { lang: l, tags: tags.read().clone(), counts: tag_counts,
-                total: all.len(), untagged, counts_ready: *nodes_loaded.read(), active: category.read().clone(),
+            NodeCategories { lang: l, tags: tags.read().clone(), counts: facets.tag_counts.clone(),
+                total: facets.total, untagged: facets.untagged, counts_ready: *nodes_loaded.read(), active: category.read().clone(),
                 loading: *tags_loading.read(), error: tags_error.read().clone(),
                 on_refresh: move |_| fetch_nodes(),
                 on_select: move |next| {
@@ -306,7 +340,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                         reset_list_scroll();
                     },
                     option { value: "", {t(l, "nodes.all_protocols")} }
-                    for p in &protocols {
+                    for p in &facets.protocols {
                         option { value: "{p}", "{p}" }
                     }
                 }
@@ -315,7 +349,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
             div { class: "flex flex-wrap items-center gap-2",
                 select { class: "node-control", aria_label: t(l, "nodes.region"), value: "{region_filter}", onchange: move |e| { region_filter.set(e.value()); scroll_top.set(0.0); reset_list_scroll(); },
                     option { value: "", {t(l, "nodes.all_regions")} }
-                    for region in regions { option { value: "{region}", "{region}" } }
+                    for region in &facets.regions { option { value: "{region}", "{region}" } }
                 }
                 select { class: "node-control", aria_label: t(l, "nodes.status"), value: "{status_filter}", onchange: move |e| { status_filter.set(e.value()); scroll_top.set(0.0); reset_list_scroll(); },
                     option { value: "", {t(l, "nodes.all_statuses")} }
@@ -401,6 +435,26 @@ pub fn NodesPage(props: NodesProps) -> Element {
             },
         }
     }
+}
+
+fn derive_node_facets(nodes: &[NodeDto]) -> NodeFacets {
+    let mut facets = NodeFacets {
+        total: nodes.len(),
+        ..NodeFacets::default()
+    };
+    for node in nodes {
+        facets.protocols.insert(node.protocol.clone());
+        if let Some(region) = &node.region {
+            facets.regions.insert(region.clone());
+        }
+        if node.tags.is_empty() {
+            facets.untagged += 1;
+        }
+        for tag in &node.tags {
+            *facets.tag_counts.entry(tag.id.clone()).or_default() += 1;
+        }
+    }
+    facets
 }
 
 fn reset_list_scroll() {

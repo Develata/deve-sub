@@ -35,7 +35,7 @@ class DependencyBoundaryTests(unittest.TestCase):
         ]))
 
     def test_codecs_and_foundations_cannot_depend_outward(self):
-        for layer in ("kernel", "contract", "domain", "protocol", "emitter", "compatibility"):
+        for layer in ("kernel", "contract", "domain", "protocol", "emitter", "compatibility", "yaml"):
             with self.subTest(layer=layer):
                 self.assertTrue(dependency_errors([package(layer, "deve-sub-application")]))
                 self.assertTrue(dependency_errors([package(layer, "axum")]))
@@ -43,6 +43,14 @@ class DependencyBoundaryTests(unittest.TestCase):
     def test_library_errors_stay_structured(self):
         self.assertTrue(dependency_errors([package("application", "anyhow")]))
         self.assertEqual([], dependency_errors([package("cli", "anyhow"), package("ci", "anyhow")]))
+
+    def test_yaml_adapter_remains_a_leaf_outside_domain_and_web(self):
+        for layer in ("application", "protocol", "emitter", "ci"):
+            self.assertEqual([], dependency_errors([package(layer, "deve-sub-yaml")]))
+        for layer in ("domain", "kernel", "contract", "web"):
+            self.assertTrue(dependency_errors([package(layer, "deve-sub-yaml")]))
+        for dependency in ("deve-sub-domain", "tokio", "sqlx", "anyhow"):
+            self.assertTrue(dependency_errors([package("yaml", dependency)]))
 
     def test_composition_and_shared_dtos_remain_valid(self):
         self.assertEqual([], dependency_errors([

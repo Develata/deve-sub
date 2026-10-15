@@ -66,6 +66,14 @@ and `crates/emitter` depend on `crates/domain`. Adapter crates depend on Port
 traits defined in `crates/domain` or `crates/application`, not the other way
 around.
 
+`crates/deve-sub-yaml` is a leaf format adapter shared by Protocol,
+Emitter, Application and CI tooling. It has no workspace dependencies and owns
+bounded YAML syntax decoding, ordered values, legacy scalar compatibility and
+serialization; it contains no subscription or template business rules. It uses
+the maintained Rust `granit-parser` event stream and `serde-saphyr` serializer.
+The latter's deserializer, source snippets, includes and interpolation are not
+enabled. Kernel, Domain and browser contracts remain independent of YAML.
+
 `tools/ci` (`deve-sub-ci`) is repository tooling with only general-purpose
 dependencies. It is a workspace member so ordinary Rust lint/test gates cover
 it, but production crates must not depend on it and release packages contain

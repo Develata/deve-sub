@@ -3,10 +3,19 @@
 
 use deve_sub_storage_sqlite::{SqliteConfig, create_pool};
 
-async fn lookup_plan(pool: &sqlx::SqlitePool) -> String {
+async fn lookup_plan(connection: &mut sqlx::SqliteConnection) -> String {
+    // WHY: EXPLAIN does not execute the read that refreshes a connection's
+    // schema after another pooled connection commits a migration. Execute a
+    // real lookup first, then prepare EXPLAIN without its old statement cache.
+    let _: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM nodes WHERE identity_fingerprint = 'test' AND missing_from_source = 0",
+    )
+    .fetch_all(&mut *connection)
+    .await
+    .expect("real lookup");
     let rows: Vec<(i64, i64, i64, String)> = sqlx::query_as(
         "EXPLAIN QUERY PLAN SELECT id FROM nodes WHERE identity_fingerprint = 'test' AND missing_from_source = 0",
-    ).fetch_all(pool).await.expect("explain");
+    ).persistent(false).fetch_all(connection).await.expect("explain");
     rows.into_iter()
         .map(|row| row.3)
         .collect::<Vec<_>>()
@@ -30,7 +39,11 @@ async fn forward_index_removes_scan_and_backup_can_reupgrade() {
     old.run(&pool).await.expect("schema 25");
     sqlx::query("INSERT INTO nodes (id, protocol_kind, host, port, identity_fingerprint) VALUES ('n', 'trojan', 'test.example', 443, 'test')")
         .execute(&pool).await.expect("node");
-    assert!(lookup_plan(&pool).await.contains("SCAN nodes"));
+    assert!(
+        lookup_plan(&mut pool.acquire().await.expect("connection"))
+            .await
+            .contains("SCAN nodes")
+    );
     let backup = dir.path().join("backup.db");
     sqlx::query("VACUUM INTO ?")
         .bind(backup.to_string_lossy().as_ref())
@@ -41,14 +54,18 @@ async fn forward_index_removes_scan_and_backup_can_reupgrade() {
         .await
         .expect("restore");
     for db in [&pool, &restored] {
+        // Keep the pre-migration reader checked out so migration must use a
+        // different connection. The old test encountered this order by chance.
+        let mut reader = db.acquire().await.expect("reader");
+        assert!(lookup_plan(&mut reader).await.contains("SCAN nodes"));
         sqlx::migrate!("../../migrations")
             .run(db)
             .await
             .expect("forward upgrade");
+        let plan = lookup_plan(&mut reader).await;
         assert!(
-            lookup_plan(db)
-                .await
-                .contains("SEARCH nodes USING COVERING INDEX idx_nodes_identity_lookup")
+            plan.contains("SEARCH nodes USING COVERING INDEX idx_nodes_identity_lookup"),
+            "{plan}"
         );
         let node: String =
             sqlx::query_scalar("SELECT id FROM nodes WHERE identity_fingerprint='test'")

@@ -442,6 +442,22 @@ node selection is dynamic; created links must return subscription content.
 Records beyond the first list page and all template choices remain reachable.
 This management proof is distinct from OUT-008 conditional ETag delivery.
 
+Subscription rows keep Copy and Edit directly visible. A keyboard-operable
+More actions disclosure exposes the existing temporary-link, short-code
+regeneration, token-rotation and delete actions. Narrow layouts stack record
+details and wrap controls within the viewport; action targets are at least
+44px high. Copy success has a textual acknowledgement.
+
+Create/edit and consequence confirmations share the native modal behavior
+defined in M4: bounded scrolling, labelled controls, isolated sequential
+focus, idle Escape cancellation and return to the initiating control. Editing
+starts at the name; destructive confirmations identify the subscription and
+start at Cancel. Regeneration explains that the existing short link stops
+working, rotation explains immediate full-token invalidation, and deletion
+explains that all of the subscription's links stop working and cannot be
+restored by undo. Cancelling does not send the mutation. These are Web
+confirmation and layout rules; credential lifecycles remain defined above.
+
 The Web quota field retains its text until submission: only an empty field
 means unlimited, and a nonempty value must be a positive decimal byte count
 no greater than `9223372036854775807` (the persisted SQLite integer range; zero
@@ -450,3 +466,17 @@ mutation. While a subscription command is pending, the dialog cannot be closed,
 replaced, edited or submitted again. A failed command leaves the same draft
 available for correction and retry. OUT-016 browser coverage exercises invalid
 quotas, intentional clearing, delayed responses and failure recovery.
+Pending feedback receives focus while controls are disabled. On failure the
+new error receives focus; after creation, rotation or temporary-link success,
+the once-displayed URL input receives focus inside the existing dialog. Tab
+then reaches Copy, so the operator can complete retry and copying by keyboard.
+
+FUNC-SUB-ACTIONS exercises mobile/desktop action reachability, short-code
+regeneration cancellation and actual old/new link responses, plus deletion
+cancellation and confirmation. FUNC-SUB-DIALOG exercises the shared focus
+boundary and 390×420 viewport. Their exact proof bindings appear in the
+[functional acceptance matrix](../../acceptance/functional-matrix.md)
+(OUT-016, UI-009/010); the existing UI-009 flow retains token-rotation and
+temporary-link coverage.
+FUNC-SUB-COMPLETION verifies pending/error focus and keyboard retry/copy for
+all three once-displayed URL paths, including a 420px-high viewport.

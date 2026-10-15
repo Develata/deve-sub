@@ -1,6 +1,6 @@
 //! Source editor and deletion confirmation; server owns update semantics.
 #![cfg(target_family = "wasm")]
-use super::source_dialog::SourceDialog;
+use super::modal_dialog::ModalDialog;
 use super::source_types::{SourceDto, SourceTypeDto, SourceTypePresentation};
 use crate::i18n::{Language, t};
 use dioxus::prelude::*;
@@ -66,7 +66,7 @@ pub fn SourceModals(props: SourceModalsProps) -> Element {
 
     rsx! {
         if is_form_modal || is_delete_modal {
-            SourceDialog { title, busy: *saving.read(), on_close: close_modal,
+            ModalDialog { title, busy: *saving.read(), on_close: close_modal,
                 if is_form_modal {
                     form {
                         onsubmit: move |event| { event.prevent_default(); do_submit.call(()); },

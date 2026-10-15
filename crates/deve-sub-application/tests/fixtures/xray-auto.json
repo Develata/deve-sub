@@ -1,0 +1,42 @@
+{
+  "outbounds": [
+    {
+      "protocol": "trojan",
+      "tag": "Trojan-Fixture",
+      "settings": {
+        "servers": [{ "address": "example.com", "port": 443, "password": "TEST_PASSWORD" }]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": { "serverName": "example.com", "allowInsecure": false },
+        "wsSettings": { "path": "/fixture" }
+      }
+    },
+    {
+      "protocol": "vless",
+      "tag": "VLESS-Fixture",
+      "settings": {
+        "vnext": [{
+          "address": "2001:db8::1",
+          "port": 8443,
+          "users": [{
+            "id": "00000000-0000-4000-8000-000000000001",
+            "encryption": "none",
+            "flow": "xtls-rprx-vision"
+          }]
+        }]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "example.com",
+          "fingerprint": "chrome",
+          "publicKey": "TEST_PUBLIC_KEY",
+          "shortId": "01020304"
+        }
+      }
+    }
+  ]
+}

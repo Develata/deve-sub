@@ -114,6 +114,7 @@ cases:
     evidence:
       tests:
         - "tests/e2e/specs/ui-008-10k-nodes.spec.ts::UI-008"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SELECT-NOW"
       status: pass
   - id: UI-009
     title: 移动端
@@ -126,12 +127,15 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/node-table.ui.spec.ts::FUNC-NODE-TABLE"
+        - "tests/e2e/functional/subscription-actions.ui.spec.ts::FUNC-SUB-ACTIONS"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-DELETE"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-FORM"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-TAG-MANAGE"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LAYOUT"
         - "tests/e2e/functional/lifecycle.ui.spec.ts::FUNC-REQUEST-TIMEOUT"
         - "tests/e2e/specs/ui-009-mobile.spec.ts::UI-009"
+        - "tests/e2e/functional/import.ui.spec.ts::FUNC-IMPORT-LAYOUT"
       status: pass
   - id: UI-010
     title: 键盘导航
@@ -144,10 +148,13 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/subscription-actions.ui.spec.ts::FUNC-SUB-DIALOG"
+        - "tests/e2e/functional/subscription-focus.ui.spec.ts::FUNC-SUB-COMPLETION"
         - "tests/e2e/functional/subscription-forms.ui.spec.ts"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-DELETE"
         - "tests/e2e/functional/source-form.ui.spec.ts::FUNC-SOURCE-FORM"
         - "tests/e2e/specs/ui-010-keyboard-nav.spec.ts::UI-010"
+        - "tests/e2e/functional/import.ui.spec.ts::FUNC-IMPORT-RETURN"
       status: pass
   - id: AUTH-001
     title: 初始化管理员
@@ -233,6 +240,11 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::stale_verified_secret_must_not_enable_replacement"
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::two_concurrent_verifications_must_have_one_winner"
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::delayed_setup_must_not_replace_enabled_secret"
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::enrollment_write_failures_roll_back_flag_secret_and_recovery_codes"
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::mismatched_recovery_owner_cannot_enable_another_user"
         - "apps/server/tests/twofa.rs::twofa_login_with_totp_code"
         - "apps/server/tests/twofa.rs::twofa_login_wrong_totp_code"
         - "apps/server/tests/twofa.rs::twofa_login_invalid_challenge_token"
@@ -249,6 +261,11 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::stale_disable_must_preserve_new_enrollment"
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::stale_regeneration_must_preserve_new_enrollment"
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::concurrent_regenerations_for_same_enrollment_commit_in_order"
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::disable_delete_failure_rolls_back_active_enrollment"
+        - "crates/deve-sub-storage-sqlite/tests/twofa_enrollment_atomicity.rs::regeneration_insert_failure_preserves_existing_batch"
         - "apps/server/tests/twofa.rs::recovery_code_single_use"
         - "apps/server/tests/twofa.rs::regenerate_recovery_codes"
         - "apps/server/tests/twofa.rs::disable_twofa"
@@ -643,6 +660,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-protocol/tests/mihomo_yaml_compatibility.rs::source_scalar_keys_duplicates_and_merge_keys_keep_json_semantics"
+        - "crates/deve-sub-protocol/tests/mihomo_yaml_compatibility.rs::source_quoted_scalars_stay_strings_without_interpolation"
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_shadowsocks"
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_hysteria2"
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_trojan_ws"
@@ -651,6 +670,10 @@ cases:
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_parses_vmess_packet_encoding"
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_invalid_json_errors"
         - "crates/deve-sub-protocol/tests/singbox.rs::singbox_missing_outbounds_errors"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::shape_errors_keep_the_existing_singbox_identity"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::any_type_value_wins_over_protocol_keys"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::duplicate_keys_keep_last_value_before_dialect_detection"
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_keeps_yaml_heuristics_ahead_of_json_detection"
       status: pass
   - id: PARSE-007
     title: Xray JSON
@@ -663,7 +686,12 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_singbox_unknown_and_malformed_nodes_remain_lossless"
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_json_type_key_takes_precedence_over_protocol_key"
+        - "crates/deve-sub-application/tests/refresh_source/json_detection.rs::auto_singbox_unknown_refresh_preserves_raw_data_with_existing_snapshot"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::auto_xray_and_explicit_v2ray_retain_their_frozen_format_identity"
         - "crates/deve-sub-protocol/tests/xray_v2ray.rs"
+        - "crates/deve-sub-protocol/tests/xray_document.rs"
       status: pass
   - id: PARSE-008
     title: V2Ray JSON
@@ -676,7 +704,12 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_xray_matches_explicit_trojan_and_vless_parsing"
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_xray_unknown_protocol_is_preserved_in_its_own_format"
+        - "crates/deve-sub-application/tests/refresh_source/json_detection.rs::auto_xray_refresh_publishes_typed_nodes_and_preserves_identity"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::auto_xray_and_explicit_v2ray_retain_their_frozen_format_identity"
         - "crates/deve-sub-protocol/tests/xray_v2ray.rs"
+        - "crates/deve-sub-protocol/tests/xray_document.rs"
       status: pass
   - id: PARSE-009
     title: Shadowrocket
@@ -852,10 +885,14 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/node_pool/import_outcomes.rs::mixed_import_outcomes_match_input_order_and_persisted_nodes"
+        - "apps/server/tests/node_pool/import_outcomes.rs::failed_import_outcomes_preserve_leading_trailing_and_all_failed_entries"
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-IMPORT-RACE"
         - "apps/server/tests/node_pool.rs::admin_can_import_nodes"
         - "apps/server/tests/node_pool.rs::import_duplicate_is_counted_not_overwritten"
         - "apps/server/tests/node_pool.rs::import_empty_content_returns_400"
+        - "apps/server/tests/node_pool/input_validation.rs::whitespace_import_returns_400_without_changing_pool_revision"
+        - "tests/e2e/functional/import.ui.spec.ts::FUNC-IMPORT-PENDING"
         - "apps/server/tests/node_pool.rs::import_unparseable_returns_400"
         - "apps/server/tests/node_pool.rs::list_returns_imported_nodes"
       status: pass
@@ -900,6 +937,8 @@ cases:
     evidence:
       tests:
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-NODE-FILTER"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SOURCE"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SELECT-NOW"
         - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-ORDER"
         - "tests/e2e/functional/category-refresh.ui.spec.ts::FUNC-CATEGORY-BATCH-RESELECT"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_004_batch_enable_disable"
@@ -923,6 +962,8 @@ cases:
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-VISIBLE"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-LIFECYCLE"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-INLINE"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-CONTENT"
+        - "tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-FILTERS"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-PAGES"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-ORDER"
         - "tests/e2e/functional/categories.ui.spec.ts::FUNC-CATEGORY-RECOVERY"
@@ -1085,6 +1126,8 @@ cases:
     evidence:
       tests:
         - "crates/deve-sub-adapters/src/real_proxy/trojan.rs::certificate_verification_precedes_proxy_authentication"
+        - "crates/deve-sub-adapters/tests/rustls_session_cache.rs::key_exchange_hint_is_saved_only_after_authenticated_handshake"
+        - "crates/deve-sub-adapters/tests/rustls_session_cache.rs::rejected_certificate_does_not_persist_key_exchange_hint"
         - "apps/server/tests/probes.rs::real_proxy_probe_run_via_api_produces_results"
       status: pass
   - id: NODE-016
@@ -1159,6 +1202,17 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-yaml/tests/parsing.rs::legacy_plain_scalars_keep_their_types_and_ranges"
+        - "crates/deve-sub-yaml/tests/parsing.rs::ordered_merges_preserve_explicit_order_and_first_inheritance"
+        - "crates/deve-sub-yaml/tests/parsing.rs::duplicate_complex_keys_are_checked_after_recursive_merge"
+        - "crates/deve-sub-yaml/tests/parsing.rs::safe_diagnostics_never_include_values_or_source_snippets"
+        - "crates/deve-sub-yaml/tests/parsing.rs::standard_tags_keep_legacy_scalar_and_collection_projections"
+        - "crates/deve-sub-yaml/tests/parsing.rs::ambiguous_compact_flow_indicators_fail_without_reinterpreting_keys_or_values"
+        - "crates/deve-sub-yaml/tests/parsing.rs::question_marks_and_tabs_in_strings_and_comments_are_not_syntax_guards"
+        - "crates/deve-sub-yaml/tests/line_breaks.rs::literal_non_ascii_breaks_fail_before_changing_values_or_comment_boundaries"
+        - "crates/deve-sub-yaml/tests/line_breaks.rs::escaped_non_ascii_breaks_preserve_exact_values_through_every_boundary"
+        - "crates/deve-sub-yaml/tests/line_breaks.rs::ordinary_line_breaks_and_indented_quoted_continuations_keep_working"
+        - "crates/deve-sub-application/src/template/validation_tests.rs::v3_scalar_values_preserve_yaml_types_and_integer_boundaries"
         - "crates/deve-sub-application/src/template/clash_tests.rs::native_clash_rejects_invalid_routing_without_silent_drops"
         - "crates/deve-sub-application/src/template/bounded_yaml.rs::scalar_alias_expansion_is_bounded_during_parse"
         - "crates/deve-sub-application/src/template/clash_tests.rs::native_clash_merge_groups_and_escaped_regexes_are_supported"
@@ -1349,6 +1403,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-yaml/tests/generated.rs::generated_validation_catches_tail_errors_tags_aliases_and_nested_duplicates"
         - "tests/e2e/functional/templates.api.spec.ts::FUNC-TEMPLATE-PIN"
         - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-VALIDATION"
         - "apps/server/tests/template_management.rs::gen015_failed_generation_preserves_old_active"
@@ -1383,6 +1438,9 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/tests/generation_safety/generated_yaml.rs::native_materialized_groups_can_exceed_template_input_limit"
+        - "crates/deve-sub-emitter/tests/mihomo_native_yaml.rs::trailing_native_block_scalars_remain_separate_from_proxies"
+        - "crates/deve-sub-emitter/tests/mihomo_native_yaml.rs::v3_rules_dns_and_tun_keep_string_scalars"
         - "tests/e2e/functional/templates.ui.spec.ts::FUNC-TEMPLATE-DIALOG"
         - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-ROUNDTRIP"
         - "apps/server/tests/template_management.rs::gen016_preview_matches_published_output"
@@ -1907,6 +1965,19 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-yaml/tests/bounds.rs::aliases_charge_the_exact_logical_value_budget_before_expansion"
+        - "crates/deve-sub-yaml/tests/bounds.rs::merge_overrides_cannot_hide_the_pre_merge_alias_cost"
+        - "crates/deve-sub-yaml/tests/bounds.rs::scalar_alias_bombs_fail_under_the_existing_template_budget"
+        - "crates/deve-sub-yaml/tests/bounds.rs::alias_jumps_are_bounded_even_below_the_value_byte_budget"
+        - "crates/deve-sub-yaml/tests/bounds.rs::value_depth_includes_aliased_subtrees_and_recursive_aliases_fail"
+        - "crates/deve-sub-yaml/tests/bounds.rs::general_source_depth_keeps_the_128_container_boundary"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::raw_outbound_count_is_checked_before_shadowtls_absorption"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::complete_document_errors_precede_entry_count_and_mapping"
+        - "crates/deve-sub-protocol/tests/xray_document.rs::explicit_family_preserves_shape_errors_and_validates_ignored_content"
+        - "crates/deve-sub-protocol/tests/xray_document.rs::xray_family_counts_every_raw_entry_after_complete_json_validation"
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_json_preserves_document_errors_before_wrapped_entry_limits"
+        - "crates/deve-sub-application/tests/parse_auto_json.rs::auto_json_keeps_byte_then_utf8_checks_before_dispatch"
+        - "crates/deve-sub-yaml/tests/parsing.rs::custom_tags_and_all_extra_document_content_are_rejected"
         - "crates/deve-sub-application/src/source/parse.rs::too_many_nodes_rejected"
         - "crates/deve-sub-application/src/source/parse.rs::max_nodes_accepted"
         - "crates/deve-sub-application/src/source/parse_bounds_tests.rs::yaml_alias_bomb_and_recursive_containers_fail_without_panicking"
@@ -2183,6 +2254,7 @@ cases:
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::mihomo_shadowtls_trojan_round_trip_semantic"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::mihomo_shadowtls_ss_round_trip_semantic"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::singbox_shadowtls_round_trip_semantic"
+        - "crates/deve-sub-protocol/tests/auto_json.rs::shared_shadowtls_wrapper_before_or_after_inners_keeps_order_credentials_and_tls"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_mihomo_accepts_shadowtls"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_singbox_accepts_shadowtls"
         - "crates/deve-sub-protocol/tests/shadowtls_round_trip.rs::compat_xray_excludes_shadowtls"
@@ -2353,6 +2425,9 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "tests/e2e/functional/dashboard.ui.spec.ts::FUNC-DASHBOARD-STATES"
+        - "tests/e2e/functional/dashboard.ui.spec.ts::FUNC-DASHBOARD-HISTORY"
+        - "tests/e2e/functional/dashboard.ui.spec.ts::FUNC-DASHBOARD-CHART"
         - "apps/server/tests/traffic_history.rs::traffic002_history_api_continuous_with_gaps"
         - "apps/server/tests/traffic_history.rs::traffic002_history_api_global_aggregation"
         - "apps/server/tests/traffic_history.rs::traffic002_history_api_invalid_subscription_id"
@@ -2431,6 +2506,9 @@ cases:
     fixtures: ["tests/e2e/functional/fixture.ts"]
     evidence:
       tests:
+        - "tests/e2e/functional/subscription-actions.ui.spec.ts::FUNC-SUB-ACTIONS"
+        - "tests/e2e/functional/subscription-actions.ui.spec.ts::FUNC-SUB-DIALOG"
+        - "tests/e2e/functional/subscription-focus.ui.spec.ts::FUNC-SUB-COMPLETION"
         - "apps/server/tests/subscription_management/integer_bounds.rs::out016_integer_bounds_reject_overflow_without_mutation"
         - "tests/e2e/functional/subscription-forms.ui.spec.ts"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-SUB-CREATE"

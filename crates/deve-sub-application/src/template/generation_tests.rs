@@ -13,6 +13,30 @@ fn validate_output_accepts_valid_yaml() {
 }
 
 #[test]
+fn validate_output_checks_yaml_after_proxies_and_document_end() {
+    for yaml in [
+        "proxies: [{}]\ndns: [unfinished",
+        "proxies: [{}]\n---\nproxies: [{}]",
+        "proxies: [{}]\nproxies: [{}]",
+        "proxies:\n  - name: test\n    plugin-opts:\n      mode: tls\n      mode: http\n",
+    ] {
+        assert!(matches!(
+            validate_output(yaml, ProfileKind::Mihomo),
+            Err(TemplateAppError::EmptyOutput)
+        ));
+    }
+}
+
+#[test]
+fn validate_output_generated_yaml_is_not_capped_by_source_input_size() {
+    // Generated subscriptions combine many sources. Their existing output
+    // boundary must not acquire a single-download input limit during migration.
+    let name = "n".repeat(deve_sub_yaml::Limits::SOURCE.input_bytes + 1);
+    let yaml = format!("proxies:\n  - name: \"{name}\"\n");
+    assert!(validate_output(&yaml, ProfileKind::Mihomo).is_ok());
+}
+
+#[test]
 fn validate_output_accepts_valid_json() {
     let json = r#"{"outbounds":[]}"#;
     assert!(validate_output(json, ProfileKind::SingBox).is_ok());

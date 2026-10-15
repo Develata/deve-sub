@@ -241,7 +241,7 @@ async fn import_nodes(
     admin: AdminUser,
     Json(req): Json<ImportNodesRequest>,
 ) -> Result<Json<ImportNodesResponse>, (StatusCode, Json<ErrorResponse>)> {
-    if req.content.is_empty() {
+    if req.content.trim().is_empty() {
         return Err(err(
             StatusCode::BAD_REQUEST,
             "invalid_input",
@@ -251,8 +251,10 @@ async fn import_nodes(
 
     let source_type = source_type_from_dto(req.source_type);
     let parsed =
-        source::parse_for_import(source_type, None, req.content.as_bytes()).map_err(|e| {
-            tracing::warn!(error = %e, "import parse failed");
+        source::parse_for_import(source_type, None, req.content.as_bytes()).map_err(|_| {
+            // WHY: parser errors can quote submitted credentials. Keep the
+            // diagnostic event without recording any part of the payload.
+            tracing::warn!("import parse failed");
             err(
                 StatusCode::BAD_REQUEST,
                 "parse_failed",
@@ -272,15 +274,20 @@ async fn import_nodes(
             )
         })?;
 
-    let outcomes = result
-        .outcomes
-        .into_iter()
-        .map(|o| match o {
-            ImportOutcome::Inserted(id) => ImportOutcomeDto::Inserted(id.to_string()),
-            ImportOutcome::Duplicate(id) => ImportOutcomeDto::Duplicate(id.to_string()),
-            ImportOutcome::Failed(raw) => ImportOutcomeDto::Failed(raw),
-        })
-        .collect();
+    let mut persisted_outcomes = result.outcomes.into_iter().map(|o| match o {
+        ImportOutcome::Inserted(id) => ImportOutcomeDto::Inserted(id.to_string()),
+        ImportOutcome::Duplicate(id) => ImportOutcomeDto::Duplicate(id.to_string()),
+        ImportOutcome::Failed(raw) => ImportOutcomeDto::Failed(raw),
+    });
+    let mut outcomes = Vec::with_capacity(persisted_outcomes.len() + parsed.failed.len());
+    // WHY: storage receives only parsed nodes. Merge failed entries at their
+    // original positions so the admin can match each outcome to the input.
+    for (position, raw) in parsed.failed_positions.into_iter().zip(parsed.failed) {
+        let preceding = position - outcomes.len();
+        outcomes.extend(persisted_outcomes.by_ref().take(preceding));
+        outcomes.push(ImportOutcomeDto::Failed(raw));
+    }
+    outcomes.extend(persisted_outcomes);
 
     // WHY: `result.failed` is always 0 because `import_nodes` receives only
     // pre-parsed nodes; failed lines are tracked in `parsed.failed` instead.

@@ -41,6 +41,39 @@ use deve_sub_domain::{Host, Node, ProtocolConfig, ProtocolKind, TlsConfig, Unsup
 
 use crate::error::ParseError;
 
+/// Parse a complete JSON document, detecting sing-box or Xray outbound shape.
+///
+/// Any `type` key selects sing-box. Only `protocol` keys without a `type` key
+/// select Xray; empty and unmarked lists retain the sing-box fallback.
+///
+/// # Errors
+/// Returns [`ParseError::InvalidJson`] before container checks for malformed JSON.
+/// Returns [`ParseError::MissingContainerKey`] for absent or non-list `outbounds`.
+/// Returns [`ParseError::TooManyEntries`] when the raw outbound count exceeds
+/// [`MAX_ENTRIES`], including wrappers absorbed into other nodes.
+pub fn parse_auto_json(text: &str) -> Result<Vec<Node>, ParseError> {
+    let value: Value =
+        serde_json::from_str(text).map_err(|e| ParseError::InvalidJson(e.to_string()))?;
+    // WHY: both dialects preserve unknown entries, so success cannot detect the
+    // format. Count raw entries before mapper setup and keep any `type` key's
+    // precedence, even when null or mixed with `protocol` entries.
+    let is_xray = match value.get("outbounds").and_then(Value::as_array) {
+        Some(outbounds) => {
+            check_entry_count(outbounds.len())?;
+            !outbounds.iter().any(|entry| entry.get("type").is_some())
+                && outbounds
+                    .iter()
+                    .any(|entry| entry.get("protocol").is_some())
+        }
+        None => false,
+    };
+    if is_xray {
+        xray_v2ray::parse_xray_v2ray_value(&value, "xray-json")
+    } else {
+        singbox::parse_singbox_value(&value)
+    }
+}
+
 /// Extract an optional string field from a JSON value.
 pub(crate) fn get_str(v: &Value, key: &str) -> Option<String> {
     v.get(key)?.as_str().map(String::from)

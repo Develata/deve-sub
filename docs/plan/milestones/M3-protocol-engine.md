@@ -90,6 +90,19 @@ Each protocol has a dedicated parser module. The top-level `parse_uri`
 dispatches on the URI scheme (`vless://`, `hysteria2://`, `hy2://`, `tuic://`,
 `naive+https://`, `ss://`, `vmess://`, `trojan://`).
 
+### Container detection and YAML projection
+
+Automatic JSON source/import detection distinguishes outbound `type` (sing-box)
+from `protocol` (Xray). Any `type` wins when formats are mixed; protocol-only
+lists select Xray, while empty/unmarked lists keep the previous sing-box fallback.
+The decision is structural and does not depend on how many protocols the
+selected parser supports. Unknown outbounds retain their raw inspection data.
+PARSE-007/008 and NODE-001 cover this boundary through both import and refresh.
+
+Mihomo source YAML uses the shared adapter's JSON projection: scalar keys retain
+their spelling, duplicate keys keep the last value, and `<<` remains ordinary
+data. Template merge semantics belong to M5 and must not leak into this parser.
+
 ### Emitter interface
 
 ```rust

@@ -2,7 +2,7 @@
 
 机器证据绑定在 `tests/acceptance/matrix.yaml`；此处解释测试维度及其限度。
 主代理负责实现和真实执行，只读审查按每轮涉及的后端或 UI/验收边界复核。
-范围是 M4/M5/M6/M7 中已复现的管理操作，以及 M10 的日志查询、清理与回收。日志索引迁移和 Compose 轮转各有单独验收；本矩阵不执行远端发布。
+范围是 M4/M5/M6/M7 中已复现的管理操作，以及 M10 的仪表盘呈现、日志查询、清理与回收。日志索引迁移和 Compose 轮转各有单独验收；本矩阵不执行远端发布。
 
 ## 执行与隔离
 
@@ -32,11 +32,16 @@ run UUID 和 test/project 分目录保留 JSON、失败 trace、截图及服务�
 API 竞争用真实 Promise.all，链路用例重复 8 轮；源配置交错使用 Notify 屏障，
 UI 乱序用受控响应释放顺序，不依赖固定 sleep。
 
+共享导航助手在判断移动端侧栏是否展开前，等待响应式样式生效：未加载样式的
+`aside` 默认可见，不能据此跳过 Menu 按钮。等待条件检查侧栏的布局状态，仍通过
+真实按钮和导航项完成操作，不强制点击隐藏元素，也不放宽动作超时。
+
 ## 场景
 
 API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运行一次，
-共 83 项（15 API + 34 × 2 浏览器）。每项检查最终状态或用户实际可执行的操作，
-不能只把 HTTP 请求发出当成通过。
+当前清单共 111 项（15 API + 48 × 2 浏览器，可用 `test --list` 核对）。
+清单数量不是单轮执行结果。每项检查最终状态或用户实际可执行的操作，不能只把
+HTTP 请求发出当成通过。
 
 | 场景标识 | 绑定 | 维度/操作 | 必须成立的结果 |
 |---|---|---|---|
@@ -46,6 +51,9 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 | FUNC-CHAIN-RACE | NODE-017/018 | A→B 与 B→A 并发写入 | 一个成功、一个冲突，最终图无环 |
 | FUNC-NODE-FILTER | NODE-004/006 | 并发启停与地区修改、筛选 | 两字段均保留；计数按唯一节点；筛选与有效值一致 |
 | FUNC-IMPORT-RACE | NODE-001/003 | 四次同时导入同样节点 | 相同身份，池内数量不增殖，无 SQLite 517 错误 |
+| FUNC-IMPORT-PENDING | NODE-001 | 导入挂起、重复提交、Escape、503 后重试 | 锁定草稿和取消；只发一次请求；失败保留输入，重试实际保存 |
+| FUNC-IMPORT-RETURN | NODE-001/UI-010 | 成功后 Escape 返回 | 节点列表已刷新，焦点返回导入入口 |
+| FUNC-IMPORT-LAYOUT | NODE-001/UI-009/010 | 390×420、空白内容、Tab 循环及 Escape | 面板不超出视口、错误可见、焦点留在窗口内并可返回 |
 | FUNC-TAG-MODES | NODE-005 | Web 批量移除与空替换 | 移除保留其余标签，空替换清空 |
 | FUNC-TAG-EDIT | NODE-005 | 打开已有成员并清空 | 预选与存储一致，清空真正持久化 |
 | FUNC-TAG-MANAGE | NODE-005/UI-009 | 创建、改名/色标、批量添加、筛选、删除 | 列表与持久成员一致，色标可见，页面不横向溢出 |
@@ -80,17 +88,49 @@ API 行各运行一次；浏览器行在桌面 Chromium 与 Pixel 5 视口各运
 keep_on_fail 策略，旧任务失败不能覆盖新字段或禁用源。有效刷新租约期间编辑返回
 409；快照和任务完成状态同事务发布，配置更新清除旧 ETag。
 
+## 前端状态与可达性补充（M4/M6/M10）
+
+下列标识均为测试标题的首个符号；路径相对仓库根目录。它们补充现有 case 的
+Web 证据，不改变 TRAFFIC-002 的历史查询语义或 OUT-016 的订阅管理语义。
+
+| 测试入口 | 绑定 | 维度/操作 | 必须成立的结果 |
+|---|---|---|---|
+| `tests/e2e/functional/dashboard.ui.spec.ts::FUNC-DASHBOARD-STATES` | TRAFFIC-002/UI-009/010 | 两请求挂起，汇总 503、历史成功，再单独重试汇总 | 等待和错误不伪报零；成功历史保留；仅重试失败请求；真正零值显示 `0 B` |
+| `tests/e2e/functional/dashboard.ui.spec.ts::FUNC-DASHBOARD-HISTORY` | TRAFFIC-002/UI-009 | 汇总成功，历史 503 后重试为空 | 错误与空历史提示分开，汇总值保留且不重复请求 |
+| `tests/e2e/functional/dashboard.ui.spec.ts::FUNC-DASHBOARD-CHART` | TRAFFIC-002/UI-002/009 | 30 天受控值、中英文、浅深色主题、强调色覆盖 | 日期范围、UTC 日期表头、IEC 单位和文字图例可读，上传有纹理，每日数值表完整，页面无横向溢出，纵向滚动不超出可见内容/视口范围 |
+| `tests/e2e/functional/subscription-actions.ui.spec.ts::FUNC-SUB-ACTIONS` | OUT-016/UI-009/010 | 常用动作、键盘展开、重生成和删除的取消/确认 | 44px 常用按钮在视口内，六个既有动作可达；确认说明名称和后果、默认取消；取消不写入，确认后真实链接/删除结果成立 |
+| `tests/e2e/functional/subscription-actions.ui.spec.ts::FUNC-SUB-DIALOG` | OUT-016/UI-009/010 | 390×420，注入链接、summary、tabindex、可编辑与不可编辑内容及隐藏/禁用项 | 窗口有界，Tab/Shift+Tab 边界正确，禁用 fieldset、关闭 details、inert 与不可见内容不进入顺序，Escape 返回编辑入口 |
+| `tests/e2e/functional/subscription-focus.ui.spec.ts::FUNC-SUB-COMPLETION` | OUT-016/UI-009/010 | 创建、轮转、临时链接各自挂起、503、键盘重试与复制；420px 高视口 | 等待、失败和一次性链接均接收窗口内焦点；草稿保留、键盘重试真实保存，链接可获取内容，复制值正确，关闭返回入口 |
+| `tests/e2e/functional/node-table.ui.spec.ts::FUNC-NODE-TABLE` | UI-008/009/010 | 真实导入 10,000 节点，首尾虚拟行、窄屏键盘滚动、行内操作与筛选 | 六列语义完整，含表头总数为 10,001、首末位置为 2/10,001；渲染不超过 24 行、元素少于 500；筛选后总数/位置更新，操作可达，页面无横向溢出 |
+| `tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SOURCE` | NODE-004/005 | 列表换源和缩短、刷新 503 后沿非空 cursor 续页 | 已加载行和选择保留，失败不丢 cursor；索引位置变化后批量请求仍只包含当前匹配 ID |
+| `tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-CONTENT` | NODE-005 | 相同索引、相同分类统计，行内容变化且目录响应延迟 | 名称、状态、地区和标签即时更新；分类身份和目录更新独立，计数一致 |
+| `tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-SELECT-NOW` | UI-008/NODE-004 | 同一任务内输入再点击选择；选择 50 个已加载节点 | 批量请求使用点击时筛选结果；全选覆盖全部匹配节点，超过虚拟窗口的部分也包含 |
+| `tests/e2e/functional/node-projection.ui.spec.ts::FUNC-NODE-PROJECTION-FILTERS` | NODE-004/005 | 空源后加载、Unicode 搜索、协议/分类/地区/状态交集 | 每个依赖更新结果；普通筛选保留显式选择，切换分类清空选择，统计基于全部已加载节点 |
+
+功能投影见 [仪表盘流量](../features/dashboard.md) 与
+[节点整理与管理操作](../features/node-organization.md)。
+
 ## 证据边界
 
 标签、覆盖、分页、模板和订阅使用真实 CLI、REST、SQLite 与生产 WASM。
-仅 FUNC-SOURCE-JOBS 的刷新/任务传输被控制，用于 UI 状态验证；真实刷新失败和
+FUNC-SOURCE-JOBS 的刷新/任务传输被控制，用于 UI 状态验证；真实刷新失败和
 并发配置保护由 Rust 集成测试补充。超时和乱序测试同样只控制传输，使用真实
 页面代码。用户和订阅表单用受控 503 验证失败恢复，重试通过真实 API 保存。
 订阅获取成功不等于已导入真实代理客户端。
 
+仪表盘用例控制汇总和历史响应以复现等待、503、零值、空列表及固定图表数据，
+执行的仍是生产 WASM。它们只证明状态与呈现；历史聚合和无记录日期补零继续由
+TRAFFIC-002 的服务端测试证明。虚拟表格记录浏览器可访问性树，模态用例验证
+真实键盘焦点与选择的 DOM 边界；没有运行真实读屏软件，不宣称 WCAG 认证。
+
 分类分页用例用真实节点响应构造小页，专门验证 Web 的目录与分页边界；目录
 仍由真实 API 提供。目录错误和乱序只控制传输。参考项目的展开分类入口予以
 采用；拖拽重排和点击即自动勾选不在本次范围，Deve Sub 保持显式批量选择。
+
+节点派生状态用例通过受控列表快照复现换源、相同索引内容更新和空源恢复，
+使用真实节点身份检查提交的批量目标。SELECT-NOW 使用真实列表和批量接口；
+同一页面任务内的相邻事件专门覆盖下次渲染前的窗口。它们验证状态一致性，
+不代替服务端筛选或性能预算测试。
 
 既有 Playwright 生命周期、鉴权、主题、键盘、移动端和 10,000 节点套件继续保留。
 协议兼容、长时间 soak、Docker/arm64 和其他浏览器引擎不由本组测试代替。

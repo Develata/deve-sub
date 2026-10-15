@@ -7,6 +7,12 @@ unknown username, a wrong password or an inactive account. Failure counters
 cover both username and canonical client IP. Excess password verification
 work returns 429 instead of growing an unbounded Argon2 workload.
 
+Enabling 2FA saves the enabled state and recovery codes together. A setup or
+verification still in flight cannot overwrite a newer enrollment. Disabling
+2FA and regenerating codes likewise preserve a later enrollment; failed writes
+leave the previous active state intact. Simultaneous regenerations for the
+same enrollment leave only the last saved batch valid.
+
 Session cookies are HttpOnly and SameSite=Lax. Deploy remote access behind
 HTTPS and set `security.cookie_secure = true`; plain local HTTP remains
 supported. Leave `security.trust_proxy_headers = false` for direct access.

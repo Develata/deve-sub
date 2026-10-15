@@ -1085,3 +1085,440 @@ was observed in the remote logs. Independent review confirmed the mount/input
 boundary. Remote follow-up results remain attached to
 [PR #13](https://github.com/Develata/deve-sub/pull/13) and its release preflight;
 local success alone does not promote the candidate to a release.
+
+## Bounded dependency and import review (2026-10-13)
+
+Starting `main` was verified against the remote at
+`0afc5c15d6f0b724c8799f712fde4841e1972b6c`; work is on
+`fix/bounded-quality-2026-10-13`. Scope: Quinn advisory remediation, M4 manual
+import (NODE-001, UI-009/010), UI-001 product title, and the existing SQLite
+index/restore regression. Main owner implemented and verified; independent
+`bounded_review` (GPT-6-astra, max) reviewed the changed slice and real browser
+paths. Its pending-result focus finding was reproduced, fixed, and rechecked;
+there are no unresolved code review findings. No remote write or deployment
+was performed.
+
+Existing defects and bounded changes:
+
+- `quinn-proto` 0.11.16 hit RUSTSEC-2026-0338 through 0342 in
+  [scheduled CI 38330711644](https://github.com/Develata/deve-sub/actions/runs/38330711644).
+  The lockfile now pins 0.11.18, meeting the combined patched-version minimum.
+  No unrelated dependency edge or policy exception changed.
+- Whitespace imports previously returned 200 for some formats. They now return
+  400 `invalid_input` before persistence. The regression checks ASCII/Unicode
+  whitespace, four formats, unchanged pool revision, an empty pool, and a
+  subsequent valid import. Import dialogs now retain pending drafts, reject
+  repeated submission/dismissal, recover after errors, refresh the list on
+  success, and preserve keyboard focus in a bounded scrolling viewport.
+- The SQLite test failed on the third baseline repetition and again with a
+  deliberately retained pre-migration reader. `EXPLAIN` on that pooled
+  connection observed stale schema/statement state. The test now executes a
+  real lookup to synchronize schema and prepares an uncached `EXPLAIN`, while
+  retaining the exact covering-index assertion on both upgrade and restore.
+  This is a test correction, not a database implementation or performance fix.
+- The generated page title appended the Dioxus default to `Deve Sub`.
+  `index.html` remains its single owner; the build config suppresses the
+  appended default and UI-001 asserts the exact resulting title.
+
+Executed evidence (logs retained in the handoff, initially under
+`/tmp/deve-sub-review-20261013`):
+
+| Gate | Actual result |
+| --- | --- |
+| `cargo fmt --all -- --check` | pass |
+| `cargo check --locked --workspace --all-targets --all-features` | pass |
+| `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` | pass |
+| `cargo test --locked --workspace --all-targets --all-features` | 1,114 passed, 0 failed, 8 ignored; 99 suites |
+| `cargo test --locked --workspace --all-features --doc` | pass; 14 library suites, zero runnable examples |
+| Node API integration target | 16/16 passed, including the new whitespace regression |
+| Final compiled SQLite index regression repeated | 30/30 passed |
+| Native debug/release and production WASM builds | pass; existing WASM warnings remain |
+| Functional Playwright suite, desktop/mobile/API | 89/89 passed, 3.8 minutes, zero retries |
+| Final import/source browser regressions | 10/10 passed, 10.4 seconds, zero retries |
+| Existing browser setup/auth/theme/mobile/10k-node suite | 16/16 passed, 32.6 seconds, zero retries |
+| Final UI-001 exact-title regression | 1/1 passed, 3.9 seconds |
+| Browser process lifecycle suite | 3/3 passed |
+| Docs / architecture / generated OpenAPI | pass; 157 cases, 512 references, 16 crates; exported OpenAPI matches byte-for-byte |
+| `cargo run --locked -p deve-sub-ci -- inventory` | pass; 9 Rust shards, 16 packages, 4 browser lanes |
+| `python3 -m unittest discover -s scripts/ci/tests` | 15/15 passed |
+| `cargo deny --locked check` with cargo-deny 0.20.2 | **fail**: RUSTSEC-2024-0449 only; bans, licenses and sources pass |
+
+The 89-case run preceded the final mounted-focus/title changes. The final
+production WASM build, 10 affected browser cases, and separate UI-001 run cover
+those last changes; the earlier full run is not represented as an exact-final
+tree rerun. Functional fixtures assert zero uncaught JavaScript exceptions;
+controlled 503/other error responses remain expected fault-injection evidence.
+The first legacy attempt with the debug server timed out while seeding 10,000
+nodes; the unchanged suite passed with the optimized binary and original
+deadlines. This does not establish a performance guarantee.
+
+Environment and remaining non-pass states:
+
+- Official Playwright Chromium installation reached `cdn.playwright.dev` but
+  redirected to `storage.googleapis.com`, which returned a domain-policy 403.
+  No network permission was expanded. Browser evidence uses existing system
+  Chromium 154.0.8037.57 with Playwright 1.62.1 via temporary configs; bundled
+  Chromium 151, other engines and screen readers were not tested. Desktop,
+  Pixel 5 and a 390×420 CSS-pixel viewport were exercised and screenshots
+  inspected; no blank page or framework error overlay was observed.
+- [RUSTSEC-2024-0449](https://rustsec.org/advisories/RUSTSEC-2024-0449.html)
+  reports `unsafe-libyaml` unmaintained with no patched release. It enters via
+  `serde_yaml`; changing to `serde_yaml_ng` alone retains that dependency.
+  YAML parsing/emission spans 16 Rust source files, including mapping order,
+  aliases/merge keys, and size/depth defenses. A compatible migration needs a
+  separate reviewed slice. This round adds no advisory ignore, disables no
+  check, and does **not** satisfy the dependency/merge gate.
+- Eight normal Rust ignores remain: seven external Mihomo/sing-box/Xray
+  validator cases and one real-process soak. They were not run separately.
+  Installer/updater isolation, Docker/ARM64, native VM, remote CI and live proxy
+  connectivity were not rerun for this slice. The matrix's 153 historical pass
+  and 4 not-run states are not claims of fresh execution.
+
+## Reviewed frontend, backend and YAML follow-up (2026-10-13)
+
+This authorized follow-up retains the five commits from the preceding bounded
+round on `fix/bounded-quality-2026-10-13`. Starting and rechecked remote `main`
+remain `0afc5c15d6f0b724c8799f712fde4841e1972b6c`. The passing dependency gate
+below supersedes the preceding checkpoint's unresolved YAML advisory; the old
+record remains historical evidence, not the current dependency status.
+
+Confirmed existing defects and resulting behavior:
+
+- 2FA enable/disable/recovery-code changes now compare the stored enrollment
+  generation and commit user state, secret state and recovery codes together.
+  Ten deterministic interleaving/rollback tests cover stale setup, duplicate
+  enable, stale disable/regeneration and owner mismatch. DTOs and schema are
+  unchanged.
+- Auto JSON imports select the outbound schema by structural keys. Unsupported
+  Xray entries no longer make a successful sing-box parse mask the real format.
+  Parse failures and persisted outcomes retain original input order; handler
+  logs do not echo raw parser diagnostics. OpenAPI is regenerated from code.
+- Dashboard sections distinguish loading, failure and empty success and retry
+  independently. Dates, IEC units and a text alternative explain the existing
+  traffic data. Subscription actions expose consequences before destructive
+  requests, maintain pending/completion focus, and keep primary actions visible.
+  Virtual node rows retain keyboard scrolling and row-count/index semantics.
+- The lockfile retains `quinn-proto` 0.11.18 and removes `serde_yaml` and
+  `unsafe-libyaml`. No advisory ignore or other policy exemption was added.
+
+YAML migration scope and maintenance cost:
+
+The new technical leaf crate contains 1,582 source lines in nine modules.
+It uses `granit-parser` 1.3.0 for syntax events and `serde-saphyr` 1.3.0 with
+only its serialization feature. It does not copy a lexer or enable includes,
+environment interpolation or source-snippet errors. The owned compatibility
+surface is ordered Value/Number/Serde semantics, legacy scalar resolution,
+pre-expansion alias cost/depth checks, separate source JSON projection and
+complete generated-document validation. Those contracts carry continuing
+maintenance cost; passing test counts alone do not establish compatibility.
+
+Independent probes compared old bounded parsing, old source JSON projection
+and old `serde_yaml::from_value` with their corresponding new entry points.
+The corpus covers scalar/tag/range boundaries, duplicate and complex keys,
+merge ordering, anchor rebinding, resource limits, collection/enum conversion,
+serialization and complete publication output. It explicitly preserves raw
+source keys, last-key-wins source objects, ordinary source `<<`, and ordered
+template merge behavior. Both reviewers found the concentrated boundary
+justified; no consumer duplicates its compatibility policy.
+
+Known compatibility differences are deliberate and documented in M5 and the
+template feature guide: ambiguous compact flow `?` entries fail with guidance
+to separate the indicator or quote literal text; Tab-only `{?\t}` and some
+unindented quoted continuations remain parser limitations. A bare `?` at end
+of input is also rejected. Literal NEL/LS/PS are rejected even inside comments,
+where changing line termination could swallow a following key. Double-quoted
+Unicode escapes preserve the intended characters. Historical serialized LS/PS
+text may need editing and resaving with escapes. Nonstandard URI tags that the
+old loader ignored are now rejected under the existing no-custom-tags contract.
+Omitted keys follow YAML 1.2 and rebound anchors use the latest definition,
+correcting a previous loader result. Normal quoted text, comments, URLs and
+password strings containing question marks or Tabs have positive regressions.
+
+Review and final-tree evidence:
+
+Two independent lanes reviewed the actual final diff in each of two rounds.
+R1 found Unicode line-break reinterpretation, including comment termination;
+the shared input guard and cross-entry regressions closed it. R2 found a
+connected omission in the hand-written Mihomo string emitter; escaping LS/PS
+closed native/V3 publication and exact-string round trips. Independent API
+probes verified that deep generated duplicate keys preserve last-good output
+for both template types. Final screenshot inspection then found the hidden
+table's intrinsic height adding blank page scroll. Its wrapper fix failed the
+new assertion on both old desktop/mobile builds and passed on both new builds;
+an independent Chromium accessibility-tree check retained the table and all
+30 rows. All accepted code findings are closed.
+
+The final reviewed implementation manifest covers 111 paths, SHA-256
+`38986a88179f92d256c606e07c2a503caf14a6c4eb5310c43916d0a1d450554b`.
+This appended evidence record is documentation-only and is checked separately.
+
+| Final local gate | Actual result |
+| --- | --- |
+| `cargo fmt --all -- --check` | pass |
+| `cargo clippy --locked --offline --all-targets --all-features -- -D warnings` | pass |
+| `cargo test --locked --offline --all-targets --all-features` | 1,192 passed, 0 failed, 8 ignored; 109 suites |
+| `cargo test --locked --offline --all-features --doc` | 15 suites passed; zero runnable examples |
+| Seven ignored Mihomo/sing-box/Xray validator tests, run explicitly | 7/7 passed with repository-pinned, checksum-verified clients |
+| Production backend/Web builds, WASM check, CSS regeneration | pass; generated CSS unchanged on regeneration |
+| Generated OpenAPI comparison | byte-for-byte match |
+| Playwright legacy / functional / lifecycle | 16/16, 103/103, 3/3; zero skips, retries or flaky results |
+| Functional project coverage | API 15, desktop 44, mobile 44 |
+| Release process soak, 90 seconds with required telemetry | pass: 2,870 cycles, 13,625 requests, zero unexpected failures/error logs |
+| Docs and acceptance bindings | 157 cases, 564 symbol references; all checks pass |
+| Architecture and CI inventory | 17 packages, 9 Rust shards, 4 browser lanes; pass |
+| Architecture / CI Python / soak-unit / health-deadline tests | 10/10, 15/15, 1/1, 2/2 |
+| `cargo deny --locked check` | advisories, bans, licenses and sources all pass |
+
+The release binary SHA-256 is
+`90d1f9044d2366498bf6356b710813b165614bf3885b2a9a7acba20b0c8c6a23`;
+the final Web file-manifest SHA-256 is
+`bd25ec31c07e5df99cdda565167b25a3045ca7ec71d0a64b6630fa45580b99c4`.
+Browser execution checks both identities before and after the suite. Real
+clients are Mihomo 1.19.0, sing-box 1.13.14 and Xray 26.3.27. Their config checks
+do not establish live proxy connectivity. The short soak checks the existing
+bounded envelopes and is not a performance improvement or long-term leak claim.
+
+Environment boundaries and non-pass states at this local checkpoint:
+
+- An initial complete Rust build exhausted the 32 GiB workspace volume. Only
+  rebuildable incremental output was removed; source and evidence were kept.
+  Final Rust gates use `CARGO_INCREMENTAL=0`, `CARGO_PROFILE_DEV_DEBUG=0` and
+  `CARGO_PROFILE_TEST_DEBUG=0`; no tests or assertions were disabled.
+- The first real Mihomo check failed before config parsing because its default
+  config directory was read-only. All seven checks subsequently passed with
+  `XDG_CONFIG_HOME` pointing to a temporary writable directory; no fixture or
+  assertion changed.
+- Official browser installation remains blocked by the previously recorded
+  redirect-domain restriction. Actual final evidence uses system Chromium
+  154.0.8037.57 and Playwright 1.62.1. Bundled Chromium 151, other engines and
+  real screen-reader software were not tested; no new domain was authorized.
+- Isolated installer smoke could not start under the default sandbox because
+  bubblewrap's UID mapping is read-only (zero test bodies ran). This is a local
+  environment blocker, not a passing check. Docker client and daemon read-only
+  queries return 28.4.0, but Docker acceptance checks were not run locally and
+  remain for the authorized work-branch CI. Native VM/systemd, signed-update
+  deployment, ARM64 runtime and long soak were not run locally for this follow-up.
+- The workflow additionally accepts only this exact work branch for push
+  events so an authorized branch push can run its existing complete baseline.
+  Permissions, required jobs and release triggers are unchanged. Remote branch
+  SHA and terminal CI evidence, if authorized and available, belong in the
+  external handoff; this local record does not assert remote CI completion.
+
+The final tracked and untracked change set passed a redacted, context-reviewed
+sensitive-information scan. Screenshots use disposable synthetic fixtures;
+no database, master key, storageState, real credential or production state is
+part of the patch. The matrix's historical 153 pass / 4 not-run statuses still
+do not claim every registered case was freshly executed.
+
+### 2026-10-13 — bounded ownership and node-list follow-up
+
+This follow-up starts at `56e81b8fc8d6694962080a03cead98e824050c10`
+on its own work branch. It changes only Auto JSON dispatch, existing cache/node
+ownership, and node-page derived projections. Two design counter-review rounds
+preceded implementation; two actual-diff review rounds found no unresolved
+product blocker. R1 strengthened the existing cache activation/preview test and
+completed acceptance bindings. R2 corrected an external RSS summary label and
+retained adverse measurements rather than treating them as successful budgets.
+
+The new immediate-filter/select regression fails on the frozen old UI in both
+desktop and mobile: filtering to one node and selecting in the same event task
+sends the previous 50 IDs. The current UI sends the current single ID. Its other
+regressions cover list replacement, content changes with identical projected
+indices, empty-source subscriptions, all filter inputs, category clearing,
+pagination errors and loaded matches beyond the visible window. The previous
+design and server-owned state boundaries remain in place.
+
+| Final local gate | Actual follow-up result |
+| --- | --- |
+| Format, locked all-target check and Clippy with warnings denied | pass |
+| Locked all-target/all-feature Rust tests | 1,202 passed, 0 failed, 8 ignored; 110 suites; 21 Criterion test-mode checks |
+| Doc tests | 15 suites passed; zero runnable examples |
+| Explicit ignored Mihomo/sing-box/Xray validators | 7/7 passed with the previously pinned clients |
+| Production backend/Web builds and WASM check | pass; final production source/artifact identities unchanged through runtime checks |
+| CSS regeneration and generated OpenAPI | unchanged; byte-for-byte OpenAPI match |
+| Playwright functional / legacy / lifecycle | 111/111, 16/16, 3/3; no skips, retries or flaky results |
+| Functional project coverage | API 15, desktop 48, mobile 48 |
+| Release process soak, 90 seconds with required telemetry | 3,114 cycles, 14,766 requests, zero unexpected failures/error logs |
+| Docs / architecture / inventory | 157 cases, 580 symbol references; 17 packages, 9 Rust shards, 4 browser lanes; pass |
+| Architecture / CI Python / soak-unit / health-deadline tests | 10/10, 15/15, 1/1, 2/2 |
+| `cargo deny --locked check` | advisories, bans, licenses and sources pass; the same 11 tool workspace-span diagnostics remain |
+
+The frozen release binary SHA-256 is
+`58b36aad8450bdff0db5355b30a4c27645a27cc25516cef0eacd9190d3bf85a0`.
+No dependency or security exception changes are made in this follow-up.
+The exact work branch is added to the existing CI push filter; permissions,
+required jobs and release triggers are unchanged. Remote SHA and terminal CI
+proof, when available, are separate handoff evidence; this local checkpoint
+does not assert their completion.
+
+Performance evidence is bounded and descriptive. Three interleaved native
+rounds retain 288 process runs and 9,360 sample records, with uninstrumented
+latency separate from allocator instrumentation. All 120 complete normalized
+JSON outcomes agree. At 10k entries, Auto sing-box/Xray parse-plus-drop P50 is
+27.00/49.25 to 17.63/31.61 ms; cached generation is 2.163 to 1.571 ms, with
+cumulative Rust allocation traffic 3,455,273 to 1,181,732 bytes. These are not
+whole-request, live-heap or overall-memory claims.
+
+Costs remain explicit: 10k Auto Xray RSS after 40 operations and result drops
+rises from about 54.7 to 61.6 MB; at 1k it rises about 3.45 MB. Native 10k
+uncached pooled P50 rises 4.40%, and 1k cached rises 4.65%. Three HTTP AB/BA/AB
+pairs (312 timed samples, 552 requests, 48 clean server lifecycles) preserve
+same-input/output checks but do not cancel those observations: 1k uncached
+pooled P50 rises 18.79%, and 10k duplicate import rises 13.51%, with mixed
+per-round directions and variable unchanged controls. Stable cross-entry
+uncached or complete-import acceleration is not established; a real regression
+is not excluded. Ownership changes are retained for their narrow, reviewed
+removal of copies, with no extra query, cache or transaction policy changes.
+
+UI-only ABBA runs pass 16/16 and verify all 112 replayed response bodies. For
+10k desktop small-step scrolling, Script/Task duration is 632.98/701.83 to
+42.15/121.79 ms per fixed sequence; rAF p95 stays about 16.8 ms. Small searches
+can be slower by 0.05–0.60 ms, and 10k desktop post-GC renderer RSS is about
+0.53–0.80 MiB higher. This is not an FPS, physical-phone, API-load or overall
+memory improvement claim. Renderer RSS, JS heap and WASM capacity stay separate.
+
+Raw native counters also contain 332 non-monotonic reported VmHWM transitions
+across 113 of 288 runs, including both variants and controls. The largest is
+663,552 bytes; the cause remains unexplained. The handoff retains these counters
+and the audit script, but does not infer precise peak live memory from them.
+RSS after warmup, after samples and after pool/runtime close are separately
+labeled. No long-term leak or statistical-significance claim is made.
+
+All three measurement lanes use serial isolated windows and synthetic data;
+no sample is silently rerun or removed. A transient executor transport loss did
+not restart the native comparison process. The original incomplete seed-export
+pilot remains excluded with its harness correction documented. Local browser
+evidence uses system Chromium 154; the previously blocked official-download
+redirect was not newly authorized. Other browser engines, real assistive
+technology, physical mobile hardware, installer/Docker acceptance, native VM,
+signed deployment and long-duration soak were not run locally for this follow-up.
+The historical PERF budget rows remain not-run; these measurements do not
+promote them to pass or justify broader rewrites.
+
+### 2026-10-14 — bounded regression convergence
+
+This round starts at `57a7714e2be9f862f9d000418cc356cac3d7cf32` on a separate
+work branch. Production backend code remains at that revision after rejecting
+an experimental owned-Xray document implementation. Three independent public
+parser regressions remain: ordered mixed entries and raw/TLS fidelity, complete
+document/shape validation, and the exact 10,000-entry boundary with error
+precedence. The acceptance matrix binds these to PARSE-007/008 and SEC-005.
+
+The shared browser navigation helper now waits for responsive CSS before
+deciding whether to open the mobile menu. An unstyled aside is visible before
+Dioxus inserts its stylesheet. A source/artifact-bound controlled reproduction
+makes the old helper fail at the hidden navigation item, while the fixed helper
+creates a subscription (201) and retrieves it (200). This agrees with the old
+main scheduled CI log, but the unavailable remote trace prevents a definitive
+claim about that historical run's sole cause. No retry, action-timeout relaxation
+or forced hidden-element click was added.
+
+| Final local gate | Actual result |
+| --- | --- |
+| Format, locked/offline workspace all-target/all-feature check and Clippy | pass; warnings denied |
+| Full Rust tests with the same workspace/target/feature selection | 1,205 passed, 0 failed, 8 ignored; 111 suites; 21 Criterion test-mode checks |
+| Doc tests | 15 suites passed; zero runnable examples |
+| Explicit ignored native client-validator tests | 7/7 passed with pinned, checksum-verified tools |
+| CI Python / soak-unit / health-deadline / architecture tests | 15/15, 1/1, 2/2, 10/10 |
+| Docs / architecture / inventory | 157 cases, 582 symbol references; 17 packages, 9 Rust shards, 4 browser lanes; pass |
+| CSS regeneration / production Web / generated OpenAPI | unchanged CSS, successful Web build, byte-identical OpenAPI |
+| Playwright functional / legacy / lifecycle | 111/111, 16/16, 3/3; no skipped, retried or flaky tests |
+| Telemetry-required release soak, 90 seconds | 3,161 cycles, 14,972 requests, zero unexpected failures/error logs |
+| `cargo deny --locked check` | advisories, bans, licenses and sources pass; no new exception |
+
+The eight ignored Rust cases remain reported as ignored in that command. Seven
+validators ran separately; the Python-driven real-process soak above does not
+claim that the ignored Rust soak wrapper ran. An initial compile ran out of
+disk, and later helpers unable to open logs did not execute their commands.
+The full Rust recovery used a separate temporary target, disabled debug symbols
+and incremental output, and preserved assertions/features. An initial Mihomo
+attempt failed at its read-only default config directory; the identical seven
+tests passed with a temporary writable `XDG_CONFIG_HOME`. Both failed attempts
+remain in the handoff rather than being overwritten.
+
+The retained release binary SHA-256 remains
+`58b36aad8450bdff0db5355b30a4c27645a27cc25516cef0eacd9190d3bf85a0`.
+Final Rust gates bind tracked and untracked source before/after execution;
+runtime gates separately bind the selected binary, compiled source and 21 Web
+files. This appended documentation is checked afterward. Two independent
+actual-diff review rounds and their validation closures have no unresolved
+accepted product finding. Only the exact work branch is added to the existing
+push allowlist; terminal remote CI is separate evidence, not asserted here.
+
+New serial measurements retain 92 initial parser processes, 100 candidate
+parser processes, 220 native-generation processes and 128 HTTP server processes.
+The owned-Xray candidate regresses 1k parse/drop latency by about 15.8% versus
+the starting implementation and does not reduce its 10k current RSS, so it is
+excluded from the final code. The retained single-parse path is faster than the
+quality baseline but still has about 13.25% higher 10k current RSS; lower
+cumulative allocation traffic does not resolve that cost.
+
+Selected-node moves are retained for an approximately 11.8 MiB paired reduction
+in warmed 10k uncached resident memory versus their isolated reversion. This is
+not a lower subsequent growth rate or an established latency improvement.
+Cached ownership reduces allocation traffic, but cache-path resident costs and
+unchanged list-control drift remain visible. The HTTP experiment uses eight
+balanced pairs for each size/case, 1,280 timed requests and 384 warmups; it does
+not establish uncached equivalence or stable acceleration. Its 10k cached-200
+final RSS medians rise from about 28.7 to 37.0 MiB despite faster responses.
+All raw values, AB/BA splits, intervals and rejected candidates are retained.
+
+Current RSS/PSS/anonymous memory, requested-live bytes and raw VmHWM remain
+distinct. Non-monotonic VmHWM observations are unexplained; no exact physical
+peak, leak-freedom, overall-memory or production-throughput claim follows.
+Performance budgets are not promoted to pass. Local browser evidence uses
+system Chromium 154; no extra download domain was authorized. This round did
+not locally run installer, Docker, ARM64, physical mobile, other browser engines,
+real assistive technology, deployment or long-duration soak acceptance.
+
+### 2026-10-15 — bounded rustls security update
+
+This local round starts at `f1e54a2b3ad797a3fbac268cad1248f04592c6c3` on
+`fix/rustls-security-2026-10-15`. Only rustls changes in the dependency graph:
+the workspace minimum and locked version rise from 0.23.45 to 0.23.46 for
+RUSTSEC-2026-0346 through 0349. Features remain `ring`, `std` and `tls12`.
+The previous Quinn 0.11.18 protocol dependency and YAML migration are retained.
+`deny.toml` and its existing paste exception are unchanged; no new exception,
+security-check suppression, production-code change or CI trigger is added.
+
+The four advisories match the old package version. No custom session-value
+logging or ECH configuration was found, and rustls certificate Brotli is not
+enabled (reqwest HTTP Brotli is separate). Ring offers classical groups only,
+so the advisory's post-quantum downgrade is not established for this binary.
+The underlying premature session-hint write is reproducible: two identical
+public-API tests fail on 0.23.45 at the unauthenticated-hint assertions and pass
+on 0.23.46. They cover an isolated ServerHello, a rejected certificate, and a
+successful authenticated handshake as the positive cache control. An initial
+tiny-cache fixture was confounded by a separate upstream eviction bug; review
+corrected it to the default capacity of 256 before the final differential run.
+The NODE-015 bindings supplement existing real-proxy/runner tests; these new
+tests themselves use in-memory TLS and do not demonstrate a production exploit.
+
+| Final local gate | Actual result |
+| --- | --- |
+| Format, locked/offline workspace all-target/all-feature check and Clippy | pass; warnings denied |
+| Full Rust baseline | 1,207 passed, 0 failed, 8 ignored; 112 suites; 21 Criterion test-mode checks |
+| Doc tests | 15 suites passed; zero runnable examples |
+| Explicit ignored client validators | 7/7 passed with checksum-pinned tools |
+| Docs / architecture / inventory | 157 cases, 584 proof references; 17 packages, 9 Rust shards, 4 browser lanes; pass |
+| Architecture / CI Python / soak-unit / health-deadline tests | 10/10, 15/15, 1/1, 2/2 |
+| Production backend/Web, CSS and OpenAPI | builds pass; regenerated CSS and OpenAPI unchanged |
+| Functional / legacy / lifecycle browser checks | 111/111, 16/16, 3/3; no failures, skips, retries or flaky results |
+| Telemetry-required release soak, 90 seconds | 3,179 cycles, 15,030 requests, zero unexpected failures/error logs |
+| Fresh `cargo deny --locked check` | advisories, bans, licenses and sources pass; pre-existing policy warnings remain |
+
+The advisory database is `edb58f5974b83eb8302332821cb6d389777aa351`, checked
+on 2026-10-15. The release binary SHA-256 is
+`949e713c2f5ac73dcef903db2252fde711170903687992e27fa672f0bb926a44`.
+Source hashes and runtime artifact hashes are stable across their respective
+gates. Native checks use a temporary target with debug symbols and incremental
+output disabled; assertions and feature selection are unchanged.
+
+Installer smoke is **blocked** before any test body: bubblewrap cannot set up
+its UID map on the read-only environment (zero tests, setup error). Docker and
+ARM64 image builds/runtime, bundled Chromium, other browser engines, physical
+mobile hardware, native VM/systemd, signed deployment and long soak are
+**not-run**. Browser evidence uses existing system Chromium 154. No remote CI,
+push, PR, merge or deployment is performed in this round. The separate Python
+soak does not claim that the ignored Rust soak wrapper ran, and short-run
+success is not a performance improvement or long-term reliability claim.

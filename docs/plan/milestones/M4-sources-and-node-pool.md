@@ -21,7 +21,7 @@ M3 (Protocol Engine) must be complete. The `deve-sub-protocol` parsers
 and `deve-sub-emitter` are prerequisites: the source refresh job parses
 fetched subscription content into canonical `Node` values using
 `parse_uri`, `parse_uri_list`, `parse_base64_subscription`,
-`parse_mihomo_yaml`, `parse_singbox_json`, `parse_xray_json`, and
+`parse_mihomo_yaml`, `parse_auto_json`, `parse_singbox_json`, `parse_xray_json`, and
 `parse_v2ray_json`. The `deve-sub-domain` `Node` model is the unified
 node pool entity.
 
@@ -330,6 +330,8 @@ create/rename/delete; assignment forms load existing membership and permit
 empty replacement. Batch forms default to add and explain replace/remove.
 Override and region editors load persisted values before enabling save.
 Background refresh must not overwrite a newer list request or selection.
+Selecting the filtered set uses the current filters and loaded nodes at the
+click; a pending render must not target an earlier result set.
 
 Manual tags are also the node page's visible categories. The complete `/tags`
 catalog owns category identity, including empty categories; loaded node
@@ -353,6 +355,17 @@ same IDs. Batch enable/disable completion clears selection only if that revision
 later choices are preserved. Node-page and refresh failures retain the last
 loaded rows, selection and cursor, show an error, and allow a bounded retry.
 
+The virtual node table retains a fixed-height viewport and locally scrollable
+columns on narrow screens. Its focusable table surface supports keyboard
+horizontal scrolling and exposes six column headers, row headers and the
+filtered loaded-row total through table semantics. The row count includes the
+header; virtual row indices describe their positions in the filtered list,
+not their positions in the small rendered window. Filtering resets/clamps the
+window without rendering the entire pool. FUNC-NODE-TABLE verifies 10,000
+nodes, the first/last indices, bounded DOM size and reachable row actions on
+desktop/mobile (UI-008/009/010); browser semantics are not a screen-reader
+compatibility certification.
+
 Design reference: miaomiaowu v0.8.5 node management uses visible tag badges,
 filter groups and grouped actions. Deve Sub retains its own brand and virtual
 list, with a compact toolbar, visible selection count, responsive dialogs and
@@ -368,6 +381,13 @@ The controlled refresh regression binds SRC-005; concurrent import binds NODE-00
 
 ## Source form interaction (SRC-001, UI-009/010)
 
+Manual node imports share the native form dialog's focus isolation, Escape
+cancellation and viewport-bounded scrolling (NODE-001, UI-009/010). A pending
+import locks its draft and dismissal and ignores duplicate submission. Failure
+preserves input for retry; successful completion starts a node-list refresh
+that continues after any exit from the result view. Whitespace-only content is
+invalid at the REST boundary and cannot mutate the pool or its revision.
+
 On narrow screens, each source table row stacks its details and actions within
 the viewport, retaining the same controls and table semantics. Desktop keeps
 separate data columns. Long names/URLs wrap without pushing actions off screen.
@@ -378,6 +398,13 @@ to the initiating control if it still exists. Escape cancels an idle dialog.
 The panel scrolls within the viewport; associated labels, visible focus and
 44px controls support keyboard and touch use. Delete confirmation identifies
 the source by name and retains the withdrawal explanation.
+
+Source, import and subscription dialogs share this native modal behavior.
+Sequential focus includes links, summary controls, editable content and
+explicit tab stops as well as form controls; hidden, inert, disabled and
+collapsed-details content is excluded. FUNC-SUB-DIALOG exercises these focus
+boundaries, a short viewport and focus return through the shared component;
+the source/import cases retain their own workflow assertions.
 
 Source forms submit through a single typed REST command, including Enter.
 Edit URL drafts start empty to preserve the existing secret; redacted URLs are

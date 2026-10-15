@@ -60,7 +60,13 @@ pub async fn setup_2fa(
     let (ciphertext, nonce) =
         envelope::seal_parts(master_key.as_bytes(), TOTP_AAD_CONTEXT, &secret)?;
     let totp_secret = TotpSecret::new(user_id, ciphertext, nonce);
-    totp_secret_repo.upsert(&totp_secret).await?;
+    totp_secret_repo
+        .upsert(&totp_secret)
+        .await
+        .map_err(|error| match error {
+            IdentityError::TwoFactorAlreadyEnabled => AuthError::TwoFactorAlreadyEnabled,
+            other => AuthError::Identity(other),
+        })?;
 
     let secret_b32 = deve_sub_security::base32_secret(&secret);
     let otpauth_uri = totp_otpauth_uri(&secret, issuer, &user.username);
@@ -82,24 +88,22 @@ pub struct TwoFactorVerifyResult {
 /// The user must have called [`setup_2fa`] first. This function:
 /// 1. Loads and decrypts the stored TOTP secret.
 /// 2. Verifies the provided code against the secret.
-/// 3. Generates 10 recovery codes and stores their hashes atomically.
-/// 4. Sets `two_factor_enabled = true` on the user.
+/// 3. Generates 10 recovery codes.
+/// 4. Atomically enables the same pending secret and stores the code hashes.
 ///
-/// WHY: recovery codes are stored BEFORE enabling 2FA. If `replace_all_for_user`
-/// fails, 2FA stays off and the user can retry without risk of lockout. If
-/// `set_two_factor_enabled` fails after codes are stored, the orphaned codes
-/// are eagerly deleted (see inline cleanup) and the error is propagated.
+/// WHY: the storage boundary compares the verified secret before committing
+/// either change. A concurrent setup cannot activate an unverified secret,
+/// and only one concurrent verification can publish recovery codes.
 ///
 /// # Errors
 /// - [`AuthError::TotpSecretNotFound`] — no TOTP secret stored (setup not done).
 /// - [`AuthError::TwoFactorAlreadyEnabled`] — 2FA is already active.
-/// - [`AuthError::InvalidTwoFactorCode`] — wrong TOTP code.
+/// - [`AuthError::InvalidTwoFactorCode`] — wrong code or pending secret changed.
 /// - [`AuthError::Security`] — decryption failed.
 /// - [`AuthError::Identity`] — storage error.
 pub async fn verify_2fa(
     user_repo: &dyn UserRepository,
     totp_secret_repo: &dyn TotpSecretRepository,
-    recovery_code_repo: &dyn RecoveryCodeRepository,
     master_key: &MasterKey,
     user_id: UserId,
     code: u32,
@@ -136,18 +140,15 @@ pub async fn verify_2fa(
         let hash = hmac_digest(PURPOSE_RECOVERY, &normalized, master_key.as_bytes())?;
         code_entities.push(RecoveryCode::new(user_id, hash));
     }
-    recovery_code_repo
-        .replace_all_for_user(user_id, &code_entities)
-        .await?;
-
-    // WHY: if set_two_factor_enabled fails after codes are stored, eagerly
-    // delete the orphaned codes so a codes-without-2FA inconsistency does
-    // not persist if the user never retries. The codes are unusable without
-    // two_factor_enabled=true, so this is a cleanliness measure, not a
-    // security fix.
-    if let Err(e) = user_repo.set_two_factor_enabled(user_id, true).await {
-        let _ = recovery_code_repo.delete_all_for_user(user_id).await;
-        return Err(AuthError::Identity(e));
+    if !totp_secret_repo
+        .enable_if_current(&stored_secret, &code_entities)
+        .await
+        .map_err(|error| match error {
+            IdentityError::TwoFactorAlreadyEnabled => AuthError::TwoFactorAlreadyEnabled,
+            other => AuthError::Identity(other),
+        })?
+    {
+        return Err(AuthError::InvalidTwoFactorCode);
     }
 
     Ok(TwoFactorVerifyResult { recovery_codes })
@@ -160,13 +161,12 @@ pub async fn verify_2fa(
 /// hijacked session).
 ///
 /// # Errors
-/// - [`AuthError::TwoFactorNotEnabled`] — 2FA is not enabled.
+/// - [`AuthError::TwoFactorNotEnabled`] — the observed enrollment is no longer active.
 /// - [`AuthError::InvalidCredentials`] — wrong password.
 /// - [`AuthError::Identity`] — storage error.
 pub async fn disable_2fa(
     user_repo: &dyn UserRepository,
     totp_secret_repo: &dyn TotpSecretRepository,
-    recovery_code_repo: &dyn RecoveryCodeRepository,
     user_id: UserId,
     password: &str,
 ) -> Result<(), AuthError> {
@@ -179,20 +179,20 @@ pub async fn disable_2fa(
         return Err(AuthError::TwoFactorNotEnabled);
     }
 
+    // WHY: bind the password-authorized action to the enrollment observed
+    // before the potentially slow password check, not a later replacement.
+    let stored_secret = totp_secret_repo
+        .find_by_user(user_id)
+        .await?
+        .ok_or(AuthError::TwoFactorNotEnabled)?;
+
     if !verify_password_async(password.to_owned(), user.password_hash.clone()).await? {
         return Err(AuthError::InvalidCredentials);
     }
 
-    // WHY: three non-transactional writes. If `set_two_factor_enabled(false)`
-    // succeeds but a subsequent delete fails, orphaned TOTP secret or recovery
-    // codes may remain. This is safe because both are only queried when
-    // `two_factor_enabled=true` (checked in `login` before routing to
-    // `login_2fa`), so orphaned data is unreachable. On re-enable,
-    // `setup_2fa` replaces the TOTP secret and `verify_2fa` calls
-    // `replace_all_for_user` which cleans up old recovery codes.
-    user_repo.set_two_factor_enabled(user_id, false).await?;
-    totp_secret_repo.delete(user_id).await?;
-    recovery_code_repo.delete_all_for_user(user_id).await?;
+    if !totp_secret_repo.disable_if_current(&stored_secret).await? {
+        return Err(AuthError::TwoFactorNotEnabled);
+    }
 
     Ok(())
 }
@@ -203,13 +203,13 @@ pub async fn disable_2fa(
 /// codes are immediately invalid.
 ///
 /// # Errors
-/// - [`AuthError::TwoFactorNotEnabled`] — 2FA is not enabled.
+/// - [`AuthError::TwoFactorNotEnabled`] — the observed enrollment is no longer active.
 /// - [`AuthError::InvalidCredentials`] — wrong password.
 /// - [`AuthError::Security`] — code generation or hashing failed.
 /// - [`AuthError::Identity`] — storage error.
 pub async fn regenerate_recovery_codes(
     user_repo: &dyn UserRepository,
-    recovery_code_repo: &dyn RecoveryCodeRepository,
+    totp_secret_repo: &dyn TotpSecretRepository,
     master_key: &MasterKey,
     user_id: UserId,
     password: &str,
@@ -223,6 +223,13 @@ pub async fn regenerate_recovery_codes(
         return Err(AuthError::TwoFactorNotEnabled);
     }
 
+    // WHY: a delayed regeneration must not replace the recovery codes issued
+    // by a newer setup/verify cycle while password verification was pending.
+    let stored_secret = totp_secret_repo
+        .find_by_user(user_id)
+        .await?
+        .ok_or(AuthError::TwoFactorNotEnabled)?;
+
     if !verify_password_async(password.to_owned(), user.password_hash.clone()).await? {
         return Err(AuthError::InvalidCredentials);
     }
@@ -234,12 +241,12 @@ pub async fn regenerate_recovery_codes(
         let hash = hmac_digest(PURPOSE_RECOVERY, &normalized, master_key.as_bytes())?;
         code_entities.push(RecoveryCode::new(user_id, hash));
     }
-    // WHY: replace_all_for_user atomically deletes old codes and inserts new
-    // ones in a single transaction, eliminating the zero-codes window that
-    // existed when delete and insert were separate calls (AUTH-006).
-    recovery_code_repo
-        .replace_all_for_user(user_id, &code_entities)
-        .await?;
+    if !totp_secret_repo
+        .replace_recovery_codes_if_current(&stored_secret, &code_entities)
+        .await?
+    {
+        return Err(AuthError::TwoFactorNotEnabled);
+    }
 
     Ok(recovery_codes)
 }

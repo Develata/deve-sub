@@ -13,20 +13,21 @@ ROOT = Path(__file__).resolve().parents[1]
 LAYERS = {
     "kernel": set(),
     "contract": set(),
+    "yaml": set(),
     "domain": {"kernel"},
     "security": {"kernel"},
     "observability": {"kernel"},
-    "protocol": {"kernel", "domain"},
-    "emitter": {"kernel", "domain"},
+    "protocol": {"kernel", "domain", "yaml"},
+    "emitter": {"kernel", "domain", "yaml"},
     "compatibility": {"kernel", "domain"},
-    "application": {"kernel", "contract", "domain", "security", "protocol", "emitter", "compatibility"},
+    "application": {"kernel", "contract", "domain", "security", "protocol", "emitter", "compatibility", "yaml"},
     "storage-sqlite": {"kernel", "domain", "application", "security"},
     "inmemory": {"kernel", "domain", "application", "security"},
     "adapters": {"kernel", "domain", "application", "security"},
     "server": {"kernel", "contract", "domain", "application", "security", "compatibility", "web"},
     "web": {"contract"},
     "cli": {"kernel", "contract", "domain", "application", "security", "protocol", "emitter", "compatibility", "storage-sqlite", "inmemory", "adapters", "observability", "server", "web"},
-    "ci": set(),
+    "ci": {"yaml"},
 }
 FRAMEWORKS = {"sqlx", "axum", "reqwest", "dioxus"}
 
@@ -42,9 +43,9 @@ def dependency_errors(packages):
         production = {dep["name"] for dep in package["dependencies"] if dep["kind"] != "dev"}
         local = {dep for dep in production if dep.startswith("deve-sub-")}
         forbidden = local - {f"deve-sub-{allowed}" for allowed in LAYERS[layer]}
-        if layer in {"kernel", "contract", "domain", "protocol", "emitter", "compatibility", "application"}:
+        if layer in {"kernel", "contract", "domain", "protocol", "emitter", "compatibility", "application", "yaml"}:
             forbidden |= production & FRAMEWORKS
-        if layer in {"kernel", "contract", "domain"}:
+        if layer in {"kernel", "contract", "domain", "yaml"}:
             forbidden |= production & {"tokio"}
         if layer == "server":
             forbidden |= production & {"sqlx", "reqwest"}

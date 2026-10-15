@@ -32,7 +32,11 @@ use super::{
 pub fn parse_singbox_json(text: &str) -> Result<Vec<Node>, ParseError> {
     let value: Value =
         serde_json::from_str(text).map_err(|e| ParseError::InvalidJson(e.to_string()))?;
+    parse_singbox_value(&value)
+}
 
+/// Borrow one complete document for explicit and automatically detected input.
+pub(super) fn parse_singbox_value(value: &Value) -> Result<Vec<Node>, ParseError> {
     let outbounds = value
         .get("outbounds")
         .ok_or(ParseError::MissingContainerKey("outbounds"))?

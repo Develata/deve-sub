@@ -74,10 +74,15 @@ pub(super) async fn prepare_nodes(
         // WHY: preserve author ordering, especially DNS nameserver-policy precedence.
         let mut native =
             super::validation::checked_yaml(spec.clash.as_deref().unwrap_or_default())?;
-        native["proxy-groups"] = serde_yaml::to_value(&config["proxy-groups"])
-            .map_err(|e| TemplateAppError::Emit(e.to_string()))?;
+        native
+            .as_mapping_mut()
+            .ok_or_else(|| clash::invalid("native Clash configuration must be a mapping"))?
+            .insert(
+                deve_sub_yaml::Value::String("proxy-groups".into()),
+                deve_sub_yaml::from_json(config["proxy-groups"].clone()),
+            );
         spec.clash = Some(
-            serde_yaml::to_string(&native).map_err(|e| TemplateAppError::Emit(e.to_string()))?,
+            deve_sub_yaml::to_string(&native).map_err(|e| TemplateAppError::Emit(e.to_string()))?,
         );
     }
     Ok(())

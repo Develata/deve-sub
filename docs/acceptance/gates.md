@@ -1470,3 +1470,55 @@ Performance budgets are not promoted to pass. Local browser evidence uses
 system Chromium 154; no extra download domain was authorized. This round did
 not locally run installer, Docker, ARM64, physical mobile, other browser engines,
 real assistive technology, deployment or long-duration soak acceptance.
+
+### 2026-10-15 — bounded rustls security update
+
+This local round starts at `f1e54a2b3ad797a3fbac268cad1248f04592c6c3` on
+`fix/rustls-security-2026-10-15`. Only rustls changes in the dependency graph:
+the workspace minimum and locked version rise from 0.23.45 to 0.23.46 for
+RUSTSEC-2026-0346 through 0349. Features remain `ring`, `std` and `tls12`.
+The previous Quinn 0.11.18 protocol dependency and YAML migration are retained.
+`deny.toml` and its existing paste exception are unchanged; no new exception,
+security-check suppression, production-code change or CI trigger is added.
+
+The four advisories match the old package version. No custom session-value
+logging or ECH configuration was found, and rustls certificate Brotli is not
+enabled (reqwest HTTP Brotli is separate). Ring offers classical groups only,
+so the advisory's post-quantum downgrade is not established for this binary.
+The underlying premature session-hint write is reproducible: two identical
+public-API tests fail on 0.23.45 at the unauthenticated-hint assertions and pass
+on 0.23.46. They cover an isolated ServerHello, a rejected certificate, and a
+successful authenticated handshake as the positive cache control. An initial
+tiny-cache fixture was confounded by a separate upstream eviction bug; review
+corrected it to the default capacity of 256 before the final differential run.
+The NODE-015 bindings supplement existing real-proxy/runner tests; these new
+tests themselves use in-memory TLS and do not demonstrate a production exploit.
+
+| Final local gate | Actual result |
+| --- | --- |
+| Format, locked/offline workspace all-target/all-feature check and Clippy | pass; warnings denied |
+| Full Rust baseline | 1,207 passed, 0 failed, 8 ignored; 112 suites; 21 Criterion test-mode checks |
+| Doc tests | 15 suites passed; zero runnable examples |
+| Explicit ignored client validators | 7/7 passed with checksum-pinned tools |
+| Docs / architecture / inventory | 157 cases, 584 proof references; 17 packages, 9 Rust shards, 4 browser lanes; pass |
+| Architecture / CI Python / soak-unit / health-deadline tests | 10/10, 15/15, 1/1, 2/2 |
+| Production backend/Web, CSS and OpenAPI | builds pass; regenerated CSS and OpenAPI unchanged |
+| Functional / legacy / lifecycle browser checks | 111/111, 16/16, 3/3; no failures, skips, retries or flaky results |
+| Telemetry-required release soak, 90 seconds | 3,179 cycles, 15,030 requests, zero unexpected failures/error logs |
+| Fresh `cargo deny --locked check` | advisories, bans, licenses and sources pass; pre-existing policy warnings remain |
+
+The advisory database is `edb58f5974b83eb8302332821cb6d389777aa351`, checked
+on 2026-10-15. The release binary SHA-256 is
+`949e713c2f5ac73dcef903db2252fde711170903687992e27fa672f0bb926a44`.
+Source hashes and runtime artifact hashes are stable across their respective
+gates. Native checks use a temporary target with debug symbols and incremental
+output disabled; assertions and feature selection are unchanged.
+
+Installer smoke is **blocked** before any test body: bubblewrap cannot set up
+its UID map on the read-only environment (zero tests, setup error). Docker and
+ARM64 image builds/runtime, bundled Chromium, other browser engines, physical
+mobile hardware, native VM/systemd, signed deployment and long soak are
+**not-run**. Browser evidence uses existing system Chromium 154. No remote CI,
+push, PR, merge or deployment is performed in this round. The separate Python
+soak does not claim that the ignored Rust soak wrapper ran, and short-run
+success is not a performance improvement or long-term reliability claim.

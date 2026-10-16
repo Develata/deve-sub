@@ -1,0 +1,99 @@
+mode: rule
+dns:
+  enable: true
+  listen: 0.0.0.0:7874
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - +.lan
+    - +.local
+    - +.home.arpa
+    - +.campus.example
+  default-nameserver:
+    - 192.0.2.53
+    - 198.51.100.53
+  nameserver:
+    - https://dns-one.example/dns-query#🚀 节点选择
+    - https://dns-two.example/dns-query#🚀 节点选择
+  direct-nameserver:
+    - https://dns-direct-one.example/dns-query
+    - https://dns-direct-two.example/dns-query
+  direct-nameserver-follow-policy: true
+  nameserver-policy:
+    geosite:private:
+      - https://dns-direct-one.example/dns-query
+    +.lan:
+      - https://dns-direct-one.example/dns-query
+    +.local:
+      - https://dns-direct-one.example/dns-query
+    +.home.arpa:
+      - https://dns-direct-one.example/dns-query
+    +.campus.example:
+      - 203.0.113.53
+      - 203.0.113.54
+  proxy-server-nameserver:
+    - https://dns-direct-one.example/dns-query
+    - https://dns-direct-two.example/dns-query
+proxies: null
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    include-all: true
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - __PROXY_PROVIDERS__
+      - __PROXY_NODES__
+      - REJECT
+      - DIRECT
+  - name: 🎯 大陆直连
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 节点选择
+      - REJECT
+  - name: 🤖 好IP
+    type: select
+    include-all: true
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - __PROXY_PROVIDERS__
+      - __PROXY_NODES__
+      - REJECT
+      - DIRECT
+  - name: ♻️ GitHub大带宽
+    type: select
+    include-all: true
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - __PROXY_PROVIDERS__
+      - __PROXY_NODES__
+rules:
+  - DOMAIN-KEYWORD,stun,🚀 节点选择
+  - DST-PORT,3478,🚀 节点选择
+  - PROCESS-NAME,ChatGPT.exe,🤖 好IP
+  - PROCESS-NAME,codex.exe,🤖 好IP
+  - DOMAIN-SUFFIX,chatgpt.com,🤖 好IP
+  - DOMAIN-KEYWORD,google,🤖 好IP
+  - DOMAIN-SUFFIX,github.com,♻️ GitHub大带宽
+  - DOMAIN,github-cloud.s3.amazonaws.com,♻️ GitHub大带宽
+  - PROCESS-NAME,easytier-gui.exe,🎯 大陆直连
+  - DOMAIN-SUFFIX,cn,🎯 大陆直连
+  - DOMAIN-SUFFIX,personal-one.example,🎯 大陆直连
+  - DOMAIN-SUFFIX,local,🎯 大陆直连
+  - DOMAIN-SUFFIX,lan,🎯 大陆直连
+  - DOMAIN-SUFFIX,home.arpa,🎯 大陆直连
+  - IP-CIDR,127.0.0.0/8,🎯 大陆直连,no-resolve
+  - IP-CIDR,10.0.0.0/8,🎯 大陆直连,no-resolve
+  - IP-CIDR6,::1/128,🎯 大陆直连,no-resolve
+  - IP-CIDR6,fc00::/7,🎯 大陆直连,no-resolve
+  - IP-CIDR,192.0.2.10/32,🎯 大陆直连,no-resolve
+  - IP-CIDR,198.51.100.10/32,🎯 大陆直连,no-resolve
+  - IP-CIDR,203.0.113.10/32,🎯 大陆直连,no-resolve
+  - IP-CIDR6,2001:db8:1::/64,🎯 大陆直连,no-resolve
+  - MATCH,🚀 节点选择

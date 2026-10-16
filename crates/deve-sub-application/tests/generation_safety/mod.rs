@@ -12,6 +12,7 @@ use deve_sub_kernel::{GenerationCacheId, NodeId};
 use serde_json::{Value, json};
 
 mod generated_yaml;
+mod placeholder_normalization;
 mod source_mutation;
 mod withdrawal_groups;
 

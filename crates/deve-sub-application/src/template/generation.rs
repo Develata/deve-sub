@@ -46,6 +46,7 @@ struct GenerationContext {
     cache_key: String,
     selection_mode: &'static str,
     selection_payload: String,
+    normalization_warnings: Vec<String>,
 }
 
 /// Run the generation pipeline for a template + profile + mode.
@@ -81,7 +82,7 @@ pub async fn generate(
                 .activate(cached.template_id, &cached.profile, cached.id)
                 .await?;
         }
-        return Ok(cached_result(cached));
+        return Ok(cached_result(cached, ctx.normalization_warnings.clone()));
     }
 
     let result = run_pipeline(
@@ -120,7 +121,7 @@ pub async fn generate(
                     .activate(cached.template_id, &cached.profile, cached.id)
                     .await?;
             }
-            return Ok(cached_result(cached));
+            return Ok(cached_result(cached, ctx.normalization_warnings.clone()));
         }
         return Err(store_err.into());
     }
@@ -158,7 +159,7 @@ pub async fn generate_for_delivery(
     let ctx = resolve_context(template_repo, version_repo, pool_meta_repo, &request).await?;
 
     if let Some(cached) = cache_repo.find_by_key(&ctx.cache_key).await? {
-        return Ok(cached_result(cached));
+        return Ok(cached_result(cached, ctx.normalization_warnings.clone()));
     }
 
     // WHY (constraint #19): on-demand regeneration after a pool revision
@@ -195,7 +196,22 @@ pub async fn generate_for_delivery(
                         error = %pipeline_err,
                         "delivery generation failed; serving last good cached version"
                     );
-                    let mut result = cached_result(last_good);
+                    // Optional diagnostic reconstruction must not prevent eligible fallback delivery.
+                    let notices = match version_repo
+                        .find_by_version_number(last_good.template_id, last_good.template_version)
+                        .await
+                    {
+                        Ok(Some(version)) => parse_template_document(&version.spec_yaml)
+                            .and_then(|doc| {
+                                super::clash_normalization::warnings(doc.spec.clash.as_deref())
+                            })
+                            .ok(),
+                        Ok(None) | Err(_) => None,
+                    }
+                    .unwrap_or_else(|| {
+                        vec!["template normalization warnings unavailable from cache".into()]
+                    });
+                    let mut result = cached_result(last_good, notices);
                     result
                         .warnings
                         .push("generation failed; served last successful version".to_owned());
@@ -234,7 +250,7 @@ pub async fn generate_for_delivery(
     // complete version). Any non-UNIQUE store error propagates.
     if let Err(store_err) = cache_repo.store(&entry).await {
         if let Some(cached) = cache_repo.find_by_key(&entry.cache_key).await? {
-            return Ok(cached_result(cached));
+            return Ok(cached_result(cached, ctx.normalization_warnings.clone()));
         }
         return Err(store_err.into());
     }
@@ -261,7 +277,7 @@ pub async fn preview(
     let ctx = resolve_context(template_repo, version_repo, pool_meta_repo, &request).await?;
 
     if let Some(cached) = cache_repo.find_by_key(&ctx.cache_key).await? {
-        return Ok(cached_result(cached));
+        return Ok(cached_result(cached, ctx.normalization_warnings.clone()));
     }
 
     run_pipeline(
@@ -365,6 +381,7 @@ async fn resolve_context(
         cache_key,
         selection_mode,
         selection_payload,
+        normalization_warnings: super::clash_normalization::warnings(doc.spec.clash.as_deref())?,
     })
 }
 
@@ -399,7 +416,7 @@ async fn run_pipeline(
         ));
     }
 
-    let mut warnings = Vec::new();
+    let mut warnings = super::clash_normalization::warnings(doc.spec.clash.as_deref())?;
     for m in &resolution.selection_missing {
         warnings.push(format!("node {} is {}", m.node_id, m.reason));
     }
@@ -587,20 +604,21 @@ fn has_json_content(v: &serde_json::Value) -> bool {
     }
 }
 
-fn cached_result(cached: GenerationCacheEntry) -> GenerationResult {
+fn cached_result(cached: GenerationCacheEntry, mut warnings: Vec<String>) -> GenerationResult {
     // WHY: the cache stores only `content`, not the CompatibilityReport.
     // Returning empty `included_node_ids`/`excluded` without explanation
     // would imply "zero nodes included, zero excluded" — a false report.
     // The warning honestly states the report is unavailable from cache.
+    warnings.extend([
+        "served from cache".to_owned(),
+        "included/excluded report unavailable from cache".to_owned(),
+    ]);
     GenerationResult {
         content: cached.content,
         profile: cached.profile,
         included_node_ids: Vec::new(),
         excluded: Vec::new(),
-        warnings: vec![
-            "served from cache".to_owned(),
-            "included/excluded report unavailable from cache".to_owned(),
-        ],
+        warnings,
     }
 }
 
@@ -737,7 +755,27 @@ fn validate_output(content: &str, profile: ProfileKind) -> Result<(), TemplateAp
                 deve_sub_yaml::SequenceState::NonEmpty => {}
             }
         }
-        ProfileKind::SingBox | ProfileKind::Xray | ProfileKind::V2Ray | ProfileKind::Json => {
+        ProfileKind::SingBox => {
+            let value: serde_json::Value =
+                serde_json::from_str(content).map_err(|_| TemplateAppError::EmptyOutput)?;
+            let mut entries = 0;
+            for field in ["outbounds", "endpoints"] {
+                if let Some(value) = value.get(field) {
+                    entries += value
+                        .as_array()
+                        .ok_or_else(|| {
+                            TemplateAppError::InvalidStructure(format!("'{field}' is not an array"))
+                        })?
+                        .len();
+                }
+            }
+            if entries == 0 {
+                return Err(TemplateAppError::InvalidStructure(
+                    "sing-box has no outbounds or endpoints".into(),
+                ));
+            }
+        }
+        ProfileKind::Xray | ProfileKind::V2Ray | ProfileKind::Json => {
             let v: serde_json::Value =
                 serde_json::from_str(content).map_err(|_| TemplateAppError::EmptyOutput)?;
             if !v.is_array() && !v.is_object() {

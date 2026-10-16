@@ -14,7 +14,7 @@ use deve_sub_domain::{
     Hysteria2Config, Node, Obfuscation, ProtocolConfig, ProtocolKind, RealityConfig,
     ShadowTlsConfig, ShadowTlsVersion, SnellConfig, SnellObfs, SnellObfsMode, SnellV6Mode,
     SnellVersion, TlsConfig, Transport, TransportKind, TrojanConfig, TuicV5Config, UdpRelayMode,
-    VMessConfig, VlessRealityConfig, WireGuardConfig, WireGuardPeer,
+    VMessConfig, VlessRealityConfig,
 };
 
 use crate::error::ParseError;
@@ -28,7 +28,8 @@ use super::{
 ///
 /// # Errors
 /// Returns [`ParseError::InvalidJson`] if the JSON is malformed.
-/// Returns [`ParseError::MissingContainerKey`] if the `outbounds` key is absent.
+/// Returns [`ParseError::MissingContainerKey`] if neither container list exists
+/// or a present `outbounds`/`endpoints` key is not a list.
 pub fn parse_singbox_json(text: &str) -> Result<Vec<Node>, ParseError> {
     let value: Value =
         serde_json::from_str(text).map_err(|e| ParseError::InvalidJson(e.to_string()))?;
@@ -37,12 +38,23 @@ pub fn parse_singbox_json(text: &str) -> Result<Vec<Node>, ParseError> {
 
 /// Borrow one complete document for explicit and automatically detected input.
 pub(super) fn parse_singbox_value(value: &Value) -> Result<Vec<Node>, ParseError> {
-    let outbounds = value
-        .get("outbounds")
-        .ok_or(ParseError::MissingContainerKey("outbounds"))?
-        .as_array()
-        .ok_or(ParseError::MissingContainerKey("outbounds (not a list)"))?;
-    super::check_entry_count(outbounds.len())?;
+    let list = |key: &'static str| -> Result<&[Value], ParseError> {
+        match value.get(key) {
+            Some(Value::Array(values)) => Ok(values),
+            Some(_) => Err(ParseError::MissingContainerKey(if key == "outbounds" {
+                "outbounds (not a list)"
+            } else {
+                "endpoints (not a list)"
+            })),
+            None => Ok(&[]),
+        }
+    };
+    if value.get("outbounds").is_none() && value.get("endpoints").is_none() {
+        return Err(ParseError::MissingContainerKey("outbounds"));
+    }
+    let outbounds = list("outbounds")?;
+    let endpoints = list("endpoints")?;
+    super::check_entry_count(outbounds.len().saturating_add(endpoints.len()))?;
 
     // WHY: ShadowTLS in sing-box uses two outbounds — a `shadowtls` outbound
     // and an inner protocol outbound that chains via `detour`. The canonical
@@ -123,6 +135,7 @@ pub(super) fn parse_singbox_value(value: &Value) -> Result<Vec<Node>, ParseError
         nodes.push(parse_outbound(entry));
     }
 
+    nodes.extend(endpoints.iter().map(super::singbox_endpoint::parse));
     Ok(nodes)
 }
 
@@ -499,77 +512,7 @@ fn parse_tuic(entry: &Value) -> Result<Node, ParseError> {
 }
 
 fn parse_wireguard(entry: &Value) -> Result<Node, ParseError> {
-    let (name, endpoint) = build_base(entry)?;
-    let private_key =
-        get_str(entry, "private_key").ok_or(ParseError::MissingField("private_key"))?;
-
-    let address = get_str_array(entry, "local_address");
-
-    let mtu = entry
-        .get("mtu")
-        .and_then(|v| v.as_u64())
-        .map(|n| u32::try_from(n).unwrap_or(0));
-
-    let workers = entry
-        .get("workers")
-        .and_then(|v| v.as_u64())
-        .map(|n| u32::try_from(n).unwrap_or(0));
-
-    let peers = if let Some(peers_arr) = entry.get("peers").and_then(|p| p.as_array()) {
-        peers_arr
-            .iter()
-            .map(|p| {
-                let public_key =
-                    get_str(p, "public_key").ok_or(ParseError::MissingField("peer public_key"))?;
-                let pre_shared_key = get_str(p, "pre_shared_key");
-                let allowed_ips = get_str_array(p, "allowed_ips");
-                let reserved = p
-                    .get("reserved")
-                    .and_then(|r| r.as_array())
-                    .and_then(|arr| {
-                        if arr.len() == 3 {
-                            let mut bytes = [0u8; 3];
-                            for (i, v) in arr.iter().enumerate() {
-                                bytes[i] = v.as_u64()?.try_into().ok()?;
-                            }
-                            Some(bytes)
-                        } else {
-                            None
-                        }
-                    });
-                let persistent_keepalive = p
-                    .get("persistent_keepalive_interval")
-                    .and_then(|v| v.as_u64())
-                    .map(|secs| time::Duration::seconds(i64::try_from(secs).unwrap_or(0)));
-                Ok(WireGuardPeer {
-                    public_key,
-                    pre_shared_key,
-                    allowed_ips,
-                    reserved,
-                    persistent_keepalive,
-                })
-            })
-            .collect::<Result<Vec<_>, ParseError>>()?
-    } else {
-        return Err(ParseError::MissingField("peers"));
-    };
-
-    let config = ProtocolConfig::WireGuard(WireGuardConfig {
-        private_key,
-        address,
-        peers,
-        mtu,
-        workers,
-        dns: vec![],
-    });
-
-    let mut node = node_shell_container();
-    node.display_name = name;
-    node.protocol = ProtocolKind::WireGuard;
-    node.config = config;
-    node.endpoint = endpoint;
-    node.authentication = Authentication::None;
-    Ok(node)
+    super::singbox_endpoint::parse_legacy(entry)
 }
 
 fn parse_anytls(entry: &Value) -> Result<Node, ParseError> {
@@ -613,6 +556,7 @@ fn parse_anytls(entry: &Value) -> Result<Node, ParseError> {
 }
 
 fn parse_snell(entry: &Value) -> Result<Node, ParseError> {
+    super::singbox_snell::validate(entry)?;
     let (name, endpoint) = build_base(entry)?;
     let psk = get_str(entry, "psk").ok_or(ParseError::MissingField("psk"))?;
 
@@ -661,14 +605,18 @@ fn parse_snell(entry: &Value) -> Result<Node, ParseError> {
             (obfs, None)
         }
         SnellVersion::V6 => {
-            let mode = get_str(entry, "mode")
-                .and_then(|s| match s.as_str() {
-                    "default" => Some(SnellV6Mode::Default),
-                    "unshaped" => Some(SnellV6Mode::Unshaped),
-                    "unsafe-raw" => Some(SnellV6Mode::UnsafeRaw),
-                    _ => None,
-                })
-                .unwrap_or(SnellV6Mode::Default);
+            let mode = match entry.get("mode") {
+                None => SnellV6Mode::Default,
+                Some(Value::String(mode)) if mode == "default" => SnellV6Mode::Default,
+                Some(Value::String(mode)) if mode == "unshaped" => SnellV6Mode::Unshaped,
+                Some(Value::String(mode)) if mode == "unsafe-raw" => SnellV6Mode::UnsafeRaw,
+                Some(other) => {
+                    return Err(ParseError::InvalidField {
+                        field: "mode",
+                        value: other.to_string(),
+                    });
+                }
+            };
             (None, Some(mode))
         }
         // WHY: sing-box outbound accepts only v4/v6 (option/snell.go line 71).
@@ -685,8 +633,8 @@ fn parse_snell(entry: &Value) -> Result<Node, ParseError> {
         }
     };
 
-    // WHY: sing-box Snell v4 with `obfs_mode = tls` carries the camouflage SNI
-    // in a nested `tls` block (server_name) and obfs_host as fallback.
+    // WHY: preserve legacy authored TLS settings for compatibility rejection;
+    // current Snell encodes camouflage only in obfs_mode and obfs_host.
     let tls = if matches!(obfs.as_ref().map(|o| o.mode), Some(SnellObfsMode::Tls)) {
         let mut t = extract_tls(entry).unwrap_or_else(default_tls_enabled);
         t.enabled = true;
@@ -695,7 +643,7 @@ fn parse_snell(entry: &Value) -> Result<Node, ParseError> {
         }
         Some(t)
     } else {
-        None
+        extract_tls(entry)
     };
 
     let config = ProtocolConfig::Snell(SnellConfig {
@@ -727,10 +675,16 @@ fn parse_snell(entry: &Value) -> Result<Node, ParseError> {
 /// chains through. The resulting Node has `ProtocolKind::ShadowTls` with
 /// `ShadowTlsConfig` carrying the wrapper params + boxed inner config.
 fn parse_shadowtls_wrapper(inner_entry: &Value, shadowtls_entry: &Value) -> Node {
-    // WHY: endpoint comes from the shadowtls outbound (the actual dial
-    // target), while the inner protocol's server/server_port are vestigial
-    // (sing-box routes through the detour). The inner entry's TLS is also
-    // vestigial — the real TLS handshake is the shadowtls camouflage.
+    // Inner TLS needs a second security layer absent from the canonical wrapper.
+    // Preserve unsupported raw input instead of silently removing that layer.
+    if inner_entry.get("tls").is_some() {
+        return unsupported_entry(
+            inner_entry,
+            "singbox-json",
+            ProtocolKind::ShadowTls,
+            "ShadowTLS inner TLS cannot be represented separately from wrapper TLS".into(),
+        );
+    }
     let shadowtls_result = parse_shadowtls_standalone(shadowtls_entry);
     let Ok(mut wrapper_node) = shadowtls_result else {
         return unsupported_entry(
@@ -742,7 +696,7 @@ fn parse_shadowtls_wrapper(inner_entry: &Value, shadowtls_entry: &Value) -> Node
     };
 
     // Parse the inner protocol to extract its typed config + authentication.
-    // The inner entry's endpoint and TLS are discarded (see WHY above).
+    // Its transport remains meaningful through a detour.
     let inner_node = parse_outbound(inner_entry);
     if matches!(inner_node.config, ProtocolConfig::Unsupported(_)) {
         return unsupported_entry(
@@ -775,6 +729,7 @@ fn parse_shadowtls_wrapper(inner_entry: &Value, shadowtls_entry: &Value) -> Node
 
     // Adopt the inner protocol's authentication (e.g. trojan password).
     wrapper_node.authentication = inner_node.authentication;
+    wrapper_node.transport = inner_node.transport;
 
     wrapper_node
 }

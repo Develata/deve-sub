@@ -79,11 +79,11 @@ pub(crate) fn parse(url: &url::Url, raw_uri: &str) -> Result<Node, ParseError> {
     // values (e.g. `insecure=maybe`) surface as `InvalidField` instead of
     // being silently mapped to `false`, matching every other boolean-query
     // parser (SRC-018).
-    let insecure = query_insecure(&query, &["insecure"])?.unwrap_or(false);
+    let insecure = query_insecure(&query, &["insecure"])?;
     let tls = TlsConfig {
         enabled: true,
         server_name: sni,
-        skip_cert_verify: Some(insecure),
+        skip_cert_verify: insecure,
         alpn: vec![],
         client_fingerprint: None,
         certificate_pins: vec![],

@@ -63,7 +63,15 @@ at whole-second precision. Configuration is server-owned and read-only in Web.
 
 `spec_yaml` on template create/update accepts the original V3 document or
 Clash/Mihomo routing YAML (`rules`, `proxy-groups`, `rule-providers`, `dns`,
-`tun`), including a bare YAML rule list. Original text is preserved. Native
+`tun`), including a bare YAML rule list. `mode` may only be `rule`; `proxies`
+may only be null or an empty list and is filled from the selected compatible
+pool. Whole group-member tokens `__PROXY_NODES__` and `__PROXY_PROVIDERS__`
+expand respectively to sorted eligible node names and an empty provider set.
+The latter and `include-all-providers: true` produce normalization warnings,
+including cache hits; actual `proxy-providers` and group `use` are rejected.
+Filtering, deduplication, selection scope and empty-group blocking still apply.
+Tokens are reserved group names, and token-named pool nodes receive output
+aliases. No interpolation occurs inside DNS/rules/URLs. Original text is preserved. Native
 templates generate for `mihomo` only. No UI parsing or client conversion is
 permitted. The optional internal `TemplateSpec.clash` stores validated native
 sections as YAML text with mapping order preserved; absent means existing V3 behavior.

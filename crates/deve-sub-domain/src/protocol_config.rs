@@ -145,7 +145,7 @@ pub struct WireGuardConfig {
     pub peers: Vec<WireGuardPeer>,
     /// MTU. Defaults differ by client (mihomo 1420, sing-box 1408).
     pub mtu: Option<u32>,
-    /// Worker count (mihomo `workers` field only).
+    /// Worker count (Mihomo and sing-box endpoint `workers`).
     pub workers: Option<u32>,
     /// DNS resolver addresses (mihomo `dns` field only).
     pub dns: Vec<String>,
@@ -216,6 +216,25 @@ pub struct SnellConfig {
     pub obfs: Option<SnellObfs>,
     /// V6 mode (sing-box only: `default`, `unshaped`, `unsafe-raw`).
     pub v6_mode: Option<SnellV6Mode>,
+}
+
+impl SnellConfig {
+    /// Simple TLS camouflage may be mirrored in `Node.tls` by importers.
+    /// Any additional TLS security setting is distinct from camouflage.
+    #[must_use]
+    pub fn tls_is_obfs_alias(&self, tls: Option<&crate::TlsConfig>) -> bool {
+        let Some(tls) = tls else { return true };
+        self.obfs.as_ref().is_some_and(|obfs| {
+            obfs.mode == SnellObfsMode::Tls
+                && tls.enabled
+                && tls.server_name == obfs.host
+                && tls.skip_cert_verify.is_none()
+                && tls.alpn == obfs.alpn
+                && tls.client_fingerprint.is_none()
+                && tls.certificate_pins.is_empty()
+                && tls.reality.is_none()
+        })
+    }
 }
 
 /// Snell protocol version.

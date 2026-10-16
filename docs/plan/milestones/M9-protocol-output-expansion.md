@@ -14,6 +14,17 @@ parsers in `deve-sub-protocol`, emitters in `deve-sub-emitter`, compatibility
 matrix updates in `deve-sub-compatibility`, and acceptance golden/round-trip
 tests for each new protocol, transport, and profile.
 
+The reviewed client baseline is Mihomo 1.19.30, sing-box 1.14.3 and Xray
+26.3.27, installed from publisher assets with pinned SHA-256 digests. Older
+Mihomo/sing-box versions are not promised by these output profiles. V2Ray
+rejects Reality security instead of emitting Xray-only settings. URI-list
+delivery excludes ShadowTLS because the de-facto URI cannot carry its inner
+protocol/authentication; wrapper-only URI parsing remains available for import.
+Mihomo rejects Snell v6. Snell camouflage is encoded as obfs fields; additional
+TLS security options that a target cannot represent are rejected, never stripped.
+Generation cache semantics change so incompatible legacy artifacts cannot be
+served by cache hits or last-good fallback.
+
 ## Dependency
 
 M3 (Protocol Engine) must be complete. The canonical node model,
@@ -130,14 +141,14 @@ WireGuardConfig {
   address: Vec<IpCidr>,          // local tunnel addresses
   peers: Vec<WireGuardPeer>,     // usually one
   mtu: Option<u32>,              // default 1408 (sing-box) / 1420 (mihomo)
-  workers: Option<u32>,          // mihomo only
+  workers: Option<u32>,          // Mihomo / sing-box endpoint
   dns: Vec<String>,              // mihomo remote-dns-resolve
 }
 
 WireGuardPeer {
   public_key: String,            // base64
   pre_shared_key: Option<String>,// base64
-  endpoint: Endpoint,            // server:port
+  // Remote endpoint is on Node; distinct peer endpoints are not representable.
   allowed_ips: Vec<IpCidr>,
   reserved: Option<[u8; 3]>,     // mihomo/sing-box specific
   persistent_keepalive: Option<Duration>,
@@ -301,12 +312,18 @@ The updated matrix in `deve-sub-compatibility`:
 |---|---|---|---|---|---|---|---|
 | WireGuard | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ |
 | AnyTLS | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Snell | ✅ | ✅ (v4/v6) | ❌ | ❌ | ❌ | ✅ | ✅ |
-| ShadowTLS | ✅ (obfs) | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Snell | ✅ (v1–v5) | ✅ (v4/v6) | ❌ | ❌ | ❌ | ✅ | ✅ |
+| ShadowTLS | ✅ (obfs) | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 | Transport | Mihomo | SingBox | Xray | V2Ray | Shadowrocket |
 |---|---|---|---|---|---|
 | xhttp | ✅ | ❌ | ✅ | ❌ | ❌ |
+
+Snell URI output rejects v6 modes, userkey and other options without a URI
+representation; sing-box raw Snell input rejects unrepresentable network/dialer
+constraints and non-alias nested TLS instead of losing them. WireGuard endpoint
+imports validate CIDRs, 32-byte base64 keys and bounded numeric fields. Legacy
+WireGuard outbounds honor peer endpoints and receive the same strict mapping.
 
 Incompatible nodes are excluded with a per-node reason in the generation
 report (constraint #7). Snell v1/2/3/5 → sing-box: excluded. AnyTLS/Snell/
@@ -325,16 +342,21 @@ Shadowrocket: excluded.
 - ShadowTLS mihomo projection: if the inner protocol is not one of
   Shadowsocks/Snell/VLESS/Trojan/VMess/AnyTLS, the mihomo emitter excludes
   the node with reason `SHADOWTLS_INNER_UNSUPPORTED`. sing-box projection
-  always succeeds (standalone type, chains via detour).
+  requires a supported, complete inner configuration. Inner transport is retained;
+  explicitly authored inner TLS is preserved as Unsupported input because the
+  canonical wrapper has no second TLS slot. Generated wrapper tags are unique
+  across outbounds and endpoints.
 - xhttp advanced fields: fields not modeled in `XhttpConfig` are preserved in
   `extras` and passed through. If a target client does not support a field,
   it is silently dropped from that target's output (advanced fields are
   optional, not security-relevant). Core fields (path, host, mode) are
   always emitted.
-- sing-box WireGuard deprecation: sing-box deprecated the `wireguard` outbound
-  in favor of the `endpoint` type (1.13.0+). The emitter emits the legacy
-  `type: wireguard` outbound for now (widely compatible). A future slice may
-  add `type: endpoint` emission for sing-box 1.13.0+.
+- sing-box WireGuard uses `endpoints` with type `wireguard`, local `address`,
+  and peer `address`/`port`. The first logical node remains the default route,
+  including endpoint-only output and ShadowTLS pairs. Import accepts legacy
+  outbounds and current endpoints with a combined raw-entry limit. Endpoint
+  configurations outside the canonical model (such as distinct peer endpoints
+  or system/listen options) are preserved as Unsupported instead of collapsed.
 
 ## Authority
 

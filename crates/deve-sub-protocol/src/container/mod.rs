@@ -14,6 +14,8 @@ pub mod base64;
 pub mod mihomo;
 pub mod shadowrocket;
 pub mod singbox;
+mod singbox_endpoint;
+mod singbox_snell;
 pub mod uri_list;
 pub mod xray_v2ray;
 
@@ -43,17 +45,21 @@ use crate::error::ParseError;
 
 /// Parse a complete JSON document, detecting sing-box or Xray outbound shape.
 ///
-/// Any `type` key selects sing-box. Only `protocol` keys without a `type` key
-/// select Xray; empty and unmarked lists retain the sing-box fallback.
+/// An `endpoints` key or any outbound `type` selects sing-box. Only outbound
+/// `protocol` keys without those markers select Xray; empty and unmarked lists
+/// retain the sing-box fallback.
 ///
 /// # Errors
 /// Returns [`ParseError::InvalidJson`] before container checks for malformed JSON.
-/// Returns [`ParseError::MissingContainerKey`] for absent or non-list `outbounds`.
-/// Returns [`ParseError::TooManyEntries`] when the raw outbound count exceeds
+/// Returns [`ParseError::MissingContainerKey`] for missing/non-list container roots.
+/// Returns [`ParseError::TooManyEntries`] when the combined raw entry count exceeds
 /// [`MAX_ENTRIES`], including wrappers absorbed into other nodes.
 pub fn parse_auto_json(text: &str) -> Result<Vec<Node>, ParseError> {
     let value: Value =
         serde_json::from_str(text).map_err(|e| ParseError::InvalidJson(e.to_string()))?;
+    if value.get("endpoints").is_some() {
+        return singbox::parse_singbox_value(&value);
+    }
     // WHY: both dialects preserve unknown entries, so success cannot detect the
     // format. Count raw entries before mapper setup and keep any `type` key's
     // precedence, even when null or mixed with `protocol` entries.

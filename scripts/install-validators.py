@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Install the reviewed compatibility binaries only after SHA-256 verification.
 
-Hashes pin the existing version matrix. sing-box/Xray match publisher GitHub
-asset digests; mihomo's older release has no digest and is pinned from the
-2026-09-09 HTTPS artifact review. Hash pinning is not publisher signing.
+Hashes match publisher GitHub release asset digests reviewed on 2026-10-16.
+Mihomo 1.19.30 adds AnyTLS/Snell v4 relative to the old baseline; sing-box
+1.14.3 supplies Snell and the current WireGuard endpoint schema. Hash pinning
+is not publisher signing.
 """
 import argparse
 import gzip
@@ -16,8 +17,8 @@ import zipfile
 from pathlib import Path
 
 ASSETS = [
-    ("mihomo", "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.0/mihomo-linux-amd64-v1.19.0.gz", "3819414761de0df553c9d397e1fda210e9f4290deccd41a3fc01f9f83ee77078"),
-    ("sing-box", "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz", "f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697"),
+    ("mihomo", "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.30/mihomo-linux-amd64-v1-v1.19.30.gz", "cbe553d0319a414bd3a372c5976a252155b2c4882b66bce88a4d6bba9571a553"),
+    ("sing-box", "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz", "e2bdf179c15a3652955dc44867e33ca0965c9c9b91b34267dcc5a5d639a5feee"),
     ("xray", "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip", "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae"),
 ]
 
@@ -39,7 +40,7 @@ def install(dest):
                     shutil.copyfileobj(source, output)
             elif name == "sing-box":
                 with tarfile.open(archive) as bundle:
-                    member = bundle.getmember("sing-box-1.13.14-linux-amd64/sing-box")
+                    member = bundle.getmember("sing-box-1.14.3-linux-amd64/sing-box")
                     if not member.isfile():
                         raise SystemExit("sing-box: binary member is not a regular file")
                     with bundle.extractfile(member) as source, target.open("wb") as output:

@@ -11,6 +11,40 @@ use serde_json::{Map, Value, json};
 use crate::error::EmitError;
 
 pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
+    if nodes.iter().any(|node| {
+        !matches!(
+            node.protocol,
+            ProtocolKind::Vless
+                | ProtocolKind::VMess
+                | ProtocolKind::Trojan
+                | ProtocolKind::Shadowsocks
+        ) || node.transport.as_ref().is_some_and(|t| {
+            !matches!(
+                t.kind,
+                TransportKind::Tcp
+                    | TransportKind::Ws
+                    | TransportKind::H2
+                    | TransportKind::Grpc
+                    | TransportKind::Quic
+            )
+        })
+    }) {
+        return Err(EmitError::NoEmitter(
+            "unsupported V2Ray protocol or transport".into(),
+        ));
+    }
+    if nodes
+        .iter()
+        .any(|node| node.tls.as_ref().is_some_and(|tls| tls.reality.is_some()))
+    {
+        return Err(EmitError::NoEmitter(
+            "V2Ray does not support Reality security".into(),
+        ));
+    }
+    emit_xray_compatible(nodes)
+}
+
+pub(super) fn emit_xray_compatible(nodes: &[Node]) -> Result<String, EmitError> {
     let outbounds: Result<Vec<Value>, EmitError> = nodes.iter().map(emit_outbound).collect();
     let doc = json!({
         "outbounds": outbounds?,
@@ -230,7 +264,15 @@ fn vless(node: &Node, server: &str, port: u16) -> Emit {
 }
 
 fn stream_settings(node: &Node) -> Option<Value> {
-    let transport = node.transport.as_ref()?;
+    // WHY: container imports commonly omit the default TCP transport; TLS and
+    // Reality still require streamSettings and must never become plaintext.
+    let default_tcp = Transport {
+        kind: TransportKind::Tcp,
+        path: None,
+        host: None,
+        xhttp_mode: None,
+    };
+    let transport = node.transport.as_ref().unwrap_or(&default_tcp);
     let network = match transport.kind {
         TransportKind::Tcp => "tcp",
         TransportKind::Ws => "ws",

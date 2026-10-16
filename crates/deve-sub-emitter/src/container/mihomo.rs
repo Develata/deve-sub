@@ -480,6 +480,17 @@ fn emit_snell(
         ProtocolConfig::Snell(c) => c,
         _ => return Err(EmitError::MissingField("snell config")),
     };
+    if cfg.version == deve_sub_domain::SnellVersion::V6
+        || node.extras.contains_key("snell_userkey")
+        || (matches!(
+            cfg.version,
+            deve_sub_domain::SnellVersion::V1 | deve_sub_domain::SnellVersion::V2
+        ) && node.udp.supported == Some(true))
+    {
+        return Err(EmitError::NoEmitter(
+            "Mihomo cannot preserve these Snell version/authentication/UDP settings".into(),
+        ));
+    }
     let mut entry = yaml_entry(name, "snell", server, port);
     entry.push_str(&format!("\n    psk: {}", yaml_dq(psk)));
     entry.push_str(&format!("\n    version: {}", cfg.version.as_u32()));

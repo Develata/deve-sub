@@ -36,6 +36,10 @@ time = { workspace = true }
 workspace = true
 
 [dev-dependencies]
+base64 = { workspace = true }
+deve-sub-protocol = { workspace = true }
+deve-sub-yaml = { workspace = true }
+reqwest = { workspace = true }
 tempfile = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 serde_json = { workspace = true }

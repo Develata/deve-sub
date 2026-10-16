@@ -101,8 +101,12 @@ async fn gen015_source_delete_invalidates_direct_generation_cache() {
 }
 
 #[tokio::test]
-async fn gen015_v2_v3_caches_are_regenerated_and_never_used_as_fallback() {
-    for salt in ["deve-sub-generation-v2", "deve-sub-generation-v3"] {
+async fn gen015_v2_v3_v4_caches_are_regenerated_and_never_used_as_fallback() {
+    for salt in [
+        "deve-sub-generation-v2",
+        "deve-sub-generation-v3",
+        "deve-sub-generation-v4",
+    ] {
         for surface in ["generate", "preview", "delivery"] {
             let db = TestDb::new(SPEC_MIHOMO_ONLY, "v2-hit").await;
             seed_legacy_cache(&db, Some(salt)).await;

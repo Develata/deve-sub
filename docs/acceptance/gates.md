@@ -19,6 +19,11 @@ output or honest not-run state.
 Only `pass` counts toward completion. `planned`, `not-run`, and `blocked` are
 non-pass states.
 
+The [subscription protocol and DNS acceptance matrix](subscription-protocols.md)
+separates generated-output coverage from actual client validation. Its approved
+follow-up covers structural template expansion, 55 generated/22 rejected matrix
+cells, and current pinned-core checks after resolving the earlier four blockers.
+
 ## Rust gates
 
 ```bash
@@ -1522,3 +1527,50 @@ mobile hardware, native VM/systemd, signed deployment and long soak are
 push, PR, merge or deployment is performed in this round. The separate Python
 soak does not claim that the ignored Rust soak wrapper ran, and short-run
 success is not a performance improvement or long-term reliability claim.
+
+### 2026-10-16 — approved template and protocol acceptance follow-up
+
+This slice starts at main `aa6ecea37cb47e0ccecc204122aede45013a30e8` on
+`test/subscription-protocol-acceptance`. It completes the separately approved
+product corrections exposed by the initial test-only commit. The sanitized
+attachment retains its full DNS/group shape and 23 representative ordered rules.
+Structural placeholders now expand under fixed/dynamic selection, with explicit
+empty-provider warnings and safe empty groups. Raw history and DNS ordering are
+preserved. WireGuard endpoints, Snell version/security constraints, V2Ray Reality
+rejection and complete ShadowTLS URI rejection match the documented matrix.
+Generation cache v5 invalidates prior output semantics.
+
+Two independent review lanes found and closed endpoint collapse, security-field
+loss, target restrictions, default routing, wrapper tag collisions, cache-notice
+fallback and placeholder isolation issues. Regression tests cover each accepted
+finding. The compatibility tests were extracted from their source module to stay
+within the existing file-size fuse; its former exception was removed.
+
+| Local gate | Actual result |
+|---|---|
+| `cargo fmt --all -- --check` | pass |
+| `cargo clippy --locked --all-targets --all-features -- -D warnings` | pass after two equivalent conditional-style fixes |
+| `cargo check --locked --all-targets --all-features` | pass |
+| `cargo test --locked --all-targets --all-features` | 1,229 passed, 0 failed, 10 ignored; 114 result groups; 21 benchmark smoke checks |
+| `cargo test --locked --all-features --doc` | pass; no runnable doctests |
+| Focused subscription acceptance | 10 passed, 2 explicit validator ignores |
+| Explicit server core validators | 2 passed: 31 individual delivered configurations, 3 mixed sets, 1 full DNS routing template, plus invalid-protocol controls |
+| Existing emitter core validators | 7/7 passed |
+| Architecture / docs / inventory | 17 crates; 157 acceptance cases, 601 symbol references; 9 Rust shards and 4 browser lanes; pass |
+| Architecture / CI Python / soak-unit / health-deadline unit tests | 10/10, 15/15, 1/1, 2/2 |
+| Generated OpenAPI comparison / `git diff --check` | pass; OpenAPI unchanged |
+
+Core versions are checksum-pinned Mihomo 1.19.30, sing-box 1.14.3 and Xray
+26.3.27. Ordinary deterministic tests perform no core downloads. Both native
+HTTP source refresh and public subscription download run on loopback; core
+validation uses isolated temporary directories, synthetic geosite data and
+bounded subprocesses. No real proxy endpoint, template resolver or production
+service was contacted. This does not establish live proxy connectivity,
+production DNS behavior or performance improvements.
+
+The ten ordinary ignores comprise the nine separately executed core-validator
+tests and the real-process soak wrapper. Browser/WASM, release artifacts,
+Docker/ARM64, supply-chain policy and the real-process soak were not run locally
+for this slice; their hosted results must be checked on the exact final PR head,
+not inherited from the earlier test-only SHA. PR workflows intentionally skip
+multiarch. No merge or deployment is authorized.

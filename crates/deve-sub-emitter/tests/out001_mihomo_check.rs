@@ -2,7 +2,7 @@
 //!
 //! Emits a multi-protocol subscription via `emit_mihomo`, wraps the
 //! `proxies:` array in a minimal Mihomo config, and validates it with
-//! `mihomo -t -f <file>`.
+//! `mihomo -t -d <isolated-directory> -f <file>`.
 //!
 //! WHY #[ignore]: these tests require the `mihomo` binary on PATH. Without
 //! it, `cargo test` reports them as `ignored` (honest), not `pass` (which
@@ -15,12 +15,10 @@ mod common;
 
 use std::process::Command;
 
-use tempfile::NamedTempFile;
-
 /// Returns `true` when `mihomo` is on PATH.
 fn mihomo_available() -> bool {
-    Command::new("mihomo")
-        .arg("-v")
+    Command::new("timeout")
+        .args(["--kill-after=2s", "5s", "mihomo", "-v"])
         .output()
         .is_ok_and(|o| o.status.success())
 }
@@ -54,7 +52,7 @@ fn out001_native_routing_templates_pass_mihomo() {
         // The outer timeout bounds client startup/provider validation even if
         // a future fixture accidentally introduces a blocking remote provider.
         let output = Command::new("timeout")
-            .args(["15s", "mihomo", "-t", "-d"])
+            .args(["--kill-after=2s", "15s", "mihomo", "-t", "-d"])
             .arg(directory.path())
             .arg("-f")
             .arg(config)
@@ -69,8 +67,7 @@ fn out001_native_routing_templates_pass_mihomo() {
     }
 }
 
-/// OUT-001: emitted Mihomo YAML passes `mihomo -t` for every supported
-/// protocol.
+/// OUT-001: the existing six-protocol baseline passes `mihomo -t`.
 #[test]
 #[ignore = "requires mihomo binary on PATH; run with cargo test -- --ignored"]
 fn out001_mihomo_check_passes() {
@@ -86,13 +83,16 @@ fn out001_mihomo_check_passes() {
     // we prepend a minimal header.
     let config = format!("mixed-port: 7890\nmode: rule\nlog-level: info\n{proxies_yaml}\n");
 
-    let tmp = NamedTempFile::new().expect("temp file");
-    std::fs::write(tmp.path(), &config).expect("write config");
+    let directory = tempfile::tempdir().expect("client directory");
+    let path = directory.path().join("config.yaml");
+    std::fs::write(&path, &config).expect("write config");
 
-    let output = Command::new("mihomo")
-        .arg("-t")
+    // Never depend on or mutate the developer's default core directory.
+    let output = Command::new("timeout")
+        .args(["--kill-after=2s", "15s", "mihomo", "-t", "-d"])
+        .arg(directory.path())
         .arg("-f")
-        .arg(tmp.path())
+        .arg(path)
         .output()
         .expect("run mihomo -t");
 
@@ -113,22 +113,31 @@ fn out001_mihomo_check_rejects_garbage() {
         panic!("mihomo binary not on PATH — required for release gate validation (B-19)");
     }
 
-    let tmp = NamedTempFile::new().expect("temp file");
+    let directory = tempfile::tempdir().expect("client directory");
+    let path = directory.path().join("config.yaml");
     std::fs::write(
-        tmp.path(),
+        &path,
         b"mixed-port: 7890\nproxies: [this is not valid yaml ]]",
     )
     .expect("write config");
 
-    let output = Command::new("mihomo")
-        .arg("-t")
+    let output = Command::new("timeout")
+        .args(["--kill-after=2s", "15s", "mihomo", "-t", "-d"])
+        .arg(directory.path())
         .arg("-f")
-        .arg(tmp.path())
+        .arg(path)
         .output()
         .expect("run mihomo -t");
 
+    let log = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.status.code(), Some(1), "{log}");
+    // A directory permission error or timeout must not pass this negative case.
     assert!(
-        !output.status.success(),
-        "mihomo -t should reject garbage, but succeeded"
+        log.contains("yaml: line 1: did not find expected key"),
+        "expected YAML rejection: {log}"
     );
 }

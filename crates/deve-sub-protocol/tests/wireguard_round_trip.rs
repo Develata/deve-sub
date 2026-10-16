@@ -9,9 +9,9 @@
 
 use deve_sub_domain::{Authentication, ProtocolConfig, ProtocolKind, WireGuardConfig};
 
-const PRIVATE_KEY: &str = "TEST_PRIVATE_KEY_BASE64";
-const PUBLIC_KEY: &str = "TEST_PUBLIC_KEY_BASE64";
-const PSK: &str = "TEST_PSK_BASE64";
+const PRIVATE_KEY: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const PUBLIC_KEY: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+const PSK: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 
 // --- PARSE-019: WireGuard URI ---
 

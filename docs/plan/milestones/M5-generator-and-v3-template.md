@@ -7,8 +7,19 @@ The default authoring surface accepts Clash/Mihomo routing YAML: `rules`,
 also accepted. When groups are omitted, Application supplies a `PROXY` select
 group with `include-all-proxies: true`. Explicit groups retain their native
 options, including filters, health checks and nested group references.
-Nodes remain owned by the unified pool; embedded `proxies` and external
-`proxy-providers` are rejected rather than silently replaced. Other top-level
+Nodes remain owned by the unified pool. `mode: rule` is accepted and retained;
+other modes are rejected. An absent, null or empty-list `proxies` is an empty
+insertion slot replaced by selected compatible pool nodes; nonempty or malformed
+embedded proxies and external `proxy-providers`/group `use` remain rejected.
+The exact group-member token `__PROXY_NODES__` expands at its authored position
+to eligible output names in alphabetical order, using the same include filter
+as automatic membership and stable first-occurrence deduplication. The exact
+`__PROXY_PROVIDERS__` token and `include-all-providers: true` contribute no
+members because external proxy providers are unsupported; generation reports
+that normalization explicitly, including cache hits. Neither token is a general
+text interpolation facility or a valid group name. Empty groups retain the
+existing fail-closed REJECT behavior. DNS values, policy-key insertion order,
+rules, group order and authored version-history text are preserved. Other top-level
 sections outside this routing scope are rejected with a field-specific error.
 
 Application detects the input format and validates size/depth/scripts before

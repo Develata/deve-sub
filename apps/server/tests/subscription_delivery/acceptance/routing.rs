@@ -1,22 +1,5 @@
 use super::*;
 
-/// An explicitly LIMITED projection for today's routing-only contract. The
-/// untouched sanitized upload is tested separately and is NOT accepted as-is.
-pub(super) fn supported_routing_projection() -> String {
-    UPLOADED
-        .lines()
-        .filter(|line| {
-            !line.starts_with("mode:")
-                && !line.starts_with("proxies:")
-                && !line.contains("include-all-providers:")
-                && !line.contains("__PROXY_PROVIDERS__")
-                && !line.contains("__PROXY_NODES__")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n"
-}
-
 fn yaml(text: &str) -> Value {
     serde_json::to_value(deve_sub_yaml::parse_generated_value(text).expect("YAML"))
         .expect("JSON view")
@@ -32,37 +15,42 @@ fn policy_keys(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// GEN-002/015: records the exact upload boundary instead of silently rewriting
-/// the fixture or claiming that placeholders/provider expansion already works.
+/// Only empty pool insertion slots are normalized. Actual nodes/providers and
+/// non-rule modes remain explicit input errors.
 #[tokio::test]
-async fn acceptance_uploaded_template_reports_existing_contract_blockers() {
-    assert_eq!(UPLOADED.lines().count(), 350);
-    let original = yaml(UPLOADED);
-    assert!(original["proxies"].is_null());
-    assert_eq!(original["mode"], "rule");
-    assert_eq!(
-        original["proxy-groups"].as_array().expect("groups").len(),
-        4
-    );
+async fn acceptance_uploaded_template_rejects_nonempty_nodes_and_external_providers() {
+    assert_eq!(yaml(UPLOADED)["rules"].as_array().expect("rules").len(), 23);
     let app = TestApp::new().await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
-    let projection = supported_routing_projection();
     for (input, message) in [
-        (UPLOADED.to_owned(), "unsupported Clash section"),
-        (format!("mode: rule\n{projection}"), "'mode'"),
-        (format!("proxies: null\n{projection}"), "'proxies'"),
         (
-            format!("proxy-providers: {{}}\n{projection}"),
+            UPLOADED.replace("mode: rule", "mode: direct"),
+            "mode must be rule",
+        ),
+        (
+            UPLOADED.replace("proxies: null", "proxies: [{name: embedded}]"),
+            "proxies must be null or an empty list",
+        ),
+        (
+            format!("proxy-providers: {{}}\n{UPLOADED}"),
             "'proxy-providers'",
         ),
         (
-            projection.replacen(
-                "include-all-proxies: true",
-                "include-all-providers: true",
+            UPLOADED.replacen("include-all-providers: true", "use: [external]", 1),
+            "external proxy providers",
+        ),
+        (
+            UPLOADED.replacen("name: 🚀 节点选择", "name: __PROXY_NODES__", 1),
+            "reserved or invalid group name",
+        ),
+        (
+            UPLOADED.replacen(
+                "type: select",
+                "type: select\n    default-selected: __PROXY_NODES__",
                 1,
             ),
-            "external proxy providers",
+            "only supported in proxies lists",
         ),
     ] {
         let response = router
@@ -70,65 +58,39 @@ async fn acceptance_uploaded_template_reports_existing_contract_blockers() {
             .oneshot(with_cookie(
                 post_json(
                     "/api/v1/templates",
-                    &json!({"name":"blocked-upload","spec_yaml":input}).to_string(),
+                    &json!({"name":"invalid-template", "spec_yaml":input}).to_string(),
                 ),
                 &cookie,
             ))
             .await
-            .expect("create rejected template");
+            .expect("create");
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let error = body_to_json(response).await;
         assert!(
-            error["message"]
-                .as_str()
-                .expect("error message")
-                .contains(message),
+            error["message"].as_str().expect("error").contains(message),
             "{error}"
         );
     }
-    let cases = cases();
-    import_cases(&app, &router, &cookie, &cases[2..3]).await;
-    for placeholder in ["__PROXY_PROVIDERS__", "__PROXY_NODES__"] {
-        let spec = projection.replacen(
-            "      - REJECT",
-            &format!("      - {placeholder}\n      - REJECT"),
-            1,
-        );
-        let id = template(&router, &cookie, &spec).await;
-        let response = generate(&router, &cookie, &id, "mihomo", "lenient").await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let error = body_to_json(response).await;
-        assert!(
-            error["message"]
-                .as_str()
-                .expect("error")
-                .contains(placeholder),
-            "{error}"
-        );
-        let token = subscription(&router, &cookie, &id, "mihomo", None).await;
-        assert_eq!(
-            router
-                .clone()
-                .oneshot(get(&format!("/sub/{token}/mihomo")))
-                .await
-                .expect("blocked delivery")
-                .status(),
-            StatusCode::SERVICE_UNAVAILABLE
-        );
+    // All accepted empty insertion forms retain the same routing semantics.
+    for input in [
+        UPLOADED.to_owned(),
+        UPLOADED.replace("proxies: null", "proxies: []"),
+        UPLOADED.replace("proxies: null\n", ""),
+    ] {
+        template(&router, &cookie, &input).await;
     }
 }
 
-/// The supported projection retains every DNS value, policy insertion order,
-/// rule and rule order. Node names must resolve and all four Unicode groups
-/// remain connected. This does not test expansion of the removed placeholders.
+/// The uploaded template retains every DNS value, ordered policy and representative
+/// rule. Expansion preserves token position and all Unicode group references.
 #[tokio::test]
-async fn acceptance_routing_projection_preserves_dns_rules_and_group_references() {
+async fn acceptance_uploaded_template_expands_nodes_and_preserves_dns_rules() {
     let app = TestApp::new().await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
     let cases = cases();
     let ids = import_cases(&app, &router, &cookie, &cases).await;
-    let spec = supported_routing_projection();
+    let spec = UPLOADED.to_owned();
     let id = template(&router, &cookie, &spec).await;
     let response = generate(&router, &cookie, &id, "mihomo", "lenient").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -140,6 +102,26 @@ async fn acceptance_routing_projection_preserves_dns_rules_and_group_references(
         .map(|(id, _)| id.clone())
         .collect::<Vec<_>>();
     assert_report(&report, &included, &ids[6..7]);
+    let notices = report["warnings"]
+        .as_array()
+        .expect("warnings")
+        .iter()
+        .filter(|w| {
+            w.as_str()
+                .is_some_and(|s| s.contains("provider placeholder"))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(notices.len(), 3);
+    let cached = body_to_json(generate(&router, &cookie, &id, "mihomo", "lenient").await).await;
+    for notice in &notices {
+        assert!(
+            cached["warnings"]
+                .as_array()
+                .expect("cached notices")
+                .contains(notice)
+        );
+    }
     let token = subscription(&router, &cookie, &id, "mihomo", None).await;
     let response = router
         .clone()
@@ -162,6 +144,7 @@ async fn acceptance_routing_projection_preserves_dns_rules_and_group_references(
 pub(super) fn assert_routing(content: &str, spec: &str) {
     let output = yaml(content);
     let original = yaml(UPLOADED);
+    assert_eq!(output["mode"], "rule");
     assert_eq!(output["dns"], original["dns"]);
     assert_eq!(output["rules"], original["rules"]);
     assert_eq!(policy_keys(content), policy_keys(UPLOADED));
@@ -194,21 +177,39 @@ pub(super) fn assert_routing(content: &str, spec: &str) {
         assert_eq!(group["type"], before["type"]);
         let members = group["proxies"].as_array().expect("members");
         let explicit = before["proxies"].as_array().expect("authored members");
-        assert_eq!(&members[..explicit.len()], explicit);
-        let actual: BTreeSet<_> = members
-            .iter()
-            .map(|v| v.as_str().expect("member"))
-            .collect();
-        assert_eq!(actual.len(), members.len());
-        assert!(actual.is_subset(&namespace), "dangling group member");
-        let mut expected: BTreeSet<_> = explicit
-            .iter()
-            .map(|v| v.as_str().expect("member"))
-            .collect();
-        if before["include-all-proxies"] == true {
-            expected.extend(&nodes);
+        let mut expected = Vec::new();
+        for member in explicit.iter().map(|v| v.as_str().expect("member")) {
+            match member {
+                "__PROXY_PROVIDERS__" => {}
+                "__PROXY_NODES__" => expected.extend(nodes.iter().copied()),
+                other => expected.push(other),
+            }
         }
-        assert_eq!(actual, expected, "group {}", group["name"]);
+        if before["include-all-proxies"] == true {
+            expected.extend(nodes.iter().copied());
+        }
+        let mut seen = BTreeSet::new();
+        expected.retain(|member| seen.insert(*member));
+        let actual = members
+            .iter()
+            .map(|v| v.as_str().expect("member"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual, expected,
+            "group {} token position/order",
+            group["name"]
+        );
+        assert!(
+            actual.iter().all(|m| namespace.contains(m)),
+            "dangling group member"
+        );
+        for flag in [
+            "include-all",
+            "include-all-proxies",
+            "include-all-providers",
+        ] {
+            assert!(group.get(flag).is_none());
+        }
     }
     for resolver in output["dns"]["nameserver"].as_array().expect("resolvers") {
         let (_, group) = resolver

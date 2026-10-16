@@ -66,8 +66,19 @@ pub(super) fn validate(
     config: &Map<String, Value>,
     nodes: Option<&HashSet<&str>>,
 ) -> Result<(), TemplateAppError> {
+    super::clash_normalization::validate(config)?;
     for key in config.keys() {
-        if !["proxy-groups", "rules", "rule-providers", "dns", "tun"].contains(&key.as_str()) {
+        if ![
+            "proxy-groups",
+            "rules",
+            "rule-providers",
+            "dns",
+            "tun",
+            "mode",
+            "proxies",
+        ]
+        .contains(&key.as_str())
+        {
             return Err(invalid(format!(
                 "unsupported Clash section '{key}'; use routing sections only, nodes come from the node pool"
             )));
@@ -90,6 +101,7 @@ pub(super) fn validate(
         if name.trim().is_empty()
             || name.contains([',', '\n', '\r'])
             || POLICIES.contains(&name)
+            || super::clash_normalization::TOKENS.contains(&name)
             || !names.insert(name)
         {
             return Err(invalid(format!(
@@ -143,12 +155,19 @@ pub(super) fn validate(
                 )));
             }
         }
-        if group.get("use").is_some()
-            || group.get("include-all-providers").and_then(Value::as_bool) == Some(true)
-        {
+        if group.get("use").is_some() {
             return Err(invalid(format!(
                 "proxy-groups '{name}': external proxy providers are not supported; use include-all-proxies"
             )));
+        }
+        if group
+            .get("default-selected")
+            .and_then(Value::as_str)
+            .is_some_and(|value| super::clash_normalization::TOKENS.contains(&value))
+        {
+            return Err(invalid(
+                "group placeholders are only supported in proxies lists",
+            ));
         }
     }
     let mut edges = HashMap::new();
@@ -156,9 +175,13 @@ pub(super) fn validate(
         let name = required_string(group, "name")?;
         let members = strings(group.get("proxies"), "proxy-groups.proxies")?;
         if members.is_empty()
-            && !["include-all", "include-all-proxies"]
-                .iter()
-                .any(|key| group.get(key).and_then(Value::as_bool) == Some(true))
+            && ![
+                "include-all",
+                "include-all-proxies",
+                "include-all-providers",
+            ]
+            .iter()
+            .any(|key| group.get(key).and_then(Value::as_bool) == Some(true))
         {
             return Err(invalid(format!(
                 "proxy-groups '{name}' has no members; add proxies or include-all-proxies: true"

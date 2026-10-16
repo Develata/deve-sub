@@ -24,6 +24,21 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
         }
     };
 
+    let ProtocolConfig::Snell(cfg) = &node.config else {
+        return Err(EmitError::NoEmitter("non-Snell config".into()));
+    };
+    if cfg.v6_mode.is_some()
+        || node.extras.contains_key("snell_userkey")
+        || !cfg.tls_is_obfs_alias(node.tls.as_ref())
+        || cfg
+            .obfs
+            .as_ref()
+            .is_some_and(|o| o.password.is_some() || o.version.is_some())
+    {
+        return Err(EmitError::NoEmitter(
+            "Snell options without URI representation".into(),
+        ));
+    }
     let SnellConfig {
         version,
         reuse,

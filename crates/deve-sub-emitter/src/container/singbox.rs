@@ -1,7 +1,7 @@
 //! sing-box JSON container emitter.
 //!
-//! Emits an `outbounds` array with one entry per compatible node. The full
-//! document (route, DNS, inbounds) is assembled in Slice 5.
+//! Emits current outbounds/endpoints and an explicit logical default route.
+//! ShadowTLS expands to a uniquely tagged wrapper plus its inner outbound.
 
 use deve_sub_domain::{
     Authentication, CongestionController, Node, ProtocolConfig, ProtocolKind, SnellObfsMode,
@@ -16,21 +16,42 @@ type EmitResult = Result<(&'static str, Vec<(String, Value)>), EmitError>;
 pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
     // WHY: ShadowTLS in sing-box expands to two outbounds — a `shadowtls`
     // outbound and an inner protocol outbound with `detour` pointing to it.
-    // All other protocols produce exactly one outbound. Flatten the
-    // per-node `Vec<Value>` results into a single `outbounds` array.
+    // WireGuard uses endpoints; all remaining nodes produce one outbound.
     let mut outbounds: Vec<Value> = Vec::new();
+    let mut endpoints: Vec<Value> = Vec::new();
+    let mut tags: std::collections::HashSet<String> =
+        nodes.iter().map(|n| n.display_name.clone()).collect();
+    if tags.len() != nodes.len() {
+        return Err(EmitError::Encode("duplicate sing-box node tags".into()));
+    }
     for node in nodes {
-        if node.protocol == ProtocolKind::ShadowTls {
-            let (stls, inner) = shadowtls_pair(node)?;
+        if node.protocol == ProtocolKind::WireGuard {
+            endpoints.push(super::singbox_wireguard::emit(node)?);
+        } else if node.protocol == ProtocolKind::ShadowTls {
+            let base = format!("{}-stls", node.display_name);
+            let mut wrapper = base.clone();
+            let mut suffix = 2;
+            while !tags.insert(wrapper.clone()) {
+                wrapper = format!("{base}-{suffix}");
+                suffix += 1;
+            }
+            let (stls, inner) = shadowtls_pair(node, wrapper)?;
             outbounds.push(stls);
             outbounds.push(inner);
         } else {
             outbounds.push(emit_outbound(node)?);
         }
     }
-    let doc = json!({
-        "outbounds": outbounds,
-    });
+    let mut doc = json!({ "outbounds": outbounds });
+    if !endpoints.is_empty() {
+        doc["endpoints"] = json!(endpoints)
+    }
+    // WHY: endpoint-only documents otherwise fall back to DIRECT; a ShadowTLS
+    // wrapper is also not the logical default. Preserve the first node's tag.
+    if let Some(first) = nodes.first() {
+        doc["route"] = json!({ "final": first.display_name })
+    }
+
     serde_json::to_string_pretty(&doc).map_err(|e| EmitError::Encode(e.to_string()))
 }
 
@@ -46,7 +67,6 @@ fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
         ProtocolKind::Vless => vless(node)?,
         ProtocolKind::Hysteria2 => hysteria2(node)?,
         ProtocolKind::TuicV5 => tuic_v5(node)?,
-        ProtocolKind::WireGuard => wireguard(node)?,
         ProtocolKind::AnyTls => anytls(node)?,
         ProtocolKind::Snell => snell(node)?,
         ref other => {
@@ -322,86 +342,6 @@ fn tuic_v5(node: &Node) -> EmitResult {
     Ok(("tuic", fields))
 }
 
-fn wireguard(node: &Node) -> EmitResult {
-    let cfg = match &node.config {
-        ProtocolConfig::WireGuard(c) => c,
-        _ => return Err(EmitError::MissingField("wireguard config")),
-    };
-
-    let mut fields: Vec<(String, Value)> = Vec::new();
-    fields.push((
-        "private_key".to_owned(),
-        Value::String(cfg.private_key.clone()),
-    ));
-
-    if !cfg.address.is_empty() {
-        fields.push((
-            "local_address".to_owned(),
-            Value::Array(
-                cfg.address
-                    .iter()
-                    .map(|a| Value::String(a.clone()))
-                    .collect(),
-            ),
-        ));
-    }
-    if let Some(mtu) = cfg.mtu {
-        fields.push(("mtu".to_owned(), json!(mtu)));
-    }
-    if let Some(workers) = cfg.workers {
-        fields.push(("workers".to_owned(), json!(workers)));
-    }
-
-    let peers: Result<Vec<Value>, EmitError> = cfg
-        .peers
-        .iter()
-        .map(|p| {
-            let mut peer = Map::new();
-            peer.insert(
-                "server".to_owned(),
-                Value::String(node.endpoint.host.uri_host()),
-            );
-            peer.insert("server_port".to_owned(), json!(node.endpoint.port));
-            peer.insert("public_key".to_owned(), Value::String(p.public_key.clone()));
-            if let Some(ref psk) = p.pre_shared_key {
-                peer.insert("pre_shared_key".to_owned(), Value::String(psk.clone()));
-            }
-            if !p.allowed_ips.is_empty() {
-                peer.insert(
-                    "allowed_ips".to_owned(),
-                    Value::Array(
-                        p.allowed_ips
-                            .iter()
-                            .map(|ip| Value::String(ip.clone()))
-                            .collect(),
-                    ),
-                );
-            }
-            if let Some(reserved) = p.reserved {
-                peer.insert(
-                    "reserved".to_owned(),
-                    Value::Array(
-                        reserved
-                            .iter()
-                            .map(|b| Value::Number((*b).into()))
-                            .collect(),
-                    ),
-                );
-            }
-            if let Some(ka) = p.persistent_keepalive {
-                let secs = ka.whole_seconds();
-                if secs >= 0 {
-                    peer.insert("persistent_keepalive_interval".to_owned(), json!(secs));
-                }
-            }
-            Ok(Value::Object(peer))
-        })
-        .collect();
-    fields.push(("peers".to_owned(), Value::Array(peers?)));
-
-    Ok(("wireguard", fields))
-}
-
 fn anytls(node: &Node) -> EmitResult {
     let password = match &node.authentication {
         Authentication::Password { password } => password.clone(),
@@ -444,6 +384,19 @@ fn snell(node: &Node) -> EmitResult {
         _ => return Err(EmitError::MissingField("snell config")),
     };
 
+    if !cfg.tls_is_obfs_alias(node.tls.as_ref())
+        || (cfg.version == SnellVersion::V6 && cfg.obfs.is_some())
+        || (cfg.version != SnellVersion::V6 && cfg.v6_mode.is_some())
+        || cfg
+            .obfs
+            .as_ref()
+            .is_some_and(|o| o.password.is_some() || o.version.is_some() || !o.alpn.is_empty())
+    {
+        return Err(EmitError::NoEmitter(
+            "sing-box Snell cannot preserve these TLS/obfuscation settings".into(),
+        ));
+    }
+
     let mut fields: Vec<(String, Value)> = vec![
         ("psk".to_owned(), Value::String(psk)),
         ("version".to_owned(), json!(cfg.version.as_u32())),
@@ -476,9 +429,6 @@ fn snell(node: &Node) -> EmitResult {
                 if let Some(ref host) = obfs.host {
                     fields.push(("obfs_host".to_owned(), Value::String(host.clone())));
                 }
-            }
-            if matches!(cfg.obfs.as_ref().map(|o| o.mode), Some(SnellObfsMode::Tls)) {
-                push_tls_fields(&mut fields, node);
             }
         }
         SnellVersion::V6 => {
@@ -568,7 +518,7 @@ fn singbox_transport(transport: &Transport) -> Option<Value> {
 /// wrapper outbound and the inner protocol outbound with `detour`.
 ///
 /// Returns `(shadowtls_outbound, inner_outbound)`.
-fn shadowtls_pair(node: &Node) -> Result<(Value, Value), EmitError> {
+fn shadowtls_pair(node: &Node, shadowtls_tag: String) -> Result<(Value, Value), EmitError> {
     let cfg = match &node.config {
         ProtocolConfig::ShadowTls(c) => c,
         _ => return Err(EmitError::MissingField("shadowtls config")),
@@ -576,13 +526,6 @@ fn shadowtls_pair(node: &Node) -> Result<(Value, Value), EmitError> {
 
     let server = node.endpoint.host.uri_host();
     let port = node.endpoint.port;
-    let tag = node.display_name.clone();
-    // WHY: derive a stable shadowtls tag from the node tag to keep
-    // round-trip deterministic. The parser matches by `detour` reference,
-    // so the exact suffix doesn't matter as long as it's unique within the
-    // document. Suffixing avoids collisions with the inner outbound tag.
-    let shadowtls_tag = format!("{tag}-stls");
-
     // --- shadowtls outbound ---
     let mut stls_obj = Map::new();
     stls_obj.insert("type".to_owned(), Value::String("shadowtls".to_owned()));

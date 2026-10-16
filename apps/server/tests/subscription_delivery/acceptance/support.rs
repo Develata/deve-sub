@@ -14,37 +14,11 @@ impl Case {
         );
         let value = serde_json::to_value(node).expect("node JSON");
         for (path, expected) in &self.fields {
-            // The de-facto ShadowTLS URI carries only the wrapper. Assert the
-            // explicit loss below instead of claiming an inner proxy survives.
-            if profile == "uri_list"
-                && self.protocol == ProtocolKind::ShadowTls
-                && (path.starts_with("/config/ShadowTls/inner_") || path == "/authentication")
-            {
-                continue;
-            }
-            if profile == "uri_list"
-                && self.protocol == ProtocolKind::ShadowTls
-                && path == "/tls/skip_cert_verify"
-            {
-                // Current URI parser explicitly defaults this wrapper to secure.
-                assert_eq!(value.pointer(path), Some(&json!(false)));
-            } else {
-                assert_eq!(
-                    value.pointer(path),
-                    Some(expected),
-                    "{} -> {profile}: {path}",
-                    self.name
-                );
-            }
-        }
-        if profile == "uri_list" && self.protocol == ProtocolKind::ShadowTls {
             assert_eq!(
-                value["config"]["ShadowTls"]["inner_protocol"],
-                json!({"Unknown":""})
-            );
-            assert_eq!(value["authentication"], json!({"type":"none"}));
-            assert!(
-                matches!(&node.config, ProtocolConfig::ShadowTls(c) if matches!(*c.inner_config, ProtocolConfig::Unsupported(_)))
+                value.pointer(path),
+                Some(expected),
+                "{} -> {profile}: {path}",
+                self.name
             );
         }
     }
@@ -196,12 +170,16 @@ pub(super) fn assert_report(report: &Value, included: &[String], excluded: &[Str
         excluded.iter().map(String::as_str).collect()
     );
     for entry in actual {
-        assert!(
-            entry["reason"]
-                .as_str()
-                .expect("reason")
-                .contains("unsupported protocol")
-        );
+        let case = cases()
+            .into_iter()
+            .find(|c| entry["display_name"] == c.name)
+            .expect("known excluded fixture");
+        let expected = if report["profile"] == "v2ray" && case.protocol == ProtocolKind::Vless {
+            "unsupported field: Reality security on V2Ray".to_owned()
+        } else {
+            format!("unsupported protocol '{}' for profile", case.protocol)
+        };
+        assert_eq!(entry["reason"], expected);
         assert!(
             entry["display_name"]
                 .as_str()
@@ -224,7 +202,20 @@ pub(super) fn assert_content_type(response: &axum::response::Response, profile: 
 }
 
 pub(super) fn assert_output(content: &str, profile: &str, expected: &[&Case]) {
-    assert!(!content.contains("__PROXY_"), "unexpanded placeholder");
+    if profile == "mihomo" {
+        let raw = deve_sub_yaml::parse_generated_value(content).expect("YAML");
+        for group in raw["proxy-groups"].as_sequence().into_iter().flatten() {
+            for member in group["proxies"].as_sequence().into_iter().flatten() {
+                assert!(
+                    !matches!(
+                        member.as_str(),
+                        Some("__PROXY_NODES__" | "__PROXY_PROVIDERS__")
+                    ),
+                    "unexpanded structural placeholder"
+                );
+            }
+        }
+    }
     use deve_sub_protocol::container::*;
     let nodes: Vec<Node> = match profile {
         "mihomo" => parse_mihomo_yaml(content).expect("Mihomo nodes"),
@@ -288,7 +279,32 @@ pub(super) fn assert_output(content: &str, profile: &str, expected: &[&Case]) {
                 .iter()
                 .filter(|c| c.protocol == ProtocolKind::ShadowTls)
                 .count();
-        assert_eq!(outbounds.len(), expected.len() + wrappers);
+        let endpoints = usize::from(profile == "sing-box")
+            * expected
+                .iter()
+                .filter(|c| c.protocol == ProtocolKind::WireGuard)
+                .count();
+        assert_eq!(outbounds.len(), expected.len() + wrappers - endpoints);
+        if profile == "sing-box" {
+            assert_eq!(doc["endpoints"].as_array().map_or(0, Vec::len), endpoints);
+            let final_tag = doc["route"]["final"]
+                .as_str()
+                .expect("explicit default route");
+            assert!(
+                names.contains(final_tag),
+                "default must be a logical node, not DIRECT or wrapper"
+            );
+            for endpoint in doc["endpoints"].as_array().into_iter().flatten() {
+                assert_eq!(endpoint["type"], "wireguard");
+                assert!(endpoint.get("local_address").is_none());
+                assert!(endpoint.get("server").is_none());
+                assert!(endpoint["peers"][0]["address"].is_string());
+                assert!(endpoint["peers"][0]["port"].is_number());
+            }
+            for snell in outbounds.iter().filter(|o| o["type"] == "snell") {
+                assert!(snell.get("tls").is_none());
+            }
+        }
         if wrappers > 0 {
             let wrapper = outbounds
                 .iter()

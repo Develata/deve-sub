@@ -19,8 +19,9 @@
 //! of whether the node was parsed from a URI or a container config.
 //!
 //! The URI format cannot represent the inner protocol; nodes with
-//! `inner_protocol = Unknown` (parsed from `shadow-tls://` URIs) round-trip
-//! lossily by design — only the wrapper fields survive.
+//! `inner_protocol = Unknown` may round-trip only representable wrapper fields.
+//! Complete nodes and extra security/transport settings are explicitly rejected;
+//! the subscription URI-list profile excludes ShadowTLS entirely.
 
 use deve_sub_domain::{Node, ProtocolConfig};
 
@@ -32,6 +33,29 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
         ProtocolConfig::ShadowTls(c) => c,
         _ => return Err(EmitError::NoEmitter("non-ShadowTls config".to_owned())),
     };
+
+    if !matches!(
+        cfg.inner_protocol,
+        deve_sub_domain::ProtocolKind::Unknown(_)
+    ) {
+        return Err(EmitError::NoEmitter(
+            "ShadowTLS URI cannot preserve the inner protocol and authentication".into(),
+        ));
+    }
+
+    if node.tls.as_ref().is_some_and(|tls| {
+        !tls.enabled
+            || !tls.alpn.is_empty()
+            || tls.client_fingerprint.is_some()
+            || !tls.certificate_pins.is_empty()
+            || tls.reality.is_some()
+    }) || node.transport.is_some()
+        || !matches!(node.authentication, deve_sub_domain::Authentication::None)
+    {
+        return Err(EmitError::NoEmitter(
+            "ShadowTLS wrapper options without URI representation".into(),
+        ));
+    }
 
     // WHY: use the wrapper password from the typed config, not
     // `node.authentication`. Container parsers populate
@@ -48,8 +72,11 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
         if let Some(ref sni) = tls.server_name {
             params.push(("sni".to_owned(), sni.clone()));
         }
-        if let Some(true) = tls.skip_cert_verify {
-            params.push(("insecure".to_owned(), "1".to_owned()));
+        if let Some(insecure) = tls.skip_cert_verify {
+            params.push((
+                "insecure".to_owned(),
+                if insecure { "1" } else { "0" }.to_owned(),
+            ));
         }
     }
 

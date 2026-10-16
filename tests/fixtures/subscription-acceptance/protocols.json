@@ -8,7 +8,6 @@
       "mihomo",
       "sing-box",
       "xray",
-      "v2ray",
       "shadowrocket",
       "uri_list",
       "json"
@@ -366,7 +365,6 @@
     "profiles": [
       "mihomo",
       "sing-box",
-      "uri_list",
       "json"
     ],
     "fields": {

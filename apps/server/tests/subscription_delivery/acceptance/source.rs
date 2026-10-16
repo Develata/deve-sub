@@ -119,7 +119,7 @@ async fn acceptance_source_refresh_to_loopback_http_subscription() {
         assert_eq!(result["status"], "completed", "{result}");
         assert_eq!(result["new_nodes"], expected);
     }
-    let spec = routing::supported_routing_projection();
+    let spec = UPLOADED.to_owned();
     let id = template(&router, &cookie, &spec).await;
     let token = subscription(&router, &cookie, &id, "mihomo", None).await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")

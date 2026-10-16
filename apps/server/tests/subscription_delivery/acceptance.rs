@@ -5,6 +5,9 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "acceptance/current_formats.rs"]
+mod current_formats;
+
 #[path = "acceptance/routing.rs"]
 mod routing;
 #[path = "acceptance/source.rs"]
@@ -56,18 +59,22 @@ fn acceptance_matrix_matches_registered_protocols() {
     assert_eq!(kinds.len(), cases.len());
     for profile in PROFILES {
         let kind = deve_sub_compatibility::ProfileKind::from_kebab(profile).expect("profile");
-        let expected = cases
+        let mut expected: std::collections::HashSet<_> = cases
             .iter()
             .filter(|c| c.accepts(profile))
             .map(|c| c.protocol.clone())
             .collect();
+        // The registry supports the VLESS family; this fixture specifically uses Reality.
+        if profile == "v2ray" {
+            expected.insert(deve_sub_domain::ProtocolKind::Vless);
+        }
         assert_eq!(
             deve_sub_compatibility::capability_for(kind).supported_protocols,
             expected,
             "{profile}"
         );
     }
-    assert_eq!(cases.iter().map(|c| c.profiles.len()).sum::<usize>(), 57);
+    assert_eq!(cases.iter().map(|c| c.profiles.len()).sum::<usize>(), 55);
 }
 
 /// OUT-001..007/015, NODE-001: all 77 protocol/profile cells pass through

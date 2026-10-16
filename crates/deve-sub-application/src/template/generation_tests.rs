@@ -38,7 +38,7 @@ fn validate_output_generated_yaml_is_not_capped_by_source_input_size() {
 
 #[test]
 fn validate_output_accepts_valid_json() {
-    let json = r#"{"outbounds":[]}"#;
+    let json = r#"{"outbounds":[{"type":"trojan","tag":"test","server":"trojan.example","server_port":443,"password":"TEST"}]}"#;
     assert!(validate_output(json, ProfileKind::SingBox).is_ok());
     assert!(validate_output(json, ProfileKind::Xray).is_ok());
     assert!(validate_output(json, ProfileKind::V2Ray).is_ok());
@@ -92,7 +92,7 @@ fn validate_output_json_scalar_rejected() {
     let err = validate_output("\"just a string\"", ProfileKind::SingBox)
         .expect_err("JSON scalar must fail structural validation");
     assert!(
-        matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("array or object")),
+        matches!(err, TemplateAppError::InvalidStructure(ref m) if m.contains("no outbounds or endpoints")),
         "got {err:?}"
     );
     let err = validate_output("42", ProfileKind::Xray).expect_err("JSON number scalar must fail");
@@ -103,8 +103,23 @@ fn validate_output_json_scalar_rejected() {
 }
 
 #[test]
-fn validate_output_json_array_accepted() {
-    assert!(validate_output("[]", ProfileKind::SingBox).is_ok());
+fn validate_output_singbox_requires_nonempty_array_roots() {
+    for invalid in [
+        "[]",
+        "{}",
+        r#"{"outbounds":[]}"#,
+        r#"{"endpoints":[],"outbounds":[]}"#,
+        r#"{"endpoints":null,"outbounds":[{}]}"#,
+    ] {
+        assert!(validate_output(invalid, ProfileKind::SingBox).is_err());
+    }
+    assert!(
+        validate_output(
+            r#"{"endpoints":[{"type":"wireguard"}]}"#,
+            ProfileKind::SingBox
+        )
+        .is_ok()
+    );
     assert!(validate_output(r#"{"outbounds":[]}"#, ProfileKind::V2Ray).is_ok());
 }
 

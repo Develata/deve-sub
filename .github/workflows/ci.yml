@@ -180,7 +180,7 @@ jobs:
           echo "$RUNNER_TEMP/validators" >> "$GITHUB_PATH"
       - name: Run validator tests
         run: cargo test --locked -p deve-sub-emitter --test out001_mihomo_check --test out003_singbox_check --test out004_xray_check -- --ignored --test-threads=1
-      - name: Validate delivered configurations and record known client gaps
+      - name: Validate delivered protocol and routing configurations
         run: cargo test --locked -p deve-sub-server --test subscription_delivery acceptance_validators -- --ignored --test-threads=1
 
   docs:

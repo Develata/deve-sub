@@ -2,6 +2,7 @@
 use super::{
     clash,
     clash_filter::{Budget, Matcher},
+    clash_normalization::{NODES, PROVIDERS, TOKENS},
     error::TemplateAppError,
 };
 use deve_sub_domain::{Node, NodeFilter, NodePoolRepository, ProtocolConfig, ProtocolKind};
@@ -51,7 +52,7 @@ pub(super) async fn materialize(
         .filter_map(|g| g["proxies"].as_array())
         .flatten()
         .filter_map(Value::as_str)
-        .filter(|n| !types.contains_key(*n))
+        .filter(|n| !types.contains_key(*n) && !TOKENS.contains(n))
         .map(str::to_owned)
         .collect();
     let mut budget = Budget::new();
@@ -108,6 +109,13 @@ pub(super) async fn materialize(
             .filter_map(Value::as_str)
         {
             budget.visit(member.len())?;
+            if member == PROVIDERS {
+                continue;
+            }
+            if member == NODES {
+                append_nodes(&automatic, &include, &mut budget, &mut seen, &mut members)?;
+                continue;
+            }
             let member = if let Some(current) = aliases.get(member) {
                 warnings.push(format!(
                     "group '{name}': node reference '{member}' resolved to '{current}'"
@@ -134,18 +142,7 @@ pub(super) async fn materialize(
         if group["include-all"].as_bool() == Some(true)
             || group["include-all-proxies"].as_bool() == Some(true)
         {
-            for member in &automatic {
-                budget.visit(member.len())?;
-                if include
-                    .as_ref()
-                    .map(|f| f.matches(member, &mut budget))
-                    .transpose()?
-                    .unwrap_or(true)
-                    && seen.insert((*member).to_owned())
-                {
-                    members.push((*member).to_owned());
-                }
-            }
+            append_nodes(&automatic, &include, &mut budget, &mut seen, &mut members)?;
         }
         let mut filtered = Vec::with_capacity(members.len());
         for member in members {
@@ -191,6 +188,29 @@ pub(super) async fn materialize(
             ] {
                 group.remove(key);
             }
+        }
+    }
+    Ok(())
+}
+
+fn append_nodes(
+    automatic: &[&str],
+    include: &Option<Matcher>,
+    budget: &mut Budget,
+    seen: &mut HashSet<String>,
+    members: &mut Vec<String>,
+) -> Result<(), TemplateAppError> {
+    for member in automatic {
+        // Charge every expansion before deduplication to bound repeated tokens.
+        budget.visit(member.len())?;
+        if include
+            .as_ref()
+            .map(|f| f.matches(member, budget))
+            .transpose()?
+            .unwrap_or(true)
+            && seen.insert((*member).to_owned())
+        {
+            members.push((*member).to_owned());
         }
     }
     Ok(())

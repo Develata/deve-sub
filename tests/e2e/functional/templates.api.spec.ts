@@ -137,7 +137,7 @@ test('FUNC-CLASH-VALIDATION unavailable members block locally and invalid refere
   expect(invalidEdit.status()).toBe(400);
   expect((await (await api.get(`${path}/generations/active?profile=mihomo`)).json()).content).toBe(good);
   const invalid = ['rules: [MATCH,PROXY]', 'rules: ["RULE-SET,missing,DIRECT"]',
-    'rules: ["MATCH,PROXY"]\nproxies: []', 'rules: ["MATCH,PROXY"]\nscript: forbidden'];
+    'rules: ["MATCH,PROXY"]\nproxies: [{name: embedded}]', 'rules: ["MATCH,PROXY"]\nscript: forbidden'];
   const failures = await Promise.all(invalid.map((spec_yaml, i) => api.post('/api/v1/templates', { data: { name: `invalid-${i}`, spec_yaml } })));
   expect(failures.map(r => r.status())).toEqual(invalid.map(() => 400));
   expect((await (await api.get('/api/v1/templates')).json()).templates).toHaveLength(1);

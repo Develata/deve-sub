@@ -35,10 +35,6 @@
     "max_lines": 639,
     "reason": "One client-format codec with protocol mapping and adjacent round-trip regression tests."
   },
-  "crates/deve-sub-compatibility/src/lib.rs": {
-    "max_lines": 632,
-    "reason": "Existing compatibility judgment and regression cases; protocol semantics must remain reviewable together."
-  },
   "crates/deve-sub-protocol/src/container/mihomo.rs": {
     "max_lines": 791,
     "reason": "One input-format codec with field mappings and adjacent fidelity regressions."

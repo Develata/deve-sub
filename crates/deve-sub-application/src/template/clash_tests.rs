@@ -56,7 +56,7 @@ fn native_clash_rejects_invalid_routing_without_silent_drops() {
         "rules: ['AND,((NETWORK,UDP),DIRECT']",
         "rules: ['MATCH,DIRECT,extra']",
         "rules: []",
-        "rules: ['MATCH,DIRECT']\nproxies: []",
+        "rules: ['MATCH,DIRECT']\nproxies: [{name: embedded}]",
         "rules: ['MATCH,DIRECT']\nproxy-providers: {}",
         "rules: ['MATCH,DIRECT']\nscripts: {}",
         "rules: ['MATCH,DIRECT']\ndns: []",

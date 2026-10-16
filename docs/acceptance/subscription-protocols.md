@@ -1,152 +1,127 @@
-# Subscription protocol and DNS acceptance
+# Subscription protocol acceptance
 
-This M3/M4/M5/M6/M9 test slice starts at main
-`aa6ecea37cb47e0ccecc204122aede45013a30e8`. It changes tests, fixtures and CI
-evidence only. The owner is the implementing Codex agent; independent review
-lanes cover protocol semantics and isolation. It does not change supported
-product behavior, deploy, or establish proxy connectivity.
+## Input provenance and native template behavior
 
-## Scope and fixtures
-
-The supplied `Pasted text(2).txt` was read completely from its Library attachment:
-350 lines, attachment metadata 15,451 bytes. Direct materialization failed;
-Library's complete text read yielded 15,100 UTF-8 bytes after newline
-normalization. The private source stays outside the repository. This is text
-provenance, not a claim of byte-identical retrieval.
+Work starts from main `aa6ecea37cb47e0ccecc204122aede45013a30e8` on
+`test/subscription-protocol-acceptance`; no merge or deployment is part of this
+work. The source is the user's Library attachment
+`libfile_b094e7ccb8bc819180a21d868d61c381`, `Pasted text(2).txt` (metadata
+15,451 bytes; 350 lines). The Library text API returned the complete text;
+materialized download was unavailable. The private original is not committed.
 
 [uploaded-mihomo.yaml](../../tests/fixtures/subscription-acceptance/uploaded-mihomo.yaml)
-retains the complete rule list, four Unicode groups, `proxies: null`, both
-placeholder tokens, all DNS sections, group-qualified resolver strings, geosite
-policy and policy insertion order. Personal/campus domains, resolver endpoints
-and public server IP rules use reserved `.example`, documentation IPv4 and
-`2001:db8::` equivalents. Private-network rules, CIDR widths, `no-resolve`,
-process-name case differences and final MATCH order remain intact. No test
-connects to a node or resolver named in the template.
+retains the complete DNS block and four Unicode groups. Following the approved
+follow-up, its rule list is shortened to **23 representative rules in original
+relative order**, including process, domain, port, IPv4/IPv6 CIDR, `no-resolve`
+and final MATCH. Personal/campus domains, resolver endpoints and server IP
+rules use reserved `.example`, documentation IPv4 and `2001:db8::` equivalents.
+No test contacts those resolvers, node endpoints or original production services.
 
-**The full upload is rejected by the current product.** M5's
-[input contract](../contracts/module-boundaries.md#template-input-and-history-boundary-m5)
-accepts routing sections only: `mode` and `proxies` are rejected, including
-`proxies: null`; external `proxy-providers`, `use`, and
-`include-all-providers: true` are unsupported. Neither `__PROXY_PROVIDERS__`
-nor `__PROXY_NODES__` expands. The suite reproduces each boundary and checks
-that unresolved placeholders cannot reach public delivery.
+The native template is accepted without removing its structural placeholders:
+`mode: rule` is retained, and absent/null/empty `proxies` is the pool insertion
+slot. Nonempty embedded proxies, other modes, actual external `proxy-providers`
+and group `use` remain explicit errors. `__PROXY_NODES__` expands at its list
+position to eligible selected nodes, sorted by final name and subject to group
+filters. Repeated tokens and include flags deduplicate in first-occurrence order.
+`__PROXY_PROVIDERS__` and `include-all-providers: true` expand to an empty set
+with a warning on generation and cache hits. Empty groups safely become REJECT;
+an empty eligible pool cannot publish a successful empty subscription.
 
-An explicitly named **supported routing projection** removes only `mode`,
-`proxies: null`, provider flags and the two placeholder entries. Existing
-`include-all`/`include-all-proxies` materializes pool membership. All DNS
-values and policy-key order, rules and their order, group names and references
-are checked against the retained upload. Passing this projection is **not**
-acceptance of the unchanged upload or evidence of placeholder expansion.
-Accepting that input requires a separately approved product/contract change.
-Native routing templates remain Mihomo-only; other formats use separate V3
-proxy-only templates.
+DNS values and policy insertion order, rule order and group references are
+asserted independently. Tokens are structural group members, never global text
+substitutions; literal token text elsewhere and raw template history survive.
+Token-named nodes receive qualified aliases only for native templates. Native
+routing remains Mihomo-only; other targets use V3 proxy-only templates.
 
-## Explicit implementation matrix
+## Explicit protocol/target matrix
 
-`G` means the current application generates, delivers and reparses the fixture
-with its independently authored expected fields. `X` means strict generation
-rejects it, mixed lenient generation excludes it with an exact node/reason
-report, and unsupported-only delivery fails. **G is not a client support claim.**
+`G` means the fixture passes real import, encrypted SQLite storage, generation,
+HTTP delivery and independent field assertions. `X` means strict rejection,
+reported mixed lenient exclusion and failed unsupported-only delivery.
+The matrix is explicit fixture data compared with the implementation registry;
+the VLESS family registry is distinguished from its Reality-specific fixture.
 
-| Protocol fixture | Mihomo | sing-box | Xray | V2Ray | Shadowrocket | URI list | Canonical JSON |
+| Fixture | Mihomo | sing-box | Xray | V2Ray | Shadowrocket | URI list | Canonical JSON |
 |---|---|---|---|---|---|---|---|
-| VLESS Reality | G | G | G | G¹ | G | G | G |
-| VMess (WebSocket) | G | G | G | G | G | G | G |
+| VLESS Reality | G | G | G | X | G | G | G |
+| VMess WebSocket | G | G | G | G | G | G | G |
 | Trojan | G | G | G | G | G | G | G |
 | Shadowsocks | G | G | G | G | G | G | G |
-| Hysteria2 (salamander) | G | G | X | X | G | G | G |
+| Hysteria2 salamander | G | G | X | X | G | G | G |
 | TUIC v5 | G | G | X | X | G | G | G |
 | NaiveProxy | X | X | X | X | X | G | G |
-| WireGuard | G | G² | G | X | X | G | G |
-| AnyTLS | G² | G | X | X | X | G | G |
-| Snell v4 | G² | G² | X | X | X | G | G |
-| ShadowTLS v3 + Shadowsocks inner | G | G | X | X | X | G³ | G |
+| WireGuard | G | G | G | X | X | G | G |
+| AnyTLS | G | G | X | X | X | G | G |
+| Snell v4 | G | G | X | X | X | G | G |
+| ShadowTLS v3 + SS | G | G | X | X | X | X | G |
 
-There are **77 cells: 57 generated and 20 rejected**. The static fixture matrix
-is compared with the actual capability registry; expected sets are not computed
-from the production checker. HTTP checks use real authentication, application
-commands, encrypted SQLite storage, generation and public subscription routes.
+**77 cells: 55 generated, 22 rejected.** Fields come from independently authored
+[fixtures](../../tests/fixtures/subscription-acceptance/protocols.json), not from
+the emitter under test. Public deterministic test keys and fake credentials are
+synthetic. G alone is not a GUI-client or live-connectivity claim.
 
-1. V2Ray emission currently includes Reality even though V2Ray does not support
-   it; the shared parser documents this difference. This is a known semantic
-   compatibility gap. No V2Ray core or GUI client was run. v2rayN/v2rayNG are
-   client applications, not equivalent to the `v2ray` output profile.
-2. Known pinned-core incompatibility; see below.
-3. The de-facto ShadowTLS URI retains wrapper version/password/SNI only. The
-   inner protocol and its credential cannot be represented; the test explicitly
-   verifies Unknown/Unsupported inner state and absent inner authentication.
-   Its existing URI parser also defaults absent verification to explicit false.
-   This URI is not claimed to be a usable complete proxy configuration.
+V2Ray rejects Reality without downgrading security; Xray retains it even when
+TCP transport is implicit. The complete ShadowTLS subscription URI is rejected
+because its format cannot preserve inner configuration/authentication. The
+low-level wrapper URI utility retains absent/false/true verification distinctly
+and rejects additional settings it cannot encode. Canonical JSON remains the
+full-fidelity typed-node representation.
 
-[protocols.json](../../tests/fixtures/subscription-acceptance/protocols.json)
-contains synthetic inputs and independent expected credentials, endpoint,
-protocol config, transport, TLS, Reality short ID/key, obfuscation and WireGuard
-fields. It contains public, deterministic test key material only. The fixture
-inputs are not generated by the emitters under test.
+sing-box WireGuard uses root `endpoints`, local `address` and peer
+`address`/`port`, with an explicit logical default route. Imports accept current
+and legacy schemas, validate keys/CIDRs/numeric bounds and count raw outbounds
+plus endpoints before merging wrappers. Distinct peer endpoints and unsupported
+interface/dialer options remain raw Unsupported input instead of being collapsed.
+Snell uses versions 1–5 on Mihomo and 4/6 on sing-box. TLS camouflage uses
+`obfs_mode`/`obfs_host`; nonrepresentable security, userkey, v6 URI mode and
+wrong-version options are rejected. Generation cache v5 prevents old output
+from bypassing these corrections through hits, active lookup or stale fallback.
 
-Additional tests cover xhttp exclusions (sing-box/V2Ray/Shadowrocket), Snell v3
-and Snell v4 Restls exclusions (sing-box), five unimplemented/unknown protocols,
-duplicate imports, mixed-valid-invalid imports, malformed containers, empty
-sets, exact included/excluded IDs, conditional GET/ETag and identical cache hits.
-Known enum names Socks5/HTTP/Hysteria v1/SSH are not treated as typed support.
+Additional regressions cover xhttp exclusions, Snell v3/Restls filtering,
+Snell TLS and v6, current IPv6 WireGuard import, default routing, implicit TCP
+security, wrapper tag collisions, unsupported inner TLS, malformed/empty/partial
+input, unknown protocols, exact exclusion reasons, duplicate imports, cache
+notices, ETags and conditional GET. The source-provider test fetches two exact
+loopback-only URLs (URI list and ShadowTLS JSON), reconciles snapshots and
+storage, then downloads the subscription over actual loopback HTTP. Ephemeral
+servers have bounded waits and joined shutdown. This proves subscription
+transport, not proxy traffic. External proxy-provider YAML is distinct from
+this source fetch path and from existing rule-provider validation.
 
-The source test uses two exact loopback-only URLs: ten URI nodes and a
-ShadowTLS-plus-inner JSON document through automatic format detection. It
-executes the real HTTP fetcher, snapshot/reconcile/storage path, then downloads
-the generated subscription over loopback HTTP. Servers use ephemeral ports,
-bounded polling and joined shutdown. This proves **subscription transport**,
-not traffic through those synthetic proxies. Existing `rule-providers` file
-validation remains covered by `out001_native_routing_templates_pass_mihomo`;
-rule providers are distinct from external proxy providers.
+## Pinned-core evidence
 
-## Pinned-core evidence and blockers
+The explicit installer verifies publisher SHA-256 digests and installs
+[Mihomo 1.19.30](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.30),
+[sing-box 1.14.3](https://github.com/SagerNet/sing-box/releases/tag/v1.14.3), and
+[Xray 26.3.27](https://github.com/XTLS/Xray-core/releases/tag/v26.3.27).
+The updated baselines support AnyTLS and Snell; the former known-rejection tests
+have been replaced by positive checks of actual delivered bytes.
 
-The existing checksum-pinned installer supplies Mihomo **1.19.0**, sing-box
-**1.13.14**, and Xray **26.3.27**. The new tests assert those versions, validate
-the actual delivered bytes and enforce 10-second subprocess deadlines with a
-2-second forced-kill grace period. Invalid-protocol controls must be rejected.
-
-| Core | Accepted delivered protocol fixtures | Reproduced incompatibilities |
+| Core | Baseline fixtures | Additional delivered cases |
 |---|---|---|
-| Mihomo 1.19.0 | VLESS Reality, VMess, Trojan, SS, HY2, TUIC v5, WireGuard, ShadowTLS (8) | AnyTLS: `unsupport proxy type`; Snell v4: `snell version error: 4` |
-| sing-box 1.13.14 | VLESS Reality, VMess, Trojan, SS, HY2, TUIC v5, AnyTLS, ShadowTLS (8) | WireGuard: unknown `local_address` field in legacy outbound; Snell: unknown outbound type |
-| Xray 26.3.27 | VLESS Reality, VMess, Trojan, SS, WireGuard (5) | None among these five fixtures |
+| Mihomo 1.19.30 | 10 | Snell TLS; mixed set; uploaded DNS template with all 10 compatible nodes |
+| sing-box 1.14.3 | 10 | Snell TLS, Snell v6, IPv6 WireGuard endpoint, implicit-TCP Reality; mixed set |
+| Xray 26.3.27 | 5 | Implicit-TCP Reality; mixed set |
 
-**21 positive configurations and four reproduced incompatibilities** are separate
-tests. A passing known-rejection regression means the gap is reproduced; those
-four cells remain **failed client acceptance**, not supported cells. No cells
-are silently skipped to obtain a green result. Updating capability decisions,
-changing WireGuard emission or expanding the pinned client baseline needs
-separate approval and new evidence. OUT-001/OUT-003 record failure for this
-expanded scope; the older six-protocol positive tests remain intact.
-The existing Mihomo validator now uses a private temporary core directory and
-bounded processes. Its malformed-YAML control checks the parser diagnostic so
-a read-only home directory cannot produce a false positive.
-
-The DNS-focused validator checks the actual delivered supported projection with
-a Trojan fixture. A tiny, self-authored `GeoSite.dat` contains PRIVATE and CN
-entries for reserved `home.arpa`; CN is required by Mihomo's initial verifier.
-It follows the pinned [Mihomo protobuf schema](https://github.com/MetaCubeX/mihomo/blob/v1.19.0/component/geodata/router/config.proto)
-and [initialization](https://github.com/MetaCubeX/mihomo/blob/v1.19.0/component/geodata/init.go).
-No external geodata is needed; download attempts fail the test. This validates
-configuration loading, not DNS answers from the fake resolvers.
-
-## Commands and acceptance bindings
+That is **31 individual configurations, three mixed sets and one full routing
+configuration**, plus invalid-protocol controls. Validators assert exact versions,
+use private temporary directories and enforce 10-second deadlines plus a
+2-second kill grace. A tiny self-authored PRIVATE/CN GeoSite protobuf allows
+DNS-policy validation without downloads; no external geodata is required.
+Maintained schema references:
+[Mihomo Snell](https://github.com/MetaCubeX/mihomo/blob/v1.19.30/adapter/outbound/snell.go),
+[sing-box Snell](https://github.com/SagerNet/sing-box/blob/v1.14.3/option/snell.go),
+[WireGuard endpoint](https://github.com/SagerNet/sing-box/blob/v1.14.3/option/wireguard.go),
+[default routing](https://github.com/SagerNet/sing-box/blob/v1.14.3/adapter/outbound/manager.go),
+[V2Fly transport security](https://www.v2fly.org/config/transport.html).
 
 ```bash
 cargo test --locked -p deve-sub-server --test subscription_delivery acceptance -- --test-threads=2
-python3 scripts/install-validators.py /tmp/deve-sub-validators
-PATH=/tmp/deve-sub-validators:$PATH cargo test --locked -p deve-sub-server --test subscription_delivery acceptance_validators -- --ignored --test-threads=1
+python3 scripts/install-validators.py /tmp/deve-sub-validators-current
+PATH=/tmp/deve-sub-validators-current:$PATH cargo test --locked -p deve-sub-server --test subscription_delivery acceptance_validators -- --ignored --test-threads=1
 ```
 
-Ordinary deterministic tests never install or run cores. The compatibility CI
-job installs the pinned tools once and explicitly runs the ignored server tests
-as well as the existing emitter validator suite. No runtime connection to a
-production service or live proxy is exercised.
-
-Bindings: NODE-001 (import/storage), SRC-002 (source refresh), GEN-002 (rejected
-templates), GEN-005/006 (dynamic/fixed selection), GEN-013/014 (compatibility and
-strict mode), OUT-001/003/004 (scoped core evidence), OUT-008 (cache/ETag),
-OUT-015 (canonical JSON), PARSE-019 through PARSE-027 (M9 fields/variants).
-The tests live under
-[subscription_delivery/acceptance](../../apps/server/tests/subscription_delivery/acceptance.rs).
+Ordinary deterministic tests neither install nor execute external cores. The
+compatibility CI job explicitly installs pinned tools and runs the ignored
+server and existing emitter validator suites. Configuration acceptance does not
+establish DNS answers, live proxy connectivity, GUI behavior or performance.

@@ -23,6 +23,11 @@ pub(super) async fn prepare_nodes(
     used.extend(spec.proxy_groups.iter().map(|g| g.name.clone()));
     if let Some(config) = &native {
         used.extend(
+            super::clash_normalization::TOKENS
+                .iter()
+                .map(|s| (*s).to_owned()),
+        );
+        used.extend(
             config
                 .get("proxy-groups")
                 .and_then(serde_json::Value::as_array)

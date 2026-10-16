@@ -887,6 +887,7 @@ cases:
     evidence:
       tests:
         - "apps/server/tests/subscription_delivery/acceptance.rs::acceptance_individual_protocol_target_matrix"
+        - "apps/server/tests/subscription_delivery/acceptance/current_formats.rs::acceptance_current_endpoint_snell_and_implicit_tcp_security_delivery"
         - "apps/server/tests/node_pool/import_outcomes.rs::mixed_import_outcomes_match_input_order_and_persisted_nodes"
         - "apps/server/tests/node_pool/import_outcomes.rs::failed_import_outcomes_preserve_leading_trailing_and_all_failed_entries"
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-IMPORT-RACE"
@@ -1204,7 +1205,11 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "apps/server/tests/subscription_delivery/acceptance/routing.rs::acceptance_uploaded_template_reports_existing_contract_blockers"
+        - "apps/server/tests/subscription_delivery/acceptance/routing.rs::acceptance_uploaded_template_rejects_nonempty_nodes_and_external_providers"
+        - "apps/server/tests/subscription_delivery/acceptance/routing.rs::acceptance_uploaded_template_expands_nodes_and_preserves_dns_rules"
+        - "crates/deve-sub-application/tests/generation_safety/placeholder_normalization.rs::placeholders_honor_fixed_selection_filters_positions_and_raw_history"
+        - "crates/deve-sub-application/tests/generation_safety/placeholder_normalization.rs::placeholder_names_are_reserved_only_for_native_templates"
+        - "crates/deve-sub-application/tests/generation_safety/placeholder_normalization.rs::fallback_notices_use_historical_template_and_never_block_delivery"
         - "crates/deve-sub-yaml/tests/parsing.rs::legacy_plain_scalars_keep_their_types_and_ranges"
         - "crates/deve-sub-yaml/tests/parsing.rs::ordered_merges_preserve_explicit_order_and_first_inheritance"
         - "crates/deve-sub-yaml/tests/parsing.rs::duplicate_complex_keys_are_checked_after_recursive_merge"
@@ -1421,7 +1426,7 @@ cases:
         - "crates/deve-sub-storage-sqlite/tests/node_pool_reconcile/source_invalidation.rs::src001_source_changes_invalidate_pool_and_rollback_together"
         - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_source_rename_invalidates_direct_generation_cache"
         - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_source_delete_invalidates_direct_generation_cache"
-        - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_v2_v3_caches_are_regenerated_and_never_used_as_fallback"
+        - "crates/deve-sub-application/tests/generation_safety/source_mutation.rs::gen015_v2_v3_v4_caches_are_regenerated_and_never_used_as_fallback"
         - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_withdrawn_v3_leaf_blocks_without_breaking_parent"
         - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_withdrawn_members_preserve_routes_and_options"
         - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_auto_groups_cannot_fall_back_to_direct_when_empty"
@@ -1461,14 +1466,13 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_21_delivered_protocol_configurations"
-        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_reproduce_4_known_client_incompatibilities"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_31_delivered_protocol_configurations"
         - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_validate_routing_dns_with_local_geosite"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_native_routing_templates_pass_mihomo"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_passes"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_rejects_garbage"
-      status: fail
-      notes: "Expanded 11-protocol acceptance reproduces pinned-core incompatibilities; see docs/acceptance/subscription-protocols.md. Positive six-protocol evidence remains scoped."
+      status: pass
+      notes: "Pinned Mihomo 1.19.30 / sing-box 1.14.3 accept the delivered fixtures, including migrated WireGuard and Snell; scoped configuration validation, not connectivity. See docs/acceptance/subscription-protocols.md."
   - id: OUT-002
     title: FlClash
     priority: P0
@@ -1494,12 +1498,11 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_21_delivered_protocol_configurations"
-        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_reproduce_4_known_client_incompatibilities"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_31_delivered_protocol_configurations"
         - "crates/deve-sub-emitter/tests/out003_singbox_check.rs::out003_singbox_check_passes"
         - "crates/deve-sub-emitter/tests/out003_singbox_check.rs::out003_singbox_check_rejects_garbage"
-      status: fail
-      notes: "Expanded 11-protocol acceptance reproduces pinned-core incompatibilities; see docs/acceptance/subscription-protocols.md. Positive six-protocol evidence remains scoped."
+      status: pass
+      notes: "Pinned Mihomo 1.19.30 / sing-box 1.14.3 accept the delivered fixtures, including migrated WireGuard and Snell; scoped configuration validation, not connectivity. See docs/acceptance/subscription-protocols.md."
   - id: OUT-004
     title: Xray
     priority: P0
@@ -1511,7 +1514,7 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_21_delivered_protocol_configurations"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_31_delivered_protocol_configurations"
         - "crates/deve-sub-emitter/tests/out004_xray_check.rs::out004_xray_check_passes"
         - "crates/deve-sub-emitter/tests/out004_xray_check.rs::out004_xray_check_rejects_garbage"
       status: pass
@@ -2298,6 +2301,7 @@ cases:
     evidence:
       tests:
         - "apps/server/tests/subscription_delivery/acceptance.rs::acceptance_individual_protocol_target_matrix"
+        - "apps/server/tests/subscription_delivery/acceptance/current_formats.rs::acceptance_current_endpoint_snell_and_implicit_tcp_security_delivery"
         - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_full_fidelity_accepts_all"
         - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_multi_node_round_trip"
         - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_single_node_round_trip"

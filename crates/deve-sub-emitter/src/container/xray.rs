@@ -10,5 +10,5 @@ use deve_sub_domain::Node;
 use crate::error::EmitError;
 
 pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
-    super::v2ray::emit(nodes)
+    super::v2ray::emit_xray_compatible(nodes)
 }

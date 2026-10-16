@@ -510,7 +510,7 @@ fn compat_singbox_accepts_snell_v6() {
     check_node(&node, &cap).expect("sing-box should accept snell v6");
 }
 
-/// PARSE-025: mihomo compatibility check accepts all Snell versions.
+/// PARSE-025: Mihomo accepts Snell v1–v5 and rejects v6.
 #[test]
 fn compat_mihomo_accepts_snell_v1_through_v5() {
     use deve_sub_compatibility::{ProfileKind, capability_for, check_node};
@@ -522,11 +522,11 @@ fn compat_mihomo_accepts_snell_v1_through_v5() {
         SnellVersion::V3,
         SnellVersion::V4,
         SnellVersion::V5,
-        SnellVersion::V6,
     ] {
         let node = snell_node(v);
         check_node(&node, &cap).expect("mihomo should accept snell v{?}");
     }
+    assert!(check_node(&snell_node(SnellVersion::V6), &cap).is_err());
 }
 
 /// PARSE-025: Xray compatibility check excludes all Snell versions.

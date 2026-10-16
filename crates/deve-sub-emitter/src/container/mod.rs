@@ -12,6 +12,7 @@ pub mod ir;
 pub mod mihomo;
 mod mihomo_template;
 pub mod singbox;
+mod singbox_wireguard;
 pub mod v2ray;
 pub mod xray;
 

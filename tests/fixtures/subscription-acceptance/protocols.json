@@ -1,0 +1,396 @@
+[
+  {
+    "name": "acceptance-vless",
+    "protocol": "Vless",
+    "source_type": "uri_list",
+    "input": "vless://00000000-0000-4000-8000-000000000001@vless.example:443?security=reality&type=tcp&sni=vless.example&fp=chrome&sid=01020304&pbk=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&flow=xtls-rprx-vision#acceptance-vless",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "xray",
+      "v2ray",
+      "shadowrocket",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "Vless",
+      "/display_name": "acceptance-vless",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "vless.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "uuid",
+        "data": {
+          "uuid": "00000000-0000-4000-8000-000000000001"
+        }
+      },
+      "/config/VlessReality/flow": "xtls-rprx-vision",
+      "/tls/reality/public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "/tls/reality/short_id": "01020304",
+      "/tls/client_fingerprint": "chrome",
+      "/tls/enabled": true,
+      "/tls/server_name": "vless.example",
+      "/tls/alpn": [],
+      "/tls/skip_cert_verify": null
+    }
+  },
+  {
+    "name": "acceptance-vmess",
+    "protocol": "VMess",
+    "source_type": "uri_list",
+    "input": "vmess://eyJ2IjogIjIiLCAicHMiOiAiYWNjZXB0YW5jZS12bWVzcyIsICJhZGQiOiAidm1lc3MuZXhhbXBsZSIsICJwb3J0IjogIjQ0MyIsICJpZCI6ICIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCAiYWlkIjogIjAiLCAic2N5IjogImF1dG8iLCAibmV0IjogIndzIiwgImhvc3QiOiAiZnJvbnQuZXhhbXBsZSIsICJwYXRoIjogIi9zb2NrZXQ/ZWQ9MjA0OCIsICJ0bHMiOiAidGxzIiwgInNuaSI6ICJ2bWVzcy5leGFtcGxlIiwgImFscG4iOiAiaDIifQ==",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "xray",
+      "v2ray",
+      "shadowrocket",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "VMess",
+      "/display_name": "acceptance-vmess",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "vmess.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "uuid",
+        "data": {
+          "uuid": "00000000-0000-4000-8000-000000000001"
+        }
+      },
+      "/config/VMess/alter_id": 0,
+      "/config/VMess/security": "auto",
+      "/transport/kind": "ws",
+      "/transport/path": "/socket?ed=2048",
+      "/transport/host": "front.example",
+      "/tls/enabled": true,
+      "/tls/server_name": "vmess.example",
+      "/tls/alpn": [
+        "h2"
+      ],
+      "/tls/skip_cert_verify": null
+    }
+  },
+  {
+    "name": "acceptance-trojan",
+    "protocol": "Trojan",
+    "source_type": "uri_list",
+    "input": "trojan://TEST_TROJAN@trojan.example:443?sni=trojan.example&alpn=h2#acceptance-trojan",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "xray",
+      "v2ray",
+      "shadowrocket",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "Trojan",
+      "/display_name": "acceptance-trojan",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "trojan.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "password",
+        "data": {
+          "password": "TEST_TROJAN"
+        }
+      },
+      "/tls/enabled": true,
+      "/tls/server_name": "trojan.example",
+      "/tls/alpn": [
+        "h2"
+      ],
+      "/tls/skip_cert_verify": null
+    }
+  },
+  {
+    "name": "acceptance-ss",
+    "protocol": "Shadowsocks",
+    "source_type": "uri_list",
+    "input": "ss://YWVzLTI1Ni1nY206VEVTVF9TUw==@ss.example:443#acceptance-ss",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "xray",
+      "v2ray",
+      "shadowrocket",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "Shadowsocks",
+      "/display_name": "acceptance-ss",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "ss.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "password",
+        "data": {
+          "password": "TEST_SS"
+        }
+      },
+      "/config/Shadowsocks/method": "aes-256-gcm",
+      "/tls": null
+    }
+  },
+  {
+    "name": "acceptance-hy2",
+    "protocol": "Hysteria2",
+    "source_type": "uri_list",
+    "input": "hysteria2://TEST_HY2@hy2.example:443?sni=hy2.example&alpn=h3&obfs=salamander&obfs-password=TEST_OBFS#acceptance-hy2",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "shadowrocket",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "Hysteria2",
+      "/display_name": "acceptance-hy2",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "hy2.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "password",
+        "data": {
+          "password": "TEST_HY2"
+        }
+      },
+      "/tls/enabled": true,
+      "/tls/server_name": "hy2.example",
+      "/tls/alpn": [
+        "h3"
+      ],
+      "/tls/skip_cert_verify": null,
+      "/obfuscation/kind": "salamander",
+      "/obfuscation/password": "TEST_OBFS"
+    }
+  },
+  {
+    "name": "acceptance-tuic",
+    "protocol": "TuicV5",
+    "source_type": "uri_list",
+    "input": "tuic://00000000-0000-4000-8000-000000000001:TEST_TUIC@tuic.example:443?sni=tuic.example&alpn=h3&udp-relay-mode=native&congestion-controller=bbr#acceptance-tuic",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "shadowrocket",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "TuicV5",
+      "/display_name": "acceptance-tuic",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "tuic.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "uuid_password",
+        "data": {
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "password": "TEST_TUIC"
+        }
+      },
+      "/config/TuicV5/udp_relay_mode": "Native",
+      "/congestion/controller": "Bbr",
+      "/tls/enabled": true,
+      "/tls/server_name": "tuic.example",
+      "/tls/alpn": [
+        "h3"
+      ],
+      "/tls/skip_cert_verify": null
+    }
+  },
+  {
+    "name": "acceptance-naive",
+    "protocol": "NaiveProxy",
+    "source_type": "uri_list",
+    "input": "naive+https://TEST_USER:TEST_NAIVE@naive.example:443?sni=naive.example&alpn=h2&http2=1#acceptance-naive",
+    "profiles": [
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "NaiveProxy",
+      "/display_name": "acceptance-naive",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "naive.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "user_password",
+        "data": {
+          "username": "TEST_USER",
+          "password": "TEST_NAIVE"
+        }
+      },
+      "/config/NaiveProxy/http2": true,
+      "/tls/enabled": true,
+      "/tls/server_name": "naive.example",
+      "/tls/alpn": [
+        "h2"
+      ],
+      "/tls/skip_cert_verify": null
+    }
+  },
+  {
+    "name": "acceptance-wg",
+    "protocol": "WireGuard",
+    "source_type": "uri_list",
+    "input": "wireguard://AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=@wg.example:443?publickey=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=&address=192.0.2.2/32,2001:db8::2/128&reserved=1,2,3&mtu=1408#acceptance-wg",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "xray",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "WireGuard",
+      "/display_name": "acceptance-wg",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "wg.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "none"
+      },
+      "/tls": null,
+      "/config/WireGuard/private_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "/config/WireGuard/address": [
+        "192.0.2.2/32",
+        "2001:db8::2/128"
+      ],
+      "/config/WireGuard/peers/0/public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "/config/WireGuard/peers/0/allowed_ips": [
+        "0.0.0.0/0",
+        "::/0"
+      ],
+      "/config/WireGuard/peers/0/reserved": [
+        1,
+        2,
+        3
+      ],
+      "/config/WireGuard/mtu": 1408
+    }
+  },
+  {
+    "name": "acceptance-anytls",
+    "protocol": "AnyTls",
+    "source_type": "uri_list",
+    "input": "anytls://TEST_ANYTLS@anytls.example:443?sni=anytls.example&alpn=h2#acceptance-anytls",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "AnyTls",
+      "/display_name": "acceptance-anytls",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "anytls.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "password",
+        "data": {
+          "password": "TEST_ANYTLS"
+        }
+      },
+      "/tls/enabled": true,
+      "/tls/server_name": "anytls.example",
+      "/tls/alpn": [
+        "h2"
+      ],
+      "/tls/skip_cert_verify": null
+    }
+  },
+  {
+    "name": "acceptance-snell",
+    "protocol": "Snell",
+    "source_type": "uri_list",
+    "input": "snell://TEST_SNELL@snell.example:443?version=4&obfs=http&obfs-host=cover.example#acceptance-snell",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "Snell",
+      "/display_name": "acceptance-snell",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "snell.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "password",
+        "data": {
+          "password": "TEST_SNELL"
+        }
+      },
+      "/config/Snell/version": "V4",
+      "/config/Snell/obfs/mode": "Http",
+      "/config/Snell/obfs/host": "cover.example",
+      "/tls": null
+    }
+  },
+  {
+    "name": "acceptance-stls",
+    "protocol": "ShadowTls",
+    "source_type": "singbox_json",
+    "input": "{\"outbounds\": [{\"type\": \"shadowtls\", \"tag\": \"wrapper\", \"server\": \"stls.example\", \"server_port\": 443, \"version\": 3, \"password\": \"TEST_WRAPPER\", \"tls\": {\"enabled\": true, \"server_name\": \"cover.example\"}}, {\"type\": \"shadowsocks\", \"tag\": \"acceptance-stls\", \"server\": \"stls.example\", \"server_port\": 443, \"method\": \"aes-256-gcm\", \"password\": \"TEST_INNER\", \"detour\": \"wrapper\"}]}",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "ShadowTls",
+      "/display_name": "acceptance-stls",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "stls.example"
+      },
+      "/endpoint/port": 443,
+      "/authentication": {
+        "type": "password",
+        "data": {
+          "password": "TEST_INNER"
+        }
+      },
+      "/tls/enabled": true,
+      "/tls/server_name": "cover.example",
+      "/tls/alpn": [],
+      "/tls/skip_cert_verify": null,
+      "/config/ShadowTls/version": "V3",
+      "/config/ShadowTls/password": "TEST_WRAPPER",
+      "/config/ShadowTls/inner_protocol": "Shadowsocks",
+      "/config/ShadowTls/inner_config/Shadowsocks/method": "aes-256-gcm"
+    }
+  }
+]

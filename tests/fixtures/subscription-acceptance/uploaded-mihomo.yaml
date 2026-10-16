@@ -1,0 +1,350 @@
+mode: rule
+dns:
+  enable: true
+  listen: 0.0.0.0:7874
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - +.lan
+    - +.local
+    - +.home.arpa
+    - +.campus.example
+  default-nameserver:
+    - 192.0.2.53
+    - 198.51.100.53
+  nameserver:
+    - https://dns-one.example/dns-query#🚀 节点选择
+    - https://dns-two.example/dns-query#🚀 节点选择
+  direct-nameserver:
+    - https://dns-direct-one.example/dns-query
+    - https://dns-direct-two.example/dns-query
+  direct-nameserver-follow-policy: true
+  nameserver-policy:
+    geosite:private:
+      - https://dns-direct-one.example/dns-query
+    +.lan:
+      - https://dns-direct-one.example/dns-query
+    +.local:
+      - https://dns-direct-one.example/dns-query
+    +.home.arpa:
+      - https://dns-direct-one.example/dns-query
+    +.campus.example:
+      - 203.0.113.53
+      - 203.0.113.54
+  proxy-server-nameserver:
+    - https://dns-direct-one.example/dns-query
+    - https://dns-direct-two.example/dns-query
+proxies: null
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    include-all: true
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - __PROXY_PROVIDERS__
+      - __PROXY_NODES__
+      - REJECT
+      - DIRECT
+  - name: 🎯 大陆直连
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 节点选择
+      - REJECT
+  - name: 🤖 好IP
+    type: select
+    include-all: true
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - __PROXY_PROVIDERS__
+      - __PROXY_NODES__
+      - REJECT
+      - DIRECT
+  - name: ♻️ GitHub大带宽
+    type: select
+    include-all: true
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - __PROXY_PROVIDERS__
+      - __PROXY_NODES__
+rules:
+  - DOMAIN-KEYWORD,stun,🚀 节点选择
+  - DST-PORT,3478,🚀 节点选择
+  - DST-PORT,19302,🚀 节点选择
+  - PROCESS-NAME,ChatGPT.exe,🤖 好IP
+  - PROCESS-NAME,codex.exe,🤖 好IP
+  - PROCESS-NAME,Claude.exe,🤖 好IP
+  - PROCESS-NAME,claude.exe,🤖 好IP
+  - PROCESS-NAME,Cursor.exe,🤖 好IP
+  - DOMAIN-SUFFIX,chatgpt.com,🤖 好IP
+  - DOMAIN-SUFFIX,openai.com,🤖 好IP
+  - DOMAIN-SUFFIX,oaistatic.com,🤖 好IP
+  - DOMAIN-SUFFIX,oaiusercontent.com,🤖 好IP
+  - DOMAIN-SUFFIX,oaistatsig.com,🤖 好IP
+  - DOMAIN-SUFFIX,openaimerge.com,🤖 好IP
+  - DOMAIN-KEYWORD,google,🤖 好IP
+  - DOMAIN-SUFFIX,gstatic.com,🤖 好IP
+  - DOMAIN-SUFFIX,1e100.net,🤖 好IP
+  - DOMAIN-SUFFIX,gvt1.com,🤖 好IP
+  - DOMAIN-SUFFIX,gvt2.com,🤖 好IP
+  - DOMAIN-SUFFIX,gvt3.com,🤖 好IP
+  - DOMAIN-SUFFIX,gmail.com,🤖 好IP
+  - DOMAIN-SUFFIX,youtube.com,🤖 好IP
+  - DOMAIN-SUFFIX,youtu.be,🤖 好IP
+  - DOMAIN-SUFFIX,ytimg.com,🤖 好IP
+  - DOMAIN-SUFFIX,g.cn,🤖 好IP
+  - DOMAIN-KEYWORD,claude,🤖 好IP
+  - DOMAIN-KEYWORD,anthropic,🤖 好IP
+  - DOMAIN-KEYWORD,telegram,🤖 好IP
+  - DOMAIN-SUFFIX,t.me,🤖 好IP
+  - DOMAIN-SUFFIX,telegra.ph,🤖 好IP
+  - DOMAIN-SUFFIX,telesco.pe,🤖 好IP
+  - DOMAIN-SUFFIX,tdesktop.com,🤖 好IP
+  - DOMAIN-SUFFIX,fragment.com,🤖 好IP
+  - DOMAIN-SUFFIX,usercontent.dev,🤖 好IP
+  - DOMAIN-SUFFIX,github.com,♻️ GitHub大带宽
+  - DOMAIN-SUFFIX,githubassets.com,♻️ GitHub大带宽
+  - DOMAIN-SUFFIX,ghcr.io,♻️ GitHub大带宽
+  - DOMAIN-SUFFIX,github.io,♻️ GitHub大带宽
+  - DOMAIN-SUFFIX,githubcopilot.com,♻️ GitHub大带宽
+  - DOMAIN-SUFFIX,githubusercontent.com,♻️ GitHub大带宽
+  - DOMAIN-SUFFIX,github.dev,♻️ GitHub大带宽
+  - DOMAIN-SUFFIX,githubstatus.com,♻️ GitHub大带宽
+  - DOMAIN,github-cloud.s3.amazonaws.com,♻️ GitHub大带宽
+  - DOMAIN,github-production-release-asset-2e65be.s3.amazonaws.com,♻️ GitHub大带宽
+  - DOMAIN,github-production-repository-file-5c1aeb.s3.amazonaws.com,♻️ GitHub大带宽
+  - DOMAIN,github-production-repository-image-32fea6.s3.amazonaws.com,♻️ GitHub大带宽
+  - DOMAIN,github-production-user-asset-6210df.s3.amazonaws.com,♻️ GitHub大带宽
+  - PROCESS-NAME,easytier-gui.exe,🎯 大陆直连
+  - PROCESS-NAME,WorkBuddy.exe,🎯 大陆直连
+  - PROCESS-NAME,wps.exe,🎯 大陆直连
+  - PROCESS-NAME,QQMusic.exe,🎯 大陆直连
+  - PROCESS-NAME,cloudmusic.exe,🎯 大陆直连
+  - PROCESS-NAME,baidunetdiskhost.exe,🎯 大陆直连
+  - PROCESS-NAME,BaiduNetdiskUnite.exe,🎯 大陆直连
+  - PROCESS-NAME,BaiduNetdisk.exe,🎯 大陆直连
+  - PROCESS-NAME,WeChatAppEx.exe,🎯 大陆直连
+  - PROCESS-NAME,WXWork.exe,🎯 大陆直连
+  - PROCESS-NAME,Weixin.exe,🎯 大陆直连
+  - PROCESS-NAME,QQ.exe,🎯 大陆直连
+  - PROCESS-NAME,Feishu.exe,🎯 大陆直连
+  - PROCESS-NAME,DingTalk.exe,🎯 大陆直连
+  - PROCESS-NAME,Douyin.exe,🎯 大陆直连
+  - PROCESS-NAME,bilibili.exe,🎯 大陆直连
+  - PROCESS-NAME,Doubao.exe,🎯 大陆直连
+  - DOMAIN-SUFFIX,cn,🎯 大陆直连
+  - DOMAIN-SUFFIX,tencent.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,tencent-cloud.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,tencent-cloud.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qq.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qqurl.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,foxmail.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,soso.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,idqqimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,gtimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qzone.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qqmusic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qqmail.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,myapp.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,wegame.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,woa.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,wechat.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,weixin.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,servicewechat.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,servicewechat.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,wechatpay.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,weixinbridge.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,wechatlegal.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,wechatlegal.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,wechatos.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,wechatgame.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,wechatgame.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,dnspod.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qcloud.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,myqcloud.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,igamecj.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,smtcdns.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,smtcdns.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,weiyun.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,tenpay.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,taobao.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,tmall.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,1688.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,alibaba.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,alipay.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,alipayobjects.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,amap.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,youku.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,dingtalk.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,aliyun.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,aliyuncs.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,alicdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyin.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,amemv.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinvod.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,idouyinvod.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ixiguavideo.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,toutiaocloud.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,toutiaocdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyincdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bdurl.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinstatic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,pstatp.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytegoofy.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytescm.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytegecko.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,amemv.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,iesdouyin.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,boxdouyin.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinfe.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinliving.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,idouyinliving.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,idouyinpic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,idouyinstatic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinpay.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ulpay.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,lifexue.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,open-douyin.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinact.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinact.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinmusicpromotion.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,awemeughun.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,awemeuglang.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,awemeugsoul.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,awemeugwave.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,byteeffecttos.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijiecdn.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijieimg.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijieurl.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijiewap.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijiewap.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,zjbyte.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytedanceapi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytecdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,byteacctimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,byteactivity.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytemastatic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinec.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ecombdapi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ecombdimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ecombdstatic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ecombdvod.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,jinritemai.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,buydouke.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytednsdoc.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zjcdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,iesdouyin.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytetos.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zjbyte.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ibytedapm.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,byted-static.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytedance.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytedns.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytexservice.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,douyinpic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijieapi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijieapi.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijiecdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijieimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zijieurl.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytecdntp.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,dahhxxttxs.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,snssdk.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,byteimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,toutiao.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ixigua.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,volcengine.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bytedance.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qishui.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,meituan.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,dianping.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,maoyan.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,meituan.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,dpfile.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,sankuai.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,didichuxing.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,didistatic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,diditaxi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,didiglobal.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,didiopenapi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,didiyun.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,didiwuxian.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,didiqiche.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,udache.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,xiaojukeji.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,baidu.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,baidubce.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bdimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bdstatic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bcebos.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,xiaohongshu.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,xhscdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,xhscdn.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,xhslink.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,sina.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,sinaimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,weibo.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,weibocdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,bilibili.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,b23.tv,🎯 大陆直连
+  - DOMAIN-SUFFIX,biliapi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,biliapi.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,bilivideo.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,hdslb.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,zhihu.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,deepseek.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,kimi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,minimaxi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,hailuoai.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qwen.ai,🎯 大陆直连
+  - DOMAIN-SUFFIX,doubao.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,stepfun.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,jd.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,360buyimg.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,pinduoduo.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,163.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,126.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,netease.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,127.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,iqiyi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,iqiyipic.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,qy.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,mi.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,mi-img.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,xiaomi.net,🎯 大陆直连
+  - DOMAIN-SUFFIX,kuaishou.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,yximgs.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,ximalaya.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,xmcdn.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,hihonorcloud.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,hihonor.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,honor.com,🎯 大陆直连
+  - DOMAIN-SUFFIX,personal-one.example,🎯 大陆直连
+  - DOMAIN-SUFFIX,personal-two.example,🎯 大陆直连
+  - DOMAIN-SUFFIX,personal-three.example,🎯 大陆直连
+  - DOMAIN-SUFFIX,local,🎯 大陆直连
+  - DOMAIN-SUFFIX,lan,🎯 大陆直连
+  - DOMAIN-SUFFIX,home.arpa,🎯 大陆直连
+  - IP-CIDR,127.0.0.0/8,🎯 大陆直连,no-resolve
+  - IP-CIDR,10.0.0.0/8,🎯 大陆直连,no-resolve
+  - IP-CIDR,172.16.0.0/12,🎯 大陆直连,no-resolve
+  - IP-CIDR,192.168.0.0/16,🎯 大陆直连,no-resolve
+  - IP-CIDR,100.64.0.0/10,🎯 大陆直连,no-resolve
+  - IP-CIDR,169.254.0.0/16,🎯 大陆直连,no-resolve
+  - IP-CIDR6,::1/128,🎯 大陆直连,no-resolve
+  - IP-CIDR6,fc00::/7,🎯 大陆直连,no-resolve
+  - IP-CIDR6,fe80::/10,🎯 大陆直连,no-resolve
+  - IP-CIDR,192.0.2.10/32,🎯 大陆直连,no-resolve
+  - IP-CIDR,192.0.2.11/32,🎯 大陆直连,no-resolve
+  - IP-CIDR,198.51.100.10/32,🎯 大陆直连,no-resolve
+  - IP-CIDR,198.51.100.11/32,🎯 大陆直连,no-resolve
+  - IP-CIDR,203.0.113.10/32,🎯 大陆直连,no-resolve
+  - IP-CIDR6,2001:db8:1::/64,🎯 大陆直连,no-resolve
+  - IP-CIDR6,2001:db8:2::/64,🎯 大陆直连,no-resolve
+  - MATCH,🚀 节点选择

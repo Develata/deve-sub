@@ -19,6 +19,10 @@ output or honest not-run state.
 Only `pass` counts toward completion. `planned`, `not-run`, and `blocked` are
 non-pass states.
 
+The [subscription protocol and DNS acceptance matrix](subscription-protocols.md)
+separates generated-output coverage from actual client validation and records
+the uploaded-template boundary and four reproduced core incompatibilities.
+
 ## Rust gates
 
 ```bash

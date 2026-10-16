@@ -14,6 +14,9 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
+#[path = "subscription_delivery/acceptance.rs"]
+mod acceptance;
+
 #[path = "subscription_delivery/short_code_concurrency.rs"]
 mod short_code_concurrency;
 

@@ -371,6 +371,7 @@ cases:
     fixtures: ["apps/server/tests/source_refresh.rs"]
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance/source.rs::acceptance_source_refresh_to_loopback_http_subscription"
         - "crates/deve-sub-application/tests/refresh_source/lease_publication.rs::terminal_write_failure_rolls_back_publication"
         - "crates/deve-sub-application/tests/refresh_source/lease_publication.rs::publication_has_no_fallible_running_phase_write_after_commit"
         - "apps/server/tests/source_refresh.rs::admin_can_refresh_source"
@@ -885,6 +886,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance.rs::acceptance_individual_protocol_target_matrix"
         - "apps/server/tests/node_pool/import_outcomes.rs::mixed_import_outcomes_match_input_order_and_persisted_nodes"
         - "apps/server/tests/node_pool/import_outcomes.rs::failed_import_outcomes_preserve_leading_trailing_and_all_failed_entries"
         - "tests/e2e/functional/tags.api.spec.ts::FUNC-IMPORT-RACE"
@@ -1202,6 +1204,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance/routing.rs::acceptance_uploaded_template_reports_existing_contract_blockers"
         - "crates/deve-sub-yaml/tests/parsing.rs::legacy_plain_scalars_keep_their_types_and_ranges"
         - "crates/deve-sub-yaml/tests/parsing.rs::ordered_merges_preserve_explicit_order_and_first_inheritance"
         - "crates/deve-sub-yaml/tests/parsing.rs::duplicate_complex_keys_are_checked_after_recursive_merge"
@@ -1377,6 +1380,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance.rs::acceptance_mixed_protocol_reports_and_cached_delivery"
         - "apps/server/tests/template_management.rs::gen013_incompatible_nodes_excluded_with_report"
       status: pass
   - id: GEN-014
@@ -1390,6 +1394,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance/variants.rs::acceptance_transport_version_and_obfuscation_exclusions_are_reported"
         - "apps/server/tests/template_management.rs::gen014_strict_mode_fails_lenient_succeeds"
       status: pass
   - id: GEN-015
@@ -1456,10 +1461,14 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_21_delivered_protocol_configurations"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_reproduce_4_known_client_incompatibilities"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_validate_routing_dns_with_local_geosite"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_native_routing_templates_pass_mihomo"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_passes"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_rejects_garbage"
-      status: pass
+      status: fail
+      notes: "Expanded 11-protocol acceptance reproduces pinned-core incompatibilities; see docs/acceptance/subscription-protocols.md. Positive six-protocol evidence remains scoped."
   - id: OUT-002
     title: FlClash
     priority: P0
@@ -1485,9 +1494,12 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_21_delivered_protocol_configurations"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_reproduce_4_known_client_incompatibilities"
         - "crates/deve-sub-emitter/tests/out003_singbox_check.rs::out003_singbox_check_passes"
         - "crates/deve-sub-emitter/tests/out003_singbox_check.rs::out003_singbox_check_rejects_garbage"
-      status: pass
+      status: fail
+      notes: "Expanded 11-protocol acceptance reproduces pinned-core incompatibilities; see docs/acceptance/subscription-protocols.md. Positive six-protocol evidence remains scoped."
   - id: OUT-004
     title: Xray
     priority: P0
@@ -1499,6 +1511,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_21_delivered_protocol_configurations"
         - "crates/deve-sub-emitter/tests/out004_xray_check.rs::out004_xray_check_passes"
         - "crates/deve-sub-emitter/tests/out004_xray_check.rs::out004_xray_check_rejects_garbage"
       status: pass
@@ -1552,6 +1565,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance.rs::acceptance_mixed_protocol_reports_and_cached_delivery"
         - "apps/server/tests/subscription_delivery.rs::del002_conditional_get_returns_304"
         - "apps/server/tests/subscription_delivery.rs::del003_non_matching_etag_returns_200"
         - "apps/server/tests/subscription_delivery.rs::del004_if_none_match_star_returns_304"
@@ -2283,6 +2297,7 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/server/tests/subscription_delivery/acceptance.rs::acceptance_individual_protocol_target_matrix"
         - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_full_fidelity_accepts_all"
         - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_multi_node_round_trip"
         - "crates/deve-sub-protocol/tests/xhttp_and_json_round_trip.rs::json_profile_single_node_round_trip"

@@ -1,7 +1,6 @@
 # Deve Sub v0.1.4 release notes
 
-Candidate notes for the changes since v0.1.3. Publication and signed-asset
-verification are separate gates; this document does not claim they have run.
+Changes since v0.1.3, with compatibility and upgrade guidance.
 
 ## Changes
 
@@ -23,7 +22,7 @@ verification are separate gates; this document does not claim they have run.
 - Emit current sing-box WireGuard endpoints and supported Snell settings,
   preserve Xray Reality with implicit TCP, and reject output combinations that
   cannot preserve their protocol or security fields. See the
-  [protocol/target matrix](../acceptance/subscription-protocols.md).
+  [protocol/target matrix](https://github.com/Develata/deve-sub/blob/v0.1.4/docs/acceptance/subscription-protocols.md).
 - Preserve the configured product title in release Web builds, distinguish
   dashboard loading/error/empty states, clarify subscription actions and focus,
   and select the currently filtered nodes after an immediate filter change.
@@ -31,7 +30,7 @@ verification are separate gates; this document does not claim they have run.
   memoized node projections. Measurements were workload-specific and included
   resident-memory regressions; this release makes no claim of universally
   faster responses or lower memory use. The
-  [bounded performance evidence](../acceptance/gates.md#2026-10-14--bounded-regression-convergence)
+  [bounded performance evidence](https://github.com/Develata/deve-sub/blob/v0.1.4/docs/acceptance/gates.md#2026-10-14--bounded-regression-convergence)
   records the tradeoffs.
 
 ## Compatibility and upgrade notes
@@ -58,7 +57,7 @@ can generate again:
   errors. Source-container projection keeps its distinct last-key-wins and
   ordinary `<<` behavior; it does not acquire template merge semantics.
 
-See the [YAML contract](../plan/milestones/M5-generator-and-v3-template.md#clash-routing-input-and-version-recovery)
+See the [YAML contract](https://github.com/Develata/deve-sub/blob/v0.1.4/docs/plan/milestones/M5-generator-and-v3-template.md#clash-routing-input-and-version-recovery)
 for bounds and remediation. Ordinary question marks and Tabs inside strings
 or comments are unaffected by these compatibility checks.
 
@@ -71,9 +70,10 @@ last-good fallback requires an eligible result under the current semantics.
 
 Some formerly lossy outputs are now explicit errors. V2Ray rejects Reality;
 complete ShadowTLS subscription URIs are rejected because they cannot retain
-the inner configuration and authentication. Snell userkey is rejected outside
-sing-box; target-incompatible security fields, version-specific settings and
-v6 URI modes are also rejected. sing-box WireGuard imports with distinct peer
+the inner configuration and authentication. Snell userkey is supported by
+sing-box and retained in Canonical JSON; other output formats reject it.
+Target-incompatible security fields, version-specific settings and v6 URI modes
+are also rejected. sing-box WireGuard imports with distinct peer
 endpoints or unsupported interface/dialer settings remain raw Unsupported input
 instead of being collapsed. Strict generation
 rejects incompatible nodes; lenient generation reports exclusions, and an
@@ -85,9 +85,9 @@ same release** with the installer. `deve-sub update` replaces only the binary;
 with Web serving enabled it requires explicit `--binary-only` acceptance of
 version skew. It is not a complete native Web upgrade. The installer checks
 downloaded checksums over HTTPS; the binary updater verifies signed manifests
-by default. See the [artifact and update contract](../contracts/release-artifacts.md).
+by default. See the [artifact and update contract](https://github.com/Develata/deve-sub/blob/v0.1.4/docs/contracts/release-artifacts.md).
 
-After publication, Docker deployments can pin
+Docker deployments can pin
 `ghcr.io/develata/deve-sub:v0.1.4` for Linux amd64 or arm64. The optional `latest`
 alias moves only after the versioned image is published and v0.1.4 is confirmed
 as the current stable GitHub release. Pulling an image does not replace a
@@ -108,4 +108,3 @@ PERF-001/002 budget cases remain `not-run`; process-isolated updater checks and
 short soak runs do not promote those cases to pass.
 
 [Full comparison](https://github.com/Develata/deve-sub/compare/v0.1.3...v0.1.4)
-(available after the release tag is published).

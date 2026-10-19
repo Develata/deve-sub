@@ -36,6 +36,12 @@ allowlist excludes signing secrets and intermediate files. Download this
 artifact for signed updater acceptance; it is not a stable release channel.
 Tag pushes repeat those gates before publication.
 
+The GitHub Release body comes from the reviewed
+`docs/guides/release-v<workspace-version>.md` in the release commit, without
+automatically generated or appended notes. Missing, empty or version-mismatched
+notes stop assembly. Links in that body use absolute HTTPS URLs so they also
+work on the Release page; repository documentation links pin the release tag.
+
 Docker publishes the same version as a lowercase GHCR reference containing
 both `linux/amd64` and `linux/arm64`: `ghcr.io/develata/deve-sub:<release-tag>`
 (for example, `ghcr.io/develata/deve-sub:v0.1.1`). The optional

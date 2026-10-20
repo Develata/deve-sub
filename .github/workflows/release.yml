@@ -56,7 +56,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.asset }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [verify, version-check]
     strategy:
@@ -140,6 +140,21 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Validate reviewed release notes
+        id: notes
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          import tomllib
+
+          version = tomllib.loads(Path("Cargo.toml").read_text())["workspace"]["package"]["version"]
+          path = Path(f"docs/guides/release-v{version}.md")
+          text = path.read_text(encoding="utf-8")
+          heading, _, body = text.partition("\n")
+          if heading != f"# Deve Sub v{version} release notes" or not body.strip():
+              raise SystemExit("FAIL: missing or mismatched reviewed release notes")
+          print(f"body_path={path.as_posix()}")
+          PY
       - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
         with:
           toolchain: 1.97.1
@@ -238,7 +253,9 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.body_path }}
+          generate_release_notes: false
+          append_body: false
           prerelease: ${{ needs.version-check.outputs.prerelease == 'true' }}
           files: |
             ${{ runner.temp }}/release/deve-sub-linux-amd64

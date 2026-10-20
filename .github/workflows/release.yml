@@ -56,7 +56,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.asset }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [verify, version-check]
     strategy:

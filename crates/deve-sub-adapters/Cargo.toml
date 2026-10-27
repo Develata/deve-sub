@@ -46,7 +46,7 @@ rcgen = { workspace = true }
 bytes = { workspace = true }
 flate2 = "1"
 brotli = "7"
-zstd = "0.13"
+zstd = "0.14.3"
 
 [lints]
 workspace = true

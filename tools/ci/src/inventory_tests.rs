@@ -239,65 +239,6 @@ fn matrices_cannot_hide_failures_or_exclude_lanes() {
 }
 
 #[test]
-fn docker_runtime_cannot_be_replaced_skipped_or_suppressed() {
-    for (job, name) in [
-        (
-            "docker",
-            "Verify image architecture, healthcheck and Web runtime",
-        ),
-        (
-            "multiarch",
-            "Verify both architectures boot with the real healthcheck",
-        ),
-    ] {
-        for (key, value) in [
-            ("run", json!("true")),
-            ("if", json!("false")),
-            ("continue-on-error", json!(true)),
-        ] {
-            rejected(|workflow| {
-                let steps = workflow["jobs"][job]["steps"]
-                    .as_array_mut()
-                    .expect("steps");
-                steps
-                    .iter_mut()
-                    .find(|step| step["name"] == name)
-                    .expect("runtime")[key] = value;
-            });
-        }
-    }
-}
-
-#[test]
-fn multiarch_must_load_both_matching_images_for_runtime_verification() {
-    for arch in ["amd64", "arm64"] {
-        let name = format!("Load {arch} image from cache");
-        rejected(|workflow| {
-            workflow["jobs"]["multiarch"]["steps"]
-                .as_array_mut()
-                .expect("steps")
-                .retain(|step| step["name"] != name);
-        });
-        for (key, value) in [
-            ("platforms", json!("linux/other")),
-            ("load", json!(false)),
-            ("push", json!(true)),
-            ("tags", json!("wrong-image")),
-        ] {
-            rejected(|workflow| {
-                let steps = workflow["jobs"]["multiarch"]["steps"]
-                    .as_array_mut()
-                    .expect("steps");
-                steps
-                    .iter_mut()
-                    .find(|step| step["name"] == name)
-                    .expect("loader")["with"][key] = value;
-            });
-        }
-    }
-}
-
-#[test]
 fn installer_smoke_cannot_skip_or_suppress_failures() {
     for (key, value) in [
         ("if", json!("false")),
@@ -316,3 +257,6 @@ fn installer_smoke_cannot_skip_or_suppress_failures() {
         });
     }
 }
+
+#[path = "docker_inventory_tests.rs"]
+mod docker_tests;

@@ -17,6 +17,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
     headless: true,
     screenshot: 'only-on-failure',
+    launchOptions: { executablePath: process.env.DEVE_SUB_BROWSER },
     permissions: ['clipboard-read', 'clipboard-write'],
   },
   projects: [

@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     # WHY: this security candidate needs push CI for the ARM64 runtime gate.
-    branches: [main, fix/bounded-quality-2026-10-13, perf/bounded-audit-2026-10-13, perf/regression-convergence-2026-10-14, fix/rustls-security-2026-10-15]
+    branches: [main, fix/bounded-quality-2026-10-13, perf/bounded-audit-2026-10-13, perf/regression-convergence-2026-10-14, fix/rustls-security-2026-10-15, backup/round5-cp10-native-ci-20261112]
   # WHY (ADR-0008): nightly full baseline detects drift before a release.
   schedule:
     - cron: "0 19 * * *"
@@ -41,6 +41,7 @@ jobs:
       - run: python3 -m unittest discover -s scripts/ci/tests
       - run: python3 scripts/tests/test_soak.py
       - run: python3 scripts/tests/test_docker_health_deadline.py
+      - run: node --test tests/e2e/verify-locked-browser.test.cjs
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: ci-tool
@@ -363,10 +364,9 @@ jobs:
         with:
           node-version: "20"
       - name: Install E2E dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: npm ci
-        working-directory: tests/e2e
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
         working-directory: tests/e2e
       - name: Verify native installer lifecycle
         if: matrix.suite == 'legacy'
@@ -377,6 +377,9 @@ jobs:
       - name: Verify browser process lifecycle
         if: matrix.suite == 'legacy'
         run: npx playwright test --config lifecycle.config.ts
+        working-directory: tests/e2e
+      - name: Verify existing locked Playwright Chromium
+        run: node verify-locked-browser.cjs
         working-directory: tests/e2e
       - name: Run browser lane
         env:
@@ -443,10 +446,12 @@ jobs:
         with:
           python-version: "3.12.14"
       - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         working-directory: tests/e2e
-      - name: Install locked Playwright Chromium
+      - name: Verify existing locked Playwright Chromium
         if: matrix.lane != 'dns'
-        run: node node_modules/@playwright/test/cli.js install --with-deps chromium
+        run: node verify-locked-browser.cjs
         working-directory: tests/e2e
       - run: python3 -m pip install pyyaml==6.0.3
       - name: Install normal protocol validators
@@ -496,90 +501,97 @@ jobs:
 
   docker:
     name: docker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: rust-gate
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: Build Docker image
-        # WHY (ADR-0008, Phase 3-F): share cache reads, isolate cache writers.
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
-          context: .
-          push: false
-          load: true
-          tags: deve-sub:ci
-          cache-from: |
-            type=gha,scope=docker-ci
-            type=gha,scope=multiarch-ci
-          cache-to: type=gha,scope=docker-ci,mode=max
+          persist-credentials: false
+      - name: Verify native Docker host
+        env:
+          DOCKER_CONTEXT: default
+          NATIVE_ARCH: amd64
+          NATIVE_MACHINE: x86_64
+        run: |
+          test "$(uname -m)" = "$NATIVE_MACHINE"
+          case "$(docker info --format '{{.Architecture}}')" in
+            x86_64|amd64) docker_arch=amd64 ;;
+            aarch64|arm64) docker_arch=arm64 ;;
+            *) exit 1 ;;
+          esac
+          test "$docker_arch" = "$NATIVE_ARCH"
+          builder_info=$(docker buildx inspect default)
+          test "$(printf '%s\n' "$builder_info" | awk '$1 == "Driver:" {print $2}')" = docker
+      - name: Build Docker image from source
+        env:
+          DOCKER_CONTEXT: default
+        run: docker build --builder default --platform linux/amd64 --tag deve-sub:ci .
       - name: Verify environment administrator bootstrap
+        env:
+          DOCKER_CONTEXT: default
         run: python3 scripts/tests/test_docker_bootstrap.py --image deve-sub:ci
       - name: Verify bounded container log rotation
+        env:
+          DOCKER_CONTEXT: default
         run: python3 scripts/tests/test_docker_logging.py --image deve-sub:ci
       - name: Verify image architecture, healthcheck and Web runtime
+        env:
+          DOCKER_CONTEXT: default
         run: python3 scripts/tests/test_docker_health.py --image deve-sub:ci --platform linux/amd64
 
-  # Multi-arch build verification (DEPLOY-003/004).
-  # WHY: runs on supported branch pushes and the nightly schedule, not on PRs.
-  # The arm64 runtime stage still needs QEMU for apt-get on
-  # debian:trixie-slim; the builder stage uses cross-compile (not QEMU) per
-  # Dockerfile line 9 --platform=$BUILDPLATFORM. Schedule inclusion keeps
-  # the arm64 GHA Docker layers warm — the docker job reuses this cache and
-  # only multiarch writes arm64 layers.
+  # Both original Dockerfile images are built and booted on matching native
+  # hosts. The existing daemon/default driver avoids privileged builder helpers.
   multiarch:
-    name: multiarch (amd64 + arm64)
-    runs-on: ubuntu-latest
+    name: multiarch (${{ matrix.arch }} native)
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     needs: rust-gate
     if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+            machine: x86_64
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            machine: aarch64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
-          platforms: arm64
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: Build multi-arch images (no push)
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: false
-          tags: deve-sub:multiarch
-          cache-from: |
-            type=gha,scope=multiarch-ci
-            type=gha,scope=docker-ci
-          cache-to: type=gha,scope=multiarch-ci,mode=max
-      - name: Load amd64 image from cache
-        # WHY (Phase 3-C): step 1 already built amd64+arm64 and wrote to GHA
-        # cache. Loading from cache avoids a redundant full docker build
-        # (the old step did `docker build` from scratch — ~3-5m wasted).
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: deve-sub-amd64
-          cache-from: type=gha,scope=multiarch-ci
-      - name: Load arm64 image from cache
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          platforms: linux/arm64
-          push: false
-          load: true
-          tags: deve-sub-arm64
-          cache-from: type=gha,scope=multiarch-ci
-      - name: Verify both architectures boot with the real healthcheck
-        # WHY: cross-compilation alone cannot prove the ARM64 image starts.
-        # Each smoke owns its cleanup; finish both and retain either failure.
+          persist-credentials: false
+      - name: Verify native Docker host
+        env:
+          DOCKER_CONTEXT: default
+          NATIVE_ARCH: ${{ matrix.arch }}
+          NATIVE_MACHINE: ${{ matrix.machine }}
         run: |
-          status=0
-          python3 scripts/tests/test_docker_health.py --image deve-sub-amd64 --platform linux/amd64 || status=1
-          python3 scripts/tests/test_docker_health.py --image deve-sub-arm64 --platform linux/arm64 || status=1
-          exit "$status"
+          test "$(uname -m)" = "$NATIVE_MACHINE"
+          case "$(docker info --format '{{.Architecture}}')" in
+            x86_64|amd64) docker_arch=amd64 ;;
+            aarch64|arm64) docker_arch=arm64 ;;
+            *) exit 1 ;;
+          esac
+          test "$docker_arch" = "$NATIVE_ARCH"
+          builder_info=$(docker buildx inspect default)
+          test "$(printf '%s\n' "$builder_info" | awk '$1 == "Driver:" {print $2}')" = docker
+      - name: Build matching native image from source
+        env:
+          DOCKER_CONTEXT: default
+          NATIVE_ARCH: ${{ matrix.arch }}
+          NATIVE_PLATFORM: ${{ matrix.platform }}
+        run: docker build --builder default --platform "$NATIVE_PLATFORM" --tag "deve-sub-$NATIVE_ARCH" .
+      - name: Verify matching native image health and Web
+        env:
+          DOCKER_CONTEXT: default
+          NATIVE_ARCH: ${{ matrix.arch }}
+          NATIVE_PLATFORM: ${{ matrix.platform }}
+        run: python3 scripts/tests/test_docker_health.py --image "deve-sub-$NATIVE_ARCH" --platform "$NATIVE_PLATFORM"
 
   acceptance-gate:
     name: acceptance-gate

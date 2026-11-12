@@ -10,7 +10,10 @@ the original parallelization decision. Product behavior and the production
 
 ## Static execution and final gate
 
-Every supported event runs the full baseline. The workflow's static matrix
+Every supported event runs the full baseline. The explicit
+`backup/round5-cp10-native-ci-20261112` verification branch is also a supported
+push target; it does not authorize publication or merging to main.
+The workflow's static matrix
 owns package partitioning; Cargo metadata proves that every workspace member
 belongs to exactly one shard. Inventory validation also requires the exact
 locked/all-targets/all-features Cargo command, without conditions, filters,
@@ -85,10 +88,16 @@ HTTP plus the non-root user. Run both architectures even if one smoke fails;
 the combined result fails if either does. Each invocation owns a random
 container, loopback port and tmpfs data, and cleans up on success, failure or
 handled termination. These checks implement M8 DEPLOY-003/004/005; a successful
-cross-build alone is insufficient. Docker and multiarch have separate
-cache write scopes and may read each other's cache. Cache misses change cost,
-not verification scope or truth. Published artifacts are never identified by
-cache keys alone.
+cross-build alone is insufficient. Multiarch runs exactly two native lanes:
+`ubuntu-24.04` for amd64 and `ubuntu-24.04-arm` for arm64, with fail-fast off
+and at most two concurrent runners. Each verifies its host architecture and
+the existing default Docker driver, then builds and boots its matching image.
+Neither Docker job starts a docker-container builder, registers binfmt, enables
+privileged containers or changes daemon settings. GHA Docker cache exporters
+are omitted because they would require a different builder configuration;
+cold builds change cost, never verification scope. Published artifacts are
+never identified by cache keys alone. See the native-runner amendment in
+ADR-0008.
 
 ## Runtime isolation and failure/recovery
 
@@ -121,6 +130,16 @@ A browser mobile viewport is not an Android client. Full acceptance readiness
 must report those gaps separately; a green automated gate cannot promote them.
 The reviewed workflow has read-only repository access, no production secrets,
 no publishing steps and no additional scheduled trigger.
+
+Browser preparation only verifies an
+already-present executable matching the locked Playwright browser version and
+revision. It records that executable's SHA-256 and exports its exact path to
+the test configs. It never downloads a browser or substitutes a system version.
+Missing or mismatched assets leave browser cases not-run and fail the job and
+final gate. The legacy installer and process lifecycle checks run before this
+preflight so their independent evidence is still available. An operator must
+provide an existing lawful exact asset or an already-authorized target
+environment; moving a refused download to another runner is not a remedy.
 
 Browser invocations own their ports, temporary databases/keys, identities,
 fixtures, child processes and logs. Setup and teardown use the same run-local

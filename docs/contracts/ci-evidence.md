@@ -19,9 +19,19 @@ workflow runs may cancel one another. There is no shadow plan schema or selectiv
 execution surface. This workspace-only binary is not packaged in product releases.
 
 Docker runtime verification is also part of the static inventory: the regular
-Docker job must run the shared image smoke; multiarch must load both matching
-platform images and run both smokes, retaining either failure. Building ARM64
+Docker job and exactly two native multiarch lanes must build the original
+Dockerfile into the existing default Docker daemon and run the matching image
+smoke. The lanes bind amd64 to `ubuntu-24.04` and arm64 to `ubuntu-24.04-arm`;
+both finish even if one fails. Extra setup actions, privileged builders, binfmt
+registration, altered commands or missing lanes fail inventory. Building ARM64
 without starting it is not DEPLOY-004 evidence.
+
+Browser preflight accepts only an existing regular executable for the locked
+Playwright revision and exact browser version, records its SHA-256 and exports
+its path for every browser config. It does not download or choose a substitute.
+Absent/mismatched assets fail preflight and the final gate; no browser cases
+are claimed to have run. The installer and process lifecycle checks precede
+this capability check on the legacy lane.
 
 ## Artifact manifest
 

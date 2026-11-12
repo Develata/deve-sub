@@ -76,6 +76,27 @@ saving was eliminating the redundant amd64 rebuild in its verification step.
 
 ## Consequences
 
+### 2026-11-12 native-runner and browser-capability amendment
+
+For `ci.yml`, the execution safety boundary now takes precedence over Docker
+GHA cache reuse (decision 4) and the earlier rejection of per-architecture
+jobs (alternative 3). The two required images are built and booted on matching
+native GitHub-hosted runners using the existing default Docker driver. No
+QEMU/binfmt registration, privileged docker-container builder, daemon feature
+change or prebuilt product substitution is permitted. The matrix keeps both
+lanes, fail-fast off and a finite per-lane deadline; cold builds remain required.
+This is an execution constraint, not a new speedup claim or a release action.
+
+Browser preparation checks existing locked assets and fails closed if absent.
+A previously refused download is not retried from another runner. The exact
+verification branch is an additional push target, with no new scheduled event;
+its push and every automatic action still require the operator's concrete
+content approval. Distribution signing and publication remain separate.
+
+GitHub documents the native `ubuntu-24.04-arm` runner label in its
+[hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The Dockerfile and both runtime smokes remain mandatory.
+
 - Wall time: ~42m → ~10m (cold caches) with a warm-cache critical path of
   ~7m. Observed job-level results (warm Docker cache): `docker` 14m37s → 32s,
   `multiarch` 14m24s → 42s, `browser-e2e` 15m14s → 1m19s (no compilation;

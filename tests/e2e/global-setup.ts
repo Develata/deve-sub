@@ -76,6 +76,18 @@ async function seedServer(port: number): Promise<void> {
   if (tmplRes.status !== 201) throw new Error(`template create failed: ${tmplRes.status} ${JSON.stringify(tmplRes.data)}`);
   const templateId = tmplRes.data.template.id;
 
+  // Saving a subscription validates generation, so seed its nodes first; the
+  // empty-pool rejection remains part of the server's safety contract.
+  const lines: string[] = [];
+  for (let i = 0; i < 10000; i++) {
+    lines.push(`trojan://pass-${i}@host-${i}.example.com:443#Node-${String(i).padStart(4, '0')}`);
+  }
+  const importRes = await apiCall(port, 'POST', '/nodes/import', {
+    content: lines.join('\n'),
+    source_type: 'uri_list',
+  }, cookie);
+  if (importRes.status !== 200) throw new Error(`node import failed: ${importRes.status} ${JSON.stringify(importRes.data)}`);
+
   // 4. Create a subscription.
   const subRes = await apiCall(port, 'POST', '/subscriptions', {
     name: 'test-sub',
@@ -96,17 +108,6 @@ async function seedServer(port: number): Promise<void> {
     keep_on_fail: true,
   }, cookie);
   if (srcRes.status !== 201) throw new Error(`source create failed: ${srcRes.status} ${JSON.stringify(srcRes.data)}`);
-
-  // 6. Import 10,000 nodes for UI-008.
-  const lines: string[] = [];
-  for (let i = 0; i < 10000; i++) {
-    lines.push(`trojan://pass-${i}@host-${i}.example.com:443#Node-${String(i).padStart(4, '0')}`);
-  }
-  const importRes = await apiCall(port, 'POST', '/nodes/import', {
-    content: lines.join('\n'),
-    source_type: 'uri_list',
-  }, cookie);
-  if (importRes.status !== 200) throw new Error(`node import failed: ${importRes.status} ${JSON.stringify(importRes.data)}`);
 
   console.log(`[seed] port ${port}: admin created, template + subscription + source + 10k nodes seeded`);
 }

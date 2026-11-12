@@ -225,6 +225,26 @@ async fn exact_quarantine_preserves_settings_references_and_chain_closure() {
             .expect("kept")
             .is_active
     );
+    // Exercise repair against the same nonempty historical reference fixture.
+    f.repo
+        .apply_security_plan(
+            &f.plan(0, NodeSecurityChange::RestoreTls(f.pins(0).await), 'b')
+                .await,
+        )
+        .await
+        .expect("repair with all references populated");
+    assert_eq!(
+        before,
+        protected(&f.pool, true).await,
+        "tags, bindings, template history, fixed subscriptions, token and chain references survive repair"
+    );
+    assert!(
+        f.repo
+            .security_blocked_ids()
+            .await
+            .expect("closure released")
+            .is_empty()
+    );
 }
 
 #[tokio::test]

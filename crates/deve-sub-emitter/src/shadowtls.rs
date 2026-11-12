@@ -34,6 +34,11 @@ pub(crate) fn emit(node: &Node) -> Result<String, EmitError> {
         _ => return Err(EmitError::NoEmitter("non-ShadowTls config".to_owned())),
     };
 
+    if !cfg.has_valid_password() {
+        return Err(EmitError::NoEmitter(
+            "ShadowTLS V2/V3 wrapper password".into(),
+        ));
+    }
     if !matches!(
         cfg.inner_protocol,
         deve_sub_domain::ProtocolKind::Unknown(_)

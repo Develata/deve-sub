@@ -59,7 +59,7 @@ pub fn DashboardPage(props: DashboardProps) -> Element {
                                 ("dashboard.total", data.total_upload as u128 + data.total_download as u128),
                             ] {
                                 div { class: "dashboard-card",
-                                    dt { class: "text-sm text-stone-600 dark:text-stone-400", {t(l, label)} }
+                                    dt { class: "text-sm text-muted", {t(l, label)} }
                                     dd { class: "mt-2 text-2xl font-semibold tabular-nums", {format_bytes(value)} }
                                 }
                             }
@@ -69,7 +69,7 @@ pub fn DashboardPage(props: DashboardProps) -> Element {
             }
             section { class: "dashboard-card", aria_label: t(l, "dashboard.history"), aria_busy: history.read().is_none(),
                 h3 { class: "text-base font-semibold", {t(l, "dashboard.history")} }
-                p { class: "mt-1 text-sm text-stone-600 dark:text-stone-400", {t(l, "dashboard.daily_utc")} }
+                p { class: "mt-1 text-sm text-muted", {t(l, "dashboard.daily_utc")} }
                 match &*history.read() {
                     None => rsx! { p { class: "dashboard-state", role: "status", {t(l, "dashboard.loading_history")} } },
                     Some(Err(message)) => rsx! {
@@ -79,7 +79,7 @@ pub fn DashboardPage(props: DashboardProps) -> Element {
                         }
                     },
                     Some(Ok(data)) if data.points.is_empty() => rsx! {
-                        p { class: "py-12 text-center text-sm text-stone-600 dark:text-stone-400", {t(l, "dashboard.empty_history")} }
+                        p { class: "py-12 text-center text-sm text-muted", {t(l, "dashboard.empty_history")} }
                     },
                     Some(Ok(data)) => traffic_chart(l, &data.points),
                 }

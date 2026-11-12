@@ -54,7 +54,7 @@ fn cases() -> Vec<Case> {
 #[test]
 fn acceptance_matrix_matches_registered_protocols() {
     let cases = cases();
-    assert_eq!(cases.len(), 11);
+    assert_eq!(cases.len(), 13);
     let kinds: std::collections::HashSet<_> = cases.iter().map(|c| c.protocol.clone()).collect();
     assert_eq!(kinds.len(), cases.len());
     for profile in PROFILES {
@@ -74,10 +74,10 @@ fn acceptance_matrix_matches_registered_protocols() {
             "{profile}"
         );
     }
-    assert_eq!(cases.iter().map(|c| c.profiles.len()).sum::<usize>(), 55);
+    assert_eq!(cases.iter().map(|c| c.profiles.len()).sum::<usize>(), 67);
 }
 
-/// OUT-001..007/015, NODE-001: all 77 protocol/profile cells pass through
+/// OUT-001..007/015, NODE-001: all 91 protocol/profile cells pass through
 /// import, SQLite, generation and public delivery. Unsupported cells must fail.
 #[tokio::test]
 async fn acceptance_individual_protocol_target_matrix() {
@@ -90,20 +90,20 @@ async fn acceptance_individual_protocol_target_matrix() {
         let template = template(&router, &cookie, &v3(Some(std::slice::from_ref(id)))).await;
         for profile in PROFILES {
             let response = generate(&router, &cookie, &template, profile, "strict").await;
-            let token = subscription(
-                &router,
-                &cookie,
-                &template,
-                profile,
-                Some(std::slice::from_ref(id)),
-            )
-            .await;
-            let delivered = router
-                .clone()
-                .oneshot(get(&format!("/sub/{token}/{profile}")))
-                .await
-                .expect("delivery");
             if case.accepts(profile) {
+                let token = subscription(
+                    &router,
+                    &cookie,
+                    &template,
+                    profile,
+                    Some(std::slice::from_ref(id)),
+                )
+                .await;
+                let delivered = router
+                    .clone()
+                    .oneshot(get(&format!("/sub/{token}/{profile}")))
+                    .await
+                    .expect("delivery");
                 assert_eq!(
                     response.status(),
                     StatusCode::OK,
@@ -130,12 +130,18 @@ async fn acceptance_individual_protocol_target_matrix() {
                     case.name
                 );
                 assert_eq!(body_to_json(response).await["error"], "incompatible_nodes");
-                assert_eq!(
-                    delivered.status(),
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "unsupported-only delivery must fail"
-                );
-                assert!(!body_to_string(delivered).await.is_empty());
+                let rejected = subscription_response(
+                    &router,
+                    &cookie,
+                    &template,
+                    profile,
+                    Some(std::slice::from_ref(id)),
+                )
+                .await;
+                assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+                let body = body_to_json(rejected).await;
+                assert_eq!(body["error"], "invalid_generation");
+                assert!(body.get("token_plaintext").is_none());
             }
         }
     }
@@ -228,13 +234,9 @@ async fn acceptance_empty_and_invalid_inputs_never_publish_empty_success() {
         let response = generate(&router, &cookie, &template, profile, "lenient").await;
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(body_to_json(response).await["error"], "no_compatible_nodes");
-        let token = subscription(&router, &cookie, &template, profile, None).await;
-        let response = router
-            .clone()
-            .oneshot(get(&format!("/sub/{token}/{profile}")))
-            .await
-            .expect("empty delivery");
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let response = subscription_response(&router, &cookie, &template, profile, None).await;
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(body_to_json(response).await["error"], "invalid_generation");
     }
     let case = &cases()[2];
     let partial = import(

@@ -220,7 +220,7 @@ pub async fn get_probe_run(
 }
 
 /// Cancel a probe run by setting the cancellation flag. The runner observes
-/// the flag, aborts pending probes, and marks the run `Cancelled`
+/// the flag, aborts in-flight probes, skips pending probes, and marks the run `Cancelled`
 /// (NODE-016).
 ///
 /// # Errors
@@ -241,8 +241,8 @@ pub async fn cancel_probe_run(
     }
 
     // If the runner has a cancellation flag for this run, fire it. The runner
-    // observes the flag, aborts pending probes, waits for in-flight probes to
-    // finish (bounded by timeout), then writes `Cancelled` with the collected
+    // observes the flag, drops in-flight probes, skips pending probes,
+    // then writes `Cancelled` with the collected
     // results via `update_status`. The terminal guard on `update_status` (W-F)
     // ensures a `Completed` write cannot overwrite a `Cancelled` row if the
     // no-flag cancel branch already persisted it.

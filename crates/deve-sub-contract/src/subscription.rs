@@ -26,6 +26,8 @@ pub struct CreateSubscriptionRequest {
     pub profile: String,
     /// Node selection configuration as a JSON object matching the V3
     /// `nodeSelector` schema (`mode`, `filters`, `nodeIds`, `nodeRevision`).
+    /// Modes: `inherit_template`, `dynamic`, `fixed`. Inheritance has no
+    /// subscription filters or pinned node IDs.
     pub node_selection: serde_json::Value,
     /// Traffic limit: 1–9223372036854775807 bytes. `null` = unlimited. Enforced at delivery.
     #[serde(skip_serializing_if = "Option::is_none")]

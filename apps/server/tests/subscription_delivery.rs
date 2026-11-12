@@ -19,6 +19,8 @@ mod acceptance;
 
 #[path = "subscription_delivery/short_code_concurrency.rs"]
 mod short_code_concurrency;
+#[path = "subscription_delivery/short_code_list.rs"]
+mod short_code_list;
 
 #[path = "subscription_delivery/source_withdrawal.rs"]
 mod source_withdrawal;
@@ -109,8 +111,10 @@ impl TestApp {
                     as Arc<dyn TemplateRepository>,
                 version_repo: Arc::new(SqliteTemplateVersionRepository::new(pool.clone()))
                     as Arc<dyn TemplateVersionRepository>,
-                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(pool.clone()))
-                    as Arc<dyn GenerationCacheRepository>,
+                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn GenerationCacheRepository>,
                 subscription_repo: Arc::new(SqliteSubscriptionRepository::new(pool.clone()))
                     as Arc<dyn SubscriptionRepository>,
                 subscription_token_repo: Arc::new(SqliteSubscriptionTokenRepository::new(
@@ -793,10 +797,28 @@ async fn del011_no_nodes_returns_503() {
     let app = TestApp::new().await;
     let router = app.router();
     let cookie = setup_and_login(&router).await;
-    // No nodes imported.
+    // A valid subscription can become empty before its first delivery.
+    let ids = import_nodes(
+        &router,
+        &cookie,
+        "trojan://TEST_PASSWORD@withdraw.example:443#withdraw",
+    )
+    .await;
     let template_id = create_template(&router, &cookie).await;
     let v = create_sub(&router, &cookie, &template_id, "empty-pool").await;
     let token = v["token_plaintext"].as_str().expect("token").to_owned();
+    let disabled = router
+        .clone()
+        .oneshot(with_cookie(
+            post_json(
+                "/api/v1/nodes/batch-enabled",
+                &serde_json::json!({"node_ids":ids,"enabled":false}).to_string(),
+            ),
+            &cookie,
+        ))
+        .await
+        .expect("disable");
+    assert_eq!(disabled.status(), StatusCode::OK);
 
     let res = router
         .clone()

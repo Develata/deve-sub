@@ -60,6 +60,7 @@ fn node_to_dto(entry: &NodePoolEntry) -> NodeDto {
         source_label: entry.node.source.source_label.clone(),
         imported_at: ts_to_iso8601(entry.node.source.imported_at),
         is_active: entry.is_active,
+        security_quarantined: entry.security_quarantined,
         missing_from_source: entry.missing_from_source,
         revision: entry.revision,
         created_at: ts_to_iso8601(entry.created_at),
@@ -70,6 +71,48 @@ fn node_to_dto(entry: &NodePoolEntry) -> NodeDto {
             .as_ref()
             .map(|c| c.nodes().iter().map(|n| n.to_string()).collect())
             .unwrap_or_default(),
+        connection: connection_to_dto(&entry.node),
+        unsupported_reason: match &entry.node.config {
+            deve_sub_domain::ProtocolConfig::Unsupported(config) => Some(config.reason.clone()),
+            _ => None,
+        },
+    }
+}
+
+fn connection_to_dto(node: &deve_sub_domain::Node) -> deve_sub_contract::NodeConnectionDto {
+    use deve_sub_domain::{Authentication, ProtocolConfig, SocksDnsResolution};
+    deve_sub_contract::NodeConnectionDto {
+        authentication: match node.authentication {
+            Authentication::None => "none",
+            Authentication::Password { .. } => "password",
+            Authentication::Uuid { .. } => "uuid",
+            Authentication::UserPassword { .. } => "user_password",
+            Authentication::UuidPassword { .. } => "uuid_password",
+        }
+        .to_owned(),
+        tls_enabled: node.tls.as_ref().map(|tls| tls.enabled),
+        skip_cert_verify: node.tls.as_ref().and_then(|tls| tls.skip_cert_verify),
+        server_name: node.tls.as_ref().and_then(|tls| tls.server_name.clone()),
+        alpn: node
+            .tls
+            .as_ref()
+            .map(|tls| tls.alpn.clone())
+            .unwrap_or_default(),
+        certificate_pin_count: node
+            .tls
+            .as_ref()
+            .map_or(0, |tls| tls.certificate_pins.len()),
+        destination_dns: match &node.config {
+            ProtocolConfig::Socks5(config) => Some(
+                match config.dns_resolution {
+                    SocksDnsResolution::Unspecified => "unspecified",
+                    SocksDnsResolution::Local => "local",
+                    SocksDnsResolution::Remote => "remote",
+                }
+                .to_owned(),
+            ),
+            _ => None,
+        },
     }
 }
 
@@ -275,6 +318,10 @@ async fn import_nodes(
         })?;
 
     let mut persisted_outcomes = result.outcomes.into_iter().map(|o| match o {
+        ImportOutcome::Unsupported { id, reason } => ImportOutcomeDto::Unsupported {
+            id: id.to_string(),
+            reason,
+        },
         ImportOutcome::Inserted(id) => ImportOutcomeDto::Inserted(id.to_string()),
         ImportOutcome::Duplicate(id) => ImportOutcomeDto::Duplicate(id.to_string()),
         ImportOutcome::Failed(raw) => ImportOutcomeDto::Failed(raw),
@@ -307,6 +354,7 @@ async fn import_nodes(
         new_nodes: result.new_nodes,
         duplicate_nodes: result.duplicate_nodes,
         failed: total_failed,
+        unsupported: result.unsupported,
         outcomes,
     }))
 }

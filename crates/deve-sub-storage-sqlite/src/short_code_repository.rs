@@ -172,6 +172,33 @@ impl ShortCodeRepository for SqliteShortCodeRepository {
         Ok(())
     }
 
+    async fn find_by_subscriptions(
+        &self,
+        subscription_ids: &[SubscriptionId],
+    ) -> Result<Vec<ShortCode>, SubscriptionError> {
+        if subscription_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        // WHY: list projection must not add one database round trip per row.
+        let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "SELECT id, subscription_id, code, created_at \
+             FROM subscription_short_codes WHERE subscription_id IN (",
+        );
+        let mut ids = query.separated(", ");
+        for id in subscription_ids {
+            ids.push_bind(id.to_string());
+        }
+        ids.push_unseparated(")");
+        query
+            .build_query_as::<ShortCodeRow>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| SubscriptionError::Storage(e.to_string()))?
+            .iter()
+            .map(ShortCodeRow::to_domain)
+            .collect()
+    }
+
     async fn delete_for_subscription(
         &self,
         subscription_id: SubscriptionId,

@@ -174,6 +174,15 @@ mod tests {
 
     #[tokio::test]
     async fn hysteria2_round_trip() {
+        round_trip_at("127.0.0.1:0").await;
+    }
+
+    #[tokio::test]
+    async fn hysteria2_ipv6_round_trip() {
+        round_trip_at("[::1]:0").await;
+    }
+
+    async fn round_trip_at(bind_address: &str) {
         let http_target = LocalHttpTarget::start().await;
         let target_port = http_target.addr().port();
 
@@ -187,7 +196,7 @@ mod tests {
         tls_srv.alpn_protocols = vec![b"h3".to_vec()];
         let qsc = quinn::crypto::rustls::QuicServerConfig::try_from(tls_srv).expect("quic server");
         let server_cfg = quinn::ServerConfig::with_crypto(Arc::new(qsc));
-        let srv_ep = quinn::Endpoint::server(server_cfg, "127.0.0.1:0".parse().expect("parse"))
+        let srv_ep = quinn::Endpoint::server(server_cfg, bind_address.parse().expect("parse"))
             .expect("server endpoint");
         let hy2_addr = srv_ep.local_addr().expect("addr");
 
@@ -273,7 +282,10 @@ mod tests {
                 lazy: None,
             }),
             endpoint: Endpoint {
-                host: Host::Ipv4("127.0.0.1".parse().expect("ipv4")),
+                host: match addr.ip() {
+                    std::net::IpAddr::V4(ip) => Host::Ipv4(ip),
+                    std::net::IpAddr::V6(ip) => Host::Ipv6(ip),
+                },
                 port: addr.port(),
             },
             authentication: Authentication::Password {
@@ -282,7 +294,7 @@ mod tests {
             transport: None,
             tls: Some(TlsConfig {
                 enabled: true,
-                server_name: Some("127.0.0.1".to_owned()),
+                server_name: None,
                 skip_cert_verify: Some(true),
                 alpn: vec!["h3".to_owned()],
                 client_fingerprint: None,

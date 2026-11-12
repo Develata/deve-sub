@@ -59,9 +59,9 @@ pub struct RunnerDeps {
 /// no run is left in `Pending` or `Running` (B-14).
 ///
 /// # Cancellation
-/// If `cancelled` is set to `true`, in-flight probes are allowed to finish
-/// their current attempt (bounded by `timeout`), and pending probes are
-/// skipped. The run status becomes `Cancelled`.
+/// If `cancelled` is set to `true`, in-flight probe futures are dropped and
+/// marked skipped, as are pending probes. Neither creates latency history.
+/// The run status becomes `Cancelled`.
 ///
 /// # Errors
 /// Returns [`ProbeError::Storage`] if a repository update fails. The `Failed`
@@ -182,7 +182,19 @@ async fn execute_probe_run_inner(
                 // LatencyProbe implementation applies its own internal
                 // timeout to every I/O step using the same `timeout` budget
                 // (W-Y). The probe is the single deadline authority.
-                probe.probe(&node, timeout).await
+                // WHY: checking only before admission leaves active I/O running
+                // until its deadline, violating NODE-016's cancellation contract.
+                // The empty Ok result is the existing skipped marker: cancellation
+                // is not a timeout measurement and must not enter latency history.
+                tokio::select! {
+                    biased;
+                    () = wait_for_cancellation(&cancelled) => LatencyResult {
+                        node_id,
+                        rtt_ms: None,
+                        error_class: ErrorClass::Ok,
+                    },
+                    result = probe.probe(&node, timeout) => result,
+                }
             }
         })
         .buffer_unordered(config.concurrency)
@@ -229,6 +241,15 @@ async fn execute_probe_run_inner(
     };
 
     persist_outcome(deps.run_repo.as_ref(), run_id, final_status, run_results).await
+}
+
+async fn wait_for_cancellation(cancelled: &std::sync::atomic::AtomicBool) {
+    // WHY: API cancellation and server shutdown already share atomic flags.
+    // Observe the existing signal while adapters await I/O without changing
+    // those registration interfaces or adding another adapter timeout.
+    while !cancelled.load(Ordering::Relaxed) {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }
 
 async fn persist_outcome(

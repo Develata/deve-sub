@@ -38,6 +38,25 @@ The local commands above mirror the CI workflow in
 Copy `.env.example` to `.env` and adjust as needed. The default SQLite database
 is created at `data/deve-sub.db` on first run.
 
+### Docker builds behind a TLS inspection proxy
+
+The source Dockerfile accepts an optional BuildKit `build_ca` secret containing
+an operator-approved PEM bundle with the normal public roots and the proxy CA:
+
+```bash
+docker build --secret id=build_ca,src=/absolute/path/to/combined-ca.pem -t deve-sub:local .
+```
+
+Rustup, Cargo and frontend build downloads use that bundle only during their
+build steps. Dioxus CLI enables Reqwest's native roots feature so its tool
+downloads can also read the bundle. TLS verification stays enabled. The secret
+is not copied into image layers, and the runtime image's trust store is
+unchanged. Without this input, tools use their normal trust settings. Downloads
+without a trusted certificate chain fail; there is no unverified TLS fallback.
+BuildKit does not invalidate
+cached steps when secret contents change, so use `--no-cache` when checking a
+changed bundle. This setting does not override network access policy.
+
 ## Database
 
 Migrations live in `migrations/`. The first real migration arrives with M1

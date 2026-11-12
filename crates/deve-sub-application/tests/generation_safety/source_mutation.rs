@@ -127,7 +127,7 @@ async fn gen015_v2_v3_v4_caches_are_regenerated_and_never_used_as_fallback() {
             .expect("disable");
         assert!(
             get_active_generation(
-                &SqliteGenerationCacheRepository::new(db.pool.clone()),
+                &SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key)),
                 db.template_id,
                 "mihomo"
             )

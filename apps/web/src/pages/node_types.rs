@@ -14,6 +14,8 @@ pub use deve_sub_contract::{
 pub enum NodeModal {
     /// Modal is closed.
     None,
+    /// Inspect non-secret canonical connection metadata.
+    Details(Box<NodeDto>),
     /// Manage tag identities independently of assignments.
     ManageTags,
     /// Import nodes (manual paste).

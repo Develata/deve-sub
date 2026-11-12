@@ -818,8 +818,8 @@ async fn migration_0008_single_active_generation_enforced() {
     sqlx::query(
         "INSERT INTO generation_cache \
          (id, template_id, template_version, profile, selection_mode, \
-          selection_payload, pool_revision, cache_key, content, is_active) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+          selection_payload, pool_revision, cache_key, content_encrypted, content_legacy, is_active) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1)",
     )
     .bind("01J0CACHE000000000000000000")
     .bind(template_id)
@@ -829,7 +829,7 @@ async fn migration_0008_single_active_generation_enforced() {
     .bind("{}")
     .bind(0_i64)
     .bind("key0")
-    .bind("content")
+    .bind("v2:schema-only-fixture:nonce")
     .execute(&pool)
     .await
     .expect("insert active cache");
@@ -837,8 +837,8 @@ async fn migration_0008_single_active_generation_enforced() {
     let second = sqlx::query(
         "INSERT INTO generation_cache \
          (id, template_id, template_version, profile, selection_mode, \
-          selection_payload, pool_revision, cache_key, content, is_active) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+          selection_payload, pool_revision, cache_key, content_encrypted, content_legacy, is_active) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1)",
     )
     .bind("01J0CACHE000000000000000001")
     .bind(template_id)
@@ -848,7 +848,7 @@ async fn migration_0008_single_active_generation_enforced() {
     .bind("{}")
     .bind(0_i64)
     .bind("key1")
-    .bind("content")
+    .bind("v2:schema-only-fixture:nonce")
     .execute(&pool)
     .await;
     assert!(
@@ -865,8 +865,8 @@ async fn migration_0008_single_active_generation_enforced() {
     let activate = sqlx::query(
         "INSERT INTO generation_cache \
          (id, template_id, template_version, profile, selection_mode, \
-          selection_payload, pool_revision, cache_key, content, is_active) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+          selection_payload, pool_revision, cache_key, content_encrypted, content_legacy, is_active) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', 1)",
     )
     .bind("01J0CACHE000000000000000004")
     .bind(template_id)
@@ -876,7 +876,7 @@ async fn migration_0008_single_active_generation_enforced() {
     .bind("{}")
     .bind(0_i64)
     .bind("key4")
-    .bind("content")
+    .bind("v2:schema-only-fixture:nonce")
     .execute(&pool)
     .await;
     assert!(
@@ -1258,8 +1258,8 @@ async fn migration_0007_cascade_delete_and_single_active() {
     sqlx::query(
         "INSERT INTO generation_cache \
          (id, template_id, template_version, profile, selection_mode, selection_payload, \
-          pool_revision, cache_key, content) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          pool_revision, cache_key, content_encrypted, content_legacy) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')",
     )
     .bind(cache_id)
     .bind(template_id)
@@ -1269,7 +1269,7 @@ async fn migration_0007_cascade_delete_and_single_active() {
     .bind("{}")
     .bind(0_i64)
     .bind("test-key")
-    .bind("content")
+    .bind("v2:schema-only-fixture:nonce")
     .execute(&pool)
     .await
     .expect("insert cache");

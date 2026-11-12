@@ -12,6 +12,10 @@ pub enum SubscriptionAppError {
     #[error("invalid input: {0}")]
     InvalidInput(String),
 
+    /// The requested template, profile and selection cannot currently produce output.
+    #[error("subscription cannot be saved: {0}")]
+    InvalidGeneration(String),
+
     /// A subscription was not found.
     #[error("subscription not found")]
     SubscriptionNotFound,

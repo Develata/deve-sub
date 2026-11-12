@@ -131,6 +131,7 @@ impl NodePoolRepository for StubPool {
     async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError> {
         Ok(Some(NodePoolEntry {
             node: make_test_node(id),
+            security_quarantined: false,
             missing_from_source: false,
             is_active: true,
             revision: 1,
@@ -144,6 +145,7 @@ impl NodePoolRepository for StubPool {
             .iter()
             .map(|&id| NodePoolEntry {
                 node: make_test_node(id),
+                security_quarantined: false,
                 missing_from_source: false,
                 is_active: true,
                 revision: 1,

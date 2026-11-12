@@ -7,6 +7,9 @@
 //! GET/LIST responses. See
 //! `docs/plan/milestones/M6-subscription-distribution.md` Slice 1.
 
+#[path = "support/subscription_fixture.rs"]
+mod subscription_fixture;
+
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -36,6 +39,8 @@ use deve_sub_storage_sqlite::{
 
 #[path = "subscription_management/integer_bounds.rs"]
 mod integer_bounds;
+#[path = "subscription_management/save_validation.rs"]
+mod save_validation;
 
 struct TestApp {
     state: deve_sub_server::AppState,
@@ -102,8 +107,10 @@ impl TestApp {
                     as Arc<dyn TemplateRepository>,
                 version_repo: Arc::new(SqliteTemplateVersionRepository::new(pool.clone()))
                     as Arc<dyn TemplateVersionRepository>,
-                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(pool.clone()))
-                    as Arc<dyn GenerationCacheRepository>,
+                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn GenerationCacheRepository>,
                 subscription_repo: Arc::new(SqliteSubscriptionRepository::new(pool.clone()))
                     as Arc<dyn SubscriptionRepository>,
                 subscription_token_repo: Arc::new(SqliteSubscriptionTokenRepository::new(
@@ -297,6 +304,7 @@ const VALID_SPEC_YAML: &str = concat!(
 
 /// Create a template via the API and return its ULID.
 async fn create_template(router: &axum::Router, cookie: &str) -> String {
+    subscription_fixture::seed_generation_node(router, cookie).await;
     let body = serde_json::json!({
         "name": "test-template",
         "description": "test",

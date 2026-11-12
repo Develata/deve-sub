@@ -33,29 +33,29 @@ pub fn TemplateModals(mut props: TemplateModalsProps) -> Element {
                 class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
                 onclick: move |_| props.on_close.call(()),
                 div {
-                    class: "node-dialog-panel w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                    class: "node-dialog-panel w-full max-w-2xl rounded-lg bg-surface p-6 shadow-xl",
                     onclick: move |e| e.stop_propagation(),
-                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
+                    h3 { class: "text-lg font-semibold text-foreground",
                         if is_edit { {t(l, "tpl.edit_title")} } else { {t(l, "tpl.add")} }
                     }
                     div { class: "mt-4 space-y-4",
                         div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "tpl.name")} }
-                            input { class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "text", disabled: *props.saving.read() || !*props.edit_ready.read(), value: "{props.f_name}", oninput: move |e| props.f_name.set(e.value()) }
+                            label { class: "block text-sm font-medium text-foreground", {t(l, "tpl.name")} }
+                            input { class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm", r#type: "text", disabled: *props.saving.read() || !*props.edit_ready.read(), value: "{props.f_name}", oninput: move |e| props.f_name.set(e.value()) }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "tpl.description")} }
-                            input { class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", r#type: "text", disabled: *props.saving.read() || !*props.edit_ready.read(), value: "{props.f_desc}", oninput: move |e| props.f_desc.set(e.value()) }
+                            label { class: "block text-sm font-medium text-foreground", {t(l, "tpl.description")} }
+                            input { class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm", r#type: "text", disabled: *props.saving.read() || !*props.edit_ready.read(), value: "{props.f_desc}", oninput: move |e| props.f_desc.set(e.value()) }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "tpl.spec_yaml")} }
-                            p { class: "mt-1 text-xs text-stone-500 dark:text-stone-400",
+                            label { class: "block text-sm font-medium text-foreground", {t(l, "tpl.spec_yaml")} }
+                            p { class: "mt-1 text-xs text-muted",
                                 {t(l, "tpl.spec_help")}
                             }
                             textarea {
                                 aria_label: "Clash routing YAML",
                                 spellcheck: "false",
-                                class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 font-mono text-xs dark:border-stone-700 dark:bg-stone-800",
+                                class: "mt-1 block w-full rounded-md border border-line px-3 py-2 font-mono text-xs",
                                 rows: "20",
                                 disabled: *props.saving.read() || !*props.edit_ready.read(),
                                 value: "{props.f_spec}",
@@ -67,8 +67,8 @@ pub fn TemplateModals(mut props: TemplateModalsProps) -> Element {
                         div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
-                        button { class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50", disabled: *props.saving.read() || (is_edit && !*props.edit_ready.read()), onclick: move |_| props.on_submit.call(()),
+                        button { class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
+                        button { class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50", disabled: *props.saving.read() || (is_edit && !*props.edit_ready.read()), onclick: move |_| props.on_submit.call(()),
                             if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
                         }
                     }
@@ -81,15 +81,15 @@ pub fn TemplateModals(mut props: TemplateModalsProps) -> Element {
                 class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
                 onclick: move |_| props.on_close.call(()),
                 div {
-                    class: "node-dialog-panel w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                    class: "node-dialog-panel w-full max-w-md rounded-lg bg-surface p-6 shadow-xl",
                     onclick: move |e| e.stop_propagation(),
-                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "common.delete")} }
-                    p { class: "mt-3 text-sm text-stone-600 dark:text-stone-400", {t(l, "tpl.delete_confirm")} }
+                    h3 { class: "text-lg font-semibold text-foreground", {t(l, "common.delete")} }
+                    p { class: "mt-3 text-sm text-muted", {t(l, "tpl.delete_confirm")} }
                     if !props.form_error.read().is_empty() {
                         div { class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{props.form_error}" }
                     }
                     div { class: "mt-6 flex justify-end gap-2",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
+                        button { class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted", onclick: move |_| props.on_close.call(()), {t(l, "common.cancel")} }
                         button { class: "rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50", disabled: *props.saving.read() || (is_edit && !*props.edit_ready.read()), onclick: move |_| props.on_submit.call(()),
                             if *props.saving.read() { {t(l, "common.loading")} } else { {t(l, "common.delete")} }
                         }

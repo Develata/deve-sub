@@ -241,8 +241,8 @@ fn mihomo_emits_tuic_v5_full_fields() {
         "must emit reduce-rtt (not zero-rtt-handshake)"
     );
     assert!(
-        output.contains("heartbeat-interval: 10"),
-        "must emit heartbeat-interval in seconds"
+        output.contains("heartbeat-interval: 10000"),
+        "must emit heartbeat-interval in milliseconds"
     );
     assert!(
         output.contains("disable-sni: true"),

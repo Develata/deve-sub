@@ -19,6 +19,7 @@ pub struct SubscriptionModalsProps {
     f_traffic: Signal<String>,
     f_expires: Signal<Option<String>>,
     f_enabled: Signal<bool>,
+    f_node_sel: Signal<serde_json::Value>,
     f_temp_expiry: Signal<String>,
     form_error: Signal<String>,
     saving: Signal<bool>,
@@ -70,6 +71,7 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                                 for p in PROFILES.iter().copied() { option { value: "{p}", "{p}" } }
                             }
                         }
+                        crate::pages::subscription_selection::SubscriptionSelection { lang: l, selection: props.f_node_sel }
                         div {
                             label { r#for: "subscription-traffic", class: "block text-sm font-medium", {t(l, "subs.traffic_limit")} }
                             input { id: "subscription-traffic", class: "source-input", r#type: "text", inputmode: "numeric",
@@ -112,7 +114,7 @@ pub fn SubscriptionModals(mut props: SubscriptionModalsProps) -> Element {
                 if let Modal::Delete(sub) | Modal::Rotate(sub) | Modal::Regenerate(sub) = &state {
                     p { class: "mt-4 break-words font-medium", "{sub.name}" }
                 }
-                p { class: "mt-3 text-sm text-stone-600 dark:text-stone-300",
+                p { class: "mt-3 text-sm text-muted",
                     {t(l, match state { Modal::Rotate(_) => "subs.rotate_confirm", Modal::Regenerate(_) => "subs.regenerate_confirm", _ => "subs.delete_confirm" })}
                 }
                 ModalFeedback { lang: l, busy: *props.saving.read(), error: props.form_error.read().clone() }

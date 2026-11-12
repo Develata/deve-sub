@@ -69,8 +69,15 @@ pub(super) async fn prepare_nodes(
         }
     }
     if let Some(mut config) = native {
-        super::clash_membership::materialize(&mut config, nodes, &original_names, pool, warnings)
-            .await?;
+        super::clash_membership::materialize(
+            &mut config,
+            nodes,
+            &original_names,
+            pool,
+            &spec.node_selector,
+            warnings,
+        )
+        .await?;
         let names = nodes
             .iter()
             .map(|(node, _)| node.display_name.as_str())

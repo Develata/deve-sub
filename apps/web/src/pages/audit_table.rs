@@ -13,15 +13,15 @@ pub struct AuditTableProps {
 pub fn AuditTable(props: AuditTableProps) -> Element {
     let l = props.lang;
     rsx! {
-                div { class: "overflow-x-auto rounded-lg border border-stone-200 dark:border-stone-800",
+                div { class: "overflow-x-auto rounded-lg border border-line-soft",
                     table { class: "w-full text-sm",
                         thead {
-                            tr { class: "border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "audit.time")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "audit.action")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "audit.actor")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "audit.target")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "audit.details")} }
+                            tr { class: "border-b border-line-soft bg-canvas",
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "audit.time")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "audit.action")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "audit.actor")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "audit.target")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "audit.details")} }
                             }
                         }
                         tbody {
@@ -36,14 +36,14 @@ pub fn AuditTable(props: AuditTableProps) -> Element {
                                     rsx! {
                                         tr {
                                             key: "{entry.id}",
-                                            class: "border-b border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-800/50",
-                                            td { class: "px-4 py-3 text-xs text-stone-500 dark:text-stone-400", "{entry.created_at}" }
+                                            class: "border-b border-line-soft hover:bg-canvas",
+                                            td { class: "px-4 py-3 text-xs text-muted", "{entry.created_at}" }
                                             td { class: "px-4 py-3",
-                                                span { class: "font-mono text-xs text-stone-700 dark:text-stone-300", "{action_label(l, &entry.action)}" }
+                                                span { class: "font-mono text-xs text-foreground", "{action_label(l, &entry.action)}" }
                                             }
-                                            td { class: "px-4 py-3 text-xs text-stone-500 dark:text-stone-400", "{actor}" }
-                                            td { class: "px-4 py-3 text-xs text-stone-500 dark:text-stone-400", "{target}" }
-                                            td { class: "px-4 py-3 text-xs text-stone-500 dark:text-stone-400",
+                                            td { class: "px-4 py-3 text-xs text-muted", "{actor}" }
+                                            td { class: "px-4 py-3 text-xs text-muted", "{target}" }
+                                            td { class: "px-4 py-3 text-xs text-muted",
                                                 if let Some(d) = &entry.details_json {
                                                     details {
                                                         summary { class: "cursor-pointer", {tr(l, "展开详情", "Show details")} }

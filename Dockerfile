@@ -10,8 +10,18 @@ FROM --platform=$BUILDPLATFORM rust:1.97.1-trixie AS tools
 
 # WHY: installing tools before copying source lets source edits retain this
 # expensive layer. Neither this stage nor the WASM branch varies by TARGETARCH.
-RUN rustup target add wasm32-unknown-unknown
-RUN cargo install dioxus-cli --locked --version 0.7.10
+# WHY: TLS-inspecting build networks may supply an explicit combined CA bundle.
+# The optional secret is scoped to each download step and never enters a layer.
+RUN --mount=type=secret,id=build_ca \
+    if [ -f /run/secrets/build_ca ]; then \
+      export SSL_CERT_FILE=/run/secrets/build_ca CARGO_HTTP_CAINFO=/run/secrets/build_ca CURL_CA_BUNDLE=/run/secrets/build_ca; \
+    fi; \
+    rustup target add wasm32-unknown-unknown
+RUN --mount=type=secret,id=build_ca \
+    if [ -f /run/secrets/build_ca ]; then \
+      export SSL_CERT_FILE=/run/secrets/build_ca CARGO_HTTP_CAINFO=/run/secrets/build_ca CURL_CA_BUNDLE=/run/secrets/build_ca; \
+    fi; \
+    cargo install dioxus-cli --locked --version 0.7.10 --features reqwest/rustls-tls-native-roots
 
 FROM tools AS source
 WORKDIR /build
@@ -19,6 +29,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY apps/ apps/
 COPY tools/ tools/
+COPY vendor/ vendor/
 COPY migrations/ migrations/
 COPY scripts/ scripts/
 # WHY: the Web template editor embeds this preset with include_str! at compile time.
@@ -26,7 +37,11 @@ COPY examples/templates/ examples/templates/
 
 # Both runtime platforms consume the same source-built frontend stage.
 FROM source AS frontend
-RUN bash scripts/build-web-release.sh
+RUN --mount=type=secret,id=build_ca \
+    if [ -f /run/secrets/build_ca ]; then \
+      export SSL_CERT_FILE=/run/secrets/build_ca CARGO_HTTP_CAINFO=/run/secrets/build_ca CURL_CA_BUNDLE=/run/secrets/build_ca; \
+    fi; \
+    bash scripts/build-web-release.sh
 
 FROM source AS builder
 ARG TARGETARCH
@@ -34,7 +49,11 @@ ARG TARGETARCH
 # Install cross-compilation toolchain for arm64 targets.
 # WHY: ring (crypto) and libsqlite3-sys (SQLite) compile C/assembly code via
 # the cc crate, which needs a native C cross-compiler for the target arch.
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
+RUN --mount=type=secret,id=build_ca \
+    if [ -f /run/secrets/build_ca ]; then \
+      export SSL_CERT_FILE=/run/secrets/build_ca CARGO_HTTP_CAINFO=/run/secrets/build_ca CURL_CA_BUNDLE=/run/secrets/build_ca; \
+    fi; \
+    if [ "$TARGETARCH" = "arm64" ]; then \
       apt-get update && \
       apt-get install -y --no-install-recommends \
         gcc-aarch64-linux-gnu g++-aarch64-linux-gnu && \
@@ -46,7 +65,11 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 # For arm64 targets, cross-compile with aarch64-unknown-linux-gnu to avoid
 # QEMU emulation. The binary is copied to target/release/deve-sub in both
 # cases so the runtime stage COPY path is stable.
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
+RUN --mount=type=secret,id=build_ca \
+    if [ -f /run/secrets/build_ca ]; then \
+      export SSL_CERT_FILE=/run/secrets/build_ca CARGO_HTTP_CAINFO=/run/secrets/build_ca CURL_CA_BUNDLE=/run/secrets/build_ca; \
+    fi; \
+    if [ "$TARGETARCH" = "arm64" ]; then \
       export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc; \
       export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++; \
       export AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar; \

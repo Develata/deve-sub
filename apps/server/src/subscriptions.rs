@@ -25,6 +25,9 @@ use deve_sub_domain::Subscription;
 use deve_sub_kernel::{SubscriptionId, TempLinkId, TemplateId, Timestamp};
 use time::format_description::well_known::Rfc3339;
 
+mod errors;
+use errors::map_subscription_app_error;
+
 use crate::AppState;
 use crate::auth::{AdminUser, err, ts_to_iso8601};
 use crate::state::SubscriptionState;
@@ -72,6 +75,7 @@ fn parse_iso8601(s: &str) -> Result<Timestamp, (StatusCode, Json<ErrorResponse>)
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
         (status = 409, description = "Slug already exists", body = ErrorResponse),
+        (status = 422, description = "Template, profile or node selection cannot generate output", body = ErrorResponse),
         (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
@@ -91,6 +95,7 @@ async fn create_subscription(
     let result = subscription::create_subscription(
         state.subscription_repo.as_ref(),
         &state.master_key,
+        &state.validation_deps(),
         CreateSubscriptionParams {
             name: req.name,
             slug: req.slug,
@@ -161,8 +166,9 @@ async fn list_subscriptions(
             )
         })?;
 
-    let subs = subscription::list_subscriptions(
+    let subs = subscription::list_subscriptions_with_short_codes(
         state.subscription_repo.as_ref(),
+        state.short_code_repo.as_ref(),
         admin.user.id,
         cursor,
         Some(limit),
@@ -171,12 +177,15 @@ async fn list_subscriptions(
     .map_err(|e| map_subscription_app_error(e, "list_subscriptions"))?;
 
     let next_cursor = if subs.len() as u32 >= limit {
-        subs.last().map(|s| s.id.to_string())
+        subs.last().map(|s| s.subscription.id.to_string())
     } else {
         None
     };
 
-    let dtos: Vec<SubscriptionDto> = subs.iter().map(|s| subscription_to_dto(s, None)).collect();
+    let dtos = subs
+        .into_iter()
+        .map(|s| subscription_to_dto(&s.subscription, s.short_code))
+        .collect();
     Ok(Json(ListSubscriptionsResponse {
         subscriptions: dtos,
         next_cursor,
@@ -240,6 +249,7 @@ async fn get_subscription(
     request_body = UpdateSubscriptionRequest,
     responses(
         (status = 200, description = "Subscription updated", body = GetSubscriptionResponse),
+        (status = 422, description = "Template, profile or node selection cannot generate output", body = ErrorResponse),
         (status = 400, description = "Invalid input", body = ErrorResponse),
         (status = 401, description = "Not authenticated", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
@@ -264,6 +274,7 @@ async fn update_subscription(
 
     let sub = subscription::update_subscription(
         state.subscription_repo.as_ref(),
+        &state.validation_deps(),
         UpdateSubscriptionParams {
             id: subscription_id,
             name: req.name,
@@ -539,67 +550,6 @@ async fn revoke_temp_link(
         .map_err(|e| map_subscription_app_error(e, "revoke_temp_link"))?;
 
     Ok(StatusCode::NO_CONTENT)
-}
-
-/// Map a [`SubscriptionAppError`] to an HTTP error response with context.
-fn map_subscription_app_error(
-    e: deve_sub_application::SubscriptionAppError,
-    ctx: &str,
-) -> (StatusCode, Json<ErrorResponse>) {
-    use deve_sub_application::SubscriptionAppError;
-    match e {
-        SubscriptionAppError::InvalidInput(msg) => {
-            err(StatusCode::BAD_REQUEST, "invalid_input", &msg)
-        }
-        SubscriptionAppError::UnknownProfile(p) => err(
-            StatusCode::BAD_REQUEST,
-            "unknown_profile",
-            &format!("profile '{p}' is not recognized"),
-        ),
-        SubscriptionAppError::SubscriptionNotFound => err(
-            StatusCode::NOT_FOUND,
-            "subscription_not_found",
-            "subscription does not exist",
-        ),
-        SubscriptionAppError::TokenNotFound => err(
-            StatusCode::NOT_FOUND,
-            "token_not_found",
-            "subscription token does not exist",
-        ),
-        SubscriptionAppError::ShortCodeNotFound => err(
-            StatusCode::NOT_FOUND,
-            "short_code_not_found",
-            "short code does not exist",
-        ),
-        SubscriptionAppError::TempLinkNotFound => err(
-            StatusCode::NOT_FOUND,
-            "temp_link_not_found",
-            "temp link does not exist",
-        ),
-        SubscriptionAppError::TempLinkInvalid => err(
-            StatusCode::NOT_FOUND,
-            "temp_link_invalid",
-            "temp link is revoked or expired",
-        ),
-        SubscriptionAppError::TemplateNotFound => err(
-            StatusCode::NOT_FOUND,
-            "template_not_found",
-            "template does not exist",
-        ),
-        SubscriptionAppError::SlugExists => err(
-            StatusCode::CONFLICT,
-            "slug_exists",
-            "subscription slug is already taken for this owner",
-        ),
-        other => {
-            tracing::warn!(error = %other, "{ctx} failed");
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                &format!("failed to {ctx}"),
-            )
-        }
-    }
 }
 
 /// Register all subscription management routes on the given `OpenApiRouter`.

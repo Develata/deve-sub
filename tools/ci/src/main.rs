@@ -24,7 +24,7 @@ fn main() -> Result<()> {
             let packages = inventory::workspace(&metadata(&root)?)?;
             let shards = inventory::validate(&workflow, &packages)?;
             println!(
-                "Full static baseline: {shards} Rust shards, {} packages, 4 browser lanes",
+                "Full static baseline: {shards} Rust shards, {} packages, 4 browser lanes, 11 normal lanes",
                 packages.len()
             );
         }

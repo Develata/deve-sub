@@ -31,10 +31,19 @@ fn fetch_err(msg: &str) -> ApiError {
 
 pub async fn get<T: DeserializeOwned>(path: &str) -> Result<T, ApiError> {
     let url = format!("{API_BASE}{path}");
+    get_url(&url).await
+}
+
+/// Public, server-owned branding is exposed with liveness before login.
+pub async fn health() -> Result<deve_sub_contract::HealthLiveResponse, ApiError> {
+    get_url("/health/live").await
+}
+
+async fn get_url<T: DeserializeOwned>(url: &str) -> Result<T, ApiError> {
     let mut init = RequestInit::new();
     init.set_method("GET");
     init.set_credentials(web_sys::RequestCredentials::SameOrigin);
-    let response = js_fetch(&url, &init).await?;
+    let response = js_fetch(url, &init).await?;
     let status = response.status();
     if !response.ok() {
         return Err(parse_error(status, &response).await);

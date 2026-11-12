@@ -62,6 +62,41 @@ temp_store=MEMORY
 - `docs/data-model/` is the conceptual entity model; migrations are the
   physical source of truth.
 
+### Encrypted generation cache (0029)
+
+Generated subscriptions contain usable proxy credentials. Schema 0029 renames
+the old payload column to `content_legacy` and adds `content_encrypted`.
+New cache writes use the existing v2 XChaCha20-Poly1305 envelope with context
+bound to `generation_cache.content`, the row ID and cache key. The repository
+requires the existing master key. Reads authenticate ciphertext and reject
+pending legacy rows, malformed envelopes, wrong keys and tampering; they never
+retry the legacy column as plaintext. Activation authenticates its target
+before replacing an active result.
+
+After stopping the service and retaining a pre-upgrade backup, run
+`deve-sub migrate --key-path /path/to/existing/master.key` (or set
+`DEVE_SUB_KEY_PATH`). A nonempty cache requires the existing key; the default
+path is `data/master.key`. Fresh empty caches can migrate before key bootstrap.
+Schema migration may finish before keyed payload migration. The payload phase
+authenticates existing ciphertext, binds/verifies the key and encrypts legacy
+rows in one transaction. Failure rolls back that phase; retry with the correct
+key. `serve` refuses to start with pending payload migration.
+
+Backfill preserves cache IDs, request keys, selectors, version pins, modes and
+active flags. It does not invalidate every last-good result or bypass the pool
+revision floor. Retention still protects the latest matching lenient result
+for each persisted subscription, as described below. Backup rejects pending
+plaintext caches and checks its immutable SQLite snapshot. Restore authenticates
+and migrates a staging database before swapping it into place.
+
+This is a forward schema change: an older binary cannot read the encrypted
+cache or safely run against schema 0029. Rollback requires the older binary
+and a compatible pre-upgrade backup with its original key; deleting the new
+column is not rollback. Prior backups and old SQLite/WAL/free-page copies can
+still contain historical plaintext. Migration is not a secure-erasure
+operation. Existing short codes are also cleartext bearer credentials, so
+protect database files and backups even after cache encryption.
+
 ## Authority
 
 - Storage Port decision: ADR-0002

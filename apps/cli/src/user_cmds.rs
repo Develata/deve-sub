@@ -5,7 +5,7 @@ use std::io::{self, BufRead as _};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand};
 
-use crate::commands::{ensure_db_dir, open_db};
+use crate::commands::ensure_db_dir;
 
 /// User management command container.
 #[derive(Args)]
@@ -72,8 +72,7 @@ pub async fn user_init_admin(args: UserInitAdminArgs) -> Result<()> {
 
     ensure_db_dir(&args.db_path)?;
 
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let user_repo = deve_sub_storage_sqlite::SqliteUserRepository::new(pool);
 

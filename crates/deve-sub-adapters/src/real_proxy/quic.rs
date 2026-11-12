@@ -19,7 +19,7 @@ use super::tls::client_config;
 /// socket) and the established connection. The caller must keep both alive
 /// for the lifetime of any streams opened on the connection.
 pub async fn quic_connect(node: &Node) -> Result<(Endpoint, Connection), ErrorClass> {
-    let host = node.endpoint.host.uri_host();
+    let host = node.endpoint.host.address_host();
     let port = node.endpoint.port;
     let addr = tokio::net::lookup_host((host.as_str(), port))
         .await
@@ -34,7 +34,13 @@ pub async fn quic_connect(node: &Node) -> Result<(Endpoint, Connection), ErrorCl
     let mut client_cfg = ClientConfig::new(Arc::new(quic_cfg));
     client_cfg.transport_config(Arc::new(transport));
 
-    let mut ep = Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
+    // The local socket family must match the resolved peer address.
+    let bind_address = if addr.is_ipv6() {
+        "[::]:0"
+    } else {
+        "0.0.0.0:0"
+    };
+    let mut ep = Endpoint::client(bind_address.parse().map_err(|_| ErrorClass::QuicFailed)?)
         .map_err(|_| ErrorClass::QuicFailed)?;
     ep.set_default_client_config(client_cfg);
 

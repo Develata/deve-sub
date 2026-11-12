@@ -23,8 +23,10 @@ pub struct TlsConfig {
     pub alpn: Vec<String>,
     /// Client TLS fingerprint (e.g. `chrome`, `firefox`).
     pub client_fingerprint: Option<String>,
-    /// Certificate pins (e.g. `pinSHA256:...`). Emitters must round-trip
-    /// unchanged.
+    /// Typed pin strings: `pinSHA256:` is a leaf-certificate pin,
+    /// `spkiSHA256:` a sing-box public-key pin, and `mihomoFingerprintSHA256:`
+    /// Mihomo's chain-capable fingerprint policy. Different namespaces must
+    /// never be substituted; unrepresentable policies are rejected.
     pub certificate_pins: Vec<CertificatePin>,
     /// Reality TLS extension configuration, present only for VLESS Reality.
     pub reality: Option<RealityConfig>,

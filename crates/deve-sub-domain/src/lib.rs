@@ -11,6 +11,7 @@
 pub mod audit;
 pub mod endpoint;
 pub mod error;
+pub mod forward_proxy;
 mod graph;
 pub mod identity;
 pub mod node;
@@ -19,6 +20,7 @@ pub mod node_override;
 pub mod probe;
 pub mod protocol;
 pub mod protocol_config;
+pub mod shadowsocks_plugin;
 pub mod source;
 pub mod subscription;
 pub mod template;
@@ -31,6 +33,7 @@ pub use audit::{
 };
 pub use endpoint::{DomainName, Endpoint, Host};
 pub use error::DomainError;
+pub use forward_proxy::{HttpProxyConfig, Socks5Config, SocksDnsResolution};
 pub use identity::{
     IdentityError, RecoveryCode, RecoveryCodeRepository, Role, Session, SessionRepository,
     TOTP_AAD_CONTEXT, TotpSecret, TotpSecretRepository, User, UserRepository,
@@ -51,6 +54,7 @@ pub use protocol_config::{
     TrojanConfig, TuicV5Config, UdpRelayMode, VMessConfig, VlessRealityConfig, WireGuardConfig,
     WireGuardPeer,
 };
+pub use shadowsocks_plugin::ShadowsocksPlugin;
 pub use source::{
     ImportOutcome, ImportResult, ItemParseStatus, NodeFilter, NodePoolEntry, NodePoolRepository,
     PoolMetaRepository, ReconcileEntry, ReconcileInput, ReconcileResult, RefreshPhase, Source,

@@ -89,6 +89,8 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     deve_sub_storage_sqlite::verify_schema(&db)
         .await
         .context("database schema check failed — run `deve-sub migrate` first")?;
+    deve_sub_storage_sqlite::verify_generation_cache_encryption(&db).await?;
+    crate::migrate::preflight::reject_unverified_key_state(&db).await?;
 
     let master_key = Arc::new(
         if config.security.allow_master_key_generation {
@@ -156,8 +158,12 @@ pub async fn serve(args: ServeArgs) -> Result<()> {
     let pool_meta_repo: Arc<dyn PoolMetaRepository> = Arc::new(
         deve_sub_storage_sqlite::SqlitePoolMetaRepository::new(db.clone()),
     );
-    let cache_repo: Arc<dyn GenerationCacheRepository> =
-        Arc::new(deve_sub_storage_sqlite::SqliteGenerationCacheRepository::new(db.clone()));
+    let cache_repo: Arc<dyn GenerationCacheRepository> = Arc::new(
+        deve_sub_storage_sqlite::SqliteGenerationCacheRepository::new(
+            db.clone(),
+            Arc::clone(&master_key),
+        ),
+    );
     let subscription_repo: Arc<dyn SubscriptionRepository> = Arc::new(
         deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(db.clone()),
     );

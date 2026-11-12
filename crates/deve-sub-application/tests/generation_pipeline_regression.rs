@@ -236,7 +236,8 @@ async fn generate_rejects_profile_not_in_target_profiles() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     // sing-box is not in targetProfiles (which declares only mihomo).
@@ -270,7 +271,8 @@ async fn generate_mihomo_emits_full_template_with_groups_rules_dns_tun() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_request(db.template_id, "mihomo");
@@ -316,7 +318,8 @@ async fn generate_applies_asc_sort_order_to_group_members() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_request(db.template_id, "mihomo");
@@ -357,7 +360,8 @@ async fn generate_applies_desc_sort_order_to_group_members() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_request(db.template_id, "mihomo");
@@ -425,7 +429,8 @@ async fn generate_strict_mode_rejects_incompatible_group_type() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = GenerationRequest::new(db.template_id, "xray".to_owned(), GenerationMode::Strict);
@@ -457,7 +462,8 @@ async fn generate_lenient_mode_warns_on_incompatible_group_type() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_request(db.template_id, "xray");
@@ -490,7 +496,8 @@ async fn generate_cache_hit_returns_honest_cache_warnings() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_request(db.template_id, "mihomo");
@@ -555,7 +562,8 @@ async fn generate_strict_mode_does_not_hit_lenient_cache() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let lenient_request =
@@ -609,7 +617,8 @@ async fn generate_activates_inactive_cache_from_delivery() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_request(db.template_id, "mihomo");
@@ -802,7 +811,8 @@ async fn strict_non_mihomo_with_container_fields_fails() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_strict_request(db.template_id, "sing-box");
@@ -845,7 +855,8 @@ async fn strict_non_mihomo_with_rules_only_fails() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_strict_request(db.template_id, "sing-box");
@@ -876,7 +887,8 @@ async fn strict_mihomo_with_container_fields_succeeds() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_strict_request(db.template_id, "mihomo");
@@ -908,7 +920,8 @@ async fn lenient_non_mihomo_with_container_fields_warns() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_request(db.template_id, "sing-box");
@@ -946,7 +959,8 @@ async fn strict_non_mihomo_no_container_fields_succeeds() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_strict_request(db.template_id, "sing-box");
@@ -985,7 +999,8 @@ async fn delivery_serves_last_good_version_when_regeneration_fails() {
     let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
     let pool_repo =
         SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
 
     let request = make_request(db.template_id, "mihomo");

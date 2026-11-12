@@ -21,6 +21,8 @@ pub enum MissingReason {
     MissingFromSource,
     /// The node exists but is inactive (manually disabled via override).
     Inactive,
+    /// An explicitly confirmed security loss awaits original-input recovery.
+    SecurityQuarantined,
     /// The node exists and is active, but is outside the resolved selector.
     OutsideSelection,
 }
@@ -31,6 +33,7 @@ impl std::fmt::Display for MissingReason {
             Self::NotFound => write!(f, "not_found"),
             Self::MissingFromSource => write!(f, "missing_from_source"),
             Self::Inactive => write!(f, "inactive"),
+            Self::SecurityQuarantined => write!(f, "security_quarantined"),
             Self::OutsideSelection => write!(f, "outside_selection"),
         }
     }

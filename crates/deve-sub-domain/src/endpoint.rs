@@ -20,6 +20,19 @@ pub enum Host {
 }
 
 impl Host {
+    /// Return the bare address for a host-only configuration or DNS lookup.
+    ///
+    /// WHY: brackets delimit IPv6 inside URI/socket authorities; a native
+    /// `server`/`address` field and resolver input contain the address itself.
+    #[must_use]
+    pub fn address_host(&self) -> String {
+        match self {
+            Self::Ipv4(addr) => addr.to_string(),
+            Self::Ipv6(addr) => addr.to_string(),
+            Self::Domain(d) => d.to_string(),
+        }
+    }
+
     /// Return the bracketed form for URI embedding.
     ///
     /// IPv6 addresses are wrapped in `[...]`; IPv4 and domains are returned
@@ -105,6 +118,23 @@ pub struct Endpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn address_host_is_bare_for_all_host_variants() {
+        for (host, address) in [
+            (Host::Ipv4("192.0.2.1".parse().expect("IPv4")), "192.0.2.1"),
+            (
+                Host::Ipv6("2001:db8::1".parse().expect("IPv6")),
+                "2001:db8::1",
+            ),
+            (
+                Host::Domain(DomainName::new("example.com".into())),
+                "example.com",
+            ),
+        ] {
+            assert_eq!(host.address_host(), address);
+        }
+    }
 
     #[test]
     fn ipv6_uri_host_has_brackets() {

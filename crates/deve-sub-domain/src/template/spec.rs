@@ -181,6 +181,9 @@ pub struct NodeSelector {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SelectionMode {
+    /// Resolve the selector from the active or pinned template version.
+    /// Only subscriptions may use this mode; templates cannot inherit.
+    InheritTemplate,
     /// Re-evaluate filters against the live pool at each generation.
     #[default]
     Dynamic,

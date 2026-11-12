@@ -6,6 +6,8 @@ pub(super) fn check(node: &Node, profile: ProfileKind) -> Result<(), Compatibili
     if profile == ProfileKind::Json {
         return Ok(());
     }
+    super::forward_proxy::check(node, profile)?;
+    super::fidelity::check(node, profile)?;
     let reject = |field| Err(CompatibilityReason::UnsupportedField(field));
     if profile == ProfileKind::V2Ray && node.tls.as_ref().is_some_and(|t| t.reality.is_some()) {
         return reject("Reality security on V2Ray");
@@ -76,6 +78,29 @@ pub(super) fn check(node: &Node, profile: ProfileKind) -> Result<(), Compatibili
         }
     }
     if let ProtocolConfig::ShadowTls(cfg) = &node.config {
+        if !cfg.has_valid_password() {
+            return reject("ShadowTLS V2/V3 wrapper password");
+        }
+        if node.tls.as_ref().is_some_and(|tls| tls.reality.is_some()) {
+            return reject("ShadowTLS Reality configuration");
+        }
+        if profile == ProfileKind::Mihomo {
+            if cfg.has_conflicting_inner_obfuscation(node.tls.as_ref()) {
+                return reject("ShadowTLS conflicts with inner obfuscation");
+            }
+            if matches!(
+                cfg.inner_protocol,
+                ProtocolKind::Shadowsocks | ProtocolKind::Snell
+            ) && node.tls.as_ref().is_some_and(|tls| {
+                !tls.enabled
+                    || tls.skip_cert_verify.is_some()
+                    || !tls.alpn.is_empty()
+                    || tls.client_fingerprint.is_some()
+                    || !tls.certificate_pins.is_empty()
+            }) {
+                return reject("Mihomo SS/Snell ShadowTLS extra TLS policy");
+            }
+        }
         let supported = match profile {
             ProfileKind::Mihomo => matches!(
                 cfg.inner_protocol,

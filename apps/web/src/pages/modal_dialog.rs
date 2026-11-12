@@ -34,7 +34,7 @@ pub fn ModalDialog(
     });
     rsx! {
         dialog {
-            class: if wide { "modal-dialog modal-dialog-wide rounded-xl bg-white p-6 text-stone-900 shadow-xl dark:bg-stone-900 dark:text-stone-100" } else { "modal-dialog rounded-xl bg-white p-6 text-stone-900 shadow-xl dark:bg-stone-900 dark:text-stone-100" },
+            class: if wide { "modal-dialog modal-dialog-wide rounded-xl bg-surface p-6 text-foreground shadow-xl  " } else { "modal-dialog rounded-xl bg-surface p-6 text-foreground shadow-xl  " },
             aria_label: "{title}",
             tabindex: "-1",
             aria_busy: busy,

@@ -2,7 +2,7 @@ use super::*;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
-/// Only these two synthetic loopback URLs may bypass production SSRF checks.
+/// Only these synthetic loopback URLs may bypass production SSRF checks.
 struct LoopbackOnly(Vec<String>);
 impl deve_sub_adapters::SsrfChecker for LoopbackOnly {
     fn check(
@@ -41,7 +41,11 @@ async fn acceptance_source_refresh_to_loopback_http_subscription() {
         listener.local_addr().expect("upstream address")
     );
     let shadow_url = origin.replace("/fixture", "/shadowtls");
+    let forward_url = origin.replace("/fixture", "/forward");
     let shadow_body = cases[10].input.clone();
+    let forward_body = json!({"proxies": cases[11..].iter()
+        .map(|case| serde_json::from_str::<Value>(&case.input).expect("forward fixture")["proxies"][0].clone())
+        .collect::<Vec<_>>()}).to_string();
     let upstream = axum::Router::new().route(
         "/fixture",
         axum::routing::get(move || {
@@ -61,6 +65,13 @@ async fn acceptance_source_refresh_to_loopback_http_subscription() {
             async move { ([("content-type", "application/json")], body) }
         }),
     );
+    let upstream = upstream.route(
+        "/forward",
+        axum::routing::get(move || {
+            let body = forward_body.clone();
+            async move { ([("content-type", "application/yaml")], body) }
+        }),
+    );
     let (upstream_stop, stop) = tokio::sync::oneshot::channel::<()>();
     let upstream_task = tokio::spawn(async move {
         axum::serve(listener, upstream)
@@ -74,13 +85,18 @@ async fn acceptance_source_refresh_to_loopback_http_subscription() {
         deve_sub_adapters::HttpFetcher::with_checker(LoopbackOnly(vec![
             origin.clone(),
             shadow_url.clone(),
+            forward_url.clone(),
         ]))
         .timeout(3)
         .max_redirects(0),
     );
     let router = app.router();
     let cookie = setup_and_login(&router).await;
-    for (kind, url, expected) in [("uri_list", origin, 10), ("auto", shadow_url, 1)] {
+    for (kind, url, expected) in [
+        ("uri_list", origin, 10),
+        ("auto", shadow_url, 1),
+        ("mihomo_yaml", forward_url, 2),
+    ] {
         let response = router.clone().oneshot(with_cookie(post_json("/api/v1/sources", &json!({"name":format!("acceptance-{kind}"),"source_type":kind,"url":url,"auto_update":false,"keep_on_fail":true,"update_interval_secs":3600}).to_string()), &cookie)).await.expect("source create");
         assert_eq!(response.status(), StatusCode::CREATED);
         let source = body_to_json(response).await;

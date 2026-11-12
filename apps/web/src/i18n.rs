@@ -4,6 +4,7 @@
 
 mod dashboard;
 mod nodes;
+mod selection;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Language {
@@ -30,6 +31,9 @@ impl Language {
 }
 
 pub fn t(lang: Language, key: &str) -> &str {
+    if key.starts_with("selection.") {
+        return selection::t(lang, key);
+    }
     if key.starts_with("dashboard.") {
         return dashboard::t(lang, key);
     }
@@ -43,8 +47,8 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::En, "auth.logout") => "Logout",
         (Language::Zh, "auth.login") => "登录",
         (Language::En, "auth.login") => "Login",
-        (Language::Zh, "auth.login_title") => "登录 Deve Sub",
-        (Language::En, "auth.login_title") => "Sign in to Deve Sub",
+        (Language::Zh, "auth.login_title") => "登录",
+        (Language::En, "auth.login_title") => "Sign in to",
         (Language::Zh, "auth.username") => "用户名",
         (Language::En, "auth.username") => "Username",
         (Language::Zh, "auth.password") => "密码",
@@ -61,6 +65,8 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::En, "auth.2fa_code") => "Verification Code",
         (Language::Zh, "auth.2fa_submit") => "验证",
         (Language::En, "auth.2fa_submit") => "Verify",
+        (Language::Zh, "auth.2fa_login_code") => "验证码或恢复码",
+        (Language::En, "auth.2fa_login_code") => "Verification or recovery code",
         (Language::Zh, "auth.2fa_invalid") => "验证码无效",
         (Language::En, "auth.2fa_invalid") => "Invalid verification code",
         (Language::Zh, "auth.2fa_back") => "返回登录",
@@ -79,8 +85,8 @@ pub fn t(lang: Language, key: &str) -> &str {
         (Language::En, "nav.settings") => "Settings",
         (Language::Zh, "setup.title") => "初始化管理员",
         (Language::En, "setup.title") => "Admin Setup",
-        (Language::Zh, "setup.description") => "创建管理员账户以开始使用 Deve Sub",
-        (Language::En, "setup.description") => "Create an admin account to get started",
+        (Language::Zh, "setup.description") => "创建管理员账户以开始使用",
+        (Language::En, "setup.description") => "Create an admin account to start using",
         (Language::Zh, "setup.username") => "用户名",
         (Language::En, "setup.username") => "Username",
         (Language::Zh, "setup.password") => "密码",

@@ -34,6 +34,9 @@ pub struct NodeDto {
     pub imported_at: String,
     /// Whether the node is active (eligible for generation).
     pub is_active: bool,
+    /// An explicitly quarantined node or chain awaits original-input recovery.
+    #[serde(default)]
+    pub security_quarantined: bool,
     /// Whether the node was marked missing after its source removed it.
     pub missing_from_source: bool,
     /// Optimistic-concurrency revision counter.
@@ -47,6 +50,32 @@ pub struct NodeDto {
     /// Ordered node IDs forming this node's proxy chain. Empty means direct
     /// connection (no chain). See NODE-017.
     pub chain: Vec<String>,
+    /// Non-secret connection metadata for inspection.
+    #[serde(default)]
+    pub connection: NodeConnectionDto,
+    /// Why a retained raw entry cannot be selected or emitted.
+    #[serde(default)]
+    pub unsupported_reason: Option<String>,
+}
+
+/// Connection semantics without authentication secrets or raw input.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct NodeConnectionDto {
+    /// Authentication shape: none, password, uuid, user_password, uuid_password.
+    pub authentication: String,
+    /// Absent, explicitly disabled, or enabled TLS.
+    pub tls_enabled: Option<bool>,
+    /// Certificate verification remains three-state.
+    pub skip_cert_verify: Option<bool>,
+    /// TLS server name used for certificate verification and SNI.
+    pub server_name: Option<String>,
+    /// Ordered TLS application protocol preferences.
+    pub alpn: Vec<String>,
+    /// Number of configured certificate pins; pin material is not exposed here.
+    pub certificate_pin_count: usize,
+    /// SOCKS destination DNS: unspecified, local or remote.
+    pub destination_dns: Option<String>,
 }
 
 /// Response body for `GET /api/v1/nodes` (cursor-paginated node list).
@@ -99,6 +128,9 @@ pub struct ImportNodesResponse {
     pub duplicate_nodes: u64,
     /// Input lines that could not be parsed.
     pub failed: u64,
+    /// Raw entries retained without usable protocol support.
+    #[serde(default)]
+    pub unsupported: u64,
     /// Per-entry outcomes in input order. Blank and comment-only URI lines
     /// are omitted; container formats report their extracted nodes.
     pub outcomes: Vec<ImportOutcomeDto>,
@@ -109,6 +141,8 @@ pub struct ImportNodesResponse {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(tag = "status", content = "data", rename_all = "snake_case")]
 pub enum ImportOutcomeDto {
+    /// Retained raw entry; not enabled or counted as a usable new node.
+    Unsupported { id: String, reason: String },
     /// A new node was inserted; `data` is the node ULID.
     Inserted(String),
     /// The node was a duplicate; `data` is the existing node ULID.

@@ -46,7 +46,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     let mut f_traffic = use_signal(String::new);
     let mut f_expires = use_signal(|| Option::<String>::None);
     let mut f_enabled = use_signal(|| true);
-    let mut f_node_sel = use_signal(|| serde_json::json!({"mode": "dynamic"}));
+    let mut f_node_sel = use_signal(|| serde_json::json!({"mode": "inherit_template"}));
     let mut f_temp_expiry = use_signal(String::new);
 
     let mut fetch_subs = move || {
@@ -166,7 +166,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
         f_traffic.set(String::new());
         f_expires.set(None);
         f_enabled.set(true);
-        f_node_sel.set(serde_json::json!({"mode": "dynamic"}));
+        f_node_sel.set(serde_json::json!({"mode": "inherit_template"}));
         form_error.set(String::new());
         modal.set(Modal::Create);
     };
@@ -424,7 +424,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
     rsx! {
         div { class: "space-y-4",
             div { class: "flex items-center justify-between",
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "nav.subscriptions")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "nav.subscriptions")} }
                 button {
                     class: "ui-button ui-button-accent",
                     onclick: open_create,
@@ -441,25 +441,25 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
 
             if *loading.read() {
                 div { class: "flex items-center justify-center py-12",
-                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-stone-700 dark:border-t-amber-500" }
+                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-line border-t-accent" }
                 }
             } else if !error.read().is_empty() {
                 div { class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{error}" }
             } else if subs.read().is_empty() {
-                div { class: "rounded-md border border-stone-200 p-8 text-center dark:border-stone-800",
-                    p { class: "text-sm text-stone-500 dark:text-stone-400", {t(l, "subs.empty")} }
+                div { class: "rounded-md border border-line-soft p-8 text-center",
+                    p { class: "text-sm text-muted", {t(l, "subs.empty")} }
                 }
             } else {
-                div { class: "overflow-x-auto rounded-lg border border-stone-200 dark:border-stone-800",
+                div { class: "overflow-x-auto rounded-lg border border-line-soft",
                     table { class: "subscription-table text-sm", role: "table", aria_label: t(l, "nav.subscriptions"),
                         thead { role: "rowgroup",
-                            tr { role: "row", class: "border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
-                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "subs.name")} }
-                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", "Slug" }
-                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "subs.profile")} }
-                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "subs.short_code")} }
-                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.status")} }
-                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-right font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.actions")} }
+                            tr { role: "row", class: "border-b border-line-soft bg-canvas",
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-muted", {t(l, "subs.name")} }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-muted", "Slug" }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-muted", {t(l, "subs.profile")} }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-muted", {t(l, "subs.short_code")} }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-left font-medium text-muted", {t(l, "nodes.status")} }
+                                th { scope: "col", role: "columnheader", class: "px-4 py-3 text-right font-medium text-muted", {t(l, "nodes.actions")} }
                             }
                         }
                         tbody { role: "rowgroup",
@@ -488,6 +488,7 @@ pub fn SubscriptionsPage(props: SubscriptionsProps) -> Element {
             f_traffic,
             f_expires,
             f_enabled,
+            f_node_sel,
             f_temp_expiry,
             form_error,
             saving,

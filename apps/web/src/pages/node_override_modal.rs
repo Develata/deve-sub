@@ -146,34 +146,34 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
             class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
             onclick: move |_| props.on_close.call(()),
             div {
-                class: "node-dialog-panel w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                class: "node-dialog-panel w-full max-w-lg rounded-lg bg-surface p-6 shadow-xl",
                 onclick: move |e| e.stop_propagation(),
-                h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
+                h3 { class: "text-lg font-semibold text-foreground",
                     {t(l, "nodes.override_title")}
                 }
                 div { class: "mt-4 space-y-3",
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "nodes.override_name")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "nodes.override_name")} }
                         input {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                             r#type: "text",
                             value: "{f_name}",
                             oninput: move |e| f_name.set(e.value()),
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "nodes.override_region")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "nodes.override_region")} }
                         input {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                             r#type: "text",
                             value: "{f_region}",
                             oninput: move |e| f_region.set(e.value()),
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "nodes.override_enabled")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "nodes.override_enabled")} }
                         select {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                             value: "{f_enabled.read().as_str()}",
                             onchange: move |e| f_enabled.set(TriBool::from_str(&e.value())),
                             option { value: "inherit", {t(l, "nodes.override_inherit")} }
@@ -182,18 +182,18 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "nodes.override_sni")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "nodes.override_sni")} }
                         input {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                             r#type: "text",
                             value: "{f_sni}",
                             oninput: move |e| f_sni.set(e.value()),
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "nodes.override_skip_verify")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "nodes.override_skip_verify")} }
                         select {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                             value: "{f_skip_verify.read().as_str()}",
                             onchange: move |e| f_skip_verify.set(TriBool::from_str(&e.value())),
                             option { value: "inherit", {t(l, "nodes.override_inherit")} }
@@ -202,18 +202,18 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "nodes.override_fingerprint")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "nodes.override_fingerprint")} }
                         input {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                             r#type: "text",
                             value: "{f_fingerprint}",
                             oninput: move |e| f_fingerprint.set(e.value()),
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "nodes.override_sort")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "nodes.override_sort")} }
                         input {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                             r#type: "number",
                             value: "{f_sort}",
                             oninput: move |e| { f_sort.set(e.value().parse::<i64>().unwrap_or(0)); },
@@ -232,12 +232,12 @@ pub fn OverrideModal(props: OverrideModalProps) -> Element {
                     }
                     div { class: "flex gap-2",
                         button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                            class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted",
                             onclick: move |_| props.on_close.call(()),
                             {t(l, "common.cancel")}
                         }
                         button {
-                            class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                            class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                             disabled: *saving.read() || !*loaded.read(),
                             onclick: submit,
                             if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
@@ -300,18 +300,18 @@ pub fn RegionModal(props: RegionModalProps) -> Element {
             class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
             onclick: move |_| props.on_close.call(()),
             div {
-                class: "node-dialog-panel w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                class: "node-dialog-panel w-full max-w-md rounded-lg bg-surface p-6 shadow-xl",
                 onclick: move |e| e.stop_propagation(),
-                h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
+                h3 { class: "text-lg font-semibold text-foreground",
                     {t(l, "nodes.region_title")}
                 }
-                p { class: "mt-2 text-sm text-stone-500 dark:text-stone-400",
+                p { class: "mt-2 text-sm text-muted",
                     {t(l, "nodes.region_hint")}
                 }
                 div { class: "mt-4",
-                    label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "nodes.region_label")} }
+                    label { class: "block text-sm font-medium text-foreground", {t(l, "nodes.region_label")} }
                     input {
-                        class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                        class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                         r#type: "text",
                         placeholder: "US",
                         value: "{region}",
@@ -323,12 +323,12 @@ pub fn RegionModal(props: RegionModalProps) -> Element {
                 }
                 div { class: "mt-6 flex justify-end gap-2",
                     button {
-                        class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                        class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted",
                         onclick: move |_| props.on_close.call(()),
                         {t(l, "common.cancel")}
                     }
                     button {
-                        class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                        class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                         disabled: *saving.read() || !*loaded.read(),
                         onclick: submit,
                         if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }

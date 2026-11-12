@@ -6,6 +6,7 @@ fn assert_version(profile: &str) {
         "mihomo" => "Mihomo Meta v1.19.30",
         "sing-box" => "sing-box version 1.14.3",
         "xray" => "Xray 26.3.27",
+        "v2ray" => "V2Ray 5.53.0",
         _ => panic!("unvalidated client"),
     };
     let output = Command::new("timeout")
@@ -54,6 +55,9 @@ fn check(profile: &str, content: &str) -> Output {
         "xray" => {
             command.args(["run", "-test", "-config"]);
         }
+        "v2ray" => {
+            command.args(["test", "-c"]);
+        }
         _ => unreachable!(),
     }
     let output = command
@@ -82,11 +86,11 @@ fn check(profile: &str, content: &str) -> Output {
     output
 }
 
-/// 31 delivered configurations accepted by pinned cores, plus semantic-negative
+/// 36 delivered configurations accepted by pinned cores, plus semantic-negative
 /// controls. This is offline configuration validation, never proxy connectivity.
 #[tokio::test]
-#[ignore = "requires checksum-pinned mihomo, sing-box and xray on PATH"]
-async fn acceptance_validators_accept_31_delivered_protocol_configurations() {
+#[ignore = "requires checksum-pinned mihomo, sing-box, xray and v2ray on PATH"]
+async fn acceptance_validators_accept_36_delivered_protocol_configurations() {
     validate_matrix().await;
     let mut variants = 0;
     for case in current_formats::variants() {
@@ -103,7 +107,7 @@ async fn acceptance_validators_accept_31_delivered_protocol_configurations() {
         }
     }
     assert_eq!(variants, 6);
-    for profile in ["mihomo", "sing-box", "xray"] {
+    for profile in ["mihomo", "sing-box", "xray", "v2ray"] {
         let invalid = match profile {
             "mihomo" => {
                 "proxies: [{name: invalid, type: invalid-protocol, server: unused.example, port: 443}]"
@@ -126,7 +130,7 @@ async fn validate_matrix() {
     let ids = import_cases(&app, &router, &cookie, &cases).await;
     let template = template(&router, &cookie, &v3(None)).await;
     let mut count = 0;
-    for profile in ["mihomo", "sing-box", "xray"] {
+    for profile in ["mihomo", "sing-box", "xray", "v2ray"] {
         assert_version(profile);
         for (case, id) in cases.iter().zip(&ids).filter(|(c, _)| c.accepts(profile)) {
             let token = subscription(
@@ -155,7 +159,7 @@ async fn validate_matrix() {
             count += 1;
         }
     }
-    for profile in ["mihomo", "sing-box", "xray"] {
+    for profile in ["mihomo", "sing-box", "xray", "v2ray"] {
         let token = subscription(&router, &cookie, &template, profile, None).await;
         let response = router
             .clone()
@@ -180,7 +184,7 @@ async fn validate_matrix() {
             String::from_utf8_lossy(&result.stderr)
         );
     }
-    assert_eq!(count, 25);
+    assert_eq!(count, 36);
 }
 
 /// The actual delivered uploaded routing template, including DNS geosite,

@@ -158,9 +158,9 @@ pub fn UsersPage(props: UsersProps) -> Element {
     rsx! {
         div { class: "space-y-4",
             div { class: "flex items-center justify-between",
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "nav.users")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "nav.users")} }
                 button {
-                    class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700",
+                    class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover",
                     onclick: open_create,
                     {t(l, "users.add")}
                 }
@@ -172,25 +172,25 @@ pub fn UsersPage(props: UsersProps) -> Element {
 
             if *loading.read() {
                 div { class: "flex items-center justify-center py-12",
-                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-stone-700 dark:border-t-amber-500" }
+                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-line border-t-accent" }
                 }
             } else if !error.read().is_empty() {
                 div { class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{error}" }
             } else if users.read().is_empty() {
-                div { class: "rounded-md border border-stone-200 p-8 text-center dark:border-stone-800",
-                    p { class: "text-sm text-stone-500 dark:text-stone-400", {t(l, "users.empty")} }
+                div { class: "rounded-md border border-line-soft p-8 text-center",
+                    p { class: "text-sm text-muted", {t(l, "users.empty")} }
                 }
             } else {
-                div { class: "overflow-x-auto rounded-lg border border-stone-200 dark:border-stone-800",
+                div { class: "overflow-x-auto rounded-lg border border-line-soft",
                     table { class: "w-full text-sm",
                         thead {
-                            tr { class: "border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "users.username")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "users.role")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "users.2fa")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.status")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "users.last_login")} }
-                                th { class: "px-4 py-3 text-right font-medium text-stone-500 dark:text-stone-400", "" }
+                            tr { class: "border-b border-line-soft bg-canvas",
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "users.username")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "users.role")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "users.2fa")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "nodes.status")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "users.last_login")} }
+                                th { class: "px-4 py-3 text-right font-medium text-muted", "" }
                             }
                         }
                         tbody {
@@ -202,14 +202,14 @@ pub fn UsersPage(props: UsersProps) -> Element {
                                     rsx! {
                                         tr {
                                             key: "{id}",
-                                            class: "border-b border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-800/50",
-                                            td { class: "px-4 py-3 font-medium text-stone-900 dark:text-stone-100", "{u.username}" }
+                                            class: "border-b border-line-soft hover:bg-canvas",
+                                            td { class: "px-4 py-3 font-medium text-foreground", "{u.username}" }
                                             td { class: "px-4 py-3",
                                                 span {
                                                     class: if u.role == deve_sub_contract::RoleDto::Admin {
-                                                        "inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                                                        "inline-flex rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-text  "
                                                     } else {
-                                                        "inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-400"
+                                                        "inline-flex rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-muted  "
                                                     },
                                                     if u.role == deve_sub_contract::RoleDto::Admin { "admin" } else { "user" }
                                                 }
@@ -218,17 +218,17 @@ pub fn UsersPage(props: UsersProps) -> Element {
                                                 if u.two_factor_enabled {
                                                     span { class: "inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300", {t(l, "users.enabled")} }
                                                 } else {
-                                                    span { class: "inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-400", {t(l, "users.disabled")} }
+                                                    span { class: "inline-flex rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-muted", {t(l, "users.disabled")} }
                                                 }
                                             }
                                             td { class: "px-4 py-3",
                                                 if u.enabled {
                                                     span { class: "inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300", {t(l, "nodes.enabled")} }
                                                 } else {
-                                                    span { class: "inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-400", {t(l, "nodes.disabled")} }
+                                                    span { class: "inline-flex rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-muted", {t(l, "nodes.disabled")} }
                                                 }
                                             }
-                                            td { class: "px-4 py-3 text-xs text-stone-500 dark:text-stone-400",
+                                            td { class: "px-4 py-3 text-xs text-muted",
                                                 if let Some(ts) = &u.last_login_at {
                                                     "{ts}"
                                                 } else {
@@ -238,7 +238,7 @@ pub fn UsersPage(props: UsersProps) -> Element {
                                             td { class: "px-4 py-3 text-right",
                                                 div { class: "flex flex-wrap justify-end gap-1",
                                                     button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                                                        class: "rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-surface-muted",
                                                         onclick: move |_| open_force_logout(flo_u.clone()),
                                                         {t(l, "users.force_logout")}
                                                     }

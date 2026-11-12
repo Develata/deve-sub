@@ -40,6 +40,9 @@ pub fn parse_uri(uri: &str) -> Result<Node, ParseError> {
     let parsed = url::Url::parse(uri).map_err(|e| ParseError::InvalidUri(e.to_string()))?;
 
     match parsed.scheme() {
+        "socks" | "socks5" | "socks5h" | "http" | "https" => {
+            crate::forward_proxy::parse(&parsed, uri)
+        }
         "vless" => crate::vless_reality::parse(&parsed, uri),
         "trojan" => crate::trojan::parse(&parsed, uri),
         "hysteria2" | "hy2" => crate::hysteria2::parse(&parsed, uri),

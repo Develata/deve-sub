@@ -68,7 +68,7 @@ pub fn ImportModal(props: ImportModalProps) -> Element {
                     div { class: "rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400",
                         {format_t(l, "nodes.import_new", r.new_nodes as usize)}
                     }
-                    div { class: "rounded-md bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
+                    div { class: "rounded-md bg-accent-soft p-3 text-sm text-accent-text",
                         {format_t(l, "nodes.import_dup", r.duplicate_nodes as usize)}
                     }
                     if r.failed > 0 {
@@ -76,10 +76,20 @@ pub fn ImportModal(props: ImportModalProps) -> Element {
                             {format_t(l, "nodes.import_failed", r.failed as usize)}
                         }
                     }
+                    if r.unsupported > 0 {
+                        div { class: "rounded-md bg-accent-soft p-3 text-sm text-foreground",
+                            {format_t(l, "nodes.import_unsupported", r.unsupported as usize)}
+                            for outcome in &r.outcomes {
+                                if let deve_sub_contract::ImportOutcomeDto::Unsupported { id, reason } = outcome {
+                                    p { key: "{id}", "{reason}" }
+                                }
+                            }
+                        }
+                    }
                     div { class: "mt-4 flex justify-end",
                         button { r#type: "button",
                             onmounted: move |event| async move { let _ = event.data().set_focus(true).await; },
-                            class: "min-h-11 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700",
+                            class: "min-h-11 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover",
                             onclick: move |_| close(()), {t(l, "common.done")}
                         }
                     }
@@ -88,7 +98,7 @@ pub fn ImportModal(props: ImportModalProps) -> Element {
                 form { onsubmit: do_import,
                     fieldset { disabled: *saving.read(), class: "mt-4 min-w-0 space-y-4",
                         div {
-                            label { r#for: "node-import-format", class: "block text-sm font-medium text-stone-700 dark:text-stone-300",
+                            label { r#for: "node-import-format", class: "block text-sm font-medium text-foreground",
                                 {t(l, "nodes.import_format")}
                             }
                             select { id: "node-import-format", autofocus: true,
@@ -109,11 +119,11 @@ pub fn ImportModal(props: ImportModalProps) -> Element {
                             }
                         }
                         div {
-                            label { r#for: "node-import-content", class: "block text-sm font-medium text-stone-700 dark:text-stone-300",
+                            label { r#for: "node-import-content", class: "block text-sm font-medium text-foreground",
                                 {t(l, "nodes.import_content")}
                             }
                             textarea { id: "node-import-content", spellcheck: false,
-                                class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 font-mono text-sm dark:border-stone-700 dark:bg-stone-800",
+                                class: "mt-1 block w-full rounded-md border border-line px-3 py-2 font-mono text-sm",
                                 rows: "12", placeholder: "vless://...\ntrojan://...\nss://...",
                                 value: "{content}", oninput: move |e| content.set(e.value()),
                             }
@@ -128,7 +138,7 @@ pub fn ImportModal(props: ImportModalProps) -> Element {
                         div { class: "flex justify-end gap-2",
                             button { r#type: "button", class: "node-control", onclick: move |_| close(()), {t(l, "common.cancel")} }
                             button { r#type: "submit",
-                                class: "min-h-11 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                                class: "min-h-11 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                                 if *saving.read() { {t(l, "common.loading")} } else { {t(l, "nodes.import_btn")} }
                             }
                         }

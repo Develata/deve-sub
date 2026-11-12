@@ -92,27 +92,27 @@ pub fn ChainModal(props: ChainModalProps) -> Element {
             class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
             onclick: move |_| props.on_close.call(()),
             div {
-                class: "w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                class: "w-full max-w-lg rounded-lg bg-surface p-6 shadow-xl",
                 onclick: move |e| e.stop_propagation(),
-                h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
+                h3 { class: "text-lg font-semibold text-foreground",
                     {t(l, "nodes.chain_title")}
                 }
-                p { class: "mt-2 text-sm text-stone-500 dark:text-stone-400",
+                p { class: "mt-2 text-sm text-muted",
                     {t(l, "nodes.chain_hint")}
                 }
 
                 if *loading.read() {
                     div { class: "mt-4 flex justify-center py-8",
-                        div { class: "h-5 w-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600" }
+                        div { class: "h-5 w-5 animate-spin rounded-full border-2 border-line border-t-accent" }
                     }
                 } else {
                     // Current chain (ordered).
                     div { class: "mt-4",
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300",
+                        label { class: "block text-sm font-medium text-foreground",
                             {t(l, "nodes.chain_current")}
                         }
                         if chain.read().is_empty() {
-                            p { class: "mt-1 text-sm text-stone-400 dark:text-stone-500", {t(l, "nodes.chain_empty")} }
+                            p { class: "mt-1 text-sm text-muted", {t(l, "nodes.chain_empty")} }
                         } else {
                             ol { class: "mt-2 space-y-1",
                                 for (i, cid) in chain.read().iter().enumerate() {
@@ -124,9 +124,9 @@ pub fn ChainModal(props: ChainModalProps) -> Element {
                                         let rm_id = cid.clone();
                                         rsx! {
                                             li {
-                                                class: "flex items-center justify-between rounded-md border border-stone-200 px-3 py-1.5 text-sm dark:border-stone-700",
-                                                span { class: "text-stone-800 dark:text-stone-200",
-                                                    span { class: "text-stone-400 mr-2", "{i + 1}." }
+                                                class: "flex items-center justify-between rounded-md border border-line-soft px-3 py-1.5 text-sm",
+                                                span { class: "text-foreground",
+                                                    span { class: "text-muted mr-2", "{i + 1}." }
                                                     "{name}"
                                                 }
                                                 button {
@@ -145,11 +145,11 @@ pub fn ChainModal(props: ChainModalProps) -> Element {
                     // Picker.
                     if !available.is_empty() {
                         div { class: "mt-4",
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300",
+                            label { class: "block text-sm font-medium text-foreground",
                                 {t(l, "nodes.chain_add")}
                             }
                             select {
-                                class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                                class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm",
                                 value: "",
                                 onchange: move |e| {
                                     let v = e.value();
@@ -179,12 +179,12 @@ pub fn ChainModal(props: ChainModalProps) -> Element {
 
                     div { class: "mt-6 flex justify-end gap-2",
                         button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                            class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted",
                             onclick: move |_| props.on_close.call(()),
                             {t(l, "common.cancel")}
                         }
                         button {
-                            class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                            class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                             disabled: *saving.read(),
                             onclick: submit,
                             if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }

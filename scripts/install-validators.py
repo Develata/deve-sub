@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Install the reviewed compatibility binaries only after SHA-256 verification.
 
-Hashes match publisher GitHub release asset digests reviewed on 2026-10-16.
+Hashes match publisher GitHub release asset digests reviewed on 2026-10-16
+(V2Ray 5.53.0 publisher SHA-256 reviewed on 2026-10-20).
 Mihomo 1.19.30 adds AnyTLS/Snell v4 relative to the old baseline; sing-box
 1.14.3 supplies Snell and the current WireGuard endpoint schema. Hash pinning
 is not publisher signing.
@@ -20,6 +21,7 @@ ASSETS = [
     ("mihomo", "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.30/mihomo-linux-amd64-v1-v1.19.30.gz", "cbe553d0319a414bd3a372c5976a252155b2c4882b66bce88a4d6bba9571a553"),
     ("sing-box", "https://github.com/SagerNet/sing-box/releases/download/v1.14.3/sing-box-1.14.3-linux-amd64.tar.gz", "e2bdf179c15a3652955dc44867e33ca0965c9c9b91b34267dcc5a5d639a5feee"),
     ("xray", "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip", "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae"),
+    ("v2ray", "https://github.com/v2fly/v2ray-core/releases/download/v5.53.0/v2ray-linux-64.zip", "6bbb8aee65a57d0b12599b4b7c842b3ad0daca4436e661d94015c447cb31b4fa"),
 ]
 
 
@@ -46,7 +48,7 @@ def install(dest):
                     with bundle.extractfile(member) as source, target.open("wb") as output:
                         shutil.copyfileobj(source, output)
             else:
-                with zipfile.ZipFile(archive) as bundle, bundle.open("xray") as source, target.open("wb") as output:
+                with zipfile.ZipFile(archive) as bundle, bundle.open(name) as source, target.open("wb") as output:
                     shutil.copyfileobj(source, output)
             target.chmod(0o755)
             subprocess.run([str(target), "-v" if name == "mihomo" else "version"], check=True, timeout=10)

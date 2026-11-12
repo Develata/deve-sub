@@ -56,6 +56,7 @@ fn make_entry(
     };
     NodePoolEntry {
         node,
+        security_quarantined: false,
         missing_from_source: missing,
         is_active,
         revision: 1,

@@ -6,6 +6,7 @@ use deve_sub_kernel::{
     NodeId, Revision, SourceId, SourceRefreshJobId, SourceSnapshotId, Timestamp,
 };
 
+use super::ImportResult;
 use super::error::SourceError;
 use super::refresh_job::{RefreshPhase, SourceRefreshJob};
 use super::source_item::ItemParseStatus;
@@ -172,6 +173,9 @@ pub struct NodePoolEntry {
     /// Whether the node is active (eligible for generation). Defaults to
     /// `true` on insert. Manual disable lands with NODE-004.
     pub is_active: bool,
+    /// Distribution is blocked by an explicit security quarantine on this
+    /// node or one of its chain dependencies. User enabled state is retained.
+    pub security_quarantined: bool,
     /// Optimistic-concurrency revision counter, bumped on each update.
     pub revision: u64,
     /// Row creation time (distinct from the ULID's embedded time and from
@@ -229,40 +233,6 @@ impl NodeFilter {
             include_inactive: true,
         }
     }
-}
-
-/// Result of a manual node import (NODE-001 / NODE-002).
-///
-/// Each input URI is classified into one of three outcomes: newly inserted,
-/// duplicate of an existing active node, or failed to parse. The counts
-/// mirror the per-row `ItemParseStatus` used by source refresh so the UI
-/// and CLI can render a single import summary.
-#[derive(Debug, Clone, Default)]
-pub struct ImportResult {
-    /// Nodes newly inserted into the pool.
-    pub new_nodes: u64,
-    /// Nodes already present (same protocol + host + port, active and
-    /// non-missing). Not re-inserted; credentials are NOT overwritten
-    /// (NODE-003: do not drop nodes with different credentials).
-    pub duplicate_nodes: u64,
-    /// Input lines that could not be parsed at all.
-    pub failed: u64,
-    /// Per-line outcomes for diagnostics. Length equals the input line
-    /// count; order preserved. Failed lines carry the raw URI; successful
-    /// lines carry the resulting `NodeId`.
-    pub outcomes: Vec<ImportOutcome>,
-}
-
-/// Per-line outcome of a manual import.
-#[derive(Debug, Clone)]
-pub enum ImportOutcome {
-    /// A new node was inserted; carries its `NodeId`.
-    Inserted(NodeId),
-    /// The node was a duplicate of an existing active pool entry; carries
-    /// the existing node's `NodeId`.
-    Duplicate(NodeId),
-    /// The line could not be parsed; carries the raw input text.
-    Failed(String),
 }
 
 /// Storage boundary for the node pool and source reconciliation.

@@ -50,11 +50,13 @@ pub(super) fn yaml_dq(s: &str) -> String {
 }
 
 fn emit_proxy(node: &Node, out: &mut String) -> Result<(), EmitError> {
-    let server = node.endpoint.host.uri_host();
+    super::fidelity::check(node, super::fidelity::Target::Mihomo)?;
+    let server = node.endpoint.host.address_host();
     let port = node.endpoint.port;
     let name = &node.display_name;
 
     match node.protocol {
+        ProtocolKind::Socks5 | ProtocolKind::Http => super::forward_proxy::mihomo(node, out),
         ProtocolKind::Trojan => emit_trojan(node, &server, port, name, out),
         ProtocolKind::Shadowsocks => emit_ss(node, &server, port, name, out),
         ProtocolKind::VMess => emit_vmess(node, &server, port, name, out),
@@ -125,37 +127,7 @@ fn emit_ss(
     let mut entry = yaml_entry(name, "ss", server, port);
     entry.push_str(&format!("\n    cipher: {}", cfg.method));
     entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
-    // WHY: mihomo stores SIP003 plugin as `plugin: <name>` and
-    // `plugin-opts:` as a YAML map. The canonical model stores the SIP003
-    // options string (`k=v;k=v`); split it into individual map entries.
-    // Boolean values emit as bare YAML bools so mihomo's struct decoder
-    // parses them with the correct type. See E1.
-    if let Some(ref p) = cfg.plugin {
-        entry.push_str(&format!("\n    plugin: {}", yaml_dq(p)));
-        if let Some(ref opts) = cfg.plugin_opts {
-            entry.push_str("\n    plugin-opts:");
-            for pair in opts.split(';') {
-                if pair.is_empty() {
-                    continue;
-                }
-                match pair.split_once('=') {
-                    Some((k, v)) => {
-                        let yaml_val = match v {
-                            "true" | "false" => v.to_owned(),
-                            _ => yaml_dq(v),
-                        };
-                        entry.push_str(&format!("\n      {k}: {yaml_val}"));
-                    }
-                    // WHY: SIP003 allows bare flags (no `=`). Emit them as
-                    // YAML `key: true` so mihomo's struct decoder accepts the
-                    // option instead of silently dropping it (SRC-019).
-                    None => {
-                        entry.push_str(&format!("\n      {pair}: true"));
-                    }
-                }
-            }
-        }
-    }
+    super::mihomo_plugin::push(cfg, &mut entry)?;
     out.push('\n');
     out.push_str(&entry);
     Ok(())
@@ -314,7 +286,7 @@ fn emit_tuic_v5(
     entry.push_str(&format!("\n    password: {}", yaml_dq(password)));
 
     // WHY: mihomo TUIC field names differ from URI/sing-box: `reduce-rtt`
-    // (not `zero-rtt-handshake`), `heartbeat-interval` as integer seconds
+    // (not `zero-rtt-handshake`), `heartbeat-interval` as integer milliseconds
     // (not `heartbeat` as duration string). Congestion controller name is
     // always emitted when present. See E3b.
     if let Some(ref cong) = node.congestion {
@@ -340,10 +312,13 @@ fn emit_tuic_v5(
     }
 
     if let Some(hb) = cfg.heartbeat {
-        let secs = hb.whole_seconds();
-        if secs >= 0 {
-            entry.push_str(&format!("\n    heartbeat-interval: {secs}"));
+        let millis = hb.whole_milliseconds();
+        if millis < 0 || hb.subsec_nanoseconds() % 1_000_000 != 0 || millis > i128::from(i64::MAX) {
+            return Err(EmitError::NoEmitter(
+                "TUIC heartbeat requires non-negative integer milliseconds".into(),
+            ));
         }
+        entry.push_str(&format!("\n    heartbeat-interval: {millis}"));
     }
 
     if let Some(ds) = cfg.disable_sni {
@@ -655,6 +630,12 @@ fn push_tls(node: &Node, entry: &mut String) {
         }
         if let Some(skip) = tls.skip_cert_verify {
             entry.push_str(&format!("\n    skip-cert-verify: {skip}"));
+        }
+        if let Some(pin) = tls.certificate_pins.first() {
+            entry.push_str(&format!(
+                "\n    fingerprint: {}",
+                yaml_dq(pin.as_str().trim_start_matches("mihomoFingerprintSHA256:"))
+            ));
         }
         if !tls.alpn.is_empty() {
             let alpn: Vec<String> = tls.alpn.iter().map(|a| yaml_dq(a)).collect();

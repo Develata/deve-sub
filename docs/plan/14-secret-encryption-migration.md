@@ -24,10 +24,45 @@ Migration 0015 adds `_encrypted` columns and drops the corresponding
 plaintext columns in one step. No dual-write window, no backfill CLI, no
 deferred cleanup migration.
 
-This is safe because no tagged release has been published — no production
-database holds data that needs backfilling. A pre-release database that
-still has plaintext columns is disposable; rollback is by restoring the
-pre-migration backup (constraint #13).
+The original pre-release assumption does not authorize discarding user data.
+Explicit migration and archive restore must reject a pre-0015 database with
+rows in sources, nodes, source items or source bindings before executing its
+DROP statements. Empty sensitive tables (including a users-only old database)
+may advance. Populated legacy data requires a separate reviewed conversion.
+
+### Explicit upgrade safety boundary (M11 / BACKUP-004)
+
+Management commands may initialize a truly empty database but never implicitly
+upgrade an existing schema. They take the same sidecar lock as serve/migrate
+and require explicit `migrate` when history or payload readiness is behind.
+
+The explicit upgrade validates the complete migration-history prefix, existing
+key binding and supported legacy data before schema mutation. Explicit key
+paths are always loaded strictly. Unbound databases containing pre-existing
+ciphertext or HMAC token/session/recovery state require separate original-key verification; supplying any new key
+does not prove ownership of old secrets.
+
+Before upgrading an existing database, persist a private consistent rollback
+snapshot, the matching loaded original key bytes (when needed), and a manifest
+binding the snapshot hash, schema and key fingerprint. The directory is 0700
+and files 0600 on Unix. These rollback snapshots may contain old plaintext and
+are separate from normal encrypted backup archives. `--rollback-dir` chooses
+the parent for a new unique directory; existing backups are never overwritten.
+
+Apply forward schema and keyed payload conversion only to a sibling staging
+copy. Verify schema, cache, key binding, integrity, foreign keys and original
+table counts before checkpoint/close/fsync and atomic replacement. Failure
+before replacement keeps the original live database and durable rollback
+pair. Backup restore applies the same legacy-data preflight before advancing
+its already isolated staging database. No key generation or historic pin
+guessing belongs to this operation.
+
+The first-binding gate also covers encrypted probe counter snapshots even when
+probe authentication is empty. Serve applies it before key generation. The
+shared process-lock implementation resolves database symlink aliases to one
+target sidecar; management connections are created only after lock acquisition.
+Already-current schema and authenticated cache are a read-only no-op, so normal
+startup retries do not create repeated rollback snapshots.
 
 ```sql
 -- sources: subscription URL and custom headers

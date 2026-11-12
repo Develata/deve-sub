@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::Serialize;
 
-use crate::commands::{ensure_db_dir, open_db};
+use crate::commands::ensure_db_dir;
 
 /// Node management command container.
 #[derive(Args)]
@@ -105,8 +105,7 @@ pub async fn node_import(args: NodeImportArgs) -> Result<()> {
     ensure_db_dir(&args.db_path)?;
     ensure_db_dir(&args.key_path)?;
 
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let master_key = Arc::new(
         deve_sub_security::MasterKey::load(std::path::Path::new(&args.key_path))
@@ -178,8 +177,7 @@ pub async fn node_list(args: NodeListArgs) -> Result<()> {
     ensure_db_dir(&args.db_path)?;
     ensure_db_dir(&args.key_path)?;
 
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let master_key = Arc::new(
         deve_sub_security::MasterKey::load(std::path::Path::new(&args.key_path))
@@ -245,7 +243,7 @@ fn print_table(entries: &[deve_sub_domain::NodePoolEntry]) {
 }
 
 fn print_uris(entries: &[deve_sub_domain::NodePoolEntry]) -> Result<()> {
-    for e in entries {
+    for e in entries.iter().filter(|entry| !entry.security_quarantined) {
         match deve_sub_emitter::emit_uri(&e.node) {
             Ok(uri) => println!("{uri}"),
             Err(deve_sub_emitter::EmitError::NoEmitter(proto)) => {

@@ -17,6 +17,8 @@ pub(crate) const REQUIRED_JOBS: &[&str] = &[
     "resource-soak",
     "supply-chain",
     "browser-e2e",
+    "normal-acceptance",
+    "normal-gate",
     "docker",
     "multiarch",
 ];

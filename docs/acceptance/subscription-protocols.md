@@ -1,5 +1,43 @@
 # Subscription protocol acceptance
 
+## Focused native-field and encrypted-cache repair
+
+The CA01–CA06 and TUIC fixtures in
+[`protocol_audit_regressions.rs`](../../crates/deve-sub-emitter/tests/protocol_audit_regressions.rs)
+bind to OUT-001/OUT-003 native generation, with retained protocol roundtrips.
+They assert bare IPv6 fields, gRPC service names, numeric YAML text, pin trust
+policies, plugin option preservation, exact bandwidth and heartbeat units.
+Unsupported conversion assertions are separate from positive field assertions.
+[`ipv6_probes.rs`](../../crates/deve-sub-adapters/tests/ipv6_probes.rs) exercises
+GeoIP host inputs and controlled dual-stack probe peers. Actual client-core
+loads and local dial evidence remain separate from these unit tests.
+
+Encrypted cache storage and BACKUP-001 through BACKUP-004 are exercised by
+[`generation_cache_encryption.rs`](../../crates/deve-sub-storage-sqlite/tests/generation_cache_encryption.rs)
+and [`backup_restore/generation_cache.rs`](../../apps/cli/tests/backup_restore/generation_cache.rs).
+These cover migration, cache hits, last-good retention, wrong keys, tampering,
+archive confidentiality and staging recovery. They do not prove that old
+generated output has current protocol semantics.
+
+The earlier unpublished v6 candidate's retained cache was blocked because it
+could bypass new pin/plugin/rate checks. The new v7/0031 slice keeps historical
+rows unqualified, independently of encryption; only current producer stores
+qualify. `generation_cache_encryption/semantics.rs` covers encrypted history,
+non-promotion, sorting/retention masking and withdrawal. Application generation
+safety tests cover regeneration and last-good delivery. This is a new port,
+not recovery of the missing final candidate.
+
+ShadowTLS explicit invalid/conflicting wrappers now remain Unsupported;
+`shadowtls_fail_closed.rs` covers password, plugin-slot and TLS policy guards,
+strict generated YAML and complete canonical round trips. Native core loads
+remain separate from these Rust assertions.
+
+NODE-016 uses the preserved round4 immediate-cancellation implementation and
+`apps/server/tests/probes/cancellation.rs`; its earlier silent-UDP deadline-only
+proof is superseded. A combined-source server gate is still required.
+Full acceptance remains NOT_READY; the separate original 1,954-row inventory
+and native-platform gaps cannot be replaced by the 11-lane regression gate.
+
 ## Input provenance and native template behavior
 
 Work starts from main `aa6ecea37cb47e0ccecc204122aede45013a30e8` on
@@ -37,7 +75,9 @@ routing remains Mihomo-only; other targets use V3 proxy-only templates.
 
 `G` means the fixture passes real import, encrypted SQLite storage, generation,
 HTTP delivery and independent field assertions. `X` means strict rejection,
-reported mixed lenient exclusion and failed unsupported-only delivery.
+reported mixed lenient exclusion and rejection of unsupported-only subscriptions
+before token creation. Existing subscriptions that later lose all compatible
+nodes are covered separately by the last-good delivery policy.
 The matrix is explicit fixture data compared with the implementation registry;
 the VLESS family registry is distinguished from its Reality-specific fixture.
 
@@ -54,11 +94,16 @@ the VLESS family registry is distinguished from its Reality-specific fixture.
 | AnyTLS | G | G | X | X | X | G | G |
 | Snell v4 | G | G | X | X | X | G | G |
 | ShadowTLS v3 + SS | G | G | X | X | X | X | G |
+| SOCKS5, unspecified destination DNS | G | G | G | G | X | G | G |
+| HTTPS forward proxy | G | G | G | G | X | G | G |
 
-**77 cells: 55 generated, 22 rejected.** Fields come from independently authored
+**91 cells: 67 generated, 24 rejected.** Fields come from independently authored
 [fixtures](../../tests/fixtures/subscription-acceptance/protocols.json), not from
 the emitter under test. Public deterministic test keys and fake credentials are
 synthetic. G alone is not a GUI-client or live-connectivity claim.
+X describes this implementation's tested rejection, not a universal claim that
+the target format cannot support the protocol. In particular, Shadowrocket
+forward-proxy output still requires a verified format mapping and client test.
 
 V2Ray rejects Reality without downgrading security; Xray retains it even when
 TCP transport is implicit. The complete ShadowTLS subscription URI is rejected
@@ -81,8 +126,8 @@ Additional regressions cover xhttp exclusions, Snell v3/Restls filtering,
 Snell TLS and v6, current IPv6 WireGuard import, default routing, implicit TCP
 security, wrapper tag collisions, unsupported inner TLS, malformed/empty/partial
 input, unknown protocols, exact exclusion reasons, duplicate imports, cache
-notices, ETags and conditional GET. The source-provider test fetches two exact
-loopback-only URLs (URI list and ShadowTLS JSON), reconciles snapshots and
+notices, ETags and conditional GET. The source-provider test fetches three exact
+loopback-only URLs (URI list, ShadowTLS JSON and forward-proxy Clash YAML), reconciles snapshots and
 storage, then downloads the subscription over actual loopback HTTP. Ephemeral
 servers have bounded waits and joined shutdown. This proves subscription
 transport, not proxy traffic. External proxy-provider YAML is distinct from
@@ -92,18 +137,20 @@ this source fetch path and from existing rule-provider validation.
 
 The explicit installer verifies publisher SHA-256 digests and installs
 [Mihomo 1.19.30](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.30),
-[sing-box 1.14.3](https://github.com/SagerNet/sing-box/releases/tag/v1.14.3), and
-[Xray 26.3.27](https://github.com/XTLS/Xray-core/releases/tag/v26.3.27).
+[sing-box 1.14.3](https://github.com/SagerNet/sing-box/releases/tag/v1.14.3),
+[Xray 26.3.27](https://github.com/XTLS/Xray-core/releases/tag/v26.3.27), and
+[V2Ray 5.53.0](https://github.com/v2fly/v2ray-core/releases/tag/v5.53.0).
 The updated baselines support AnyTLS and Snell; the former known-rejection tests
 have been replaced by positive checks of actual delivered bytes.
 
 | Core | Baseline fixtures | Additional delivered cases |
 |---|---|---|
-| Mihomo 1.19.30 | 10 | Snell TLS; mixed set; uploaded DNS template with all 10 compatible nodes |
-| sing-box 1.14.3 | 10 | Snell TLS, Snell v6, IPv6 WireGuard endpoint, implicit-TCP Reality; mixed set |
-| Xray 26.3.27 | 5 | Implicit-TCP Reality; mixed set |
+| Mihomo 1.19.30 | 12 | Snell TLS; mixed set; uploaded DNS template with all 12 compatible nodes |
+| sing-box 1.14.3 | 12 | Snell TLS, Snell v6, IPv6 WireGuard endpoint, implicit-TCP Reality; mixed set |
+| Xray 26.3.27 | 7 | Implicit-TCP Reality; mixed set |
+| V2Ray 5.53.0 | 5 | Mixed set |
 
-That is **31 individual configurations, three mixed sets and one full routing
+That is **42 individual configurations, four mixed sets and one full routing
 configuration**, plus invalid-protocol controls. Validators assert exact versions,
 use private temporary directories and enforce 10-second deadlines plus a
 2-second kill grace. A tiny self-authored PRIVATE/CN GeoSite protobuf allows
@@ -125,3 +172,34 @@ Ordinary deterministic tests neither install nor execute external cores. The
 compatibility CI job explicitly installs pinned tools and runs the ignored
 server and existing emitter validator suites. Configuration acceptance does not
 establish DNS answers, live proxy connectivity, GUI behavior or performance.
+
+## Normal forward-proxy and selection follow-up
+
+Forward proxies retain their name, endpoint, authentication shape, TLS state
+and explicit SOCKS destination DNS intent. `http`/`https` are HTTP CONNECT
+proxies, not NaiveProxy. `socks5h` requests remote destination resolution; it
+does not introduce a separate wire protocol. Native targets without a verified
+per-node DNS representation reject an explicit local/remote policy. Unknown
+fields remain encrypted Unsupported entries with a reason and cannot become
+usable through an enabled override. Existing raw entries require reimport to
+gain a typed representation.
+Ambiguous SNI aliases and enabled uTLS without an explicit fingerprint also
+remain Unsupported rather than losing an authored security setting.
+
+Subscription saves preview the exact template/profile/selector before issuing
+a token. The Web exposes template inheritance, dynamic filters and fixed IDs.
+Inheritance retains the active or pinned template's selector. Empty or wholly
+incompatible selections fail before persistence. Cache v6 invalidates v5 output
+because the forward-proxy and inheritance semantics changed; there is no database
+schema change.
+Older binaries do not understand the new typed forward-proxy payloads or
+inheritance selector. Restoring a pre-change backup is required for a rollback
+that includes those records; unchanged SQL schema is not downgrade compatibility.
+
+`tests/e2e/normal` starts blank native instances and creates administrators,
+nodes, templates and subscriptions through visible controls. It separately
+checks copied delivery, exact node sets, reload/restart persistence, all four
+themes in both languages and two viewport widths, computed colors and contrast,
+and screenshots. Its evidence is distinct from API-seeded functional regression.
+Run with the candidate binary and matching Web assets; configure
+`DEVE_SUB_NORMAL_OUTPUT` outside the source tree to retain evidence.

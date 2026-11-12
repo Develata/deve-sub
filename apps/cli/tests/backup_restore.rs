@@ -15,6 +15,9 @@ use serde::Deserialize;
 
 const BIN: &str = env!("CARGO_BIN_EXE_deve-sub");
 
+#[path = "backup_restore/generation_cache.rs"]
+mod generation_cache;
+
 #[derive(Debug, Deserialize)]
 struct BackupManifest {
     version: u32,

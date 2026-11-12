@@ -35,7 +35,11 @@ ShadowsocksConfig, VMessConfig, TrojanConfig
 WireGuardConfig, AnyTlsConfig, SnellConfig, ShadowTlsConfig
 ```
 
-Non-P0 or unknown protocols not covered by M9 use `UnsupportedNode`.
+SOCKS5 and HTTP CONNECT additionally use `Socks5Config` and `HttpProxyConfig`.
+`Socks5Config.dns_resolution` is `unspecified | local | remote`; HTTPS retains
+`ProtocolKind::Http` and enabled `Node.tls`. `HttpProxyConfig` preserves optional
+CONNECT path and ordered header values. Neither variant aliases NaiveProxy.
+Remaining unimplemented or unknown protocols use `UnsupportedNode`.
 
 ### UnsupportedNode
 

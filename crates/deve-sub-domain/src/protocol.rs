@@ -6,6 +6,7 @@
 //! `Unsupported` variant, which preserves raw data without claiming support.
 //! See ADR-0003.
 
+use crate::{HttpProxyConfig, Socks5Config};
 use serde::{Deserialize, Serialize};
 
 use crate::protocol_config::{
@@ -36,10 +37,10 @@ pub enum ProtocolKind {
     TuicV5,
     /// NaiveProxy.
     NaiveProxy,
-    // --- Non-P0: stored as ProtocolConfig::Unsupported until typed config lands. ---
-    /// SOCKS5 proxy. Non-P0.
+    // --- Non-P0: only variants with an implemented typed config can be emitted. ---
+    /// SOCKS5 proxy; destination DNS policy is part of its typed configuration.
     Socks5,
-    /// HTTP/HTTPS proxy. Non-P0.
+    /// HTTP CONNECT proxy; HTTPS uses enabled node TLS.
     Http,
     /// Hysteria v1. Non-P0.
     HysteriaV1,
@@ -133,6 +134,10 @@ impl ProtocolKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum ProtocolConfig {
+    /// Ordinary SOCKS5, including explicit destination DNS intent.
+    Socks5(Socks5Config),
+    /// Ordinary HTTP CONNECT, distinct from NaiveProxy.
+    Http(HttpProxyConfig),
     /// VLESS Reality configuration. P0 scopes VLESS to Reality only.
     VlessReality(VlessRealityConfig),
     /// Hysteria2 configuration.

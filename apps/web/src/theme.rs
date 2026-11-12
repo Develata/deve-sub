@@ -149,7 +149,7 @@ pub fn apply_custom_accent(color: &str) {
             let _ = style.set_property("--color-accent", color);
             let hover = format!("color-mix(in srgb, {color} 80%, white)");
             let _ = style.set_property("--color-accent-hover", &hover);
-            let soft = format!("color-mix(in srgb, {color} 15%, white)");
+            let soft = format!("color-mix(in srgb, {color} 15%, var(--color-surface))");
             let _ = style.set_property("--color-accent-soft", &soft);
         }
     }

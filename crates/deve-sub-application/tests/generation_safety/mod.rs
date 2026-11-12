@@ -5,14 +5,14 @@ use deve_sub_application::template::{
     TemplateAppError, UpdateTemplateParams, preview, update_template,
 };
 use deve_sub_domain::{
-    GenerationCacheEntry, GenerationCacheRepository, NodeOverrideRepository, NodeSelector,
-    PoolMetaRepository,
+    GenerationCacheEntry, NodeOverrideRepository, NodeSelector, PoolMetaRepository,
 };
 use deve_sub_kernel::{GenerationCacheId, NodeId};
 use serde_json::{Value, json};
 
 mod generated_yaml;
 mod placeholder_normalization;
+mod security_recovery;
 mod source_mutation;
 mod withdrawal_groups;
 
@@ -32,7 +32,7 @@ async fn run(
     let templates = SqliteTemplateRepository::new(db.pool.clone());
     let versions = SqliteTemplateVersionRepository::new(db.pool.clone());
     let nodes = SqliteNodePoolRepository::new_with_key(db.pool.clone(), db.master_key.clone());
-    let cache = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache = SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
     let revision = SqlitePoolMetaRepository::new(db.pool.clone());
     match surface {
         "generate" => generate(&templates, &versions, &nodes, &cache, &revision, request).await,
@@ -120,7 +120,7 @@ async fn gen006_empty_selection_and_resolved_group_preserve_scope() {
         );
         assert!(
             get_active_generation(
-                &SqliteGenerationCacheRepository::new(db.pool.clone()),
+                &SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key)),
                 db.template_id,
                 "mihomo"
             )
@@ -159,7 +159,7 @@ async fn gen015_mihomo_unsupported_groups_never_replace_last_good() {
             }
         }
         let active = get_active_generation(
-            &SqliteGenerationCacheRepository::new(db.pool.clone()),
+            &SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key)),
             db.template_id,
             "mihomo",
         )
@@ -229,11 +229,22 @@ async fn seed_legacy_cache(db: &TestDb, semantics: Option<&str>) {
         is_active: false,
     };
     entry.cache_key = legacy_key(&entry, semantics);
-    let repo = SqliteGenerationCacheRepository::new(db.pool.clone());
-    repo.store(&entry).await.expect("legacy cache");
-    repo.activate(db.template_id, "mihomo", entry.id)
-        .await
-        .expect("legacy active");
+    // Historical rows predate the producer guard. Seed real, row-bound
+    // ciphertext with the migration's default unqualified state.
+    let content = deve_sub_security::envelope::seal(
+        db.master_key.as_bytes(),
+        format!(
+            "generation_cache.content\0{}\0{}",
+            entry.id, entry.cache_key
+        )
+        .as_bytes(),
+        entry.content.as_bytes(),
+    )
+    .expect("historical envelope");
+    sqlx::query("INSERT INTO generation_cache (id, template_id, template_version, profile, mode, selection_mode, selection_payload, pool_revision, cache_key, content_encrypted, content_legacy, is_active) VALUES (?, ?, 1, 'mihomo', 'lenient', 'dynamic', ?, ?, ?, ?, '', 1)")
+        .bind(entry.id.to_string()).bind(db.template_id.to_string()).bind(&entry.selection_payload)
+        .bind(entry.pool_revision as i64).bind(&entry.cache_key).bind(content)
+        .execute(&db.pool).await.expect("historical cache");
 }
 
 #[tokio::test]
@@ -282,7 +293,7 @@ async fn gen015_legacy_active_cache_is_not_exposed_as_valid_output() {
     legacy_cache(&db).await;
     assert!(
         get_active_generation(
-            &SqliteGenerationCacheRepository::new(db.pool.clone()),
+            &SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key)),
             db.template_id,
             "mihomo"
         )

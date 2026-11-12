@@ -390,5 +390,72 @@
       "/config/ShadowTls/inner_protocol": "Shadowsocks",
       "/config/ShadowTls/inner_config/Shadowsocks/method": "aes-256-gcm"
     }
+  },
+  {
+    "name": "acceptance-socks5",
+    "protocol": "Socks5",
+    "source_type": "mihomo_yaml",
+    "input": "{\"proxies\": [{\"name\": \"acceptance-socks5\", \"type\": \"socks5\", \"server\": \"proxy.example\", \"port\": 1080, \"username\": \"test-user\", \"password\": \"TEST_PASSWORD\"}]}",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "xray",
+      "v2ray",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "Socks5",
+      "/display_name": "acceptance-socks5",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "proxy.example"
+      },
+      "/endpoint/port": 1080,
+      "/authentication": {
+        "type": "user_password",
+        "data": {
+          "username": "test-user",
+          "password": "TEST_PASSWORD"
+        }
+      },
+      "/tls": null,
+      "/config/Socks5/dns_resolution": "unspecified"
+    }
+  },
+  {
+    "name": "acceptance-https",
+    "protocol": "Http",
+    "source_type": "mihomo_yaml",
+    "input": "{\"proxies\": [{\"name\": \"acceptance-https\", \"type\": \"http\", \"server\": \"proxy.example\", \"port\": 8443, \"username\": \"test-user\", \"password\": \"TEST_PASSWORD\", \"tls\": true, \"sni\": \"cert.example\", \"skip-cert-verify\": false}]}",
+    "profiles": [
+      "mihomo",
+      "sing-box",
+      "xray",
+      "v2ray",
+      "uri_list",
+      "json"
+    ],
+    "fields": {
+      "/protocol": "Http",
+      "/display_name": "acceptance-https",
+      "/endpoint/host": {
+        "type": "domain",
+        "value": "proxy.example"
+      },
+      "/endpoint/port": 8443,
+      "/authentication": {
+        "type": "user_password",
+        "data": {
+          "username": "test-user",
+          "password": "TEST_PASSWORD"
+        }
+      },
+      "/tls/enabled": true,
+      "/tls/server_name": "cert.example",
+      "/tls/skip_cert_verify": false,
+      "/tls/alpn": [],
+      "/config/Http/headers": {}
+    }
   }
 ]

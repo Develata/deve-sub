@@ -3863,6 +3863,16 @@
               }
             }
           },
+          "422": {
+            "description": "Template, profile or node selection cannot generate output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal error",
             "content": {
@@ -4041,6 +4051,16 @@
           },
           "409": {
             "description": "Slug already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Template, profile or node selection cannot generate output",
             "content": {
               "application/json": {
                 "schema": {
@@ -7032,7 +7052,7 @@
             "description": "Human-readable subscription name."
           },
           "node_selection": {
-            "description": "Node selection configuration as a JSON object matching the V3\n`nodeSelector` schema (`mode`, `filters`, `nodeIds`, `nodeRevision`)."
+            "description": "Node selection configuration as a JSON object matching the V3\n`nodeSelector` schema (`mode`, `filters`, `nodeIds`, `nodeRevision`).\nModes: `inherit_template`, `dynamic`, `fixed`. Inheritance has no\nsubscription filters or pinned node IDs."
           },
           "profile": {
             "type": "string",
@@ -7630,11 +7650,49 @@
               "$ref": "#/components/schemas/ImportOutcomeDto"
             },
             "description": "Per-entry outcomes in input order. Blank and comment-only URI lines\nare omitted; container formats report their extracted nodes."
+          },
+          "unsupported": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Raw entries retained without usable protocol support.",
+            "minimum": 0
           }
         }
       },
       "ImportOutcomeDto": {
         "oneOf": [
+          {
+            "type": "object",
+            "description": "Retained raw entry; not enabled or counted as a usable new node.",
+            "required": [
+              "data",
+              "status"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "description": "Retained raw entry; not enabled or counted as a usable new node.",
+                "required": [
+                  "id",
+                  "reason"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "unsupported"
+                ]
+              }
+            }
+          },
           {
             "type": "object",
             "description": "A new node was inserted; `data` is the node ULID.",
@@ -8134,6 +8192,61 @@
           }
         }
       },
+      "NodeConnectionDto": {
+        "type": "object",
+        "description": "Connection semantics without authentication secrets or raw input.",
+        "required": [
+          "authentication",
+          "alpn",
+          "certificate_pin_count"
+        ],
+        "properties": {
+          "alpn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ordered TLS application protocol preferences."
+          },
+          "authentication": {
+            "type": "string",
+            "description": "Authentication shape: none, password, uuid, user_password, uuid_password."
+          },
+          "certificate_pin_count": {
+            "type": "integer",
+            "description": "Number of configured certificate pins; pin material is not exposed here.",
+            "minimum": 0
+          },
+          "destination_dns": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SOCKS destination DNS: unspecified, local or remote."
+          },
+          "server_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "TLS server name used for certificate verification and SNI."
+          },
+          "skip_cert_verify": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Certificate verification remains three-state."
+          },
+          "tls_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Absent, explicitly disabled, or enabled TLS."
+          }
+        }
+      },
       "NodeDto": {
         "type": "object",
         "description": "A node in the unified pool, as returned by list/get endpoints.\n\nPool metadata (`missing_from_source`, `is_active`, `revision`) is\nincluded alongside the canonical node fields. Sensitive fields\n(raw URI with embedded credentials) are never serialized.",
@@ -8160,6 +8273,10 @@
               "type": "string"
             },
             "description": "Ordered node IDs forming this node's proxy chain. Empty means direct\nconnection (no chain). See NODE-017."
+          },
+          "connection": {
+            "$ref": "#/components/schemas/NodeConnectionDto",
+            "description": "Non-secret connection metadata for inspection."
           },
           "created_at": {
             "type": "string",
@@ -8216,6 +8333,10 @@
             "description": "Optimistic-concurrency revision counter.",
             "minimum": 0
           },
+          "security_quarantined": {
+            "type": "boolean",
+            "description": "An explicitly quarantined node or chain awaits original-input recovery."
+          },
           "source_label": {
             "type": "string",
             "description": "Source label (the source name, or `\"manual\"` for pasted nodes)."
@@ -8226,6 +8347,13 @@
               "$ref": "#/components/schemas/TagDto"
             },
             "description": "Tags assigned to this node."
+          },
+          "unsupported_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why a retained raw entry cannot be selected or emitted."
           }
         }
       },

@@ -10,6 +10,7 @@
 // and served from `apps/web/dist/`.
 
 mod api;
+mod branding;
 mod i18n;
 mod pages;
 mod theme;
@@ -62,6 +63,7 @@ const NAV_ITEMS: [(Page, &str); 8] = [
 ];
 
 fn app() -> Element {
+    let branding = branding::use_branding();
     let mut auth_state = use_signal(|| AuthState::Checking);
     let mut lang = use_context_provider(|| Signal::new(theme::read_language()));
     let mut current_theme = use_context_provider(|| Signal::new(theme::read_theme()));
@@ -101,10 +103,10 @@ fn app() -> Element {
 
     let view = match *auth_state.read() {
         AuthState::Checking => rsx! {
-            div { class: "flex min-h-screen items-center justify-center bg-stone-50 dark:bg-stone-950",
+            div { class: "flex min-h-screen items-center justify-center bg-canvas",
                 div { class: "flex flex-col items-center gap-3",
-                    div { class: "h-8 w-8 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-stone-700 dark:border-t-amber-500" }
-                    p { class: "text-sm text-stone-500 dark:text-stone-400", {t(l, "common.loading")} }
+                    div { class: "h-8 w-8 animate-spin rounded-full border-2 border-line border-t-accent" }
+                    p { class: "text-sm text-muted", {t(l, "common.loading")} }
                 }
             }
         },
@@ -120,13 +122,13 @@ fn app() -> Element {
         },
         AuthState::Authenticated => {
             let sidebar_class = if *mobile_menu.read() {
-                "fixed z-40 flex w-56 flex-col border-r border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900"
+                "fixed z-40 flex w-56 flex-col border-r border-line-soft bg-surface  "
             } else {
-                "hidden md:flex w-56 flex-col border-r border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900"
+                "hidden md:flex w-56 flex-col border-r border-line-soft bg-surface  "
             };
 
             rsx! {
-                div { class: "flex min-h-screen bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100",
+                div { class: "flex min-h-screen bg-canvas text-foreground",
                     // Mobile overlay.
                     if *mobile_menu.read() {
                         div {
@@ -138,16 +140,16 @@ fn app() -> Element {
                     // Sidebar.
                     aside { class: "{sidebar_class}", style: "flex-shrink: 0;",
                         div { class: "flex h-16 items-center px-6",
-                            span { class: "text-lg font-bold text-amber-600 dark:text-amber-500", "Deve Sub" }
+                            span { class: "truncate text-lg font-bold text-accent-text", "{branding.read().display_name()}" }
                         }
                         nav { class: "flex-1 space-y-1 p-4",
                             for (page, label_key) in NAV_ITEMS {
                                 {
                                     let is_active = *current_page.read() == page;
                                     let class = if is_active {
-                                        "flex w-full items-center gap-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                                        "flex w-full items-center gap-3 rounded-md bg-accent-soft px-3 py-2 text-sm font-medium text-accent-text  "
                                     } else {
-                                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
+                                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted hover:bg-surface-muted  "
                                     };
                                     rsx! {
                                         button {
@@ -165,9 +167,9 @@ fn app() -> Element {
                             }
                         }
                         // Logout button.
-                        div { class: "border-t border-stone-200 p-4 dark:border-stone-800",
+                        div { class: "border-t border-line-soft p-4",
                             button {
-                                class: "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800",
+                                class: "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted hover:bg-surface-muted",
                                 tabindex: 0,
                                 onclick: move |_| {
                                     spawn(async move {
@@ -183,9 +185,9 @@ fn app() -> Element {
                     // Main content area.
                     div { class: "flex min-w-0 flex-1 flex-col",
                         header {
-                            class: "flex h-16 items-center justify-between border-b border-stone-200 bg-white px-4 dark:border-stone-800 dark:bg-stone-900",
+                            class: "flex h-16 items-center justify-between border-b border-line-soft bg-surface px-4",
                             button {
-                                class: "rounded-md p-2 text-stone-500 hover:bg-stone-100 md:hidden dark:text-stone-400 dark:hover:bg-stone-800",
+                                class: "rounded-md p-2 text-muted hover:bg-surface-muted md:hidden",
                                 aria_label: "Menu",
                                 onclick: move |_| {
                                     let v = *mobile_menu.read();
@@ -193,7 +195,7 @@ fn app() -> Element {
                                 },
                                 "☰"
                             }
-                            h1 { class: "text-sm font-semibold text-stone-400 dark:text-stone-500", {t(l, "app.title")} }
+                            h1 { class: "min-w-0 truncate text-sm font-semibold text-muted", "{branding.read().display_name()}" }
                             components::LanguageSwitcher {
                                 lang: lang,
                                 on_change: move |v: Language| {
@@ -234,6 +236,7 @@ fn app() -> Element {
         }
     };
     rsx! {
+        document::Title { "{branding.read().display_name()}" }
         // WHY: asset! registers the stylesheet with dx so production dist
         // includes the file; legacy resource links alone did not copy it.
         document::Stylesheet { href: asset!("/src/styles/tailwind.css") }
@@ -257,18 +260,18 @@ mod components {
             div { class: "flex items-center gap-1",
                 button {
                     class: if l == Language::Zh {
-                        "rounded-md px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20"
+                        "rounded-md px-2 py-1 text-xs font-medium text-accent-text bg-accent-soft  "
                     } else {
-                        "rounded-md px-2 py-1 text-xs font-medium text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
+                        "rounded-md px-2 py-1 text-xs font-medium text-muted hover:bg-surface-muted  "
                     },
                     onclick: move |_| props.on_change.call(Language::Zh),
                     "中文"
                 }
                 button {
                     class: if l == Language::En {
-                        "rounded-md px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20"
+                        "rounded-md px-2 py-1 text-xs font-medium text-accent-text bg-accent-soft  "
                     } else {
-                        "rounded-md px-2 py-1 text-xs font-medium text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
+                        "rounded-md px-2 py-1 text-xs font-medium text-muted hover:bg-surface-muted  "
                     },
                     onclick: move |_| props.on_change.call(Language::En),
                     "EN"

@@ -92,15 +92,17 @@ async fn acceptance_unimplemented_protocols_are_not_treated_as_supported() {
     let fixtures = cases();
     let supported_ids = import_cases(&app, &router, &cookie, &fixtures[2..3]).await;
     let mut unsupported_ids = BTreeSet::new();
-    for kind in ["socks5", "http", "hysteria", "ssh", "future-protocol"] {
+    for kind in ["hysteria", "ssh", "future-protocol"] {
         let input = format!(
             "proxies:\n  - {{name: unsupported-{kind}, type: {kind}, server: unused.example, port: 443}}\n"
         );
         let response = import(&router, &cookie, "mihomo_yaml", &input).await;
         assert_eq!(response.status(), StatusCode::OK);
         let result = body_to_json(response).await;
-        assert_eq!(result["new_nodes"], 1);
-        let id = result["outcomes"][0]["data"]
+        assert_eq!(result["new_nodes"], 0);
+        assert_eq!(result["unsupported"], 1);
+        assert_eq!(result["outcomes"][0]["status"], "unsupported");
+        let id = result["outcomes"][0]["data"]["id"]
             .as_str()
             .expect("stored unsupported ID")
             .to_owned();
@@ -113,9 +115,10 @@ async fn acceptance_unimplemented_protocols_are_not_treated_as_supported() {
         assert!(
             matches!(&nodes[0].node.config, deve_sub_domain::ProtocolConfig::Unsupported(config) if config.raw["type"] == kind)
         );
+        assert!(!nodes[0].is_active);
         unsupported_ids.insert(id);
     }
-    assert_eq!(unsupported_ids.len(), 5);
+    assert_eq!(unsupported_ids.len(), 3);
     let id = template(&router, &cookie, &v3(None)).await;
     for profile in PROFILES {
         let response = generate(&router, &cookie, &id, profile, "lenient").await;
@@ -123,17 +126,10 @@ async fn acceptance_unimplemented_protocols_are_not_treated_as_supported() {
         let report = body_to_json(response).await;
         assert_eq!(report["included_node_ids"], json!(supported_ids));
         let excluded = report["excluded"].as_array().expect("excluded");
-        assert_eq!(excluded.len(), 5);
-        assert_eq!(
-            excluded
-                .iter()
-                .map(|v| v["node_id"].as_str().expect("ID").to_owned())
-                .collect::<BTreeSet<_>>(),
-            unsupported_ids
+        assert!(
+            excluded.is_empty(),
+            "unsupported entries are inactive before selection"
         );
-        for node in excluded {
-            assert!(!node["reason"].as_str().expect("reason").is_empty());
-        }
         let token = subscription(&router, &cookie, &id, profile, None).await;
         let response = router
             .clone()

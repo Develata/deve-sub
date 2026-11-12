@@ -99,6 +99,14 @@ template/profile. Subscription edits/deletion release old protection on the
 next store. Storage owns this retention transaction; no new delivery operation
 or cross-repository application transaction is introduced.
 
+The SQLite cache adapter requires the existing master key and persists generated
+content only in a v2 envelope bound to the row ID/cache key. Decryption failure
+is a storage error, never a plaintext fallback. Schema 0029's explicit keyed
+backfill preserves cache identity and retention/fallback references; pending
+legacy payloads prevent serving or backup. Restore authenticates the staged
+cache before publication. See [storage migration policy](../plan/13-storage.md#encrypted-generation-cache-0029)
+for key requirements, rollback and historical plaintext limits.
+
 The resolved selector bounds all group membership, including explicit and quick
 groups, for both admin generation and delivery. Explicit out-of-selection nodes
 are reported as `outside_selection`. Empty resolved Mihomo groups and unsupported
@@ -363,3 +371,39 @@ Mutation modes are evaluated against current stored memberships atomically;
 Delivery never reads and rewrites sets to emulate add/remove. Domain graph
 validation uses the same protected snapshot as chain persistence. Invalid or
 missing references leave the whole batch unchanged.
+
+### Historical node security recovery (0030)
+
+`NodeSecurityPlan` is the explicit reviewed mapping boundary for original node
+identities. `SqliteNodePoolRepository::security_snapshot` returns persisted base
+fields before overrides. `apply_security_plan` atomically checks original key
+binding, pool revision and each old ID/revision/fingerprint, preserves references
+and user settings, records the batch and changes distribution eligibility plus
+the global withdrawal floor. Node identity fingerprints retain the existing
+43-character base64url HMAC format; map/artifact SHA256 and key fingerprints
+are 64-character hexadecimal strings. No display-name/endpoint inference or
+ordinary reimport is permitted. RestoreTLS requires the same old ID to already
+be quarantined; it authenticates base identity, changes only TLS ciphertext and
+identity revision/fingerprint, rejects collisions and verifies stored results.
+A verified replay authenticates repaired TLS against the prepared policy and
+recorded identity; quarantine replay proves unchanged recorded metadata only
+and cannot release the node.
+
+`migrate --security-map PATH --preview` parses exact hashed artifacts through
+the backend, verifies the same staged transaction as application, prints the
+exact blocked/chain-dependent IDs and global cache impact, then discards staging.
+Actual mapping application retains the original DB/key rollback pair before
+publishing staging. A populated schema prefix before 0030 needs an explicit
+review result, including empty actions if no affected ID was confirmed. Restore
+refuses to implicitly upgrade historical node snapshots without that review.
+Non-prefix or conflicting historical migration ledgers remain rejected.
+
+`NodePoolEntry.security_quarantined` and REST `NodeDto.security_quarantined`
+include transitive chain dependency. They are independent of override enabled
+state. Generation, compatibility and final emission use this eligibility.
+Required in-scope fixed/explicit references fail clearly in either generation
+mode; out-of-selector references cannot make an unrelated selection fail.
+Automatic groups retain eligible nodes. Native explicit required references
+observe the same rule; ordinary source-withdrawn group branches retain their
+existing REJECT behavior. Web renders server-projected state only. See
+[recovery plan](../plan/15-historical-node-security-recovery.md).

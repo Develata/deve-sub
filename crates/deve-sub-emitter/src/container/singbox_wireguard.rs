@@ -1,6 +1,6 @@
 //! WireGuard is an endpoint in sing-box 1.14, not a legacy outbound.
 use crate::error::EmitError;
-use deve_sub_domain::{Host, Node, ProtocolConfig};
+use deve_sub_domain::{Node, ProtocolConfig};
 use serde_json::{Value, json};
 
 pub(super) fn emit(node: &Node) -> Result<Value, EmitError> {
@@ -12,10 +12,7 @@ pub(super) fn emit(node: &Node) -> Result<Value, EmitError> {
             "sing-box WireGuard endpoint cannot preserve interface DNS".into(),
         ));
     }
-    let address = match &node.endpoint.host {
-        Host::Ipv6(ip) => ip.to_string(),
-        host => host.uri_host(),
-    };
+    let address = node.endpoint.host.address_host();
     let peers = cfg
         .peers
         .iter()

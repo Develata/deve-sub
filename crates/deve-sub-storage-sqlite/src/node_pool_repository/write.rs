@@ -50,7 +50,7 @@ pub(super) async fn insert_node(
          congestion_json, region, extras_json_encrypted, \
          imported_at, revision, status, missing_from_source, source_label, \
          identity_fingerprint) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', 0, ?, ?) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?) \
          ON CONFLICT DO NOTHING",
     )
     .bind(&node_id)
@@ -69,6 +69,13 @@ pub(super) async fn insert_node(
     .bind(&node.region.value)
     .bind(&extras_json_encrypted)
     .bind(imported_at)
+    .bind(
+        if matches!(node.config, deve_sub_domain::ProtocolConfig::Unsupported(_)) {
+            "unsupported"
+        } else {
+            "active"
+        },
+    )
     .bind(source_label)
     .bind(fingerprint)
     .execute(&mut **tx)

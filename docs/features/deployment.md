@@ -18,6 +18,20 @@ restore the previous unit/binary/Web before clearing it. An old process must
 pass readiness and version checks before automatic rollback removes backups.
 Docker upgrades replace the complete versioned image.
 
+Backup checks a snapshot's stored master-key binding before publishing its
+archive. Restore checks that binding and the recorded migration history before
+replacing the target database. Wrong required keys or inconsistent schema
+metadata stop the operation and preserve the previous archive or database.
+See the [backup and restore guide](../guides/backup-restore.md) for legacy
+archive limits and separate master-key backup requirements.
+
+Explicit migration now checks existing history, original-key binding and
+supported legacy data before changing schema. It writes a private rollback
+snapshot/key pair, upgrades a sibling staging copy and verifies it before
+replacement. Populated pre-0015 sensitive tables and unbound encrypted/HMAC
+state require separate reviewed recovery. Management commands initialize empty
+databases but require explicit migration for existing older schemas.
+
 Runtime rotation and audit retention/manual cleanup are documented in
 [日志管理](logging.md). Compose bounds its own runtime logs; database audit history
 defaults to 90 days in builds containing the M10 lifecycle extension (0 disables).

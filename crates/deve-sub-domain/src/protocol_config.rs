@@ -361,6 +361,38 @@ pub struct ShadowTlsConfig {
     pub inner_config: Box<crate::ProtocolConfig>,
 }
 
+impl ShadowTlsConfig {
+    /// V2/V3 authenticate the wrapper handshake and require a nonempty password.
+    #[must_use]
+    pub fn has_valid_password(&self) -> bool {
+        self.version == ShadowTlsVersion::V1
+            || self
+                .password
+                .as_ref()
+                .is_some_and(|password| !password.is_empty())
+    }
+
+    /// Whether serializing this wrapper would discard a separate inner obfs.
+    /// A Snell native projection duplicates the same wrapper metadata; it may
+    /// be collapsed only when the values agree exactly.
+    #[must_use]
+    pub fn has_conflicting_inner_obfuscation(&self, tls: Option<&crate::TlsConfig>) -> bool {
+        match self.inner_config.as_ref() {
+            crate::ProtocolConfig::Shadowsocks(inner) => {
+                inner.plugin.is_some() || inner.plugin_opts.is_some()
+            }
+            crate::ProtocolConfig::Snell(inner) => inner.obfs.as_ref().is_some_and(|obfs| {
+                obfs.mode != SnellObfsMode::ShadowTls
+                    || obfs.version != Some(self.version.as_u32())
+                    || obfs.password != self.password
+                    || obfs.host.as_deref() != tls.and_then(|t| t.server_name.as_deref())
+                    || !obfs.alpn.is_empty()
+            }),
+            _ => false,
+        }
+    }
+}
+
 /// ShadowTLS protocol version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ShadowTlsVersion {

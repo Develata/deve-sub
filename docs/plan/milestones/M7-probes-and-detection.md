@@ -154,7 +154,7 @@ ProbeSource {
   enabled: bool,
   last_sync_at: Option<Timestamp>,
   last_sync_status: Option<SyncStatus>,  // Ok | Failed(msg) | Stale
-  last_counter_snapshot: Option<EncryptedConfig>, // cumulative-counter state for Nezha/Komari delta computation
+  last_counter_snapshot: Option<EncryptedConfig>, // cumulative-counter state for Nezha/DStatus/Komari delta computation
   created_at, updated_at: Timestamp,
 }
 ```
@@ -173,7 +173,12 @@ exercises the shared panel HTTP client through the DStatus adapter.
 ```text
 Port trait: ProbeSourceAdapter
   async fn sync_traffic(&self, source: &ProbeSource)
-      -> Result<Vec<ProbeTrafficSample>, ProbeError>
+      -> Result<ProbeSyncResult, ProbeError>
+
+ProbeSyncResult {
+  samples: Vec<ProbeTrafficSample>,
+  new_counter_snapshot: Option<String>, // serialized state; encrypted by storage
+}
 
 ProbeTrafficSample {
   external_server_id: String,    // ID in the external panel
@@ -185,8 +190,9 @@ ProbeTrafficSample {
 
 Each adapter (Nezha, DStatus, Komari) implements this trait. The application
 `sync_probe_traffic` command calls the adapter, maps `external_server_id` to
-`subscription_id` via the probe source binding, and writes `TrafficRecord`
-rows with `source_kind = Probe`.
+`subscription_id` via the probe source binding, and atomically commits
+`TrafficRecord` rows with `source_kind = Probe` together with the encrypted
+counter snapshot under the source revision check.
 
 The three panels differ in auth, identifier, and traffic semantics. Each
 adapter normalizes these to the unified `ProbeTrafficSample` (upload/download
@@ -195,16 +201,20 @@ deltas in bytes):
 | Panel | Auth | Endpoint | Identifier | Raw fields | Semantics |
 |---|---|---|---|---|---|
 | Nezha | `Authorization: Bearer nzp_...` (PAT) | `GET /api/v1/server` | `id` (uint64) + `uuid` | `state.net_in_transfer` / `state.net_out_transfer` | Cumulative counters — adapter stores last counter and computes delta |
-| DStatus | None (anonymous public API) | `GET /api/allnode_status` | node ID string | `traffic_stats.used` / `traffic_stats.limit` | Billing-cycle used/limit quota — adapter returns current `used` as the delta (reset on billing cycle) |
+| DStatus | None (anonymous public API) | `GET /api/allnode_status` | node ID string | `traffic_stats.used` / `traffic_stats.limit` | Billing-cycle cumulative `used` — subtract the stored per-node baseline; first observation establishes a baseline without traffic; after a decrease use current `used` as the reset delta. `limit` is quota, not traffic |
 | Komari | None (guest, unless site is private) | `GET /api/records/load?uuid=...&load_type=network` | `uuid` (string) | `net_total_up` / `net_total_down` | Cumulative counters — same delta computation as Nezha |
 
-The adapter-local counter state (for Nezha/Komari cumulative models) is
-persisted in the `probe_sources` table as `last_counter_snapshot` (encrypted
-JSON). On sync, the adapter reads the snapshot, computes the delta, writes
-`TrafficRecord` rows, and updates the snapshot. Counter resets (panel
-restart, counter rollover) are detected: if the new counter is less than the
-snapshot, the adapter treats the new value as the full delta (no negative
-traffic).
+All three adapters receive the previous counter snapshot and return computed
+deltas plus a new snapshot. They do not write records or advance the baseline
+themselves. Application/storage `commit_sync` persists traffic records and
+`probe_sources.last_counter_snapshot` (encrypted JSON) atomically; revision
+conflicts cannot count the same interval twice. Counter resets (panel restart,
+billing-cycle reset or rollover) are detected per counter: if the new counter
+is less than its previous value, that current value is the reset delta.
+DStatus reports combined traffic as `upload = 0`, `download = used_delta`;
+it omits zero deltas and establishes a new node's baseline without billing
+historical usage. This behavior is covered by the DStatus adapter and atomic
+probe-sync tests; cumulative `used` must never be appended on every sync.
 
 `auth_config` stores the Nezha PAT token (DStatus/Komari need no token but
 the field remains for forward compatibility and private-site session tokens).

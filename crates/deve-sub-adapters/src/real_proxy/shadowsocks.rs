@@ -40,7 +40,7 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
     };
 
     let method = CipherKind::from_str(&method_str).map_err(|_| ErrorClass::Refused)?;
-    let svr_addr = ServerAddr::from((node.endpoint.host.uri_host(), node.endpoint.port));
+    let svr_addr = ServerAddr::from((node.endpoint.host.address_host(), node.endpoint.port));
     let svr_cfg = ServerConfig::new(svr_addr, password, method).map_err(|_| ErrorClass::Refused)?;
 
     let context = Context::new_shared(ServerType::Local);
@@ -69,9 +69,18 @@ mod tests {
 
     #[tokio::test]
     async fn shadowsocks_round_trip() {
+        round_trip_at("127.0.0.1:0").await;
+    }
+
+    #[tokio::test]
+    async fn shadowsocks_ipv6_round_trip() {
+        round_trip_at("[::1]:0").await;
+    }
+
+    async fn round_trip_at(bind_address: &str) {
         let http_target = LocalHttpTarget::start().await;
 
-        let probe_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        let probe_listener = tokio::net::TcpListener::bind(bind_address)
             .await
             .expect("bind");
         let ss_addr = probe_listener.local_addr().expect("addr");
@@ -127,7 +136,10 @@ mod tests {
                 plugin_opts: None,
             }),
             endpoint: Endpoint {
-                host: Host::Ipv4("127.0.0.1".parse().expect("ipv4")),
+                host: match addr.ip() {
+                    std::net::IpAddr::V4(ip) => Host::Ipv4(ip),
+                    std::net::IpAddr::V6(ip) => Host::Ipv6(ip),
+                },
                 port: addr.port(),
             },
             authentication: Authentication::Password {

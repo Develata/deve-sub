@@ -357,6 +357,7 @@ async fn resolve_context(
         .as_ref()
         .unwrap_or(&doc.spec.node_selector);
     let selection_mode = match selector.mode {
+        SelectionMode::InheritTemplate => "inherit_template",
         SelectionMode::Dynamic => "dynamic",
         SelectionMode::Fixed => "fixed",
     };
@@ -394,11 +395,24 @@ async fn run_pipeline(
 ) -> Result<GenerationResult, TemplateAppError> {
     let mut doc = parse_template_document(&version.spec_yaml)?;
 
-    if let Some(sel) = selection_override {
+    if let Some(sel) = selection_override.filter(|sel| sel.mode != SelectionMode::InheritTemplate) {
         doc.spec.node_selector = sel.clone();
     }
 
     let resolution = resolve_template(&doc, pool_repo).await?;
+    if resolution
+        .selection_missing
+        .iter()
+        .chain(
+            resolution
+                .groups
+                .iter()
+                .flat_map(|group| group.missing.iter()),
+        )
+        .any(|missing| missing.reason == deve_sub_domain::MissingReason::SecurityQuarantined)
+    {
+        return Err(TemplateAppError::InvalidInput("required node or chain is security_quarantined; recover its original input before distribution".into()));
+    }
 
     let mut all_ids = resolution.selected_node_ids;
     all_ids.sort_unstable();

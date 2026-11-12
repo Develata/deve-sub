@@ -92,6 +92,36 @@ cache keys alone.
 
 ## Runtime isolation and failure/recovery
 
+### Normal capability regression
+
+The normal regression suite consumes the same source-bound binary and Web
+artifacts. Its static lanes cover protocol input/output (four shards), API
+business/authentication, browser subscription/settings, themes (four shards),
+and the local SOCKS DNS handshake. At most four lanes run concurrently, each
+with one browser worker and no retries. Test-level sharding requires
+`fullyParallel`; tests still own independent processes, ports and databases.
+
+The reviewed `tests/acceptance/normal-ci.json` catalogue binds every automated
+case to exactly one lane. Discovery must match the complete catalogue before
+execution and each lane's assigned cases afterwards. Adding/removing a test
+requires updating this reviewed coverage projection. This is a static coverage
+inventory, not selective scheduling or an alternate business authority.
+
+The normal result gate runs with `always()` and requires successful producer
+and matrix job outcomes plus every expected case result from this source,
+workflow run and attempt. Missing/duplicate/unknown cases, missing shards,
+unexpected skips, expected-failure tests, retries, cancellation, timeout and
+nonzero execution exits fail. Evidence contains exact commands, timestamps,
+case outcomes, logs and screenshots; no database or keys are uploaded.
+
+This automated scope is distinct from complete device/deployment acceptance.
+Native GUI clients, real Android/iOS devices, authorized proxy connectivity,
+and remaining unimplemented catalogue combinations stay blocked or not-run.
+A browser mobile viewport is not an Android client. Full acceptance readiness
+must report those gaps separately; a green automated gate cannot promote them.
+The reviewed workflow has read-only repository access, no production secrets,
+no publishing steps and no additional scheduled trigger.
+
 Browser invocations own their ports, temporary databases/keys, identities,
 fixtures, child processes and logs. Setup and teardown use the same run-local
 configuration; partial setup failure stops the children already started.

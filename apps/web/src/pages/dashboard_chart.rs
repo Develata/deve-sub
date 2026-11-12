@@ -46,14 +46,14 @@ pub(super) fn traffic_chart(l: Language, points: &[TrafficHistoryPointDto]) -> E
 
     rsx! {
         figure { class: "mt-5", aria_label: t(l, "dashboard.history"),
-            figcaption { class: "flex flex-wrap items-center justify-between gap-3 text-sm text-stone-600 dark:text-stone-400",
+            figcaption { class: "flex flex-wrap items-center justify-between gap-3 text-sm text-muted",
                 span { "{start} – {end} · {unit}" }
                 div { class: "flex gap-4",
                     span { class: "inline-flex items-center gap-2", span { class: "traffic-swatch traffic-upload", aria_hidden: "true" } {t(l, "dashboard.upload")} }
                     span { class: "inline-flex items-center gap-2", span { class: "traffic-swatch traffic-download", aria_hidden: "true" } {t(l, "dashboard.download")} }
                 }
             }
-            p { id: "traffic-scroll-hint", class: "mt-3 text-xs text-stone-600 dark:text-stone-400 sm:hidden", {t(l, "dashboard.scroll_hint")} }
+            p { id: "traffic-scroll-hint", class: "mt-3 text-xs text-muted sm:hidden", {t(l, "dashboard.scroll_hint")} }
             div { class: "traffic-chart-scroll mt-3", tabindex: "0", role: "region",
                 aria_label: t(l, "dashboard.history"), aria_describedby: "traffic-scroll-hint",
                 svg { class: "traffic-chart", width: "100%", height: "{height}", view_box: "0 0 {width} {height}", "aria-hidden": "true",

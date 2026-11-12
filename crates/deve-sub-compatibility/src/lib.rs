@@ -17,6 +17,8 @@ use std::collections::HashSet;
 use deve_sub_domain::{GroupType, Node, ProtocolKind, SnellObfsMode, SnellVersion, TransportKind};
 use thiserror::Error;
 
+mod fidelity;
+mod forward_proxy;
 mod restrictions;
 
 /// Target output profile identifier.
@@ -114,6 +116,8 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
         ProfileKind::Mihomo => ProfileCapability {
             profile,
             supported_protocols: [
+                ProtocolKind::Socks5,
+                ProtocolKind::Http,
                 ProtocolKind::Vless,
                 ProtocolKind::VMess,
                 ProtocolKind::Trojan,
@@ -152,6 +156,8 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
         ProfileKind::SingBox => ProfileCapability {
             profile,
             supported_protocols: [
+                ProtocolKind::Socks5,
+                ProtocolKind::Http,
                 ProtocolKind::Vless,
                 ProtocolKind::VMess,
                 ProtocolKind::Trojan,
@@ -183,6 +189,8 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
         ProfileKind::Xray => ProfileCapability {
             profile,
             supported_protocols: [
+                ProtocolKind::Socks5,
+                ProtocolKind::Http,
                 ProtocolKind::Vless,
                 ProtocolKind::VMess,
                 ProtocolKind::Trojan,
@@ -209,6 +217,8 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
         ProfileKind::V2Ray => ProfileCapability {
             profile,
             supported_protocols: [
+                ProtocolKind::Socks5,
+                ProtocolKind::Http,
                 ProtocolKind::VMess,
                 ProtocolKind::Vless,
                 ProtocolKind::Trojan,
@@ -257,6 +267,8 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
         ProfileKind::UriList => ProfileCapability {
             profile,
             supported_protocols: [
+                ProtocolKind::Socks5,
+                ProtocolKind::Http,
                 ProtocolKind::Vless,
                 ProtocolKind::VMess,
                 ProtocolKind::Trojan,
@@ -292,6 +304,8 @@ pub fn capability_for(profile: ProfileKind) -> ProfileCapability {
             // canonical Node model verbatim via serde, so every protocol
             // and transport is accepted. No filtering, no exclusion.
             supported_protocols: [
+                ProtocolKind::Socks5,
+                ProtocolKind::Http,
                 ProtocolKind::Vless,
                 ProtocolKind::VMess,
                 ProtocolKind::Trojan,

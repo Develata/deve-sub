@@ -5,7 +5,9 @@ use super::{
     clash_normalization::{NODES, PROVIDERS, TOKENS},
     error::TemplateAppError,
 };
-use deve_sub_domain::{Node, NodeFilter, NodePoolRepository, ProtocolConfig, ProtocolKind};
+use deve_sub_domain::{
+    Node, NodeFilter, NodePoolRepository, NodeSelector, ProtocolConfig, ProtocolKind, SelectionMode,
+};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
@@ -14,6 +16,7 @@ pub(super) async fn materialize(
     nodes: &[(Node, i64)],
     original_names: &[String],
     pool: &dyn NodePoolRepository,
+    selector: &NodeSelector,
     warnings: &mut Vec<String>,
 ) -> Result<(), TemplateAppError> {
     let groups = config
@@ -83,7 +86,8 @@ pub(super) async fn materialize(
             }
         }
     }
-    let unavailable = unavailable_names(pool, &unresolved, &mut budget).await?;
+    let (unavailable, security_required) =
+        unavailable_names(pool, selector, &unresolved, &mut budget).await?;
     let mut automatic: Vec<&str> = nodes.iter().map(|(n, _)| n.display_name.as_str()).collect();
     automatic.sort_unstable();
     let groups = config
@@ -125,6 +129,11 @@ pub(super) async fn materialize(
                 member
             };
             if !types.contains_key(member) {
+                if security_required.contains(member) {
+                    return Err(clash::invalid(
+                        "required native node or chain is security_quarantined; recover its original input before distribution",
+                    ));
+                }
                 if unavailable.contains(member) {
                     warnings.push(format!(
                         "group '{name}': unavailable node '{member}' removed"
@@ -232,12 +241,14 @@ fn qualified_name(name: &str) -> Option<(&str, &str)> {
 
 async fn unavailable_names(
     pool: &dyn NodePoolRepository,
+    selector: &NodeSelector,
     wanted: &HashSet<String>,
     budget: &mut Budget,
-) -> Result<HashSet<String>, TemplateAppError> {
+) -> Result<(HashSet<String>, HashSet<String>), TemplateAppError> {
+    let mut security_required = HashSet::new();
     let mut names = HashSet::new();
     if wanted.is_empty() {
-        return Ok(names);
+        return Ok((names, security_required));
     }
     let mut qualified: HashMap<&str, Vec<(&str, &str)>> = HashMap::new();
     for name in wanted {
@@ -260,24 +271,35 @@ async fn unavailable_names(
         for entry in entries {
             budget.visit(entry.node.display_name.len())?;
             if entry.missing_from_source || !entry.is_active {
+                let in_scope = match selector.mode {
+                    SelectionMode::Fixed => selector.node_ids.contains(&entry.node.id),
+                    SelectionMode::Dynamic => {
+                        super::selection::matches_all_filters(&entry, &selector.filters)
+                    }
+                    SelectionMode::InheritTemplate => false,
+                };
+                let required = entry.security_quarantined && in_scope;
                 if wanted.contains(&entry.node.display_name) {
                     names.insert(entry.node.display_name.clone());
+                    if required {
+                        security_required.insert(entry.node.display_name.clone());
+                    }
                 }
                 if let Some(references) = qualified.get(entry.node.id.to_string().as_str()) {
                     for (base, name) in references {
                         budget.visit(name.len())?;
                         if *base == entry.node.display_name.trim() {
                             names.insert((*name).to_owned());
+                            if required {
+                                security_required.insert((*name).to_owned());
+                            }
                         }
                     }
                 }
             }
         }
-        if names.len() == wanted.len() {
-            break;
-        }
     }
-    Ok(names)
+    Ok((names, security_required))
 }
 
 // WHY: exclude-type matches Mihomo AdapterType.String(), not the UI protocol

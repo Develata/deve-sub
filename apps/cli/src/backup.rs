@@ -35,8 +35,11 @@ use crate::commands::{ensure_db_dir, load_config, open_db};
 use deve_sub_security::MasterKey;
 
 #[path = "backup_database.rs"]
-mod database;
-use database::{collect_row_counts, current_schema_version, integrity_check, vacuum_into};
+pub(crate) mod database;
+use database::{
+    cache_backup_fingerprint, collect_row_counts, current_schema_version, fsync_dir, fsync_file,
+    integrity_check, vacuum_into,
+};
 
 /// Backup format version. Increment when the archive layout changes
 /// incompatibly.
@@ -200,6 +203,8 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
     tracing::info!(db_path = %db_path, output = %args.output.display(), "starting backup");
 
     let pool = open_db(&db_path, 1).await?;
+    database::verify_key_binding(&pool, master_key_fingerprint.as_deref(), None).await?;
+    cache_backup_fingerprint(&pool, master_key_fingerprint.as_deref()).await?;
     let snapshot_dir = tempfile::tempdir().context("failed to create temp dir for snapshot")?;
     let snapshot_path = snapshot_dir.path().join("database.sqlite");
     vacuum_into(&pool, &snapshot_path).await?;
@@ -217,6 +222,9 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
         .await
         .context("failed to open backup snapshot")?;
     let schema_version = current_schema_version(&snapshot).await?;
+    database::verify_key_binding(&snapshot, master_key_fingerprint.as_deref(), None).await?;
+    let master_key_fingerprint =
+        cache_backup_fingerprint(&snapshot, master_key_fingerprint.as_deref()).await?;
     let row_counts = collect_row_counts(&snapshot).await?;
     let integrity = integrity_check(&snapshot).await?;
     snapshot.close().await;
@@ -298,6 +306,11 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
 pub async fn restore(args: RestoreArgs) -> Result<()> {
     let config = load_config(&args.config)?;
     let db_path = args.db_path.unwrap_or_else(|| config.database.path.clone());
+    // WHY: rename would replace the alias itself, changing the lock identity
+    // while this restore still owns the original target's resolved sidecar.
+    if fs::symlink_metadata(&db_path).is_ok_and(|m| m.file_type().is_symlink()) {
+        bail!("restore database must use its resolved regular path, not a file symlink");
+    }
 
     if !args.input.exists() {
         bail!("backup file not found: {}", args.input.display());
@@ -331,15 +344,23 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
     // loaded and match. A missing key cannot silently proceed — encrypted
     // columns would be unreadable, and the operator might not notice until
     // a runtime query fails.
-    let loaded_key = match args
-        .key_path
-        .as_deref()
-        .map(Path::new)
-        .or_else(|| Some(Path::new(&config.security.master_key_path)))
-    {
-        Some(p) if p.exists() => Some(MasterKey::load(p).context("failed to load master key")?),
-        _ => None,
+    let loaded_key = if let Some(path) = args.key_path.as_deref() {
+        Some(
+            MasterKey::load(Path::new(path))
+                .context("failed to load explicitly requested master key")?,
+        )
+    } else {
+        let path = Path::new(&config.security.master_key_path);
+        if path.exists() {
+            Some(MasterKey::load(path).context("failed to load master key")?)
+        } else {
+            None
+        }
     };
+    let loaded_fingerprint = loaded_key
+        .as_ref()
+        .map(MasterKey::fingerprint)
+        .transpose()?;
     match (&loaded_key, &manifest.master_key_fingerprint) {
         (Some(key), Some(backup_fp)) => {
             let actual_fp = key.fingerprint()?;
@@ -425,9 +446,27 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
 
     let pool = open_db(&staging_path.to_string_lossy(), 1).await?;
 
+    database::verify_archived_schema(&pool, manifest.schema_version).await?;
+    database::verify_key_binding(
+        &pool,
+        loaded_fingerprint.as_deref(),
+        manifest.master_key_fingerprint.as_deref(),
+    )
+    .await?;
+
     // WHY: the manifest describes the archived schema. Forward migrations
     // may legitimately backfill projection rows (0024); compare before them.
     verify_restore(&pool, &manifest).await?;
+
+    crate::migrate::preflight::verify(&pool, loaded_key.as_ref()).await?;
+
+    // Historical node recovery needs an explicit reviewed old-ID mapping.
+    // Restore cannot manufacture one or silently publish unreviewed identities.
+    if manifest.schema_version < 30 && crate::migrate::preflight::has_rows(&pool, "nodes").await? {
+        bail!(
+            "historical node snapshot requires a reviewed security map; migrate an isolated copy with --security-map before backup/restore"
+        );
+    }
 
     if manifest.schema_version < current_version {
         tracing::info!(
@@ -438,6 +477,25 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
         deve_sub_storage_sqlite::run_migrations(&pool).await?;
         tracing::info!("forward migrations applied to staged DB");
     }
+
+    let has_cache: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM generation_cache)")
+        .fetch_one(&pool)
+        .await?;
+    if has_cache {
+        let key = loaded_key.as_ref().context(
+            "restoring generation cache requires the existing master key; provide --key-path",
+        )?;
+        deve_sub_storage_sqlite::migrate_generation_cache(&pool, key).await?;
+    }
+    deve_sub_storage_sqlite::verify_generation_cache_encryption(&pool).await?;
+
+    deve_sub_storage_sqlite::verify_schema(&pool).await?;
+    database::verify_key_binding(
+        &pool,
+        loaded_fingerprint.as_deref(),
+        manifest.master_key_fingerprint.as_deref(),
+    )
+    .await?;
 
     let integrity = integrity_check(&pool).await?;
     if integrity != "ok" {
@@ -778,31 +836,6 @@ fn delete_wal_shm_sidecars(db_path: &Path) {
         let sidecar = format!("{}{suffix}", db_path.to_string_lossy());
         let _ = fs::remove_file(&sidecar);
     }
-}
-
-fn fsync_file(path: &Path) -> Result<()> {
-    let file = fs::File::open(path)
-        .with_context(|| format!("failed to open {} for fsync", path.display()))?;
-    file.sync_all()
-        .with_context(|| format!("failed to fsync {}", path.display()))?;
-    Ok(())
-}
-
-/// fsync the parent directory so a rename/unlink is durable across crashes.
-/// On non-Unix this is a no-op (POSIX directory fsync is the relevant case).
-fn fsync_dir(dir: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        let file = fs::File::open(dir)
-            .with_context(|| format!("failed to open dir {} for fsync", dir.display()))?;
-        file.sync_all()
-            .with_context(|| format!("failed to fsync dir {}", dir.display()))?;
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = dir;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

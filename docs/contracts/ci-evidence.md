@@ -61,3 +61,35 @@ Reports and logs use synthetic fixtures only. Failure browser traces may carry
 disposable test login/session metadata; never connect this harness to production
 state. Database files, master keys, persisted storageState and release secrets
 must not be uploaded with diagnostic artifacts.
+
+## Normal regression results
+
+`python3 scripts/ci/normal.py inventory|run|gate` owns the OS/browser result
+adapter for `plan/14-ci-verification.md`'s normal capability lanes. The static
+catalogue is `tests/acceptance/normal-ci.json`: 39 browser/API tests and one
+controlled DNS handshake, assigned once across 11 required lanes. The Rust
+inventory checks the complete lane set, execution command, build dependencies,
+validator installation and always-running gate. The final baseline also
+requires `normal-acceptance` and `normal-gate`.
+
+Each lane's `summary.json` records source identity, workflow run/attempt,
+command, binary digest, exit code, exact case IDs/statuses, timestamps and raw
+report digest. The aggregate verifies complete unique case coverage and the
+raw report, and requires GitHub success for both producers, the Rust gate and
+the normal matrix. Playwright expected failures, skips and retries never count
+as pass. Errors write a failing aggregate before nonzero exit. Missing evidence
+is failure, including if setup prevented a lane from writing its summary.
+These reports trust the reviewed test runner; they are not signed attestations.
+
+The scope is implemented automated regression, not every row in the broader
+manual acceptance catalogue. `external_scope` and
+`full_acceptance_readiness: NOT_ASSERTED` survive aggregation. There is no
+promotion of historical results, native device claims from browser viewports,
+or inference that unsupported/unimplemented combinations have passed.
+
+Sources reviewed for this implementation:
+[GitHub job matrices](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow),
+[artifact handoff](https://docs.github.com/en/actions/tutorials/store-and-share-data),
+[status expressions](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions),
+[SHA pinning](https://docs.github.com/en/actions/reference/security/secure-use),
+and [Playwright test-level sharding](https://playwright.dev/docs/test-sharding).

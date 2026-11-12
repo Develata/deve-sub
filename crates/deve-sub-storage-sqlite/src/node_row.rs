@@ -83,7 +83,7 @@ const CTX_OBFUSCATION: &[u8] = b"nodes.obfuscation_json";
 const CTX_EXTRAS: &[u8] = b"nodes.extras_json";
 
 /// Raw row from the `nodes` table plus a COALESCE for the source label.
-#[derive(sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub(crate) struct NodeRow {
     id: String,
     display_name: String,
@@ -105,6 +105,8 @@ pub(crate) struct NodeRow {
     revision: i64,
     status: String,
     missing_from_source: i64,
+    #[sqlx(default)]
+    security_quarantined: i64,
     created_at: String,
     source_label: Option<String>,
     override_id: Option<String>,
@@ -119,6 +121,20 @@ pub(crate) struct NodeRow {
 }
 
 impl NodeRow {
+    /// Read persisted base security fields without applying user overrides.
+    pub(crate) fn base_node(&self, key: &MasterKey) -> Result<Node, SourceError> {
+        let mut raw = self.clone();
+        raw.override_id = None;
+        raw.override_display_name = None;
+        raw.override_region = None;
+        raw.override_enabled = None;
+        raw.override_sni = None;
+        raw.override_skip_cert_verify = None;
+        raw.override_fingerprint = None;
+        raw.override_sort_order = None;
+        Ok(raw.to_pool_entry(Some(key))?.node)
+    }
+
     /// Reconstruct a full [`NodePoolEntry`] from the denormalized row.
     ///
     /// Effective field resolution applies the [`NodeOverride`] (if present)
@@ -242,14 +258,17 @@ impl NodeRow {
 
         // WHY: override_enabled=Some forces active/inactive; None keeps the
         // node's natural status (NODE-004).
-        let is_active = self
-            .override_enabled
-            .map_or(self.status == "active", |e| e != 0);
+        let is_active = self.security_quarantined == 0
+            && !matches!(node.config, deve_sub_domain::ProtocolConfig::Unsupported(_))
+            && self
+                .override_enabled
+                .map_or(self.status == "active", |e| e != 0);
 
         Ok(NodePoolEntry {
             node,
             missing_from_source: self.missing_from_source != 0,
             is_active,
+            security_quarantined: self.security_quarantined != 0,
             revision: u64::try_from(self.revision)
                 .map_err(|_| SourceError::Storage("revision out of range".to_owned()))?,
             created_at: parse_ts(&self.created_at).map_err(SourceError::Storage)?,
@@ -286,3 +305,12 @@ pub(crate) const NODE_COLUMNS: &str = "n.id, n.display_name, n.protocol_kind, n.
      o.fingerprint AS override_fingerprint, o.sort_order AS override_sort_order, \
      (SELECT json_group_array(json_object('id', t.id, 'name', t.name, 'color', t.color)) \
       FROM node_tags nt JOIN tags t ON t.id = nt.tag_id WHERE nt.node_id = n.id) AS tags_json";
+
+/// Correlated chain closure includes the owner and deduplicates cycles. It
+/// preserves stored chains while preventing a quarantined hop from bypassing
+/// the distribution boundary through an otherwise enabled parent.
+pub(crate) const SECURITY_BLOCKED: &str = "EXISTS(WITH RECURSIVE dependencies(id) AS (SELECT n.id UNION SELECT item.value FROM dependencies d JOIN nodes parent ON parent.id = d.id JOIN json_each(COALESCE(parent.chain_json, '[]')) item WHERE item.type = 'text') SELECT 1 FROM dependencies d JOIN node_security_recovery recovery ON recovery.node_id = d.id WHERE recovery.state = 'quarantined')";
+
+pub(crate) fn qualified_node_columns() -> String {
+    format!("{NODE_COLUMNS}, {SECURITY_BLOCKED} AS security_quarantined")
+}

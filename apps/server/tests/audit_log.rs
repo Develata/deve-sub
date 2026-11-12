@@ -101,8 +101,10 @@ impl TestApp {
                     as Arc<dyn TemplateRepository>,
                 version_repo: Arc::new(SqliteTemplateVersionRepository::new(pool.clone()))
                     as Arc<dyn TemplateVersionRepository>,
-                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(pool.clone()))
-                    as Arc<dyn GenerationCacheRepository>,
+                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn GenerationCacheRepository>,
                 subscription_repo: Arc::new(SqliteSubscriptionRepository::new(pool.clone()))
                     as Arc<dyn SubscriptionRepository>,
                 subscription_token_repo: Arc::new(SqliteSubscriptionTokenRepository::new(

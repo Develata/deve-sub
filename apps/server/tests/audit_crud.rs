@@ -6,6 +6,9 @@
 //! operations produce audit_log entries with correct actor, action, and
 //! target.
 
+#[path = "support/subscription_fixture.rs"]
+mod subscription_fixture;
+
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -99,8 +102,10 @@ impl TestApp {
                     as Arc<dyn TemplateRepository>,
                 version_repo: Arc::new(SqliteTemplateVersionRepository::new(pool.clone()))
                     as Arc<dyn TemplateVersionRepository>,
-                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(pool.clone()))
-                    as Arc<dyn GenerationCacheRepository>,
+                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn GenerationCacheRepository>,
                 subscription_repo: Arc::new(SqliteSubscriptionRepository::new(pool.clone()))
                     as Arc<dyn SubscriptionRepository>,
                 subscription_token_repo: Arc::new(SqliteSubscriptionTokenRepository::new(
@@ -452,6 +457,7 @@ async fn template_crud_audited() {
 async fn subscription_crud_audited() {
     let app = TestApp::new().await;
     let (router, cookie) = setup_and_login(&app).await;
+    subscription_fixture::seed_generation_node(&router, &cookie).await;
 
     // Need a template first for subscription creation.
     let tpl_body = serde_json::json!({

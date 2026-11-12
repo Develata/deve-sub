@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "scope": "Implemented automated normal capability regression; not complete native device/deployment acceptance",
+  "lanes": {
+    "protocol-1": {
+      "kind": "playwright",
+      "args": [
+        "baseline.spec.ts",
+        "forward-matrix.spec.ts",
+        "--shard=1/4"
+      ],
+      "cases": [
+        "baseline.spec.ts::baseline eleven protocols plus forward proxies from blank UI at 1280px::",
+        "baseline.spec.ts::baseline eleven protocols plus forward proxies from blank UI at 390px::",
+        "forward-matrix.spec.ts::forward proxies mihomo_yaml through independent API setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies mihomo_yaml through independent UI setup import selection and delivery::"
+      ]
+    },
+    "protocol-2": {
+      "kind": "playwright",
+      "args": [
+        "baseline.spec.ts",
+        "forward-matrix.spec.ts",
+        "--shard=2/4"
+      ],
+      "cases": [
+        "forward-matrix.spec.ts::forward proxies base64 through independent API setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies base64 through independent UI setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies uri_list through independent API setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies uri_list through independent UI setup import selection and delivery::"
+      ]
+    },
+    "protocol-3": {
+      "kind": "playwright",
+      "args": [
+        "baseline.spec.ts",
+        "forward-matrix.spec.ts",
+        "--shard=3/4"
+      ],
+      "cases": [
+        "forward-matrix.spec.ts::forward proxies singbox_json through independent API setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies singbox_json through independent UI setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies xray_json through independent API setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies xray_json through independent UI setup import selection and delivery::"
+      ]
+    },
+    "protocol-4": {
+      "kind": "playwright",
+      "args": [
+        "baseline.spec.ts",
+        "forward-matrix.spec.ts",
+        "--shard=4/4"
+      ],
+      "cases": [
+        "forward-matrix.spec.ts::forward proxies shadowrocket through independent API setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies shadowrocket through independent UI setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies v2ray_json through independent API setup import selection and delivery::",
+        "forward-matrix.spec.ts::forward proxies v2ray_json through independent UI setup import selection and delivery::"
+      ]
+    },
+    "api": {
+      "kind": "playwright",
+      "args": [
+        "api-workflow.spec.ts",
+        "auth.spec.ts"
+      ],
+      "cases": [
+        "api-workflow.spec.ts::normal HTTP API workflow persists node template subscription source and user changes::",
+        "auth.spec.ts::normal API TOTP recovery regeneration disable and restart::",
+        "auth.spec.ts::normal UI TOTP recovery regeneration disable and restart::"
+      ]
+    },
+    "browser": {
+      "kind": "playwright",
+      "args": [
+        "journey.spec.ts",
+        "settings.spec.ts"
+      ],
+      "cases": [
+        "journey.spec.ts::blank browser journey imports saves copies refreshes and restarts at 1280px::",
+        "journey.spec.ts::blank browser journey imports saves copies refreshes and restarts at 390px::",
+        "settings.spec.ts::settings visibly persist name accent and reduced motion at 1280px::",
+        "settings.spec.ts::settings visibly persist name accent and reduced motion at 390px::"
+      ]
+    },
+    "themes-1": {
+      "kind": "playwright",
+      "args": [
+        "themes.spec.ts",
+        "--shard=1/4"
+      ],
+      "cases": [
+        "themes.spec.ts::Light en 1280px eight real pages and dialogs::",
+        "themes.spec.ts::Light en 390px eight real pages and dialogs::",
+        "themes.spec.ts::Light zh 1280px eight real pages and dialogs::",
+        "themes.spec.ts::Light zh 390px eight real pages and dialogs::"
+      ]
+    },
+    "themes-2": {
+      "kind": "playwright",
+      "args": [
+        "themes.spec.ts",
+        "--shard=2/4"
+      ],
+      "cases": [
+        "themes.spec.ts::Dark en 1280px eight real pages and dialogs::",
+        "themes.spec.ts::Dark en 390px eight real pages and dialogs::",
+        "themes.spec.ts::Dark zh 1280px eight real pages and dialogs::",
+        "themes.spec.ts::Dark zh 390px eight real pages and dialogs::"
+      ]
+    },
+    "themes-3": {
+      "kind": "playwright",
+      "args": [
+        "themes.spec.ts",
+        "--shard=3/4"
+      ],
+      "cases": [
+        "themes.spec.ts::Minimal Warm en 1280px eight real pages and dialogs::",
+        "themes.spec.ts::Minimal Warm en 390px eight real pages and dialogs::",
+        "themes.spec.ts::Minimal Warm zh 1280px eight real pages and dialogs::",
+        "themes.spec.ts::Minimal Warm zh 390px eight real pages and dialogs::"
+      ]
+    },
+    "themes-4": {
+      "kind": "playwright",
+      "args": [
+        "themes.spec.ts",
+        "--shard=4/4"
+      ],
+      "cases": [
+        "themes.spec.ts::Fantasy Violet en 1280px eight real pages and dialogs::",
+        "themes.spec.ts::Fantasy Violet en 390px eight real pages and dialogs::",
+        "themes.spec.ts::Fantasy Violet zh 1280px eight real pages and dialogs::",
+        "themes.spec.ts::Fantasy Violet zh 390px eight real pages and dialogs::"
+      ]
+    },
+    "dns": {
+      "kind": "dns",
+      "args": [],
+      "cases": [
+        "dns::socks5-local-and-socks5h-remote"
+      ]
+    }
+  },
+  "external_scope": {
+    "status": "not-run-or-blocked",
+    "items": [
+      "Native Android/iOS/Windows/macOS GUI import and refresh",
+      "Authorized real proxy connectivity and external panel telemetry",
+      "Actual ARM hardware and systemd installation",
+      "Remaining full protocol cross-product and field combinations; user CSV02 original remains unavailable"
+    ]
+  }
+}

@@ -142,7 +142,13 @@ async fn backup003_failed_verification_cleans_own_staging() {
     let original = std::fs::read(&target).expect("target bytes");
     let archive = directory.path().join("bad-count.tar");
     let mut builder = tar::Builder::new(std::fs::File::create(&archive).expect("archive"));
-    let manifest = br#"{"version":1,"schema_version":27,"created_at":"2025-01-01T00:00:00Z","row_counts":{"users":2}}"#;
+    let manifest = serde_json::to_vec(&serde_json::json!({
+        "version": 1,
+        "schema_version": deve_sub_storage_sqlite::embedded_schema_version(),
+        "created_at": "2025-01-01T00:00:00Z",
+        "row_counts": {"users": 2}
+    }))
+    .expect("manifest");
     let mut header = tar::Header::new_gnu();
     header.set_size(manifest.len() as u64);
     header.set_mode(0o600);

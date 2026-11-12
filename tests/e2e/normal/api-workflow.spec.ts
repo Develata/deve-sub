@@ -1,0 +1,181 @@
+import { test, expect } from './fixture';
+import { writeFileSync } from 'fs';
+import { createServer } from 'net';
+
+test('normal HTTP API workflow persists node template subscription source and user changes', async ({ page, playwright, instance }, info) => {
+  const api = await playwright.request.newContext({ baseURL: instance.url, extraHTTPHeaders: { Origin: instance.url } });
+  const memberApi = await playwright.request.newContext({ baseURL: instance.url, extraHTTPHeaders: { Origin: instance.url } });
+  const records: object[] = [];
+  const call = async (id: string, method: string, path: string, data?: object, status = 200) => {
+    const response = await api.fetch(path, { method, data });
+    expect(response.status(), `${id} ${method} ${path}`).toBe(status);
+    records.push({ id, method, path: path.replace(/\/sub\/[^/]+/, '/sub/[redacted]').replace(/\/s\/[^/]+/, '/s/[redacted]'), status, at: new Date().toISOString() });
+    return response.status() === 204 || !(response.headers()['content-type'] ?? '').includes('json') ? null : response.json();
+  };
+  const credentials = { username: 'api-admin', password: 'SyntheticPassword2026' };
+  const peer = createServer(socket => socket.end());
+  await new Promise<void>(resolve => peer.listen(0, '127.0.0.1', resolve));
+  const port = (peer.address() as { port: number }).port;
+  try {
+    expect((await call('API-014', 'GET', '/api/v1/auth/status')).initialized).toBe(false);
+    await call('API-013', 'POST', '/api/v1/auth/setup', credentials, 201);
+    await call('API-009', 'POST', '/api/v1/auth/login', credentials);
+    expect((await call('API-012', 'GET', '/api/v1/auth/me')).user.username).toBe(credentials.username);
+    expect((await call('API-080', 'GET', '/health/live')).product_name).toBe('Deve Sub');
+    expect((await call('API-081', 'GET', '/health/ready')).status).toBe('healthy');
+    const member = (await call('API-077', 'POST', '/api/v1/users', { username: 'api-member', password: credentials.password, role: 'user' }, 201)).user;
+    expect(member.username).toBe('api-member');
+    const memberCredentials = { username: member.username, password: credentials.password };
+    expect((await memberApi.post('/api/v1/auth/login', { data: memberCredentials })).status()).toBe(200);
+    expect((await (await memberApi.get('/api/v1/auth/me')).json()).user.role).toBe('user');
+    const imported = await call('API-021', 'POST', '/api/v1/nodes/import', { source_type: 'uri_list',
+      content: `trojan://TEST_ONE@127.0.0.1:${port}#API-One\ntrojan://TEST_TWO@192.0.2.31:443#API-Two` });
+    expect(imported.new_nodes).toBe(2);
+    let nodes = (await call('API-018', 'GET', '/api/v1/nodes?limit=100')).nodes;
+    const first = nodes.find((node: any) => node.display_name === 'API-One').id;
+    const second = nodes.find((node: any) => node.display_name === 'API-Two').id;
+    const tag = (await call('API-060', 'POST', '/api/v1/tags', { name: 'normal-tag', color: '#2563eb' }, 201)).tag;
+    await call('API-062', 'PATCH', `/api/v1/tags/${tag.id}`, { name: 'normal-renamed', color: '#7c3aed' });
+    await call('API-029', 'PUT', `/api/v1/nodes/${first}/tags`, { tag_ids: [tag.id] }, 204);
+    await call('API-020', 'POST', '/api/v1/nodes/batch-tags', { mode: 'add', assignments: [{ node_id: second, tag_ids: [tag.id] }] }, 204);
+    await call('API-023', 'PUT', `/api/v1/nodes/${first}/chain`, { nodes: [second] });
+    expect((await call('API-022', 'GET', `/api/v1/nodes/${first}`)).node.chain).toEqual([second]);
+    await call('API-023', 'PUT', `/api/v1/nodes/${first}/chain`, { nodes: [] });
+    await call('API-028', 'PATCH', `/api/v1/nodes/${first}/region`, { region: 'HK' });
+    await call('API-027', 'PATCH', `/api/v1/nodes/${first}/override`, { display_name: 'API-Renamed', region: 'HK', sni: 'certificate.example', skip_cert_verify: false, sort_order: 7 });
+    expect((await call('API-025', 'GET', `/api/v1/nodes/${first}/override`)).override.sni).toBe('certificate.example');
+    await call('API-019', 'POST', '/api/v1/nodes/batch-enabled', { node_ids: [second], enabled: false });
+    expect((await call('API-022', 'GET', `/api/v1/nodes/${second}`)).node.is_active).toBe(false);
+    await call('API-019', 'POST', '/api/v1/nodes/batch-enabled', { node_ids: [second], enabled: true });
+    const run = (await call('API-030', 'POST', '/api/v1/probe-runs', { probe_type: 'tcp_connect', node_ids: [first] }, 201)).run;
+    await expect.poll(async () => (await (await api.get(`/api/v1/probe-runs/${run.id}`)).json()).run.status).toBe('completed');
+    expect((await call('API-031', 'GET', `/api/v1/probe-runs/${run.id}`)).run.status).toBe('completed');
+    const latency = await call('API-024', 'GET', `/api/v1/nodes/${first}/latency`);
+    expect(JSON.stringify(latency)).toContain(first);
+    const sourceBody = { name: 'normal-source', source_type: 'uri_list', url: 'https://source.example/subscription', auto_update: false, keep_on_fail: true, update_interval_secs: 3600 };
+    const source = (await call('API-040', 'POST', '/api/v1/sources', sourceBody, 201)).source;
+    await call('API-044', 'PUT', `/api/v1/sources/${source.id}`, { ...sourceBody, name: 'source-renamed', url: 'https://source.example/new', enabled: true });
+    expect((await call('API-043', 'GET', `/api/v1/sources/${source.id}`)).source.name).toBe('source-renamed');
+    const probeSource = (await call('API-034', 'POST', '/api/v1/probe-sources', { kind: 'dstatus', name: 'normal-panel', endpoint_url: 'https://panel.example', auth_config: '' }, 201)).source;
+    await call('API-036', 'PUT', `/api/v1/probe-sources/${probeSource.id}`, { name: 'panel-renamed', enabled: false });
+    const spec = (name: string, selected: string[]) => JSON.stringify({
+      apiVersion: 'deve-sub.io/v1', kind: 'SubscriptionTemplate', metadata: { name },
+      spec: { targetProfiles: ['json', 'mihomo'], nodeSelector: { mode: 'fixed', nodeIds: selected }, proxyGroups: [], rules: [] },
+    });
+    const template = await call('API-064', 'POST', '/api/v1/templates', { name: 'normal-template', description: 'v1', spec_yaml: spec('v1', [first]) }, 201);
+    const templateId = template.template.id;
+    const changed = await call('API-066', 'PUT', `/api/v1/templates/${templateId}`, { name: 'normal-template', description: 'v2', spec_yaml: spec('v2', [first, second]) });
+    expect(changed.version.version).toBe(2);
+    expect((await call('API-072', 'GET', `/api/v1/templates/${templateId}/resolve`)).selected_node_ids.sort()).toEqual([first, second].sort());
+    const compatibility = await call('API-068', 'GET', `/api/v1/templates/${templateId}/compatibility?profile=json`);
+    expect(compatibility.included_node_ids.sort()).toEqual([first, second].sort());
+    const preview = await call('API-071', 'POST', `/api/v1/templates/${templateId}/preview?profile=json`);
+    const generated = await call('API-069', 'POST', `/api/v1/templates/${templateId}/generate?profile=json`);
+    expect(generated.content).toBe(preview.content);
+    expect((await call('API-070', 'GET', `/api/v1/templates/${templateId}/generations/active?profile=json`)).content).toBe(preview.content);
+    expect(JSON.parse(generated.content).map((node: any) => node.id).sort()).toEqual([first, second].sort());
+    await call('API-073', 'POST', `/api/v1/templates/${templateId}/rollback`, { version_id: template.version.id });
+    expect((await call('API-075', 'GET', `/api/v1/templates/${templateId}/versions/active`)).version.version).toBe(1);
+    expect((await call('API-074', 'GET', `/api/v1/templates/${templateId}/versions`)).versions).toHaveLength(2);
+    const sub = await call('API-049', 'POST', '/api/v1/subscriptions', {
+      name: 'normal-sub', slug: 'normal-sub', template_id: templateId, profile: 'json', node_selection: { mode: 'inherit_template' },
+    }, 201);
+    const subId = sub.subscription.id;
+    const future = new Date(Date.now() + 86400000).toISOString();
+    const update = { name: 'sub-renamed', slug: 'sub-renamed', profile: 'json', node_selection: { mode: 'inherit_template' },
+      traffic_limit: 1000000, expires_at: future, template_version_pin: 1, enabled: true };
+    await call('API-051', 'PUT', `/api/v1/subscriptions/${subId}`, update);
+    let token = sub.token_plaintext;
+    const delivered = await api.get(`/sub/${token}/json`); expect(delivered.status()).toBe(200);
+    const canonical = await delivered.json(); expect(canonical.map((node: any) => node.id)).toEqual([first]);
+    expect(canonical[0]).toMatchObject({ display_name: 'API-Renamed', tls: { server_name: 'certificate.example', skip_cert_verify: false } });
+    records.push({ id: 'API-082', method: 'GET', path: '/sub/[redacted]/json', status: 200, assertion: 'exact selected ID, override and TLS fields' });
+    const etag = delivered.headers().etag; expect(etag).toBeTruthy();
+    expect((await api.get(`/sub/${token}/json`, { headers: { 'If-None-Match': etag } })).status()).toBe(304);
+    const short = await call('API-053', 'POST', `/api/v1/subscriptions/${subId}/regenerate-short-code`);
+    expect(await (await api.get(`/s/${short.code}/json`)).json()).toEqual(canonical);
+    records.push({ id: 'API-084', method: 'GET', path: '/s/[redacted]/json', status: 200, assertion: 'canonical body equals token delivery' });
+    const temporary = await call('API-055', 'POST', `/api/v1/subscriptions/${subId}/temp-links`, { expires_at: future }, 201);
+    expect(await (await api.get(`/sub/${temporary.token_plaintext}/json`)).json()).toEqual(canonical);
+    await call('API-056', 'DELETE', `/api/v1/subscriptions/${subId}/temp-links/${temporary.temp_link_id}`, undefined, 204);
+    expect((await api.get(`/sub/${temporary.token_plaintext}/json`)).status()).toBe(404);
+    const rotated = await call('API-054', 'POST', `/api/v1/subscriptions/${subId}/rotate-token`, { grace_seconds: 0 });
+    expect((await api.get(`/sub/${token}/json`)).status()).toBe(404); token = rotated.token_plaintext;
+    expect(await (await api.get(`/sub/${token}/json`)).json()).toEqual(canonical);
+    const correction = await call('API-058', 'POST', `/api/v1/subscriptions/${subId}/traffic-correction`, { upload: 123, download: 456, note: 'Synthetic measured correction' }, 201);
+    expect(correction).toMatchObject({ upload: 123, download: 456, subscription_id: subId });
+    expect(await call('API-057', 'GET', `/api/v1/subscriptions/${subId}/traffic`)).toMatchObject({ upload: 123, download: 456, total: 579 });
+
+    // Verify all retained mutations using a fresh process, not cached responses.
+    await instance.restart();
+    const after = (await call('API-022', 'GET', `/api/v1/nodes/${first}`)).node;
+    expect(after).toMatchObject({ display_name: 'API-Renamed', region: 'HK', is_active: true, chain: [] });
+    expect(after.tags.map((t: any) => t.id)).toEqual([tag.id]);
+    expect((await call('API-059', 'GET', '/api/v1/tags')).tags[0]).toMatchObject({ name: 'normal-renamed', color: '#7c3aed' });
+    expect((await call('API-039', 'GET', '/api/v1/sources')).sources[0].name).toBe('source-renamed');
+    expect((await call('API-035', 'GET', `/api/v1/probe-sources/${probeSource.id}`)).source).toMatchObject({ name: 'panel-renamed', enabled: false });
+    expect((await call('API-033', 'GET', '/api/v1/probe-sources')).sources).toHaveLength(1);
+    expect((await call('API-065', 'GET', `/api/v1/templates/${templateId}`)).template.active_version).toBe(1);
+    expect((await call('API-063', 'GET', '/api/v1/templates')).templates).toHaveLength(1);
+    expect((await call('API-050', 'GET', `/api/v1/subscriptions/${subId}`)).subscription).toMatchObject({ name: 'sub-renamed', template_version_pin: 1, traffic_limit: 1000000 });
+    expect((await call('API-048', 'GET', '/api/v1/subscriptions')).subscriptions).toHaveLength(1);
+    expect(await (await api.get(`/sub/${token}/json`)).json()).toEqual(canonical);
+    expect(await call('API-057', 'GET', `/api/v1/subscriptions/${subId}/traffic`)).toMatchObject({ total: 579 });
+    expect(await call('API-016', 'GET', '/api/v1/dashboard/traffic')).toMatchObject({ total_upload: 123, total_download: 456 });
+    const history = await call('API-017', 'GET', '/api/v1/dashboard/traffic/history?days=30');
+    expect(history.points).toHaveLength(30);
+    expect(history.points.at(-1)).toMatchObject({ total_upload: 123, total_download: 456 });
+    expect(history.points.slice(0, -1).every((point: any) => point.total_upload === 0 && point.total_download === 0)).toBe(true);
+    expect((await call('API-015', 'GET', '/api/v1/dashboard/latency')).records.some((row: any) => row.node_id === first && row.error_class === 'ok')).toBe(true);
+    await page.goto('/');
+    await page.locator('input[autocomplete=username]').fill(credentials.username);
+    await page.locator('input[autocomplete=current-password]').fill(credentials.password);
+    await page.getByRole('button', { name: /^登录$|^Sign In$|^Login$/ }).click();
+    await expect(page.locator('main dd')).toHaveText(['123 B', '456 B', '579 B']);
+    await expect(page.locator('main table tbody tr').last()).toContainText('123 B');
+    await expect(page.locator('main table tbody tr').last()).toContainText('456 B');
+    await page.screenshot({ path: info.outputPath('actual-dashboard-data.png'), fullPage: true });
+    expect((await call('API-076', 'GET', '/api/v1/users')).users.map((u: any) => u.id)).toContain(member.id);
+    await call('API-079', 'POST', `/api/v1/users/${member.id}/force-logout`);
+    expect((await memberApi.get('/api/v1/auth/me')).status()).toBe(401);
+    expect((await memberApi.post('/api/v1/auth/login', { data: memberCredentials })).status()).toBe(200);
+    await call('API-078', 'POST', `/api/v1/users/${member.id}/disable`);
+    expect((await memberApi.get('/api/v1/auth/me')).status()).toBe(401);
+    expect((await memberApi.post('/api/v1/auth/login', { data: memberCredentials })).status()).toBe(401);
+    expect((await call('API-076', 'GET', '/api/v1/users')).users.find((u: any) => u.id === member.id).enabled).toBe(false);
+    const audit = await call('API-001', 'GET', '/api/v1/audit-logs?limit=100');
+    expect(JSON.stringify(audit)).toContain('source');
+    await call('API-004', 'GET', '/api/v1/audit-logs/policy');
+    const cleanup = await call('API-003', 'POST', '/api/v1/audit-logs/cleanup/preview', { keep_days: 1 });
+    expect(cleanup.entry_ids).toHaveLength(0);
+    await call('API-002', 'POST', '/api/v1/audit-logs/cleanup', { before_unix_ms: cleanup.before_unix_ms, entry_ids: cleanup.entry_ids }, 400);
+    await call('API-019', 'POST', '/api/v1/nodes/batch-enabled', { node_ids: [first, second], enabled: false });
+    await call('API-051', 'PUT', `/api/v1/subscriptions/${subId}`, { ...update, enabled: false });
+    expect((await api.get(`/sub/${token}/json`)).status()).toBe(404);
+    await call('API-051', 'PUT', `/api/v1/subscriptions/${subId}`, update, 422);
+    await call('API-019', 'POST', '/api/v1/nodes/batch-enabled', { node_ids: [first, second], enabled: true });
+    await call('API-051', 'PUT', `/api/v1/subscriptions/${subId}`, update);
+    expect(await (await api.get(`/sub/${token}/json`)).json()).toEqual(canonical);
+    await call('API-026', 'DELETE', `/api/v1/nodes/${first}/override`, undefined, 204);
+    expect((await call('API-022', 'GET', `/api/v1/nodes/${first}`)).node.display_name).toBe('API-One');
+    await call('API-028', 'PATCH', `/api/v1/nodes/${first}/region`, { region: null });
+    expect((await call('API-022', 'GET', `/api/v1/nodes/${first}`)).node.region).toBeNull();
+    await call('API-061', 'DELETE', `/api/v1/tags/${tag.id}`, undefined, 204);
+    expect((await call('API-022', 'GET', `/api/v1/nodes/${first}`)).node.tags).toHaveLength(0);
+    await call('API-045', 'DELETE', `/api/v1/sources/${source.id}`);
+    await call('API-037', 'DELETE', `/api/v1/probe-sources/${probeSource.id}`);
+    await call('API-052', 'DELETE', `/api/v1/subscriptions/${subId}`);
+    expect((await api.get(`/sub/${token}/json`)).status()).toBe(404);
+    await call('API-067', 'DELETE', `/api/v1/templates/${templateId}`);
+    await instance.restart();
+    expect((await call('API-039', 'GET', '/api/v1/sources')).sources).toHaveLength(0);
+    expect((await call('API-063', 'GET', '/api/v1/templates')).templates).toHaveLength(0);
+    expect((await call('API-048', 'GET', '/api/v1/subscriptions')).subscriptions).toHaveLength(0);
+    await call('API-011', 'POST', '/api/v1/auth/logout');
+    expect((await api.get('/api/v1/auth/me')).status()).toBe(401);
+    writeFileSync(info.outputPath('api-workflow.json'), JSON.stringify({
+      status: 'PASS', at: new Date().toISOString(), entry: 'HTTP API', preseeded: false,
+      records, limits: ['Source/panel CRUD only; external refresh/sync not attempted.', 'Empty cleanup is correctly rejected; actual deletion has a separate preseeded functional test.', 'TCP probe uses a local peer; no real proxy or panel connectivity.'],
+    }, null, 2));
+  } finally { await api.dispose(); await memberApi.dispose(); await new Promise<void>(resolve => peer.close(() => resolve())); }
+});

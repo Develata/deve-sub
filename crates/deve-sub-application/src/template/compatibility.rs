@@ -48,6 +48,11 @@ pub async fn check_compatibility(
 
     for id in node_ids {
         match entries.get(id) {
+            Some(entry) if entry.security_quarantined => excluded.push(ExcludedNode {
+                node_id: *id,
+                display_name: entry.node.display_name.clone(),
+                reason: "node or chain is security_quarantined".into(),
+            }),
             Some(entry) => match check_node(&entry.node, &cap) {
                 Ok(()) => included.push(*id),
                 Err(reason) => excluded.push(ExcludedNode {

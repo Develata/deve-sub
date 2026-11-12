@@ -10,8 +10,12 @@
 //! See `docs/plan/05-protocol-engine.md` §"Input formats vs protocols" and
 //! `docs/plan/milestones/M3-protocol-engine.md` Slice 3.
 
+mod bandwidth;
 pub mod base64;
+mod forward_proxy;
+mod forward_proxy_tls;
 pub mod mihomo;
+mod native_tls;
 pub mod shadowrocket;
 pub mod singbox;
 mod singbox_endpoint;
@@ -43,11 +47,11 @@ use deve_sub_domain::{Host, Node, ProtocolConfig, ProtocolKind, TlsConfig, Unsup
 
 use crate::error::ParseError;
 
-/// Parse a complete JSON document, detecting sing-box or Xray outbound shape.
+/// Parse a complete JSON document, detecting Mihomo, sing-box or Xray shape.
 ///
 /// An `endpoints` key or any outbound `type` selects sing-box. Only outbound
 /// `protocol` keys without those markers select Xray; empty and unmarked lists
-/// retain the sing-box fallback.
+/// retain the sing-box fallback. A standalone `proxies` root selects Mihomo.
 ///
 /// # Errors
 /// Returns [`ParseError::InvalidJson`] before container checks for malformed JSON.
@@ -57,6 +61,14 @@ use crate::error::ParseError;
 pub fn parse_auto_json(text: &str) -> Result<Vec<Node>, ParseError> {
     let value: Value =
         serde_json::from_str(text).map_err(|e| ParseError::InvalidJson(e.to_string()))?;
+    // JSON is also valid source YAML. Keep native outbound/endpoint precedence
+    // for mixed documents and reuse the decoded value instead of parsing twice.
+    if value.get("proxies").is_some()
+        && value.get("outbounds").is_none()
+        && value.get("endpoints").is_none()
+    {
+        return mihomo::parse_mihomo_value(&value);
+    }
     if value.get("endpoints").is_some() {
         return singbox::parse_singbox_value(&value);
     }
@@ -83,6 +95,16 @@ pub fn parse_auto_json(text: &str) -> Result<Vec<Node>, ParseError> {
 /// Extract an optional string field from a JSON value.
 pub(crate) fn get_str(v: &Value, key: &str) -> Option<String> {
     v.get(key)?.as_str().map(String::from)
+}
+
+/// Native YAML decoders accept numeric scalars in fields declared as text.
+/// Leading-zero values already remain strings in the bounded YAML projection.
+pub(crate) fn get_scalar_text(v: &Value, key: &str) -> Option<String> {
+    match v.get(key)? {
+        Value::String(value) => Some(value.clone()),
+        Value::Number(value) => Some(value.to_string()),
+        _ => None,
+    }
 }
 
 /// Extract an optional boolean field from a JSON value. Handles both JSON
@@ -187,7 +209,41 @@ pub(crate) fn unsupported_entry(
     reason: String,
 ) -> Node {
     let mut node = node_shell_container();
-    node.protocol = protocol;
+    node.display_name = get_str(raw, "name")
+        .or_else(|| get_str(raw, "tag"))
+        .unwrap_or_default();
+    // Keep safe identifying fields visible even when protocol fields are unrepresentable.
+    let endpoint = raw
+        .get("settings")
+        .and_then(|settings| {
+            settings
+                .get("servers")
+                .and_then(Value::as_array)
+                .and_then(|items| items.first())
+                .or(Some(settings))
+        })
+        .unwrap_or(raw);
+    if let Some(server) = get_str(endpoint, "server").or_else(|| get_str(endpoint, "address"))
+        && let Ok(host) = parse_host_str(&server)
+    {
+        node.endpoint.host = host;
+    }
+    node.endpoint.port = get_port(endpoint, "server_port")
+        .ok()
+        .flatten()
+        .or_else(|| get_port(endpoint, "port").ok().flatten())
+        .unwrap_or(0);
+    node.protocol = match protocol {
+        ProtocolKind::Unknown(ref name)
+            if matches!(name.as_str(), "socks" | "socks5" | "socks5h") =>
+        {
+            ProtocolKind::Socks5
+        }
+        ProtocolKind::Unknown(ref name) if matches!(name.as_str(), "http" | "https") => {
+            ProtocolKind::Http
+        }
+        other => other,
+    };
     node.config = ProtocolConfig::Unsupported(UnsupportedNode {
         raw: raw.clone(),
         raw_format: Some(raw_format.to_owned()),

@@ -14,6 +14,7 @@
 
 mod chain;
 mod reconcile;
+mod recovery;
 mod write;
 use write::{insert_node, retain_manual_contribution};
 
@@ -22,14 +23,14 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use deve_sub_domain::{
-    ImportOutcome, ImportResult, ItemParseStatus, Node, NodeChain, NodeChainEntry, NodeFilter,
-    NodePoolEntry, NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
+    ImportResult, ItemParseStatus, Node, NodeChain, NodeChainEntry, NodeFilter, NodePoolEntry,
+    NodePoolRepository, ReconcileInput, ReconcileResult, SourceError,
 };
 use deve_sub_kernel::{NodeId, NodeSourceBindingId, SourceItemId};
 use deve_sub_security::{MasterKey, PURPOSE_NODE_IDENTITY, envelope, identity_fingerprint};
 use sqlx::sqlite::SqlitePool;
 
-use crate::node_row::{NODE_COLUMNS, NodeRow};
+use crate::node_row::{NodeRow, SECURITY_BLOCKED, qualified_node_columns};
 use crate::timestamp::format_ts;
 
 /// Retention bound: newest snapshots kept per source; older ones are pruned
@@ -151,7 +152,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         };
 
         let mut sql = String::from("SELECT ");
-        sql.push_str(NODE_COLUMNS);
+        sql.push_str(&qualified_node_columns());
         sql.push_str(" FROM nodes n LEFT JOIN node_overrides o ON o.node_id = n.id WHERE 1=1");
 
         if proto_json.is_some() {
@@ -164,7 +165,10 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             sql.push_str(" AND n.missing_from_source = 0");
         }
         if !filter.include_inactive {
-            sql.push_str(" AND COALESCE(o.enabled, n.status = 'active') = 1");
+            sql.push_str(&format!(" AND NOT ({SECURITY_BLOCKED})"));
+            sql.push_str(
+                " AND n.status != 'unsupported' AND COALESCE(o.enabled, n.status = 'active') = 1",
+            );
         }
         if cursor.is_some() {
             sql.push_str(" AND n.id > ?");
@@ -194,8 +198,9 @@ impl NodePoolRepository for SqliteNodePoolRepository {
 
     async fn get_node(&self, id: NodeId) -> Result<Option<NodePoolEntry>, SourceError> {
         let sql = format!(
-            "SELECT {NODE_COLUMNS} FROM nodes n \
-             LEFT JOIN node_overrides o ON o.node_id = n.id WHERE n.id = ?"
+            "SELECT {} FROM nodes n \
+             LEFT JOIN node_overrides o ON o.node_id = n.id WHERE n.id = ?",
+            qualified_node_columns()
         );
         let row: Option<NodeRow> = sqlx::query_as::<_, NodeRow>(&sql)
             .bind(id.to_string())
@@ -220,9 +225,10 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                 .trim_end_matches(',')
                 .to_owned();
             let sql = format!(
-                "SELECT {NODE_COLUMNS} FROM nodes n \
+                "SELECT {} FROM nodes n \
                  LEFT JOIN node_overrides o ON o.node_id = n.id \
-                 WHERE n.id IN ({placeholders})"
+                 WHERE n.id IN ({placeholders})",
+                qualified_node_columns()
             );
             let mut query = sqlx::query_as::<_, NodeRow>(&sql);
             for id in chunk {
@@ -280,8 +286,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                 retain_manual_contribution(&mut tx, &existing_id, independent_label).await?;
                 let nid =
                     NodeId::parse(&existing_id).map_err(|e| SourceError::Storage(e.to_string()))?;
-                result.duplicate_nodes += 1;
-                result.outcomes.push(ImportOutcome::Duplicate(nid));
+                result.record_node(&node, nid, true);
             } else {
                 let missing: Option<(String,)> = sqlx::query_as(
                     "SELECT id FROM nodes \
@@ -304,8 +309,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                     retain_manual_contribution(&mut tx, &missing_id, independent_label).await?;
                     let nid = NodeId::parse(&missing_id)
                         .map_err(|e| SourceError::Storage(e.to_string()))?;
-                    result.new_nodes += 1;
-                    result.outcomes.push(ImportOutcome::Inserted(nid));
+                    result.record_node(&node, nid, false);
                 } else {
                     let new_id = insert_node(
                         &mut tx,
@@ -321,8 +325,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                         Some(id) => {
                             let nid = NodeId::parse(&id)
                                 .map_err(|e| SourceError::Storage(e.to_string()))?;
-                            result.new_nodes += 1;
-                            result.outcomes.push(ImportOutcome::Inserted(nid));
+                            result.record_node(&node, nid, false);
                         }
                         // WHY: `ON CONFLICT DO NOTHING` fired — a concurrent
                         // import or refresh inserted the same node. Re-query
@@ -343,8 +346,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                                     .await?;
                                 let nid = NodeId::parse(&winner_id)
                                     .map_err(|e| SourceError::Storage(e.to_string()))?;
-                                result.duplicate_nodes += 1;
-                                result.outcomes.push(ImportOutcome::Duplicate(nid));
+                                result.record_node(&node, nid, true);
                             }
                         }
                     }

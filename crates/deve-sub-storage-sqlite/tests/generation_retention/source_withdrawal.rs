@@ -54,6 +54,7 @@ async fn gen015_source_deletion_fences_all_cache_reads_and_late_writes() {
     current.cache_key = current.id.to_string();
     current.pool_revision = revision.get_revision().await.expect("revision").value();
     current.content = "current-without-A".into();
+    rekey(&mut current);
     fixture.cache.store(&current).await.expect("store current");
     fixture
         .cache
@@ -64,6 +65,7 @@ async fn gen015_source_deletion_fences_all_cache_reads_and_late_writes() {
     let mut late = old.clone();
     late.id = GenerationCacheId::new();
     late.cache_key = late.id.to_string();
+    rekey(&mut late);
     assert!(
         fixture.cache.store(&late).await.is_err(),
         "late old snapshot must be fenced"
@@ -109,6 +111,7 @@ async fn gen015_source_deletion_fences_all_cache_reads_and_late_writes() {
         churn.id = GenerationCacheId::new();
         churn.cache_key = churn.id.to_string();
         churn.selection_payload = format!("churn-{i}");
+        rekey(&mut churn);
         fixture
             .cache
             .store(&churn)
@@ -134,7 +137,8 @@ async fn gen015_source_deletion_fences_all_cache_reads_and_late_writes() {
         fixture.count().await <= 10,
         "active plus protected fallback plus eight history entries"
     );
-    let reopened = SqliteGenerationCacheRepository::new(fixture.pool.clone());
+    let reopened =
+        SqliteGenerationCacheRepository::new(fixture.pool.clone(), Arc::clone(&fixture.key));
     assert!(
         reopened
             .find_by_key(&old.cache_key)

@@ -107,7 +107,23 @@ live database. Check the snapshot's integrity before publishing the archive.
 Concurrent writes or retention therefore cannot make a successful backup's
 manifest disagree with its archived database.
 
+If the completed snapshot contains a `key_metadata` binding, the loaded key
+must match that binding before the archive is published. A bound snapshot
+requires its original key even when no explicit key option was supplied.
+The manifest fingerprint describes that checked key, not an unrelated key
+chosen by the operator. Backup verification never creates or changes a binding.
+
 ### Restore and migration
+
+Explicit upgrade and archive restore share read-only history/key/legacy-data
+preflight from plan/14. Management commands take the stable database lock before
+connecting and cannot implicitly migrate existing schemas. Explicit upgrade
+persists a private rollback snapshot and original key pair before forward
+migration on staging; verify schema, payload authentication, key binding,
+integrity, foreign keys and stable business row counts before replacement.
+Known derived daily traffic backfill is verified against raw traffic instead
+of incorrectly requiring an unchanged projection row count. Unknown unbound
+encrypted/HMAC state is not authenticated by supplying an arbitrary key.
 
 ```text
 restore(backup_path):
@@ -115,11 +131,23 @@ restore(backup_path):
   2. verify master-key fingerprint continuity; refuse a missing/wrong required key
   3. acquire the server sidecar lock; create a private, unique sibling staging
      directory and copy the snapshot into it, isolated from prior WAL/SHM files
-  4. compare staged row counts with the archived manifest before migration
-  5. run forward migrations on staging; verify PRAGMA integrity_check
-  6. checkpoint, close, fsync and atomically replace the target with rollback protection
-  7. report result; keep the existing target intact on pre-swap failure
+  4. check the staged schema version against the manifest, and validate all
+     applied migration checksums and success flags; an old schema must be a
+     complete prefix of the embedded migrations
+  5. verify the staged database key binding against the loaded key and manifest;
+     compare archived row counts, then run forward migrations on staging
+  6. require the current schema and key binding to verify after migration;
+     verify PRAGMA integrity_check
+  7. checkpoint, close, fsync and atomically replace the target with rollback protection
+  8. report result; keep the existing target intact on pre-swap failure
 ```
+
+An explicitly supplied restore key must load even if a legacy manifest omits
+its fingerprint. Legacy snapshots without a database binding retain their
+unverified status; fingerprint checks do not prove that every encrypted value
+can decrypt. These checks neither bind a legacy database nor replace its key.
+Preserving populated pre-envelope data during migration is a separate upgrade
+requirement; schema validation alone does not establish that conversion.
 
 ## Failure/recovery
 

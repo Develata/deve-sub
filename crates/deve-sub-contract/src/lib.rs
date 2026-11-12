@@ -38,9 +38,9 @@ pub use health::{HealthLiveResponse, HealthReadyResponse, HealthStatusDto};
 pub use node::{
     BatchEnabledRequest, BatchResultDto, BatchTagsRequest, CreateTagRequest, ImportNodesRequest,
     ImportNodesResponse, ImportOutcomeDto, ListNodesResponse, ListTagsResponse, NodeChainResponse,
-    NodeDto, NodeOverrideDto, NodeOverrideResponse, NodeResponse, NodeTagAssignmentDto,
-    RegionMethodDto, RegionResponse, SetNodeChainRequest, SetNodeTagsRequest, SetRegionRequest,
-    TagDto, TagResponse, TagUpdateModeDto, UpdateOverrideRequest,
+    NodeConnectionDto, NodeDto, NodeOverrideDto, NodeOverrideResponse, NodeResponse,
+    NodeTagAssignmentDto, RegionMethodDto, RegionResponse, SetNodeChainRequest, SetNodeTagsRequest,
+    SetRegionRequest, TagDto, TagResponse, TagUpdateModeDto, UpdateOverrideRequest,
 };
 pub use probe::{
     CreateProbeRunRequest, CreateProbeSourceRequest, ErrorClassDto, LatencyRecordDto,

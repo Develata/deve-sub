@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use time::format_description::well_known::Rfc3339;
 
-use crate::commands::{ensure_db_dir, open_db};
+use crate::commands::ensure_db_dir;
 
 /// Format a [`Timestamp`] as an ISO 8601 string for CLI output.
 fn ts_to_iso8601(ts: deve_sub_kernel::Timestamp) -> String {
@@ -16,9 +16,8 @@ fn ts_to_iso8601(ts: deve_sub_kernel::Timestamp) -> String {
         .unwrap_or_else(|_| ts.as_offset_date_time().to_string())
 }
 
-/// Default node selection JSON for new subscriptions (dynamic mode, no
-/// filters — includes all pool nodes).
-const DEFAULT_NODE_SELECTION: &str = r#"{"mode":"dynamic","filters":[]}"#;
+/// Follow the template's selector unless the user explicitly overrides it.
+const DEFAULT_NODE_SELECTION: &str = r#"{"mode":"inherit_template"}"#;
 
 /// Subscription management command container.
 #[derive(Args)]
@@ -159,6 +158,10 @@ pub struct SubscriptionUpdateArgs {
     /// Database path.
     #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
     pub db_path: String,
+
+    /// Master key file path (for validating encrypted node configurations).
+    #[arg(long, env = "DEVE_SUB_KEY_PATH", default_value = "data/master.key")]
+    pub key_path: String,
 }
 
 /// Arguments for `subscription delete`.
@@ -214,11 +217,12 @@ pub async fn subscription_add(args: SubscriptionAddArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, name = %args.name, "adding subscription");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool.clone());
-    let master_key = load_master_key(&pool, &args.key_path).await?;
+    let master_key = std::sync::Arc::new(load_master_key(&pool, &args.key_path).await?);
+    let validation =
+        crate::subscription_validation::ValidationRepositories::new(pool, master_key.clone());
 
     let owner_id = deve_sub_kernel::UserId::parse(&args.owner_id)
         .context("invalid owner_id (expected ULID)")?;
@@ -238,10 +242,14 @@ pub async fn subscription_add(args: SubscriptionAddArgs) -> Result<()> {
         expires_at: args.expires_at.clone(),
     };
 
-    let result =
-        deve_sub_application::subscription::create_subscription(&sub_repo, &master_key, params)
-            .await
-            .map_err(|e| anyhow::anyhow!("create failed: {e}"))?;
+    let result = deve_sub_application::subscription::create_subscription(
+        &sub_repo,
+        &master_key,
+        &validation.deps(),
+        params,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("create failed: {e}"))?;
 
     println!("Subscription created successfully:");
     println!("  id:      {}", result.subscription.id);
@@ -257,8 +265,7 @@ pub async fn subscription_list(args: SubscriptionListArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, "listing subscriptions");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool);
 
@@ -300,8 +307,7 @@ pub async fn subscription_get(args: SubscriptionGetArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, id = %args.id, "getting subscription");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool);
 
@@ -340,10 +346,11 @@ pub async fn subscription_update(args: SubscriptionUpdateArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, id = %args.id, "updating subscription");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
-    let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool);
+    let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool.clone());
+    let master_key = std::sync::Arc::new(load_master_key(&pool, &args.key_path).await?);
+    let validation = crate::subscription_validation::ValidationRepositories::new(pool, master_key);
 
     let id = deve_sub_kernel::SubscriptionId::parse(&args.id)
         .context("invalid subscription id (expected ULID)")?;
@@ -362,9 +369,13 @@ pub async fn subscription_update(args: SubscriptionUpdateArgs) -> Result<()> {
         enabled: args.enabled,
     };
 
-    let sub = deve_sub_application::subscription::update_subscription(&sub_repo, params)
-        .await
-        .map_err(|e| anyhow::anyhow!("update failed: {e}"))?;
+    let sub = deve_sub_application::subscription::update_subscription(
+        &sub_repo,
+        &validation.deps(),
+        params,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("update failed: {e}"))?;
 
     println!("Subscription updated successfully:");
     println!("  id:      {}", sub.id);
@@ -378,8 +389,7 @@ pub async fn subscription_delete(args: SubscriptionDeleteArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, id = %args.id, "deleting subscription");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool);
 
@@ -398,8 +408,7 @@ pub async fn subscription_rotate(args: SubscriptionRotateArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, id = %args.id, "rotating subscription token");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let sub_repo = deve_sub_storage_sqlite::SqliteSubscriptionRepository::new(pool.clone());
     let master_key = load_master_key(&pool, &args.key_path).await?;

@@ -249,16 +249,16 @@ pub fn NodesPage(props: NodesProps) -> Element {
     rsx! {
         div { class: "space-y-4",
             div { class: "flex items-center justify-between",
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "nodes.title")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "nodes.title")} }
                 if selected_count > 0 {
-                    span { class: "text-sm text-amber-600 dark:text-amber-500", {format_t(l, "nodes.selected", selected_count)} }
+                    span { class: "text-sm text-accent-text", {format_t(l, "nodes.selected", selected_count)} }
                 }
             }
 
             // Toolbar.
             div { class: "flex flex-wrap items-center gap-2",
                 button {
-                    class: "rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700",
+                    class: "rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover",
                     onclick: move |_| modal.set(NodeModal::Import),
                     {t(l, "nodes.import_btn")}
                 }
@@ -281,12 +281,12 @@ pub fn NodesPage(props: NodesProps) -> Element {
                         {t(l, "nodes.batch_enable")}
                     }
                     button {
-                        class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                        class: "rounded-md border border-line px-3 py-2 text-sm text-muted hover:bg-surface-muted",
                         disabled: *batch_busy.read(), onclick: move |_| batch_set_enabled(false),
                         {t(l, "nodes.batch_disable")}
                     }
                     button {
-                        class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                        class: "rounded-md border border-line px-3 py-2 text-sm text-muted hover:bg-surface-muted",
                         onclick: move |_| {
                             let ids: Vec<String> = selected.read().ids().iter().cloned().collect();
                             modal.set(NodeModal::Tags(ids));
@@ -294,7 +294,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                         {t(l, "nodes.batch_tags")}
                     }
                     button {
-                        class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-500 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800",
+                        class: "rounded-md border border-line px-3 py-2 text-sm text-muted hover:bg-surface-muted",
                         onclick: move |_| selected.write().clear(),
                         {t(l, "nodes.clear_selection")}
                     }
@@ -321,7 +321,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
             }
             div { class: "flex flex-wrap items-center gap-3",
                 input {
-                    class: "flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                    class: "flex-1 rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
                     r#type: "search",
                     placeholder: {t(l, "nodes.search")},
                     value: "{search}",
@@ -332,7 +332,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     },
                 }
                 select {
-                    class: "rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                    class: "rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
                     value: "{protocol_filter}",
                     onchange: move |e| {
                         protocol_filter.set(e.value());
@@ -356,7 +356,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                     option { value: "enabled", {t(l, "nodes.enabled")} }
                     option { value: "disabled", {t(l, "nodes.disabled")} }
                 }
-                span { class: "text-sm text-stone-600 dark:text-stone-400",
+                span { class: "text-sm text-muted",
                     {format_t(l, "nodes.matching_count", total)} " / " {format_t(l, "nodes.loaded_count", all.len())} }
             }
 
@@ -368,7 +368,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
             }
             if *loading.read() {
                 div { class: "flex items-center justify-center py-12",
-                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-stone-700 dark:border-t-amber-500" }
+                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-line border-t-accent" }
                 }
             } else if *nodes_loaded.read() {
                 NodeList { lang: props.lang, nodes: visible_items, selected, modal,
@@ -377,7 +377,7 @@ pub fn NodesPage(props: NodesProps) -> Element {
                 if cursor.read().is_some() {
                     div { class: "flex justify-center pt-4",
                         button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                            class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted disabled:opacity-50",
                             disabled: *loading_more.read() || *refreshing.read(),
                             onclick: load_more,
                             if *loading_more.read() { {t(l, "common.loading")} } else { {t(l, "nodes.load_more")} }
@@ -390,6 +390,10 @@ pub fn NodesPage(props: NodesProps) -> Element {
         // Modals.
         match &*modal.read() {
             NodeModal::None => rsx! {},
+            NodeModal::Details(node) => rsx! {
+                crate::pages::node_details::NodeDetails { lang: l, node: (**node).clone(),
+                    on_close: move |_| modal.set(NodeModal::None) }
+            },
             NodeModal::ManageTags => rsx! { TagManager { lang: props.lang,
                 on_close: move |_| modal.set(NodeModal::None), on_success: move |_| fetch_nodes() } },
             NodeModal::Import => rsx! {

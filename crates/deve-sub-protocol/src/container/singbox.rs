@@ -152,8 +152,18 @@ fn parse_outbound(entry: &Value) -> Node {
             );
         }
     };
+    if let Err(error) = super::native_tls::singbox(entry) {
+        return unsupported_entry(
+            entry,
+            "singbox-json",
+            ProtocolKind::Unknown(outbound_type),
+            error.to_string(),
+        );
+    }
 
     let result = match outbound_type.as_str() {
+        "socks" => super::forward_proxy::singbox(entry, true),
+        "http" => super::forward_proxy::singbox(entry, false),
         "vless" => parse_vless(entry),
         "vmess" => parse_vmess(entry),
         "trojan" => parse_trojan(entry),
@@ -223,7 +233,7 @@ fn extract_tls(entry: &Value) -> Option<TlsConfig> {
         skip_cert_verify: insecure,
         alpn,
         client_fingerprint: fingerprint,
-        certificate_pins: vec![],
+        certificate_pins: super::native_tls::singbox(entry).unwrap_or_default(),
         reality,
     })
 }
@@ -426,14 +436,8 @@ fn parse_hysteria2(entry: &Value) -> Result<Node, ParseError> {
     // WHY: sing-box uses `up_mbps`/`down_mbps` as int Mbps. Convert to bps
     // for the canonical CongestionConfig. BBR is sing-box's only congestion
     // controller for Hysteria2 (no `congestion_control` field). See P2.
-    let up_bps = entry
-        .get("up_mbps")
-        .and_then(|v| v.as_u64())
-        .map(|mbps| mbps * 1_000_000);
-    let down_bps = entry
-        .get("down_mbps")
-        .and_then(|v| v.as_u64())
-        .map(|mbps| mbps * 1_000_000);
+    let up_bps = super::bandwidth::singbox(entry, "up_mbps")?;
+    let down_bps = super::bandwidth::singbox(entry, "down_mbps")?;
     let congestion = (up_bps.is_some() || down_bps.is_some()).then_some(CongestionConfig {
         controller: CongestionController::Bbr,
         up_bps,
@@ -740,6 +744,7 @@ fn parse_shadowtls_wrapper(inner_entry: &Value, shadowtls_entry: &Value) -> Node
 /// when merging via detour; for standalone shadowtls (no detour reference),
 /// the node is returned as-is with placeholder inner.
 fn parse_shadowtls_standalone(entry: &Value) -> Result<Node, ParseError> {
+    super::native_tls::singbox(entry)?;
     let (name, endpoint) = build_base(entry)?;
     let version_n = entry
         .get("version")
@@ -752,6 +757,13 @@ fn parse_shadowtls_standalone(entry: &Value) -> Result<Node, ParseError> {
         },
     )?;
     let password = get_str(entry, "password");
+    if entry.get("password").is_some_and(|p| !p.is_string())
+        || (version != ShadowTlsVersion::V1 && password.as_ref().is_none_or(String::is_empty))
+    {
+        return Err(ParseError::MissingField(
+            "ShadowTLS V2/V3 nonempty password",
+        ));
+    }
     let tls = extract_tls(entry).unwrap_or_else(default_tls_enabled);
 
     let config = ProtocolConfig::ShadowTls(ShadowTlsConfig {

@@ -179,14 +179,14 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
 
     rsx! {
         section {
-            h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "settings.2fa")} }
+            h2 { class: "text-lg font-semibold text-foreground", {t(l, "settings.2fa")} }
 
             if *enabled.read() && !is_recovery && !is_disable_prompt && !is_regen_prompt {
                 div { class: "mt-4 space-y-3",
                     p { class: "text-sm text-green-600 dark:text-green-400", {t(l, "2fa.enabled_status")} }
                     div { class: "flex gap-2",
                         button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                            class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted",
                             onclick: move |_| { phase.set(Phase::RegeneratePrompt); password.set(String::new()); error.set(String::new()); },
                             {t(l, "2fa.regenerate")}
                         }
@@ -201,9 +201,9 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
 
             if !*enabled.read() && !is_awaiting_verify && !is_recovery {
                 div { class: "mt-4 space-y-3",
-                    p { class: "text-sm text-stone-600 dark:text-stone-400", {t(l, "2fa.not_enabled")} }
+                    p { class: "text-sm text-muted", {t(l, "2fa.not_enabled")} }
                     button {
-                        class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                        class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                         disabled: *loading.read(),
                         onclick: start_setup,
                         if *loading.read() { {t(l, "common.loading")} } else { {t(l, "2fa.setup")} }
@@ -213,13 +213,13 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
 
             if is_awaiting_verify {
                 div { class: "mt-4 space-y-4",
-                    p { class: "text-sm text-stone-600 dark:text-stone-400", {t(l, "2fa.setup_instructions")} }
+                    p { class: "text-sm text-muted", {t(l, "2fa.setup_instructions")} }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "2fa.secret")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "2fa.secret")} }
                         div { class: "mt-1 flex items-center gap-2",
-                            code { class: "block w-full rounded-md border border-stone-300 bg-stone-50 px-3 py-2 font-mono text-sm dark:border-stone-700 dark:bg-stone-800", "{secret}" }
+                            code { class: "block w-full rounded-md border border-line bg-canvas px-3 py-2 font-mono text-sm", "{secret}" }
                             button {
-                                class: "rounded-md border border-stone-300 px-3 py-2 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                                class: "rounded-md border border-line px-3 py-2 text-xs text-muted hover:bg-surface-muted",
                                 onclick: move |_| {
                                     let s = secret.clone();
                                     spawn(async move { let _ = copy_to_clipboard(&s).await; });
@@ -228,14 +228,14 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
                             }
                         }
                     }
-                    details { class: "rounded-md border border-stone-200 dark:border-stone-800",
-                        summary { class: "cursor-pointer px-3 py-2 text-sm text-stone-600 dark:text-stone-400", {t(l, "2fa.otpauth_uri")} }
-                        code { class: "block px-3 pb-2 break-all font-mono text-xs text-stone-500 dark:text-stone-400", "{otpauth_uri}" }
+                    details { class: "rounded-md border border-line-soft",
+                        summary { class: "cursor-pointer px-3 py-2 text-sm text-muted", {t(l, "2fa.otpauth_uri")} }
+                        code { class: "block px-3 pb-2 break-all font-mono text-xs text-muted", "{otpauth_uri}" }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "auth.2fa_code")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "auth.2fa_code")} }
                         input {
-                            class: "mt-1 block w-full max-w-xs rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full max-w-xs rounded-md border border-line px-3 py-2 text-sm",
                             r#type: "text",
                             inputmode: "numeric",
                             maxlength: "6",
@@ -246,12 +246,12 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
                     }
                     div { class: "flex gap-2",
                         button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                            class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted",
                             onclick: cancel_setup,
                             {t(l, "common.cancel")}
                         }
                         button {
-                            class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                            class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                             disabled: *loading.read(),
                             onclick: move |_| do_verify(),
                             if *loading.read() { {t(l, "common.loading")} } else { {t(l, "auth.2fa_submit")} }
@@ -263,15 +263,15 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
             if is_recovery {
                 div { class: "mt-4 space-y-3",
                     p { class: "text-sm font-medium text-red-600 dark:text-red-400", {t(l, "2fa.recovery_warning")} }
-                    div { class: "rounded-md border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900",
+                    div { class: "rounded-md border border-line-soft bg-canvas p-4",
                         ul { class: "grid grid-cols-2 gap-1 font-mono text-sm",
                             for code in recovery.iter() {
-                                li { class: "text-stone-700 dark:text-stone-300", "{code}" }
+                                li { class: "text-foreground", "{code}" }
                             }
                         }
                     }
                     button {
-                        class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                        class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted",
                         onclick: move |_| { phase.set(Phase::Idle); },
                         {t(l, "common.close")}
                     }
@@ -280,11 +280,11 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
 
             if is_disable_prompt || is_regen_prompt {
                 div { class: "mt-4 space-y-3",
-                    p { class: "text-sm text-stone-600 dark:text-stone-400", {t(l, "2fa.password_required")} }
+                    p { class: "text-sm text-muted", {t(l, "2fa.password_required")} }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "users.password")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "users.password")} }
                         input {
-                            class: "mt-1 block w-full max-w-xs rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "mt-1 block w-full max-w-xs rounded-md border border-line px-3 py-2 text-sm",
                             r#type: "password",
                             value: "{password}",
                             oninput: move |e| password.set(e.value()),
@@ -298,7 +298,7 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
                     }
                     div { class: "flex gap-2",
                         button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                            class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted",
                             onclick: move |_| { phase.set(Phase::Idle); password.set(String::new()); error.set(String::new()); },
                             {t(l, "common.cancel")}
                         }
@@ -311,7 +311,7 @@ pub fn TwoFactorSettings(props: TwoFactorSettingsProps) -> Element {
                             }
                         } else {
                             button {
-                                class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                                class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                                 disabled: *loading.read(),
                                 onclick: move |_| do_regenerate(),
                                 if *loading.read() { {t(l, "common.loading")} } else { {t(l, "2fa.regenerate")} }

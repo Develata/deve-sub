@@ -369,11 +369,12 @@ proxies:
 }
 
 /// R3-03 regression: ShadowTLS wrapping a Snell inner whose SnellConfig carries
-/// an `obfs` must emit exactly one `obfs-opts` block. Before the fix,
+/// an independent `obfs` must be rejected. The former fix emitted only one
+/// block by silently deleting the inner layer. Before that,
 /// `emit_snell` emitted the inner `obfs-opts:` and `emit_shadowtls` appended a
 /// second `obfs-opts: mode: shadow-tls`, producing a duplicate YAML key.
 #[test]
-fn mihomo_shadowtls_snell_inner_obfs_no_duplicate_key() {
+fn mihomo_shadowtls_snell_independent_obfs_is_not_discarded() {
     use deve_sub_domain::{
         DomainName, Endpoint, Host, NodeSource, RegionAssignment, RegionMethod, SnellConfig,
         SnellObfs, SnellObfsMode, SnellVersion, TlsConfig, UdpCapability,
@@ -436,12 +437,7 @@ fn mihomo_shadowtls_snell_inner_obfs_no_duplicate_key() {
         extras: std::collections::BTreeMap::new(),
     };
 
-    let emitted = deve_sub_emitter::emit_mihomo(&[node]).expect("emit");
-    let obfs_opts_count = emitted.matches("obfs-opts:").count();
-    assert_eq!(
-        obfs_opts_count, 1,
-        "expected exactly one `obfs-opts:` block, got {obfs_opts_count}\n--- emitted ---\n{emitted}"
-    );
+    assert!(deve_sub_emitter::emit_mihomo(&[node]).is_err());
 }
 
 // --- PARSE-026: URI round-trip (wrapper only — no inner protocol) ---

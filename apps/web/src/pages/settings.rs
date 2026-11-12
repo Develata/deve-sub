@@ -21,15 +21,14 @@ pub struct SettingsProps {
 }
 
 pub fn SettingsPage(props: SettingsProps) -> Element {
+    let mut branding = use_context::<Signal<crate::branding::Branding>>();
     let l = *props.lang.read();
     let current_theme = *props.theme.read();
     let mut reduce_motion = use_signal(|| crate::theme::read_reduce_motion());
     let mut custom_accent =
         use_signal(|| crate::theme::read_custom_accent().unwrap_or_else(|| "#d97706".to_string()));
     let mut use_custom_accent = use_signal(|| crate::theme::read_custom_accent().is_some());
-    let mut product_name = use_signal(|| {
-        crate::theme::read_custom_product_name().unwrap_or_else(|| "Deve Sub".to_string())
-    });
+    let mut product_name = use_signal(|| branding.read().display_name().to_owned());
     let mut saved_flash = use_signal(|| false);
 
     let theme_options: [(Theme, &str); 4] = [
@@ -43,21 +42,21 @@ pub fn SettingsPage(props: SettingsProps) -> Element {
         div { class: "mx-auto max-w-2xl space-y-8",
             // Theme selection.
             section {
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "settings.theme")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "settings.theme")} }
                 div { class: "mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4",
                     for (theme, label_key) in theme_options {
                         {
                             let is_active = current_theme == theme;
                             let border = if is_active {
-                                "border-amber-500 ring-2 ring-amber-500"
+                                "border-accent ring-2 ring-accent"
                             } else {
-                                "border-stone-300 dark:border-stone-700"
+                                "border-line "
                             };
                             let bg = match theme {
-                                Theme::Light => "bg-stone-50",
-                                Theme::Dark => "bg-stone-900",
-                                Theme::Warm => "bg-amber-50",
-                                Theme::Violet => "bg-violet-50",
+                                Theme::Light => "theme-preview-light",
+                                Theme::Dark => "theme-preview-dark",
+                                Theme::Warm => "theme-preview-warm",
+                                Theme::Violet => "theme-preview-violet",
                             };
                             rsx! {
                                 button {
@@ -65,7 +64,7 @@ pub fn SettingsPage(props: SettingsProps) -> Element {
                                     class: "rounded-lg border-2 {border} {bg} p-4 text-left transition hover:shadow-md",
                                     onclick: move |_| props.on_theme_change.call(theme),
                                     div { class: "flex h-16 flex-col justify-end",
-                                        span { class: "text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, label_key)} }
+                                        span { class: "text-sm font-medium", {t(l, label_key)} }
                                     }
                                 }
                             }
@@ -76,12 +75,12 @@ pub fn SettingsPage(props: SettingsProps) -> Element {
 
             // Custom accent color (UI-006).
             section {
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "settings.accent_color")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "settings.accent_color")} }
                 div { class: "mt-4 flex items-center gap-4",
-                    label { class: "flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300",
+                    label { class: "flex items-center gap-2 text-sm text-foreground",
                         input {
                             r#type: "checkbox",
-                            class: "rounded border-stone-300 text-amber-600 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800",
+                            class: "rounded border-line text-accent-text focus:ring-accent",
                             checked: *use_custom_accent.read(),
                             onchange: move |e| {
                                 let v = e.checked();
@@ -98,7 +97,7 @@ pub fn SettingsPage(props: SettingsProps) -> Element {
                     if *use_custom_accent.read() {
                         input {
                             r#type: "color",
-                            class: "h-10 w-16 rounded border border-stone-300 dark:border-stone-700 dark:bg-stone-800",
+                            class: "h-10 w-16 rounded border border-line",
                             value: "{custom_accent}",
                             onchange: move |e| {
                                 let v = e.value();
@@ -112,12 +111,12 @@ pub fn SettingsPage(props: SettingsProps) -> Element {
 
             // Reduce motion (UI-007).
             section {
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "settings.reduce_motion")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "settings.reduce_motion")} }
                 div { class: "mt-4",
-                    label { class: "flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300",
+                    label { class: "flex items-center gap-2 text-sm text-foreground",
                         input {
                             r#type: "checkbox",
-                            class: "rounded border-stone-300 text-amber-600 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800",
+                            class: "rounded border-line text-accent-text focus:ring-accent",
                             checked: *reduce_motion.read(),
                             onchange: move |e| {
                                 let v = e.checked();
@@ -132,22 +131,22 @@ pub fn SettingsPage(props: SettingsProps) -> Element {
 
             // Language (UI-002).
             section {
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "settings.language")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "settings.language")} }
                 div { class: "mt-4 flex gap-3",
                     button {
                         class: if l == Language::Zh {
-                            "rounded-md bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                            "rounded-md bg-accent-soft px-4 py-2 text-sm font-medium text-accent-text  "
                         } else {
-                            "rounded-md border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+                            "rounded-md border border-line px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted   "
                         },
                         onclick: move |_| props.on_lang_change.call(Language::Zh),
                         {t(l, "settings.chinese")}
                     }
                     button {
                         class: if l == Language::En {
-                            "rounded-md bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                            "rounded-md bg-accent-soft px-4 py-2 text-sm font-medium text-accent-text  "
                         } else {
-                            "rounded-md border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+                            "rounded-md border border-line px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted   "
                         },
                         onclick: move |_| props.on_lang_change.call(Language::En),
                         {t(l, "settings.english")}
@@ -157,18 +156,22 @@ pub fn SettingsPage(props: SettingsProps) -> Element {
 
             // Custom product name (UI-006).
             section {
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "settings.product_name")} }
-                div { class: "mt-4 flex items-center gap-3",
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "settings.product_name")} }
+                div { class: "mt-4 flex flex-wrap items-center gap-3",
                     input {
-                        class: "block w-64 rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                        class: "block w-full min-w-0 rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent sm:w-64",
                         r#type: "text",
+                        aria_label: t(l, "settings.product_name"),
                         value: "{product_name}",
                         oninput: move |e| product_name.set(e.value()),
                     }
                     button {
-                        class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700",
+                        class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover",
                         onclick: move |_| {
-                            crate::theme::save_custom_product_name(&product_name.read());
+                            let name = product_name.read().trim().to_owned();
+                            crate::theme::save_custom_product_name(&name);
+                            branding.write().custom_name = (!name.is_empty()).then_some(name);
+                            product_name.set(branding.read().display_name().to_owned());
                             saved_flash.set(true);
                         },
                         {t(l, "common.save")}

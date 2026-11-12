@@ -23,19 +23,19 @@ pub fn SubscriptionRow(
     let temp_link = sub.clone();
     let delete = sub.clone();
     rsx! {
-        tr { class: "border-b border-stone-100 align-top dark:border-stone-800", role: "row",
+        tr { class: "border-b border-line-soft align-top", role: "row",
             td { class: "subscription-identity px-4 py-4 font-medium", role: "cell", "{sub.name}" }
-            td { class: "subscription-slug px-4 py-4 text-stone-600 dark:text-stone-400", role: "cell",
+            td { class: "subscription-slug px-4 py-4 text-muted", role: "cell",
                 span { class: "subscription-cell-label", aria_hidden: "true", {t(lang, "subs.slug")} } "{sub.slug}" }
-            td { class: "px-4 py-4 text-stone-600 dark:text-stone-400", role: "cell",
+            td { class: "px-4 py-4 text-muted", role: "cell",
                 span { class: "subscription-cell-label", aria_hidden: "true", {t(lang, "subs.profile")} } "{sub.profile}" }
-            td { class: "px-4 py-4 text-stone-600 dark:text-stone-400", role: "cell",
+            td { class: "px-4 py-4 text-muted", role: "cell",
                 span { class: "subscription-cell-label", aria_hidden: "true", {t(lang, "subs.short_code")} }
                 span { class: "font-mono text-xs", {sub.short_code.as_deref().unwrap_or("—")} }
             }
             td { class: "px-4 py-4", role: "cell",
                 span { class: "subscription-cell-label", aria_hidden: "true", {t(lang, "nodes.status")} }
-                span { class: if sub.enabled { "subscription-status-enabled" } else { "text-sm text-stone-600 dark:text-stone-400" },
+                span { class: if sub.enabled { "subscription-status-enabled" } else { "text-sm text-muted " },
                     {t(lang, if sub.enabled { "nodes.enabled" } else { "nodes.disabled" })} }
             }
             td { class: "subscription-action-cell px-4 py-4", role: "cell",

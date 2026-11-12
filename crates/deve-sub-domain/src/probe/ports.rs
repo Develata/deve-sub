@@ -131,6 +131,8 @@ pub trait LatencyProbe: Send + Sync {
     ///
     /// Implementations must:
     /// - respect the `timeout` parameter (abort after the deadline);
+    /// - release owned I/O and stop owned relays when the caller drops the
+    ///   returned future to cancel a probe;
     /// - classify errors into [`ErrorClass`];
     /// - return `rtt_ms = None` + `error_class = Timeout` for no response
     ///   (NODE-014: no fake latency, no auto-kill).

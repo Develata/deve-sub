@@ -15,6 +15,7 @@ pub const PROFILES: &[&str] = &[
     "v2ray",
     "shadowrocket",
     "uri_list",
+    "json",
 ];
 
 /// Modal state machine for the subscriptions page.

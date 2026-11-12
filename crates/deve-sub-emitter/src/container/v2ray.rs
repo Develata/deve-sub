@@ -18,6 +18,8 @@ pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
                 | ProtocolKind::VMess
                 | ProtocolKind::Trojan
                 | ProtocolKind::Shadowsocks
+                | ProtocolKind::Socks5
+                | ProtocolKind::Http
         ) || node.transport.as_ref().is_some_and(|t| {
             !matches!(
                 t.kind,
@@ -41,6 +43,18 @@ pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
             "V2Ray does not support Reality security".into(),
         ));
     }
+    if nodes.iter().any(|node| {
+        matches!(&node.config, ProtocolConfig::Http(config) if !config.headers.is_empty())
+            || matches!(node.protocol, ProtocolKind::Http | ProtocolKind::Socks5)
+                && node
+                    .tls
+                    .as_ref()
+                    .is_some_and(|tls| tls.client_fingerprint.is_some())
+    }) {
+        return Err(EmitError::NoEmitter(
+            "V2Ray v4 JSON cannot preserve forward-proxy HTTP headers or TLS fingerprint".into(),
+        ));
+    }
     emit_xray_compatible(nodes)
 }
 
@@ -53,7 +67,11 @@ pub(super) fn emit_xray_compatible(nodes: &[Node]) -> Result<String, EmitError> 
 }
 
 fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
-    let server = node.endpoint.host.uri_host();
+    super::fidelity::check(node, super::fidelity::Target::Xray)?;
+    if matches!(node.protocol, ProtocolKind::Socks5 | ProtocolKind::Http) {
+        return super::forward_proxy::xray(node);
+    }
+    let server = node.endpoint.host.address_host();
     let port = node.endpoint.port;
     let tag = node.display_name.clone();
 

@@ -1,4 +1,4 @@
-import { test, expect, navigate, createTemplate } from './fixture';
+import { test, expect, navigate, createTemplate, importNodes } from './fixture';
 
 const subscriptions = /^长期订阅$|^Subscriptions$/;
 const addSubscription = /^添加订阅$|^Add Subscription$/;
@@ -7,6 +7,7 @@ const cancel = /^取消$|^Cancel$/;
 
 // OUT-016: malformed limits must not silently turn an existing cap into unlimited.
 test('subscription quota preserves invalid drafts and only blank removes the limit', async ({ api, page }) => {
+  await importNodes(api, 1);
   const template = await createTemplate(api);
   const created = await api.post('/api/v1/subscriptions', { data: {
     name: 'Quota fixture', slug: 'quota-fixture', template_id: template.id,
@@ -53,7 +54,7 @@ test('subscription quota preserves invalid drafts and only blank removes the lim
 
 for (const kind of ['subscription', 'user'] as const) {
   test(`${kind} pending form cannot close or switch and failed save keeps the draft`, async ({ api, page }) => {
-    if (kind === 'subscription') await createTemplate(api);
+    if (kind === 'subscription') { await importNodes(api, 1); await createTemplate(api); }
     await navigate(page, kind === 'subscription' ? subscriptions : /^用户$|^Users$/);
     const add = page.getByRole('button', { name: kind === 'subscription' ? addSubscription : /^新建用户$|^New User$/ });
     await add.click();

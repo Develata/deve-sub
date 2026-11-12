@@ -100,6 +100,20 @@ compatibility judgment, security-field correction, subscription source merging,
 core YAML generation, or permission logic. See `docs/plan/01-terminology.md`
 §"Thin frontend".
 
+Theme presentation (UI-003/004/005/006) uses shared semantic colors for the
+page canvas, surfaces, inputs, borders, primary text, secondary text and accent.
+Light, Dark, Warm and Violet must visibly affect the complete application shell
+and dialogs. Theme and custom-accent preferences persist independently.
+Browser acceptance checks computed colors and rendered screenshots on actual
+pages after reload; an HTML class or storage value alone is insufficient proof.
+
+The public health response supplies the configured product name. One reactive
+Web branding state supplies the shell, authentication screens and document
+title. A browser-local display-name preference may override it; clearing that
+preference restores the server name. This presentation preference does not
+change server configuration or the authentication issuer. UI-006 verifies the
+visible name after saving, navigation and reload.
+
 ## Authority
 
 - Typed module boundaries: `docs/contracts/module-boundaries.md`

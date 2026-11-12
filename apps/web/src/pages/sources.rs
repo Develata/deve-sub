@@ -300,15 +300,15 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
     rsx! {
         div { class: "space-y-4",
             div { class: "flex flex-wrap items-center justify-between gap-3",
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "sources.title")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "sources.title")} }
                 div { class: "flex gap-2",
                     button {
-                        class: "rounded-md border border-stone-300 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                        class: "rounded-md border border-line px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted",
                         onclick: move |_| fetch_sources(),
                         {t(l, "common.refresh")}
                     }
                     button {
-                        class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700",
+                        class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover",
                         onclick: open_create,
                         {t(l, "sources.add")}
                     }
@@ -323,24 +323,24 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
 
             if *loading.read() {
                 div { class: "flex items-center justify-center py-12",
-                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-stone-700 dark:border-t-amber-500" }
+                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-line border-t-accent" }
                 }
             } else if !error.read().is_empty() {
                 div { class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{error}" }
             } else if sources.read().is_empty() {
-                div { class: "rounded-md border border-stone-200 p-8 text-center dark:border-stone-800",
-                    p { class: "text-sm text-stone-500 dark:text-stone-400", {t(l, "sources.empty")} }
+                div { class: "rounded-md border border-line-soft p-8 text-center",
+                    p { class: "text-sm text-muted", {t(l, "sources.empty")} }
                 }
             } else {
-                div { class: "overflow-x-auto rounded-lg border border-stone-200 dark:border-stone-800",
+                div { class: "overflow-x-auto rounded-lg border border-line-soft",
                     table { class: "source-table w-full text-sm",
                         thead {
-                            tr { class: "border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "sources.name")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "sources.url")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "sources.source_type")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "nodes.status")} }
-                                th { class: "px-4 py-3 text-right font-medium text-stone-500 dark:text-stone-400", "" }
+                            tr { class: "border-b border-line-soft bg-canvas",
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "sources.name")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "sources.url")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "sources.source_type")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "nodes.status")} }
+                                th { class: "px-4 py-3 text-right font-medium text-muted", "" }
                             }
                         }
                         tbody {
@@ -353,31 +353,31 @@ pub fn SourcesPage(props: SourcesProps) -> Element {
                                     rsx! {
                                         tr {
                                             key: "{id}",
-                                            class: "border-b border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-800/50",
-                                            td { class: "source-identity px-4 py-3 font-medium text-stone-900 dark:text-stone-100", "{source.name}" }
-                                            td { class: "source-address px-4 py-3 text-stone-500 dark:text-stone-400",
+                                            class: "border-b border-line-soft hover:bg-canvas",
+                                            td { class: "source-identity px-4 py-3 font-medium text-foreground", "{source.name}" }
+                                            td { class: "source-address px-4 py-3 text-muted",
                                                 span { class: "block max-w-xs truncate", "{source.url}" }
                                             }
-                                            td { class: "px-4 py-3 text-stone-500 dark:text-stone-400",
+                                            td { class: "px-4 py-3 text-muted",
                                                 {source.source_type.label(l)}
                                             }
                                             td { class: "px-4 py-3",
                                                 if source.enabled {
                                                     span { class: "inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300", {t(l, "nodes.enabled")} }
                                                 } else {
-                                                    span { class: "inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500 dark:bg-stone-800 dark:text-stone-400", {t(l, "nodes.disabled")} }
+                                                    span { class: "inline-flex rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-muted", {t(l, "nodes.disabled")} }
                                                 }
                                             }
                                             td { class: "source-actions px-4 py-3 text-right",
                                                 div { class: "flex justify-end gap-1",
                                                     button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                                                        class: "rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-surface-muted disabled:opacity-50",
                                                         disabled: is_refreshing,
                                                         onclick: move |_| do_refresh(id.clone()),
                                                         if is_refreshing { {t(l, "common.loading")} } else { {t(l, "common.refresh")} }
                                                     }
                                                     button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                                                        class: "rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-surface-muted",
                                                         onclick: move |_| open_edit(edit_src.clone()),
                                                         {t(l, "common.edit")}
                                                     }

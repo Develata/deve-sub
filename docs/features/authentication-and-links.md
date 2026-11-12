@@ -7,6 +7,11 @@ unknown username, a wrong password or an inactive account. Failure counters
 cover both username and canonical client IP. Excess password verification
 work returns 429 instead of growing an unbounded Argon2 workload.
 
+The second-factor login field accepts the complete alphanumeric recovery code,
+including its separator, as well as a six-digit TOTP. Enrollment still asks for
+a six-digit TOTP. The normal browser/API authentication journey exercises
+enrollment, both login methods, recovery-code renewal, disable and restart.
+
 Enabling 2FA saves the enabled state and recovery codes together. A setup or
 verification still in flight cannot overwrite a newer enrollment. Disabling
 2FA and regenerating codes likewise preserve a later enrollment; failed writes
@@ -45,6 +50,7 @@ failed replacement leaves the previous code usable.
 
 The subscription list's Copy action fetches the existing short code and
 copies `/s/{code}/{profile}`. If no short code exists, generate one first.
+The list displays the current short code after generation and on reload.
 Creation, token rotation and temporary-link dialogs display an importable
 `/sub/{token}/{profile}` URL once. The slug is only a name, never a credential.
 

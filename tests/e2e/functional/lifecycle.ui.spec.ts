@@ -1,6 +1,7 @@
-import { test, expect, navigate, templateYaml } from './fixture';
+import { test, expect, navigate, templateYaml, importNodes } from './fixture';
 
 test('FUNC-PAGINATION sources, templates and subscriptions remain reachable beyond the first page', async ({ api, page }) => {
+  await importNodes(api, 1);
   const templates: string[] = [];
   for (let i = 0; i < 51; i++) {
     const name = `Fixture-${String(i).padStart(2, '0')}`;

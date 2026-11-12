@@ -3,6 +3,8 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
+#[path = "normal_inventory.rs"]
+mod normal;
 #[cfg(test)]
 #[path = "inventory_tests.rs"]
 mod tests;
@@ -74,7 +76,7 @@ pub(crate) fn validate(workflow: &Value, packages: &BTreeSet<String>) -> Result<
             job.get("continue-on-error").is_none(),
             "{name}: job cannot suppress errors"
         );
-        if name != "multiarch" && name != "acceptance-gate" {
+        if !["multiarch", "acceptance-gate", "normal-gate"].contains(&name.as_str()) {
             ensure!(
                 job.get("if").is_none(),
                 "{name}: baseline job cannot be conditional"
@@ -95,6 +97,7 @@ pub(crate) fn validate(workflow: &Value, packages: &BTreeSet<String>) -> Result<
     );
     let count = rust_shards(&jobs["test"], packages)?;
     browser_lanes(&jobs["browser-e2e"])?;
+    normal::validate(&jobs["normal-acceptance"], &jobs["normal-gate"])?;
     docker_runtime(&jobs["docker"], &jobs["multiarch"])?;
     Ok(count)
 }

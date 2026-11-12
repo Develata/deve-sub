@@ -348,7 +348,7 @@ GenerationRequest
       compatible nodes → keep
       incompatible nodes → ExcludedNode (reason code)
       strict mode: any excluded → GenerationError
-  → sort + dedup (by sort key, then endpoint+protocol)
+  → sort by override sort key, host, port and protocol; dedup by stable NodeId
   → resolve chain graph (expand relay groups, detect cycles)
   → assemble ProxyGroups (populate members, apply quick-group filters)
   → assemble template IR (nodes + groups + rules + dns + tun + output)
@@ -417,8 +417,18 @@ container correctness changes. Current cache keys are recomputable from each
 entry's stored inputs. Direct hits, active-output queries and last-good fallback
 may expose only entries produced under current semantics. The selection/group
 safety upgrade rebuilds legacy caches on demand; their rows remain untouched
-until ordinary retention, but cannot be treated as valid fallback. If rebuilding
+for private recovery until explicit removal, but cannot be valid fallback. If rebuilding
 fails before a current valid result exists, delivery returns a controlled error.
+
+The v7 security transition also records producer qualification separately from
+encryption. Migration 0031 adds `semantics_version` with default 0, without
+rewriting or deleting any historical row. Keyed 0029 backfill authenticates and
+encrypts payloads but never promotes this qualification. Only a successfully
+generated current-key entry may be stored with version 7. Direct, active,
+latest, activation and retention protection filter qualification before
+ordering or mutation. Historical rows remain available for private recovery;
+they cannot mask or evict a qualified current last-good result. Withdrawal
+fences remain authoritative, including for late writers.
 
 ## Failure/recovery
 

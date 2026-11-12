@@ -1047,6 +1047,16 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-storage-sqlite/tests/node_security_recovery.rs::exact_quarantine_preserves_settings_references_and_chain_closure"
+        - "crates/deve-sub-storage-sqlite/tests/node_security_recovery.rs::tls_repair_keeps_old_id_ciphertext_overrides_and_disabled_state"
+        - "crates/deve-sub-storage-sqlite/tests/node_security_recovery.rs::wrong_key_stale_cas_collision_and_late_fault_are_atomic"
+        - "crates/deve-sub-storage-sqlite/tests/node_security_recovery.rs::reviewed_empty_batch_never_disables_nodes_or_changes_withdrawal"
+        - "crates/deve-sub-storage-sqlite/tests/node_security_recovery.rs::ignored_tls_update_cannot_record_repaired_or_release_quarantine"
+        - "crates/deve-sub-storage-sqlite/tests/node_security_recovery.rs::altered_result_and_different_replay_policy_are_not_verified_repairs"
+        - "crates/deve-sub-storage-sqlite/tests/node_security_recovery.rs::repair_cannot_implicitly_select_a_previously_unquarantined_identity"
+        - "apps/cli/tests/node_security_recovery.rs::historical_pool_requires_map_preview_is_readonly_and_repair_preserves_old_identity"
+        - "apps/cli/tests/node_security_recovery.rs::absent_wrong_hash_wrong_entry_non_tls_change_and_stale_cas_keep_quarantine"
+        - "apps/cli/tests/node_security_recovery.rs::original_spki_policy_is_not_rewritten_into_certificate_fingerprint_policy"
         - "tests/e2e/functional/organization.ui.spec.ts::FUNC-OVERRIDE"
         - "crates/deve-sub-application/tests/node_override_acceptance.rs::node_010_override_survives_refresh"
         - "crates/deve-sub-storage-sqlite/tests/node_overrides.rs::override_crud_round_trip"
@@ -1144,7 +1154,8 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "apps/server/tests/probes.rs::batch_cancel_probe_run_aborts_inflight_and_skips_pending"
+        - "apps/server/tests/probes/cancellation.rs::batch_cancel_probe_run_aborts_inflight_and_skips_pending"
+        - "apps/server/tests/probes/cancellation.rs::batch_cancel_probe_run_preserves_completed_measurements"
       status: pass
   - id: NODE-017
     title: 链式代理
@@ -1413,6 +1424,12 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-application/tests/generation_safety/security_recovery.rs::dynamic_and_quick_groups_regenerate_without_old_quarantined_cache_or_chain"
+        - "crates/deve-sub-application/tests/generation_safety/security_recovery.rs::required_quarantined_node_and_chain_fail_in_both_modes_on_all_surfaces"
+        - "crates/deve-sub-application/tests/generation_safety/security_recovery.rs::quarantine_outside_the_selector_cannot_block_an_unaffected_selection"
+        - "crates/deve-sub-application/tests/generation_safety/security_recovery.rs::native_automatic_groups_keep_safe_nodes_but_explicit_required_quarantine_errors"
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption/semantics.rs::encrypted_v6_upgrade_keeps_history_but_never_serves_or_promotes_it"
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption/semantics.rs::newer_unqualified_row_cannot_mask_or_evict_current_last_good"
         - "crates/deve-sub-yaml/tests/generated.rs::generated_validation_catches_tail_errors_tags_aliases_and_nested_duplicates"
         - "tests/e2e/functional/templates.api.spec.ts::FUNC-TEMPLATE-PIN"
         - "tests/e2e/functional/templates.api.spec.ts::FUNC-CLASH-VALIDATION"
@@ -1436,7 +1453,8 @@ cases:
         - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_retained_node_alias_survives_withdrawn_name_collision"
         - "crates/deve-sub-application/tests/generation_safety/withdrawal_groups.rs::gen015_native_withdrawn_secondary_alias_is_removed_without_losing_survivors"
         - "crates/deve-sub-application/src/template/clash_filter.rs::gen015_native_regex_bounds_reject_excessive_work"
-      status: pass
+      status: blocked
+      notes: "v7/0031 targeted storage and application gates now exclude unqualified historical cache before delivery, ordering and retention; encryption never promotes it. Complete candidate acceptance, historical node pin recovery and platform gates remain NOT_READY."
   - id: GEN-016
     title: 预览一致性
     priority: P0
@@ -1466,7 +1484,13 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_31_delivered_protocol_configurations"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::ca01_native_server_fields_use_bare_ipv6"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::ca03_mihomo_numeric_name_and_password_are_text"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::ca03_mihomo_numeric_short_id_and_existing_leading_zero_are_text"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::ca04_native_targets_reject_hysteria_leaf_pin_trust_policy"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::ca05_mihomo_obfs_options_map_to_sip003_and_back"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::tuic_mihomo_heartbeat_interval_is_milliseconds"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_36_delivered_protocol_configurations"
         - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_validate_routing_dns_with_local_geosite"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_native_routing_templates_pass_mihomo"
         - "crates/deve-sub-emitter/tests/out001_mihomo_check.rs::out001_mihomo_check_passes"
@@ -1498,7 +1522,10 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_31_delivered_protocol_configurations"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::ca02_singbox_grpc_uses_service_name"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::ca04_singbox_retains_spki_pin"
+        - "crates/deve-sub-emitter/tests/protocol_audit_regressions.rs::ca06_singbox_rejects_lossy_bandwidth_and_retains_integer_mbps"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_36_delivered_protocol_configurations"
         - "crates/deve-sub-emitter/tests/out003_singbox_check.rs::out003_singbox_check_passes"
         - "crates/deve-sub-emitter/tests/out003_singbox_check.rs::out003_singbox_check_rejects_garbage"
       status: pass
@@ -1514,7 +1541,7 @@ cases:
     fixtures: []
     evidence:
       tests:
-        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_31_delivered_protocol_configurations"
+        - "apps/server/tests/subscription_delivery/acceptance/validators.rs::acceptance_validators_accept_36_delivered_protocol_configurations"
         - "crates/deve-sub-emitter/tests/out004_xray_check.rs::out004_xray_check_passes"
         - "crates/deve-sub-emitter/tests/out004_xray_check.rs::out004_xray_check_rejects_garbage"
       status: pass
@@ -2459,11 +2486,13 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["deve-sub backup --output 生成含 manifest/database/config/metadata 的 tar"]
+    assertions: ["deve-sub backup --output 生成含 manifest/database/config/metadata 的 tar", "快照已有密钥绑定时要求匹配原密钥；错误或缺失密钥不得替换旧归档"]
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/backup_restore/generation_cache.rs::cache_migrate_archive_restore_keeps_key_and_last_good_output"
         - "apps/cli/tests/backup_key_validation.rs::backup001_invalid_explicit_key_preserves_previous_archive"
+        - "apps/cli/tests/backup_continuity.rs::backup_bound_snapshot_requires_matching_key_and_preserves_archive"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
       status: pass
   - id: BACKUP-002
@@ -2477,6 +2506,8 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption.rs::cache_content_does_not_leak_into_database_backup"
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption.rs::schema_rejects_plaintext_reintroduction"
         - "apps/cli/tests/backup_concurrency.rs::backup002_concurrent_writes_preserve_manifest_and_restore"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
         - "crates/deve-sub-storage-sqlite/tests/schema_verify.rs::verify_ok_on_fully_migrated_db"
@@ -2488,12 +2519,18 @@ cases:
     dimensions: []
     preconditions: []
     steps: []
-    assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check", "旧 staging WAL 不得混入新备份；验证失败保留目标并清理本次 staging"]
+    assertions: ["deve-sub restore 在新实例恢复数据库并通过 integrity_check", "旧 staging WAL 不得混入新备份；验证失败保留目标并清理本次 staging", "替换前核对数据库真实密钥绑定与迁移历史，显式密钥加载失败不得忽略"]
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/backup_restore/generation_cache.rs::cache_restore_legacy_archive_backfills_staging_and_tamper_never_swaps_target"
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption.rs::wrong_key_cannot_read_write_or_demote_last_good_output"
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption.rs::tampered_and_relocated_envelopes_never_become_plaintext_or_active"
         - "apps/cli/tests/restore_staging.rs::backup003_restore_ignores_previous_staging_wal"
         - "apps/cli/tests/restore_staging.rs::backup003_failed_verification_cleans_own_staging"
+        - "apps/cli/tests/backup_continuity.rs::restore_checks_database_binding_even_when_manifest_matches_wrong_key"
+        - "apps/cli/tests/backup_continuity.rs::restore_explicit_invalid_key_cannot_disappear_with_legacy_manifest"
+        - "apps/cli/tests/backup_continuity.rs::restore_rejects_tampered_migration_history_before_swap"
         - "apps/cli/tests/backup_concurrency.rs::backup002_concurrent_writes_preserve_manifest_and_restore"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0002_backup_restore_preserves_schema"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
@@ -2509,8 +2546,19 @@ cases:
     fixtures: []
     evidence:
       tests:
+        - "apps/cli/tests/migration_safety.rs::missing_wrong_key_and_backup_io_failure_leave_schema_unchanged"
+        - "apps/cli/tests/migration_safety.rs::failed_staged_payload_conversion_keeps_live_database_and_rollback_pair"
+        - "apps/cli/tests/migration_safety.rs::populated_pre0015_and_management_implicit_upgrade_preserve_original_fields"
+        - "apps/cli/tests/migration_safety.rs::supplied_key_never_first_binds_unverified_existing_ciphertext"
+        - "apps/cli/tests/migration_safety.rs::probe_counter_and_pre_binding_hmac_state_require_original_key_verification"
+        - "apps/cli/tests/migration_safety.rs::traffic_projection_backfill_is_verified_without_rejecting_valid_new_rows"
+        - "apps/cli/tests/migration_safety.rs::management_waiter_opens_published_database_after_acquiring_lock"
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption/migration.rs::legacy_migration_preserves_cache_identity_pins_modes_and_withdrawal_floor"
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption/migration.rs::interrupted_backfill_rolls_back_all_payloads_and_key_binding"
+        - "crates/deve-sub-storage-sqlite/tests/generation_cache_encryption/migration.rs::ciphertext_authentication_failure_never_reencrypts_as_legacy"
         - "crates/deve-sub-storage-sqlite/tests/migration_recovery.rs::migration_0013_backup_restore_preserves_chain"
         - "apps/cli/tests/backup_restore.rs::backup004_old_traffic_and_pruned_totals_round_trip"
+        - "apps/cli/tests/backup_continuity.rs::legacy_user_only_archive_upgrades_without_creating_key_binding"
         - "crates/deve-sub-storage-sqlite/tests/node_lookup_index.rs::forward_index_removes_scan_and_backup_can_reupgrade"
       status: pass
 

@@ -166,6 +166,13 @@ pub trait ShortCodeRepository: Send + Sync {
         subscription_id: SubscriptionId,
     ) -> Result<Option<ShortCode>, SubscriptionError>;
 
+    /// Read current credentials for one authorized subscription page in bulk.
+    /// An empty set returns no rows; absent codes are omitted.
+    async fn find_by_subscriptions(
+        &self,
+        subscription_ids: &[SubscriptionId],
+    ) -> Result<Vec<ShortCode>, SubscriptionError>;
+
     /// Delete a short code by ID.
     async fn delete(&self, id: ShortCodeId) -> Result<(), SubscriptionError>;
 

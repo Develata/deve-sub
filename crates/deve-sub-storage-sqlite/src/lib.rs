@@ -46,7 +46,10 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use thiserror::Error;
 
 pub use audit_log_repository::SqliteAuditLogRepository;
-pub use generation_cache_repository::SqliteGenerationCacheRepository;
+pub use generation_cache_repository::{
+    SqliteGenerationCacheRepository, migrate_generation_cache, verify_generation_cache_encryption,
+    verify_generation_cache_payloads,
+};
 pub use node_override_repository::SqliteNodeOverrideRepository;
 pub use node_pool_repository::SqliteNodePoolRepository;
 pub use pool_meta_repository::SqlitePoolMetaRepository;
@@ -157,6 +160,10 @@ pub enum StorageError {
          Restore the correct key from backup, or remove the database to start fresh"
     )]
     KeyFingerprintMismatch { expected: String, actual: String },
+
+    /// Cache encryption/backfill failed; plaintext delivery is never permitted.
+    #[error("{0}")]
+    CacheEncryption(&'static str),
 }
 
 /// SQLite PRAGMA configuration applied on every new connection.

@@ -18,6 +18,7 @@ pub struct SetupProps {
 
 /// Admin setup wizard.
 pub fn SetupPage(props: SetupProps) -> Element {
+    let branding = use_context::<Signal<crate::branding::Branding>>();
     let l = *props.lang.read();
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
@@ -65,16 +66,16 @@ pub fn SetupPage(props: SetupProps) -> Element {
     };
 
     rsx! {
-        div { class: "flex min-h-screen items-center justify-center bg-stone-50 dark:bg-stone-950",
-            div { class: "w-full max-w-md rounded-lg border border-stone-200 bg-white p-8 shadow-sm dark:border-stone-800 dark:bg-stone-900",
-                h1 { class: "text-xl font-bold text-stone-900 dark:text-stone-100", {t(l, "setup.title")} }
-                p { class: "mt-2 text-sm text-stone-500 dark:text-stone-400", {t(l, "setup.description")} }
+        div { class: "flex min-h-screen items-center justify-center bg-canvas",
+            div { class: "w-full max-w-md rounded-lg border border-line-soft bg-surface p-8 shadow-sm",
+                h1 { class: "text-xl font-bold text-foreground", {t(l, "setup.title")} }
+                p { class: "mt-2 text-sm text-muted", {format!("{} {}", t(l, "setup.description"), branding.read().display_name())} }
 
                 div { class: "mt-6 space-y-4",
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "setup.username")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "setup.username")} }
                         input {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
                             r#type: "text",
                             autocomplete: "username",
                             value: "{username}",
@@ -85,9 +86,9 @@ pub fn SetupPage(props: SetupProps) -> Element {
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "setup.password")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "setup.password")} }
                         input {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
                             r#type: "password",
                             autocomplete: "new-password",
                             value: "{password}",
@@ -96,12 +97,12 @@ pub fn SetupPage(props: SetupProps) -> Element {
                                 if e.key() == Key::Enter { do_setup(); }
                             },
                         }
-                        p { class: "mt-1 text-xs text-stone-400 dark:text-stone-500", {t(l, "setup.password_weak")} }
+                        p { class: "mt-1 text-xs text-muted", {t(l, "setup.password_weak")} }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "setup.confirm")} }
+                        label { class: "block text-sm font-medium text-foreground", {t(l, "setup.confirm")} }
                         input {
-                            class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                            class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
                             r#type: "password",
                             autocomplete: "new-password",
                             value: "{confirm}",
@@ -115,7 +116,7 @@ pub fn SetupPage(props: SetupProps) -> Element {
                         p { class: "text-sm text-red-600 dark:text-red-400", "{error}" }
                     }
                     button {
-                        class: "w-full rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-stone-900",
+                        class: "w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 disabled:opacity-50",
                         r#type: "submit",
                         disabled: *loading.read(),
                         onclick: move |_| do_setup(),

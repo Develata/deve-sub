@@ -42,15 +42,15 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                 class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
                 onclick: move |_| props.on_close.call(()),
                 div {
-                    class: "node-dialog-panel w-full max-w-3xl rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                    class: "node-dialog-panel w-full max-w-3xl rounded-lg bg-surface p-6 shadow-xl",
                     onclick: move |e| e.stop_propagation(),
-                    h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", "{title}" }
+                    h3 { class: "text-lg font-semibold text-foreground", "{title}" }
 
                     div { class: "mt-4 flex flex-wrap gap-4",
                         div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "tpl.profile")} }
+                            label { class: "block text-sm font-medium text-foreground", {t(l, "tpl.profile")} }
                             select {
-                                class: "mt-1 block rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                                class: "mt-1 block rounded-md border border-line px-3 py-2 text-sm",
                                 value: "{props.gen_profile}",
                                 disabled: *props.gen_loading.read(),
                                 onchange: move |e| { props.gen_profile.set(e.value()); props.gen_result.set(None); props.gen_error.set(String::new()); },
@@ -60,9 +60,9 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                             }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "tpl.mode")} }
+                            label { class: "block text-sm font-medium text-foreground", {t(l, "tpl.mode")} }
                             select {
-                                class: "mt-1 block rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                                class: "mt-1 block rounded-md border border-line px-3 py-2 text-sm",
                                 value: "{props.gen_mode}",
                                 disabled: *props.gen_loading.read(),
                                 onchange: move |e| { props.gen_mode.set(e.value()); props.gen_result.set(None); props.gen_error.set(String::new()); },
@@ -72,7 +72,7 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                         }
                         div { class: "flex items-end",
                             button {
-                                class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                                class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                                 disabled: *props.gen_loading.read(),
                                 onclick: move |_| props.on_run.call(()),
                                 if *props.gen_loading.read() { {t(l, "common.loading")} } else { "{run_label}" }
@@ -87,39 +87,39 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                     if let Some(result) = props.gen_result.read().as_ref() {
                         div { class: "mt-4 space-y-3",
                             if !result.warnings.is_empty() {
-                                div { class: "rounded-md bg-amber-50 p-3 dark:bg-amber-900/20",
-                                    p { class: "text-sm font-medium text-amber-700 dark:text-amber-400", {t(l, "tpl.warnings")} }
+                                div { class: "rounded-md bg-accent-soft p-3",
+                                    p { class: "text-sm font-medium text-accent-text", {t(l, "tpl.warnings")} }
                                     ul { class: "mt-1 list-disc pl-5",
                                         for w in result.warnings.iter() {
-                                            li { class: "text-xs text-amber-700 dark:text-amber-400", "{w}" }
+                                            li { class: "text-xs text-accent-text", "{w}" }
                                         }
                                     }
                                 }
                             }
                             div { class: "flex flex-wrap gap-4 text-xs",
                                 span { "{result.profile}" }
-                                span { class: "text-stone-500 dark:text-stone-400",
+                                span { class: "text-muted",
                                     "{t(l, \"tpl.included\")}: {result.included_node_ids.len()}"
                                 }
-                                span { class: "text-stone-500 dark:text-stone-400",
+                                span { class: "text-muted",
                                     "{t(l, \"tpl.excluded\")}: {result.excluded.len()}"
                                 }
                             }
                             if !result.excluded.is_empty() {
-                                details { class: "rounded-md border border-stone-200 dark:border-stone-800",
-                                    summary { class: "cursor-pointer px-3 py-2 text-sm text-stone-600 dark:text-stone-400", {t(l, "tpl.excluded_nodes")} }
+                                details { class: "rounded-md border border-line-soft",
+                                    summary { class: "cursor-pointer px-3 py-2 text-sm text-muted", {t(l, "tpl.excluded_nodes")} }
                                     ul { class: "px-3 pb-2 list-disc pl-5",
                                         for ex in result.excluded.iter() {
-                                            li { class: "text-xs text-stone-500 dark:text-stone-400", "{ex.display_name} ({ex.node_id}): {ex.reason}" }
+                                            li { class: "text-xs text-muted", "{ex.display_name} ({ex.node_id}): {ex.reason}" }
                                         }
                                     }
                                 }
                             }
                             div {
                                 div { class: "flex items-center justify-between",
-                                    label { class: "text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "tpl.output")} }
+                                    label { class: "text-sm font-medium text-foreground", {t(l, "tpl.output")} }
                                     button {
-                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                                        class: "rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-surface-muted",
                                         onclick: move |_| {
                                             let c = props.gen_result.read().as_ref().map(|r| r.content.clone()).unwrap_or_default();
                                             spawn(async move { let _ = copy_to_clipboard(&c).await; });
@@ -128,7 +128,7 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                                     }
                                 }
                                 textarea {
-                                    class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 font-mono text-xs dark:border-stone-700 dark:bg-stone-800",
+                                    class: "mt-1 block w-full rounded-md border border-line px-3 py-2 font-mono text-xs",
                                     rows: "20",
                                     readonly: true,
                                     "{result.content}",
@@ -138,7 +138,7 @@ pub fn TemplateGenModal(mut props: TemplateGenModalProps) -> Element {
                     }
 
                     div { class: "mt-6 flex justify-end",
-                        button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800", onclick: move |_| props.on_close.call(()), {t(l, "common.close")} }
+                        button { class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted", onclick: move |_| props.on_close.call(()), {t(l, "common.close")} }
                     }
                 }
             }

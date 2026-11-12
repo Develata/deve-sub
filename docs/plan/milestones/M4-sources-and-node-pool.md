@@ -112,7 +112,7 @@ M4 is delivered in five slices:
    for the slowest source in the batch. The CLI retains its bounded grace and
    crash recovery for unresponsive workers (constraint #20; SRC-003/009).
 3. **Node pool + dedup + diff**: Node pool queries with protocol/region
-   filters, dedup by endpoint+protocol, diff (new/unchanged/missing),
+   filters, dedup by keyed canonical node identity, diff (new/unchanged/missing),
    `missing_from_source` flag. Manual node import (paste batch, file
    import). Acceptance: NODE-001, NODE-002, NODE-003, NODE-011.
 4. **Node override + manual region**: `NodeOverride` CRUD, manual region
@@ -142,7 +142,7 @@ NodeReconciler.reconcile(source_id, nodes)
     ↓  (single transaction)
   - create SourceSnapshot (version, etag, node_count)
   - insert SourceItems (raw_uri, parse_status)
-  - dedup nodes by (protocol, host, port)
+  - dedup nodes by HMAC fingerprint of canonical identity
   - upsert into node pool (new nodes get status=active)
   - mark missing nodes (missing_from_source=true)
   - create NodeSourceBindings
@@ -174,11 +174,20 @@ target. Reject if a redirect points to an internal address (SEC-004).
 
 ### Node pool dedup
 
-Two nodes are duplicates if they share the same `(protocol_kind, host,
-port)` tuple. The first-seen node wins; subsequent duplicates are
-recorded as `SourceItem` with `parse_status=duplicate` but do not create
-a new pool entry. The `NodeSourceBinding` table tracks which sources
-contribute to each pool node.
+Two nodes are duplicates when their canonical identity has the same keyed
+HMAC-SHA256 fingerprint (`PURPOSE_NODE_IDENTITY`). Identity includes protocol
+configuration, endpoint, authentication, transport and TLS settings; sharing
+only `(protocol_kind, host, port)` is not enough. Different credentials or
+security settings at one endpoint remain distinct nodes. Display labels,
+source metadata, tags and region do not change identity. Canonical JSON uses
+stable key ordering; raw credentials are not used as database index keys.
+
+The first-seen identity wins; subsequent duplicates are recorded as
+`SourceItem` with `parse_status=duplicate` but do not create a new pool entry.
+The `NodeSourceBinding` table tracks which sources contribute to each pool
+node. The authority is `Node::canonical_identity_str` and the storage
+repository's `identity_fingerprint`; do not replace this with endpoint-only
+deduplication.
 
 ### Node override
 

@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use time::format_description::well_known::Rfc3339;
 
-use crate::commands::{ensure_db_dir, open_db};
+use crate::commands::ensure_db_dir;
 
 /// Format a [`Timestamp`] as an ISO 8601 string for CLI output.
 fn ts_to_iso8601(ts: deve_sub_kernel::Timestamp) -> String {
@@ -190,8 +190,7 @@ pub async fn template_add(args: TemplateAddArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, name = %args.name, "adding template");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool);
 
@@ -222,8 +221,7 @@ pub async fn template_list(args: TemplateListArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, "listing templates");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool);
 
@@ -257,8 +255,7 @@ pub async fn template_get(args: TemplateGetArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, id = %args.id, "getting template");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool.clone());
     let version_repo = deve_sub_storage_sqlite::SqliteTemplateVersionRepository::new(pool);
@@ -291,8 +288,7 @@ pub async fn template_update(args: TemplateUpdateArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, id = %args.id, "updating template");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool);
 
@@ -327,8 +323,7 @@ pub async fn template_delete(args: TemplateDeleteArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, id = %args.id, "deleting template");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let template_repo = deve_sub_storage_sqlite::SqliteTemplateRepository::new(pool);
 
@@ -347,8 +342,7 @@ pub async fn template_versions(args: TemplateVersionsArgs) -> Result<()> {
     tracing::info!(db_path = %args.db_path, id = %args.id, "listing versions");
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let version_repo = deve_sub_storage_sqlite::SqliteTemplateVersionRepository::new(pool);
 
@@ -389,8 +383,7 @@ pub async fn template_rollback(args: TemplateRollbackArgs) -> Result<()> {
     );
 
     ensure_db_dir(&args.db_path)?;
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let version_repo = deve_sub_storage_sqlite::SqliteTemplateVersionRepository::new(pool);
 

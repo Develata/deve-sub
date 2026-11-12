@@ -60,13 +60,17 @@ A typed payload carrying protocol-specific parameters. The seven P0 protocols
 have typed `ProtocolConfig` variants in Phase 1 (VLESS Reality, Hysteria2,
 TUIC v5, NaiveProxy, Shadowsocks, VMess, Trojan). M9 adds four additional
 typed variants: WireGuard, AnyTLS, Snell, ShadowTLS. Remaining non-P0 or
-unknown protocols use `UnsupportedNode`.
+unknown protocols use `UnsupportedNode`, except the forward-proxy expansion's
+typed SOCKS5 and HTTP CONNECT payloads. HTTPS is HTTP CONNECT with enabled TLS;
+SOCKS local/remote destination DNS intent is configuration, not another wire
+protocol.
 
 ### UnsupportedNode
 
-A node whose protocol is not P0 or not recognized. The system preserves its
-raw data but does not pass it to emitters or claim support for it. See
-ADR-0003.
+A node whose protocol or supplied fields lack a complete supported mapping.
+The system preserves its raw data but does not pass it to emitters or claim
+support for it. A recognized protocol name alone does not imply a usable node.
+See ADR-0003.
 
 ### Override
 

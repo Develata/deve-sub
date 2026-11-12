@@ -170,7 +170,7 @@ fn template_id() -> TemplateId {
 }
 
 fn cache_entry(suffix: u32, is_active: bool) -> GenerationCacheEntry {
-    GenerationCacheEntry {
+    let mut entry = GenerationCacheEntry {
         id: GenerationCacheId::parse(&ulid_str("01KZCACA", suffix)).expect("ulid"),
         template_id: template_id(),
         template_version: 1,
@@ -182,7 +182,9 @@ fn cache_entry(suffix: u32, is_active: bool) -> GenerationCacheEntry {
         cache_key: format!("ck-{suffix}"),
         content: format!("content-{suffix}"),
         is_active,
-    }
+    };
+    rekey(&mut entry);
+    entry
 }
 
 #[tokio::test]
@@ -195,7 +197,8 @@ async fn generation_cache_store_prunes_inactive_beyond_retention() {
         .await
         .expect("insert template");
 
-    let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+    let cache_repo =
+        SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
 
     // 12 inactive stores: only the newest 8 (suffixes 4-11) survive.
     for suffix in 0..12u32 {
@@ -434,4 +437,17 @@ async fn upgrade_starts_retention_for_legacy_terminal_runs_without_touching_acti
             .expect("preserve diagnosis"),
         0
     );
+}
+
+fn rekey(entry: &mut GenerationCacheEntry) {
+    entry.cache_key = deve_sub_domain::CacheKeyParams {
+        template_id: entry.template_id,
+        template_version: entry.template_version,
+        profile: &entry.profile,
+        mode: entry.mode.parse().expect("fixture mode"),
+        selection_mode: &entry.selection_mode,
+        selection_payload: &entry.selection_payload,
+        pool_revision: deve_sub_kernel::Revision::new(entry.pool_revision),
+    }
+    .compute_key();
 }

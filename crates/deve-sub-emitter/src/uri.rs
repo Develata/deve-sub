@@ -16,7 +16,26 @@ use crate::error::EmitError;
 /// Returns [`EmitError`] if the protocol has no emitter or a required field
 /// is missing.
 pub fn emit_uri(node: &Node) -> Result<String, EmitError> {
+    if !matches!(node.protocol, ProtocolKind::Socks5 | ProtocolKind::Http)
+        && let Some(tls) = &node.tls
+        && !tls.certificate_pins.is_empty()
+        && (!tls.enabled
+            || tls.reality.is_some()
+            || !matches!(
+                node.protocol,
+                ProtocolKind::Hysteria2 | ProtocolKind::NaiveProxy
+            )
+            || !tls
+                .certificate_pins
+                .iter()
+                .all(|p| p.as_str().starts_with("pinSHA256:")))
+    {
+        return Err(EmitError::NoEmitter(
+            "certificate pin representation".into(),
+        ));
+    }
     match node.protocol {
+        ProtocolKind::Socks5 | ProtocolKind::Http => crate::forward_proxy::emit(node),
         ProtocolKind::Vless => crate::vless_reality::emit(node),
         ProtocolKind::Trojan => crate::trojan::emit(node),
         ProtocolKind::Hysteria2 => crate::hysteria2::emit(node),

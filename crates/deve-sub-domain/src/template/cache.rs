@@ -88,8 +88,8 @@ impl CacheKeyParams<'_> {
         }
 
         let mut hasher = Sha256::new();
-        // v5 rebuilds legacy WireGuard, V2Ray Reality, URI and placeholder output.
-        feed(&mut hasher, b"deve-sub-generation-v5");
+        // v7 excludes historical output produced before security-fidelity fixes.
+        feed(&mut hasher, b"deve-sub-generation-v7");
         feed(&mut hasher, self.template_id.to_string().as_bytes());
         feed(&mut hasher, self.template_version.to_string().as_bytes());
         feed(&mut hasher, self.profile.as_bytes());

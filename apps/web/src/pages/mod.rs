@@ -24,6 +24,8 @@ pub mod sources;
 pub mod subscription_modals;
 mod subscription_row;
 pub mod subscription_types;
+pub mod subscription_selection;
+pub mod node_details;
 pub mod subscriptions;
 pub mod template_gen_modal;
 pub mod template_modals;

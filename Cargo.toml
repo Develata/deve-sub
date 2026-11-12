@@ -123,6 +123,11 @@ js-sys = "0.3"
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
+# WHY: SQLx 0.8.6 pins a vulnerable bundled SQLite; keep its API while
+# updating only the SQLite FFI dependency. See vendor/sqlx-sqlite/README.deve-sub.md.
+[patch.crates-io]
+sqlx-sqlite = { path = "vendor/sqlx-sqlite" }
+
 [workspace.lints.clippy]
 dbg_macro = "deny"
 todo = "deny"

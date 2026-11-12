@@ -10,13 +10,7 @@ use deve_sub_application::AppConfig;
 
 pub use crate::serve_args::ServeArgs;
 
-/// Migrate command arguments.
-#[derive(Args)]
-pub struct MigrateArgs {
-    /// Database path.
-    #[arg(long, env = "DEVE_SUB_DB_PATH", default_value = "data/deve-sub.db")]
-    db_path: String,
-}
+pub use crate::migrate::{MigrateArgs, migrate};
 
 /// Doctor command arguments.
 #[derive(Args)]
@@ -252,18 +246,6 @@ async fn check_bind_available(bind_addr: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn migrate(args: MigrateArgs) -> Result<()> {
-    tracing::info!(db_path = %args.db_path, "running migrations");
-
-    ensure_db_dir(&args.db_path)?;
-
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
-
-    println!("Migrations applied successfully to {db}", db = args.db_path);
-    Ok(())
-}
-
 pub async fn config_validate(args: ConfigValidateArgs) -> Result<()> {
     let config = load_config(&args.config)?;
 
@@ -386,8 +368,7 @@ pub async fn source_add(args: SourceAddArgs) -> Result<()> {
 
     ensure_db_dir(&args.db_path)?;
 
-    let pool = open_db(&args.db_path, 1).await?;
-    deve_sub_storage_sqlite::run_migrations(&pool).await?;
+    let (_db_lock, pool) = crate::migrate::open_current_database(&args.db_path).await?;
 
     let master_key = Arc::new(
         deve_sub_security::MasterKey::load(std::path::Path::new(&args.key_path))

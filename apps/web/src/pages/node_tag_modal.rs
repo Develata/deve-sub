@@ -139,15 +139,15 @@ pub fn TagModal(props: TagModalProps) -> Element {
             class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
             onclick: move |_| { if !*saving.read() { props.on_close.call(()); } },
             div {
-                class: "node-dialog-panel w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+                class: "node-dialog-panel w-full max-w-lg rounded-lg bg-surface p-6 shadow-xl",
                 role: "dialog", aria_label: t(l, "nodes.tag_title"), aria_modal: "true",
                 onclick: move |e| e.stop_propagation(),
-                h3 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100",
+                h3 { class: "text-lg font-semibold text-foreground",
                     {t(l, "nodes.tag_title")}
                 }
 
                 if is_batch {
-                    p { class: "my-3 text-sm text-stone-500", {t(l, "nodes.tag_batch_hint")} }
+                    p { class: "my-3 text-sm text-muted", {t(l, "nodes.tag_batch_hint")} }
                     select { class: "node-control w-full", aria_label: t(l, "nodes.tag_mode"), value: "{mode}",
                         onchange: move |e| mode.set(e.value()), disabled: *saving.read() || !*ready.read(),
                         option { value: "add", {t(l, "nodes.tag_add")} }
@@ -157,12 +157,12 @@ pub fn TagModal(props: TagModalProps) -> Element {
                 }
                 if *loading.read() {
                     div { class: "mt-4 flex justify-center py-8",
-                        div { class: "h-5 w-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600" }
+                        div { class: "h-5 w-5 animate-spin rounded-full border-2 border-line border-t-accent" }
                     }
                 } else {
                     div { class: "mt-4 space-y-2 max-h-64 overflow-y-auto",
                         if all_tags.read().is_empty() {
-                            p { class: "text-sm text-stone-500 dark:text-stone-400", {t(l, "nodes.tag_empty")} }
+                            p { class: "text-sm text-muted", {t(l, "nodes.tag_empty")} }
                         } else {
                             for tag in all_tags.read().iter() {
                                 {
@@ -170,7 +170,7 @@ pub fn TagModal(props: TagModalProps) -> Element {
                                     let is_on = selected.read().contains(&tid);
                                     rsx! {
                                         label {
-                                            class: "flex items-center gap-2 rounded-md border border-stone-200 px-3 py-2 text-sm hover:bg-stone-50 dark:border-stone-700 dark:hover:bg-stone-800",
+                                            class: "flex items-center gap-2 rounded-md border border-line-soft px-3 py-2 text-sm hover:bg-canvas",
                                             input {
                                                 r#type: "checkbox",
                                                 checked: is_on,
@@ -182,7 +182,7 @@ pub fn TagModal(props: TagModalProps) -> Element {
                                                     }
                                                 },
                                             }
-                                            span { class: "text-stone-800 dark:text-stone-200", "{tag.name}" }
+                                            span { class: "text-foreground", "{tag.name}" }
                                         }
                                     }
                                 }
@@ -193,14 +193,14 @@ pub fn TagModal(props: TagModalProps) -> Element {
                     // Inline create.
                     div { class: "mt-4 flex gap-2",
                         input {
-                            class: "flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800",
+                            class: "flex-1 rounded-md border border-line px-3 py-2 text-sm",
                             r#type: "text",
                             placeholder: {t(l, "nodes.tag_new_name")},
                             value: "{new_tag_name}",
                             oninput: move |e| new_tag_name.set(e.value()),
                         }
                         button {
-                            class: "rounded-md border border-stone-300 px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                            class: "rounded-md border border-line px-3 py-2 text-sm text-muted hover:bg-surface-muted disabled:opacity-50",
                             disabled: *saving.read() || !*ready.read(),
                             onclick: create_tag,
                             {t(l, "nodes.tag_create")}
@@ -213,12 +213,12 @@ pub fn TagModal(props: TagModalProps) -> Element {
 
                     div { class: "mt-6 flex justify-end gap-2",
                         button {
-                            class: "rounded-md border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                            class: "rounded-md border border-line px-4 py-2 text-sm text-muted hover:bg-surface-muted",
                             onclick: move |_| { if !*saving.read() { props.on_close.call(()); } },
                             {t(l, "common.cancel")}
                         }
                         button {
-                            class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                            class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                             disabled: *saving.read() || !*ready.read(),
                             onclick: submit,
                             if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }

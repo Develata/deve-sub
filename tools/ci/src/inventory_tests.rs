@@ -41,6 +41,45 @@ fn current_complete_workflow_passes() {
 }
 
 #[test]
+fn normal_case_lanes_gate_and_validators_cannot_be_weakened() {
+    rejected(|workflow| {
+        workflow["jobs"]["normal-acceptance"]["strategy"]["matrix"]["include"]
+            .as_array_mut()
+            .expect("matrix")
+            .pop();
+    });
+    rejected(|workflow| {
+        workflow["jobs"]["normal-acceptance"]["strategy"]["matrix"]["include"][1] =
+            json!({"lane":"protocol-1"});
+    });
+    rejected(|workflow| {
+        workflow["jobs"]["normal-acceptance"]["strategy"]["max-parallel"] = json!(8)
+    });
+    rejected(|workflow| {
+        workflow["jobs"]["normal-acceptance"]["strategy"]["fail-fast"] = json!(true)
+    });
+    rejected(|workflow| workflow["jobs"]["normal-gate"]["if"] = json!("success()"));
+    for (job, name) in [
+        ("normal-acceptance", "Run complete normal lane"),
+        ("normal-acceptance", "Verify normal candidate artifacts"),
+        ("normal-acceptance", "Install normal protocol validators"),
+        ("normal-gate", "Require all normal shards and cases"),
+    ] {
+        for key in ["if", "continue-on-error", "run"] {
+            rejected(|workflow| {
+                let step = workflow["jobs"][job]["steps"]
+                    .as_array_mut()
+                    .expect("steps")
+                    .iter_mut()
+                    .find(|step| step["name"] == name)
+                    .expect("normal step");
+                step[key] = json!("false");
+            });
+        }
+    }
+}
+
+#[test]
 fn metadata_includes_only_workspace_members_and_rejects_missing_members() {
     let mut metadata = json!({
         "workspace_members": ["local"],

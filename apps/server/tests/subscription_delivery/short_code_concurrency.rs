@@ -38,6 +38,12 @@ impl ShortCodeRepository for GatedCodes {
     ) -> Result<Option<ShortCode>, SubscriptionError> {
         self.inner.find_by_subscription(id).await
     }
+    async fn find_by_subscriptions(
+        &self,
+        ids: &[SubscriptionId],
+    ) -> Result<Vec<ShortCode>, SubscriptionError> {
+        self.inner.find_by_subscriptions(ids).await
+    }
     async fn delete(&self, id: ShortCodeId) -> Result<(), SubscriptionError> {
         self.inner.delete(id).await
     }

@@ -9,6 +9,8 @@
 pub mod commands;
 pub mod delivery;
 pub mod error;
+mod generation_validation;
+mod list_projection;
 pub mod scheduler;
 pub mod traffic;
 pub mod traffic_history;
@@ -26,6 +28,8 @@ pub use delivery::{
     deliver_subscription, detect_profile_from_user_agent,
 };
 pub use error::SubscriptionAppError;
+pub use generation_validation::SubscriptionValidationDeps;
+pub use list_projection::list_subscriptions_with_short_codes;
 pub use scheduler::GraceTokenCleanupScheduler;
 pub use traffic::{
     ManualCorrectionParams, RecordTrafficParams, apply_manual_correction, get_traffic_summary,

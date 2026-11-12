@@ -142,6 +142,11 @@ pub struct SubscriptionState {
     pub(crate) subscription_token_repo: Arc<dyn SubscriptionTokenRepository>,
     pub(crate) temp_link_repo: Arc<dyn TempLinkRepository>,
     pub(crate) traffic_repo: Arc<dyn TrafficRepository>,
+    pub(crate) cache_repo: Arc<dyn GenerationCacheRepository>,
+    pub(crate) pool_meta_repo: Arc<dyn PoolMetaRepository>,
+    pub(crate) pool_repo: Arc<dyn NodePoolRepository>,
+    pub(crate) template_repo: Arc<dyn TemplateRepository>,
+    pub(crate) version_repo: Arc<dyn TemplateVersionRepository>,
 }
 
 impl FromRef<AppState> for SubscriptionState {
@@ -154,6 +159,25 @@ impl FromRef<AppState> for SubscriptionState {
             subscription_token_repo: state.subscription_token_repo.clone(),
             temp_link_repo: state.temp_link_repo.clone(),
             traffic_repo: state.traffic_repo.clone(),
+            cache_repo: state.cache_repo.clone(),
+            pool_meta_repo: state.pool_meta_repo.clone(),
+            pool_repo: state.pool_repo.clone(),
+            template_repo: state.template_repo.clone(),
+            version_repo: state.version_repo.clone(),
+        }
+    }
+}
+
+impl SubscriptionState {
+    pub(crate) fn validation_deps(
+        &self,
+    ) -> deve_sub_application::subscription::SubscriptionValidationDeps<'_> {
+        deve_sub_application::subscription::SubscriptionValidationDeps {
+            template_repo: self.template_repo.as_ref(),
+            version_repo: self.version_repo.as_ref(),
+            pool_repo: self.pool_repo.as_ref(),
+            cache_repo: self.cache_repo.as_ref(),
+            pool_meta_repo: self.pool_meta_repo.as_ref(),
         }
     }
 }

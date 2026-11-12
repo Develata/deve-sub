@@ -87,6 +87,12 @@ pub(super) fn checked_yaml(spec_yaml: &str) -> Result<Value, TemplateAppError> {
 /// - [`TemplateAppError::ForbiddenScript`] — a forbidden script key is
 ///   present.
 pub fn validate_document(doc: &TemplateDocument, spec_yaml: &str) -> Result<(), TemplateAppError> {
+    if doc.spec.node_selector.mode == deve_sub_domain::SelectionMode::InheritTemplate {
+        return Err(TemplateAppError::InvalidInput(
+            "templates must use dynamic or fixed node selection; inheritance is subscription-only"
+                .to_owned(),
+        ));
+    }
     // Size limit.
     let size = spec_yaml.len();
     if size > MAX_SPEC_BYTES {

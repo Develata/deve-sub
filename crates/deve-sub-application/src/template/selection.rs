@@ -43,6 +43,7 @@ pub async fn resolve_template(
     doc: &TemplateDocument,
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<TemplateResolution, TemplateAppError> {
+    require_resolved_selector(&doc.spec.node_selector)?;
     let active_pool = if doc.spec.node_selector.mode == SelectionMode::Dynamic {
         list_active_nodes(pool_repo).await?
     } else {
@@ -82,7 +83,7 @@ pub async fn resolve_template(
             .iter()
             .filter(|entry| selected.contains(&entry.node.id))
             .collect(),
-        SelectionMode::Fixed => explicit_entries
+        SelectionMode::Fixed | SelectionMode::InheritTemplate => explicit_entries
             .values()
             .filter(|entry| selected.contains(&entry.node.id))
             .collect(),
@@ -107,6 +108,26 @@ pub async fn resolve_template(
                 false
             }
         });
+        // WHY: a group cannot make an out-of-selector ID required merely
+        // because it is quarantined. Keep the selection boundary authoritative.
+        for missing in &mut resolution.missing {
+            if missing.reason == MissingReason::SecurityQuarantined {
+                let in_scope = match doc.spec.node_selector.mode {
+                    SelectionMode::Fixed => {
+                        doc.spec.node_selector.node_ids.contains(&missing.node_id)
+                    }
+                    SelectionMode::Dynamic => {
+                        explicit_entries.get(&missing.node_id).is_some_and(|entry| {
+                            matches_all_filters(entry, &doc.spec.node_selector.filters)
+                        })
+                    }
+                    SelectionMode::InheritTemplate => false,
+                };
+                if !in_scope {
+                    missing.reason = MissingReason::OutsideSelection;
+                }
+            }
+        }
         groups.push(resolution);
     }
 
@@ -127,6 +148,7 @@ pub async fn resolve_selection(
     selector: &NodeSelector,
     pool_repo: &dyn NodePoolRepository,
 ) -> Result<(Vec<NodeId>, Vec<MissingNodeRef>), TemplateAppError> {
+    require_resolved_selector(selector)?;
     let active_pool = if selector.mode == SelectionMode::Dynamic {
         list_active_nodes(pool_repo).await?
     } else {
@@ -174,8 +196,17 @@ pub async fn resolve_group(
 fn pinned_ids(selector: &NodeSelector) -> &[NodeId] {
     match selector.mode {
         SelectionMode::Fixed => &selector.node_ids,
-        SelectionMode::Dynamic => &[],
+        SelectionMode::Dynamic | SelectionMode::InheritTemplate => &[],
     }
+}
+
+fn require_resolved_selector(selector: &NodeSelector) -> Result<(), TemplateAppError> {
+    if selector.mode == SelectionMode::InheritTemplate {
+        return Err(TemplateAppError::InvalidInput(
+            "inherit_template must first resolve a template selector".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 /// Pre-fetched pool data shared by the synchronous `_impl` resolvers.
@@ -195,6 +226,8 @@ fn resolve_selection_impl(
     view: &PoolView<'_>,
 ) -> (Vec<NodeId>, Vec<MissingNodeRef>) {
     match selector.mode {
+        // WHY: async entry points reject unresolved inheritance before pool access.
+        SelectionMode::InheritTemplate => (Vec::new(), Vec::new()),
         SelectionMode::Dynamic => {
             let filtered: Vec<NodeId> = view
                 .active
@@ -209,6 +242,12 @@ fn resolve_selection_impl(
             let mut missing = Vec::new();
             for id in &selector.node_ids {
                 match view.explicit.get(id) {
+                    Some(entry) if entry.security_quarantined => {
+                        missing.push(MissingNodeRef {
+                            node_id: *id,
+                            reason: MissingReason::SecurityQuarantined,
+                        });
+                    }
                     Some(entry) if entry.is_active && !entry.missing_from_source => {
                         found.push(*id);
                     }
@@ -249,6 +288,12 @@ fn resolve_group_impl<'a>(
     for member in &group.members {
         if let GroupMember::Node { id } = member {
             match view.explicit.get(id) {
+                Some(entry) if entry.security_quarantined => {
+                    missing.push(MissingNodeRef {
+                        node_id: *id,
+                        reason: MissingReason::SecurityQuarantined,
+                    });
+                }
                 Some(entry) if entry.is_active && !entry.missing_from_source => {
                     explicit_node_ids.push(*id);
                     explicit_set.insert(*id);
@@ -360,7 +405,7 @@ async fn list_active_nodes(
 }
 
 /// Check whether a pool entry matches all filter rules (AND semantics).
-fn matches_all_filters(entry: &NodePoolEntry, rules: &[NodeFilterRule]) -> bool {
+pub(super) fn matches_all_filters(entry: &NodePoolEntry, rules: &[NodeFilterRule]) -> bool {
     rules.iter().all(|r| matches_filter_rule(entry, r))
 }
 

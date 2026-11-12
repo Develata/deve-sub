@@ -9,6 +9,32 @@ use deve_sub_domain::{ItemParseStatus, ProtocolConfig, ProtocolKind, SourceType}
 const XRAY_JSON: &str = include_str!("fixtures/xray-auto.json");
 
 #[test]
+fn auto_clash_json_projection_preserves_forward_proxy_fields_and_limits() {
+    let body = br#"{"proxies":[{"type":"http","name":"HTTPS","server":"192.0.2.1","port":8443,"tls":true,"skip-cert-verify":false},{"type":"socks5","name":"SOCKS","server":"2001:db8::1","port":1080}]}"#;
+    let expected = parse_content(SourceType::MihomoYaml, None, body).expect("explicit Clash");
+    for content_type in [None, Some("application/json")] {
+        let actual = parse_content(SourceType::Auto, content_type, body).expect("auto Clash");
+        assert_eq!(actual.len(), expected.len());
+        for (actual, expected) in actual.into_iter().zip(&expected) {
+            assert_eq!(actual.initial_status, ItemParseStatus::Parsed);
+            let mut node = actual.node.expect("actual node");
+            let reference = expected.node.as_ref().expect("expected node");
+            node.id = reference.id;
+            node.source.imported_at = reference.source.imported_at;
+            assert_eq!(&node, reference);
+        }
+    }
+    let oversized = serde_json::json!({"proxies": vec![serde_json::json!({}); 10_001]});
+    assert!(matches!(
+        parse_content(SourceType::Auto, None, oversized.to_string().as_bytes()),
+        Err(ParseContentError::TooManyNodes(10_001))
+    ));
+    for invalid in [r#"{"proxies":{}}"#, r#"{"proxies":[]} trailing"#] {
+        assert!(parse_content(SourceType::Auto, None, invalid.as_bytes()).is_err());
+    }
+}
+
+#[test]
 fn auto_xray_matches_explicit_trojan_and_vless_parsing() {
     let expected = parse_content(SourceType::XrayJson, None, XRAY_JSON.as_bytes()).expect("Xray");
     assert_eq!(expected.len(), 2);

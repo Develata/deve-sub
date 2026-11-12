@@ -15,6 +15,7 @@ mod anytls;
 mod common;
 mod container;
 pub mod error;
+mod forward_proxy;
 mod hysteria2;
 mod json;
 mod naive;

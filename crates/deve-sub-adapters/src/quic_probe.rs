@@ -22,12 +22,13 @@ use tokio::time::Instant;
 
 /// QUIC handshake latency probe adapter.
 ///
-/// A single [`quinn::Endpoint`] is lazily created on first use and reused
-/// across all probe calls. The endpoint binds to `0.0.0.0:0` (ephemeral
-/// source port) and is configured to skip server certificate verification,
+/// One [`quinn::Endpoint`] per address family is lazily created and reused
+/// across probe calls. Each binds an ephemeral source port on its family's
+/// unspecified address and is configured to skip server certificate verification,
 /// because the probe measures reachability/latency, not authentication.
 pub struct QuicHandshakeProbe {
-    endpoint: OnceLock<Endpoint>,
+    ipv4_endpoint: OnceLock<Endpoint>,
+    ipv6_endpoint: OnceLock<Endpoint>,
     // WHY: serializes endpoint construction so concurrent first-use probes
     // build exactly one `Endpoint` instead of N. The `OnceLock` alone cannot
     // prevent N racing `set()` calls from each building (and leaking) a UDP
@@ -42,7 +43,8 @@ impl QuicHandshakeProbe {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            endpoint: OnceLock::new(),
+            ipv4_endpoint: OnceLock::new(),
+            ipv6_endpoint: OnceLock::new(),
             build_lock: Mutex::new(()),
         }
     }
@@ -113,19 +115,24 @@ impl rustls::client::danger::ServerCertVerifier for SkipVerification {
 
 impl QuicHandshakeProbe {
     /// Get or create the lazily-initialized QUIC endpoint.
-    fn endpoint(&self) -> Result<&Endpoint, ErrorClass> {
-        if let Some(ep) = self.endpoint.get() {
+    fn endpoint(&self, ipv6: bool) -> Result<&Endpoint, ErrorClass> {
+        let slot = if ipv6 {
+            &self.ipv6_endpoint
+        } else {
+            &self.ipv4_endpoint
+        };
+        if let Some(ep) = slot.get() {
             return Ok(ep);
         }
         // WHY: hold the build mutex during construction so concurrent
         // first-use probes serialize. The `OnceLock` alone cannot prevent N
-        // racing `set()` calls from each building (and leaking) a `0.0.0.0:0`
-        // UDP socket; the mutex guarantees exactly one construction. The lock
+        // racing `set()` calls from each building (and leaking) a UDP
+        // socket for the same address family; the mutex guarantees exactly one construction. The lock
         // is released before I/O (SRC-022).
         let _guard = self.build_lock.lock();
         // Re-check after acquiring the lock: another task may have built the
         // endpoint while we waited.
-        if let Some(ep) = self.endpoint.get() {
+        if let Some(ep) = slot.get() {
             return Ok(ep);
         }
         let verifier = Arc::new(SkipVerification(Arc::new(
@@ -141,13 +148,14 @@ impl QuicHandshakeProbe {
         transport.keep_alive_interval(None);
         let mut client_config = ClientConfig::new(Arc::new(quic_config));
         client_config.transport_config(Arc::new(transport));
-        let mut ep = Endpoint::client("0.0.0.0:0".parse().map_err(|_| ErrorClass::QuicFailed)?)
+        let bind_address = if ipv6 { "[::]:0" } else { "0.0.0.0:0" };
+        let mut ep = Endpoint::client(bind_address.parse().map_err(|_| ErrorClass::QuicFailed)?)
             .map_err(|_| ErrorClass::QuicFailed)?;
         ep.set_default_client_config(client_config);
         // WHY: `set` returns Err if another caller won an earlier race; the
         // `get()` fallback below returns the winner's endpoint either way.
-        let _ = self.endpoint.set(ep);
-        self.endpoint.get().ok_or(ErrorClass::QuicFailed)
+        let _ = slot.set(ep);
+        slot.get().ok_or(ErrorClass::QuicFailed)
     }
 }
 
@@ -157,19 +165,14 @@ impl LatencyProbe for QuicHandshakeProbe {
         let node_id = node.id;
 
         // Resolve the endpoint to a SocketAddr (DNS if domain, direct if IP).
-        let host_str = match &node.endpoint.host {
-            deve_sub_domain::Host::Domain(d) => d.to_string(),
-            deve_sub_domain::Host::Ipv4(ip) => ip.to_string(),
-            deve_sub_domain::Host::Ipv6(ip) => ip.to_string(),
-        };
+        let host_str = node.endpoint.host.address_host();
         let port = node.endpoint.port;
-        let addr_target = format!("{host_str}:{port}");
 
         let start = Instant::now();
 
         // DNS resolution (for domains) with the probe timeout.
         let socket_addr: SocketAddr = match tokio::time::timeout(timeout, async {
-            tokio::net::lookup_host(&addr_target)
+            tokio::net::lookup_host((host_str.as_str(), port))
                 .await
                 .and_then(|mut iter| {
                     iter.next().ok_or_else(|| {
@@ -204,7 +207,7 @@ impl LatencyProbe for QuicHandshakeProbe {
         };
 
         // Get the QUIC endpoint (lazily initialized).
-        let endpoint = match self.endpoint() {
+        let endpoint = match self.endpoint(socket_addr.is_ipv6()) {
             Ok(ep) => ep,
             Err(class) => {
                 return LatencyResult {

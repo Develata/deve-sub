@@ -160,11 +160,6 @@ def main():
                 api.call("POST", "/api/v1/auth/setup", credentials, (201,))
                 api.call("POST", "/api/v1/auth/login", credentials)
                 template = api.call("POST", "/api/v1/templates", {"name": "soak", "description": "test", "spec_yaml": SPEC}, (201,))["template"]["id"]
-                subscription = api.call("POST", "/api/v1/subscriptions", {
-                    "name": "soak", "slug": "soak", "template_id": template,
-                    "profile": "mihomo", "node_selection": {"mode": "dynamic"}}, (201,))
-                sub_id = subscription["subscription"]["id"]
-                token = subscription["token_plaintext"]
                 source = api.call("POST", "/api/v1/sources", {
                     "name": "ssrf-failure-fixture", "source_type": "uri_list",
                     "url": "http://127.0.0.1/fixture", "auto_update": False}, (201,))["source"]["id"]
@@ -188,6 +183,11 @@ def main():
                     import_body = {"source_type": "uri_list", "content": content}
                     api.call("POST", "/api/v1/nodes/import", import_body)
                     node_ids = [n["id"] for n in api.call("GET", "/api/v1/nodes?limit=100")["nodes"]]
+                    subscription = api.call("POST", "/api/v1/subscriptions", {
+                        "name": "soak", "slug": "soak", "template_id": template,
+                        "profile": "mihomo", "node_selection": {"mode": "dynamic"}}, (201,))
+                    sub_id = subscription["subscription"]["id"]
+                    token = subscription["token_plaintext"]
                     start = time.monotonic()
                     cycles = 0
                     samples = [resources(child.pid, database, 0, cycles)]

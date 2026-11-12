@@ -394,6 +394,106 @@ jobs:
             tests/e2e/test-results/
           retention-days: 7
 
+  # Real normal paths: fixed coverage, independent state and shared candidate builds.
+  normal-acceptance:
+    name: normal-acceptance:${{ matrix.lane }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [rust-gate, web-wasm, build-release]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - lane: protocol-1
+          - lane: protocol-2
+          - lane: protocol-3
+          - lane: protocol-4
+          - lane: api
+          - lane: browser
+          - lane: themes-1
+          - lane: themes-2
+          - lane: themes-3
+          - lane: themes-4
+          - lane: dns
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-binary
+          path: target/release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: wasm-dist
+          path: apps/web/dist
+      - name: Verify normal candidate artifacts
+        env:
+          BINARY_MANIFEST_SHA256: ${{ needs.build-release.outputs.manifest-sha256 }}
+          WASM_MANIFEST_SHA256: ${{ needs.web-wasm.outputs.manifest-sha256 }}
+        run: |
+          python3 scripts/ci/artifact.py verify --kind binary --root target/release --manifest-sha256 "$BINARY_MANIFEST_SHA256"
+          python3 scripts/ci/artifact.py verify --kind wasm --root apps/web/dist --manifest-sha256 "$WASM_MANIFEST_SHA256"
+          chmod +x target/release/deve-sub
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.19.0"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12.14"
+      - run: npm ci
+        working-directory: tests/e2e
+      - name: Install locked Playwright Chromium
+        if: matrix.lane != 'dns'
+        run: node node_modules/@playwright/test/cli.js install --with-deps chromium
+        working-directory: tests/e2e
+      - run: python3 -m pip install pyyaml==6.0.3
+      - name: Install normal protocol validators
+        if: startsWith(matrix.lane, 'protocol-')
+        run: python3 scripts/install-validators.py "$RUNNER_TEMP/validators"
+      - name: Run complete normal lane
+        env:
+          NORMAL_LANE: ${{ matrix.lane }}
+          DEVE_SUB_VALIDATORS: ${{ runner.temp }}/validators
+        run: python3 scripts/ci/normal.py run --lane "$NORMAL_LANE" --output "$RUNNER_TEMP/normal"
+      - name: Preserve normal execution evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: normal-results-${{ matrix.lane }}
+          path: ${{ runner.temp }}/normal/
+          if-no-files-found: error
+          retention-days: 7
+
+  normal-gate:
+    name: normal-coverage-gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: always()
+    needs: [normal-acceptance, build-release, web-wasm, rust-gate]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: normal-results-*
+          path: ${{ runner.temp }}/normal-results
+          merge-multiple: false
+      - name: Require all normal shards and cases
+        if: always()
+        env:
+          CI_NORMAL_NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/normal.py gate --reports "$RUNNER_TEMP/normal-results" --output "$RUNNER_TEMP/normal-result.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: normal-result
+          path: ${{ runner.temp }}/normal-result.json
+          if-no-files-found: error
+          retention-days: 7
+
   docker:
     name: docker
     runs-on: ubuntu-latest
@@ -486,7 +586,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: always()
-    needs: [inventory, fmt-check, clippy, test, test-doc, openapi-diff, rust-gate, compatibility, docs, web-wasm, build-release, resource-soak, supply-chain, browser-e2e, docker, multiarch]
+    needs: [inventory, fmt-check, clippy, test, test-doc, openapi-diff, rust-gate, compatibility, docs, web-wasm, build-release, resource-soak, supply-chain, browser-e2e, normal-acceptance, normal-gate, docker, multiarch]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1

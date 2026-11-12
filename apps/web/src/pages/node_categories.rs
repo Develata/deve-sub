@@ -51,7 +51,7 @@ pub fn NodeCategories(props: NodeCategoriesProps) -> Element {
             div { class: "flex flex-wrap items-center justify-between gap-x-4 gap-y-1",
                 div { class: "flex flex-wrap items-baseline gap-x-3 gap-y-1",
                     h3 { class: "text-sm font-semibold", {t(l, "nodes.categories")} }
-                    p { class: "text-xs text-stone-600 dark:text-stone-400", {t(l, "nodes.category_counts_hint")} }
+                    p { class: "text-xs text-muted", {t(l, "nodes.category_counts_hint")} }
                 }
                 button { class: "node-row-action px-2", onclick: move |_| props.on_refresh.call(()),
                     {t(l, "nodes.refresh_categories")} }
@@ -77,13 +77,13 @@ pub fn NodeCategories(props: NodeCategoriesProps) -> Element {
                     } }
                 }
             }
-            if props.loading { p { role: "status", class: "mt-2 text-xs text-stone-600 dark:text-stone-400", {t(l, "common.loading")} } }
+            if props.loading { p { role: "status", class: "mt-2 text-xs text-muted", {t(l, "common.loading")} } }
             if !props.error.is_empty() {
                 p { role: "alert", class: "mt-2 text-sm text-red-700 dark:text-red-400",
                     {t(l, "nodes.category_load_error")} " {props.error}"
                 }
             } else if !props.loading && props.tags.is_empty() {
-                p { class: "mt-2 text-sm text-stone-600 dark:text-stone-400", {t(l, "nodes.categories_empty")} }
+                p { class: "mt-2 text-sm text-muted", {t(l, "nodes.categories_empty")} }
             }
         }
     }

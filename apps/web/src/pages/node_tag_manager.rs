@@ -93,11 +93,11 @@ pub fn TagManager(props: TagManagerProps) -> Element {
     rsx! {
         div { class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3",
             onclick: move |_| { if !*busy.read() { props.on_close.call(()); } },
-            div { class: "node-dialog-panel w-full max-w-lg rounded-lg bg-white p-6 shadow-xl dark:bg-stone-900",
+            div { class: "node-dialog-panel w-full max-w-lg rounded-lg bg-surface p-6 shadow-xl",
                 role: "dialog", aria_label: t(l, "nodes.manage_tags"), aria_modal: "true",
                 onkeydown: move |e| { if e.key() == Key::Escape && !*busy.read() { props.on_close.call(()); } }, onclick: move |e| e.stop_propagation(),
                 h3 { class: "text-lg font-semibold", {t(l, "nodes.manage_tags")} }
-                p { class: "my-2 text-sm text-stone-500", {t(l, "nodes.manage_tags_hint")} }
+                p { class: "my-2 text-sm text-muted", {t(l, "nodes.manage_tags_hint")} }
                 if !error.read().is_empty() { p { role: "alert", class: "my-2 text-sm text-red-600", "{error}" } }
                 div { class: "my-4 max-h-64 space-y-2 overflow-y-auto",
                     for tag in tags.read().iter() {

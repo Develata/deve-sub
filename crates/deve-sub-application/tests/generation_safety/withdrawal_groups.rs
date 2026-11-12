@@ -318,7 +318,7 @@ async fn gen015_native_unknown_names_and_invalid_filters_cannot_publish() {
         );
         assert!(
             get_active_generation(
-                &SqliteGenerationCacheRepository::new(db.pool.clone()),
+                &SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key)),
                 db.template_id,
                 "mihomo"
             )

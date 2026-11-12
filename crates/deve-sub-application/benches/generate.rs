@@ -169,7 +169,8 @@ fn bench_generate(c: &mut Criterion) {
         let version_repo = SqliteTemplateVersionRepository::new(db.pool.clone());
         let pool_repo =
             SqliteNodePoolRepository::new_with_key(db.pool.clone(), Arc::clone(&db.master_key));
-        let cache_repo = SqliteGenerationCacheRepository::new(db.pool.clone());
+        let cache_repo =
+            SqliteGenerationCacheRepository::new(db.pool.clone(), Arc::clone(&db.master_key));
         let pool_meta_repo = SqlitePoolMetaRepository::new(db.pool.clone());
         let request = make_request(db.template_id);
 

@@ -8,8 +8,11 @@
 //! See `docs/plan/milestones/M5-generator-and-v3-template.md` §"Container
 //! emitters".
 
+mod fidelity;
+mod forward_proxy;
 pub mod ir;
 pub mod mihomo;
+mod mihomo_plugin;
 mod mihomo_template;
 pub mod singbox;
 mod singbox_wireguard;

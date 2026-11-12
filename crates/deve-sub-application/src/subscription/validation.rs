@@ -60,8 +60,16 @@ pub(super) fn validate_profile(profile: &str) -> Result<ProfileKind, Subscriptio
 pub(super) fn parse_node_selection(
     value: serde_json::Value,
 ) -> Result<NodeSelector, SubscriptionAppError> {
-    serde_json::from_value(value)
-        .map_err(|e| SubscriptionAppError::InvalidInput(format!("invalid node_selection: {e}")))
+    let selector: NodeSelector = serde_json::from_value(value)
+        .map_err(|e| SubscriptionAppError::InvalidInput(format!("invalid node_selection: {e}")))?;
+    if selector.mode == deve_sub_domain::SelectionMode::InheritTemplate
+        && (!selector.filters.is_empty() || !selector.node_ids.is_empty())
+    {
+        return Err(SubscriptionAppError::InvalidInput(
+            "inherit_template cannot contain subscription filters or fixed node IDs".to_owned(),
+        ));
+    }
+    Ok(selector)
 }
 
 /// Validate a positive traffic limit representable by the storage contract.

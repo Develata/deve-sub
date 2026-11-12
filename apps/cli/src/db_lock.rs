@@ -78,7 +78,21 @@ impl DbLock {
     /// (another process holds it), or if the file cannot be opened or
     /// locked for a non-contention reason.
     pub fn acquire_with_timeout(db_path: &Path, timeout: Duration) -> Result<Self> {
-        let lock_path = sidecar_lock_path(db_path);
+        // WHY: serve/restore may receive a symlink alias. Every operation must
+        // lock the resolved target's stable sidecar, including before rename.
+        ensure_parent(db_path)?;
+        let resolved = if db_path.exists() {
+            std::fs::canonicalize(db_path).context("resolve database lock target")?
+        } else {
+            let parent = db_path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new("."));
+            std::fs::canonicalize(parent)
+                .context("resolve database lock directory")?
+                .join(db_path.file_name().context("database filename missing")?)
+        };
+        let lock_path = sidecar_lock_path(&resolved);
         ensure_parent(&lock_path)?;
         let mut file = OpenOptions::new()
             .read(true)
@@ -350,5 +364,21 @@ mod tests {
             p,
             PathBuf::from("/var/lib/deve-sub/db.sqlite.deve-sub.lock")
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_alias_locks_the_same_resolved_sidecar() {
+        let directory = tmp();
+        let database = directory.path().join("real.sqlite");
+        let alias = directory.path().join("alias.sqlite");
+        std::fs::write(&database, b"fixture").expect("database");
+        std::os::unix::fs::symlink(&database, &alias).expect("alias");
+        let held =
+            DbLock::acquire_with_timeout(&alias, Duration::from_millis(100)).expect("alias lock");
+        assert!(DbLock::acquire_with_timeout(&database, Duration::from_millis(100)).is_err());
+        drop(held);
+        DbLock::acquire_with_timeout(&database, Duration::from_millis(100))
+            .expect("resolved lock released");
     }
 }

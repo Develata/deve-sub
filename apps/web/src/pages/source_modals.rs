@@ -84,7 +84,7 @@ pub fn SourceModals(props: SourceModalsProps) -> Element {
                                     autocomplete: "off", spellcheck: false,
                                     value: "{f_url}", oninput: move |e| f_url.set(e.value()), }
                                 if let Modal::Edit(source) = &*modal.read() {
-                                    p { id: "source-url-hint", class: "mt-2 break-words text-xs text-stone-500 dark:text-stone-400",
+                                    p { id: "source-url-hint", class: "mt-2 break-words text-xs text-muted",
                                         {t(l, "sources.url_keep")} " · {source.url}"
                                     }
                                 }
@@ -124,7 +124,7 @@ pub fn SourceModals(props: SourceModalsProps) -> Element {
                             }
                             div { class: "flex justify-end gap-2 pt-2",
                                 button { r#type: "button", class: "node-control", onclick: move |_| close_modal.call(()), {t(l, "common.cancel")} }
-                                button { r#type: "submit", class: "min-h-11 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50",
+                                button { r#type: "submit", class: "min-h-11 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50",
                                     if *saving.read() { {t(l, "common.loading")} } else { {t(l, "common.save")} }
                                 }
                             }
@@ -134,7 +134,7 @@ pub fn SourceModals(props: SourceModalsProps) -> Element {
                     if let Modal::Delete(source) = &*modal.read() {
                         p { class: "mt-4 break-words font-medium", "{source.name}" }
                     }
-                    p { class: "mt-3 text-sm text-stone-600 dark:text-stone-400", {t(l, "sources.delete_confirm")} }
+                    p { class: "mt-3 text-sm text-muted", {t(l, "sources.delete_confirm")} }
                     if !form_error.read().is_empty() {
                         p { role: "alert", class: "mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{form_error}" }
                     }

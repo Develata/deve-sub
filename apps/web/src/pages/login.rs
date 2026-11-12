@@ -25,6 +25,7 @@ enum Stage {
 }
 
 pub fn LoginPage(props: LoginProps) -> Element {
+    let branding = use_context::<Signal<crate::branding::Branding>>();
     let l = *props.lang.read();
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
@@ -108,16 +109,16 @@ pub fn LoginPage(props: LoginProps) -> Element {
     };
 
     rsx! {
-        div { class: "flex min-h-screen items-center justify-center bg-stone-50 dark:bg-stone-950",
-            div { class: "w-full max-w-md rounded-lg border border-stone-200 bg-white p-8 shadow-sm dark:border-stone-800 dark:bg-stone-900",
+        div { class: "flex min-h-screen items-center justify-center bg-canvas",
+            div { class: "w-full max-w-md rounded-lg border border-line-soft bg-surface p-8 shadow-sm",
                 match *stage.read() {
                     Stage::Credentials => rsx! {
-                        h1 { class: "text-xl font-bold text-stone-900 dark:text-stone-100", {t(l, "auth.login_title")} }
+                h1 { class: "text-xl font-bold text-foreground", {format!("{} {}", t(l, "auth.login_title"), branding.read().display_name())} }
                         div { class: "mt-6 space-y-4",
                             div {
-                                label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "auth.username")} }
+                                label { class: "block text-sm font-medium text-foreground", {t(l, "auth.username")} }
                                 input {
-                                    class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                                    class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
                                     r#type: "text",
                                     autocomplete: "username",
                                     value: "{username}",
@@ -128,9 +129,9 @@ pub fn LoginPage(props: LoginProps) -> Element {
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "auth.password")} }
+                                label { class: "block text-sm font-medium text-foreground", {t(l, "auth.password")} }
                                 input {
-                                    class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                                    class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
                                     r#type: "password",
                                     autocomplete: "current-password",
                                     value: "{password}",
@@ -144,7 +145,7 @@ pub fn LoginPage(props: LoginProps) -> Element {
                                 p { class: "text-sm text-red-600 dark:text-red-400", "{error}" }
                             }
                             button {
-                                class: "w-full rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-stone-900",
+                                class: "w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 disabled:opacity-50",
                                 disabled: *loading.read(),
                                 onclick: move |_| do_login(),
                                 if *loading.read() {
@@ -156,18 +157,20 @@ pub fn LoginPage(props: LoginProps) -> Element {
                         }
                     },
                     Stage::TwoFactorChallenge => rsx! {
-                        h1 { class: "text-xl font-bold text-stone-900 dark:text-stone-100", {t(l, "auth.2fa_title")} }
-                        p { class: "mt-2 text-sm text-stone-500 dark:text-stone-400", {t(l, "auth.2fa_prompt")} }
+                        h1 { class: "text-xl font-bold text-foreground", {t(l, "auth.2fa_title")} }
+                        p { class: "mt-2 text-sm text-muted", {t(l, "auth.2fa_prompt")} }
                         div { class: "mt-6 space-y-4",
                             div {
-                                label { class: "block text-sm font-medium text-stone-700 dark:text-stone-300", {t(l, "auth.2fa_code")} }
+                                label { r#for: "login-second-factor", class: "block text-sm font-medium text-foreground", {t(l, "auth.2fa_login_code")} }
                                 input {
-                                    class: "mt-1 block w-full rounded-md border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100",
+                                    id: "login-second-factor",
+                                    class: "mt-1 block w-full rounded-md border border-line px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent",
                                     r#type: "text",
                                     autocomplete: "one-time-code",
-                                    inputmode: "numeric",
-                                    maxlength: "6",
-                                    pattern: "[0-9]*",
+                                    // Recovery codes contain letters and a separator;
+                                    // six-digit-only controls make that valid path unusable.
+                                    inputmode: "text",
+                                    maxlength: "64",
                                     value: "{code}",
                                     oninput: move |e| code.set(e.value()),
                                     onkeydown: move |e| {
@@ -179,7 +182,7 @@ pub fn LoginPage(props: LoginProps) -> Element {
                                 p { class: "text-sm text-red-600 dark:text-red-400", "{error}" }
                             }
                             button {
-                                class: "w-full rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-stone-900",
+                                class: "w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 disabled:opacity-50",
                                 disabled: *loading.read(),
                                 onclick: move |_| do_2fa(),
                                 if *loading.read() {
@@ -189,7 +192,7 @@ pub fn LoginPage(props: LoginProps) -> Element {
                                 }
                             }
                             button {
-                                class: "w-full rounded-md px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800",
+                                class: "w-full rounded-md px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted",
                                 onclick: move |_| back_to_credentials(),
                                 {t(l, "auth.2fa_back")}
                             }

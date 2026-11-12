@@ -119,10 +119,21 @@ async fn auto_singbox_unknown_refresh_preserves_raw_data_with_existing_snapshot(
     }
 
     let nodes = pool_repo
-        .list_nodes(&NodeFilter::default(), None, 10)
+        .list_nodes(
+            &NodeFilter {
+                include_inactive: true,
+                ..NodeFilter::default()
+            },
+            None,
+            10,
+        )
         .await
         .expect("preserved nodes");
     assert_eq!(nodes.len(), 1);
+    assert!(
+        !nodes[0].is_active,
+        "raw unsupported data is inspectable, never eligible"
+    );
     let ProtocolConfig::Unsupported(node) = &nodes[0].node.config else {
         panic!("unknown node must remain unsupported");
     };

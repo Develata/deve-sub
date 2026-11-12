@@ -97,6 +97,9 @@ from `protocol` (Xray). Any `type` wins when formats are mixed; protocol-only
 lists select Xray, while empty/unmarked lists keep the previous sing-box fallback.
 The decision is structural and does not depend on how many protocols the
 selected parser supports. Unknown outbounds retain their raw inspection data.
+JSON documents with a standalone `proxies` root use the Mihomo projection,
+including its raw-entry limit; documents with native outbound or endpoint roots
+retain their existing precedence. Detection reuses the decoded JSON value.
 PARSE-007/008 and NODE-001 cover this boundary through both import and refresh.
 
 Mihomo source YAML uses the shared adapter's JSON projection: scalar keys retain

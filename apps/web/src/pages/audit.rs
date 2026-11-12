@@ -105,37 +105,37 @@ pub fn AuditPage(props: AuditProps) -> Element {
     };
     rsx! {
         div { class: "min-w-0 space-y-4",
-            h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "nav.audit")} }
+            h2 { class: "text-lg font-semibold text-foreground", {t(l, "nav.audit")} }
             AuditCleanup { lang: props.lang, on_cleaned: move |_| { let path = applied.read().clone(); fetch(path); } }
             div { class: "flex flex-wrap items-end gap-3",
-                label { class: "text-xs text-stone-500 dark:text-stone-400", {t(l, "audit.action")}
-                    select { class: "mt-1 block rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", value: "{action}", onchange: move |e| action.set(e.value()),
+                label { class: "text-xs text-muted", {t(l, "audit.action")}
+                    select { class: "mt-1 block rounded-md border border-line px-3 py-2 text-sm", value: "{action}", onchange: move |e| action.set(e.value()),
                         option { value: "", {t(l, "audit.all")} }
                         for a in ACTIONS.iter().copied() { option { value: "{a}", "{action_label(l, a)}" } }
                     }
                 }
-                label { class: "text-xs text-stone-500 dark:text-stone-400", {t(l, "audit.target_type")}
-                    select { class: "mt-1 block rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", value: "{target_type}", onchange: move |e| target_type.set(e.value()),
+                label { class: "text-xs text-muted", {t(l, "audit.target_type")}
+                    select { class: "mt-1 block rounded-md border border-line px-3 py-2 text-sm", value: "{target_type}", onchange: move |e| target_type.set(e.value()),
                         option { value: "", {t(l, "audit.all")} }
                         for value in TARGET_TYPES.iter().copied() { option { value: "{value}", "{value}" } }
                     }
                 }
-                label { class: "text-xs text-stone-500 dark:text-stone-400", {tr(l, "开始日期（UTC）", "From date (UTC)")}
-                    input { r#type: "date", class: "mt-1 block rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", value: "{since}", onchange: move |e| since.set(e.value()) }
+                label { class: "text-xs text-muted", {tr(l, "开始日期（UTC）", "From date (UTC)")}
+                    input { r#type: "date", class: "mt-1 block rounded-md border border-line px-3 py-2 text-sm", value: "{since}", onchange: move |e| since.set(e.value()) }
                 }
-                label { class: "text-xs text-stone-500 dark:text-stone-400", {tr(l, "结束日期（不含，UTC）", "Before date (UTC)")}
-                    input { r#type: "date", class: "mt-1 block rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800", value: "{before}", onchange: move |e| before.set(e.value()) }
+                label { class: "text-xs text-muted", {tr(l, "结束日期（不含，UTC）", "Before date (UTC)")}
+                    input { r#type: "date", class: "mt-1 block rounded-md border border-line px-3 py-2 text-sm", value: "{before}", onchange: move |e| before.set(e.value()) }
                 }
-                button { class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700", onclick: apply, {t(l, "audit.apply")} }
-                button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm dark:border-stone-700", onclick: move |_| { let path = applied.read().clone(); fetch(path); }, {tr(l, "刷新日志", "Refresh logs")} }
+                button { class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover", onclick: apply, {t(l, "audit.apply")} }
+                button { class: "rounded-md border border-line px-4 py-2 text-sm", onclick: move |_| { let path = applied.read().clone(); fetch(path); }, {tr(l, "刷新日志", "Refresh logs")} }
             }
             if !error.read().is_empty() { p { role: "alert", class: "text-sm text-red-600 dark:text-red-400", "{error}" } }
             if *loading.read() { p { role: "status", {t(l, "common.loading")} } }
-            else if entries.read().is_empty() { p { class: "p-8 text-center text-sm text-stone-500", {t(l, "audit.empty")} } }
+            else if entries.read().is_empty() { p { class: "p-8 text-center text-sm text-muted", {t(l, "audit.empty")} } }
             else { AuditTable { entries: entries.read().clone(), lang: l } }
             if cursor.read().is_some() && !*loading.read() {
                 div { class: "flex justify-center",
-                    button { class: "rounded-md border border-stone-300 px-4 py-2 text-sm disabled:opacity-50 dark:border-stone-700", disabled: *loading_more.read(), onclick: more,
+                    button { class: "rounded-md border border-line px-4 py-2 text-sm disabled:opacity-50", disabled: *loading_more.read(), onclick: more,
                         if *loading_more.read() { {t(l, "common.loading")} } else { {t(l, "audit.load_more")} }
                     }
                 }

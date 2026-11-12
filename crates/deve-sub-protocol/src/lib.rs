@@ -14,6 +14,7 @@
 mod anytls;
 pub mod container;
 pub mod error;
+mod forward_proxy;
 mod hysteria2;
 mod naive;
 mod shadowsocks;

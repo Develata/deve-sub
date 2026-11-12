@@ -19,6 +19,7 @@ use deve_sub_domain::{
 use deve_sub_kernel::{SubscriptionId, TempLinkId, TemplateId, Timestamp, UserId};
 use deve_sub_security::{MasterKey, generate_session_token, generate_short_code, hmac_digest};
 
+use super::SubscriptionValidationDeps;
 use super::error::{SubscriptionAppError, map_subscription_error};
 use super::validation::{
     parse_iso8601, parse_node_selection, validate_name, validate_profile, validate_slug,
@@ -80,6 +81,7 @@ pub struct CreateSubscriptionResult {
 pub async fn create_subscription(
     sub_repo: &dyn SubscriptionRepository,
     master_key: &MasterKey,
+    validation: &SubscriptionValidationDeps<'_>,
     params: CreateSubscriptionParams,
 ) -> Result<CreateSubscriptionResult, SubscriptionAppError> {
     validate_name(&params.name)?;
@@ -92,6 +94,10 @@ pub async fn create_subscription(
         .as_deref()
         .map(parse_iso8601)
         .transpose()?;
+
+    validation
+        .validate(params.template_id, None, &params.profile, &node_selection)
+        .await?;
 
     // WHY: the plaintext token is CSPRNG-generated and returned to the caller
     // exactly once. Only the HMAC-SHA256 digest is persisted. A database
@@ -171,6 +177,7 @@ pub struct UpdateSubscriptionParams {
 /// - [`SubscriptionAppError::Subscription`] — storage error.
 pub async fn update_subscription(
     sub_repo: &dyn SubscriptionRepository,
+    validation: &SubscriptionValidationDeps<'_>,
     params: UpdateSubscriptionParams,
 ) -> Result<Subscription, SubscriptionAppError> {
     validate_name(&params.name)?;
@@ -190,6 +197,23 @@ pub async fn update_subscription(
         .await
         .map_err(map_subscription_error)?
         .ok_or(SubscriptionAppError::SubscriptionNotFound)?;
+
+    // WHY: operators must still revoke delivery after source withdrawal makes
+    // the existing selection empty. Changes that could deliver output validate.
+    let revoking_unchanged_generation = params.enabled == Some(false)
+        && params.template_version_pin == subscription.template_version_pin
+        && params.profile == subscription.profile
+        && node_selection == subscription.node_selection;
+    if !revoking_unchanged_generation {
+        validation
+            .validate(
+                subscription.template_id,
+                params.template_version_pin,
+                &params.profile,
+                &node_selection,
+            )
+            .await?;
+    }
 
     subscription.name = params.name;
     subscription.slug = params.slug;

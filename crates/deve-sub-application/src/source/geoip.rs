@@ -55,11 +55,7 @@ pub async fn enrich_regions(entries: &mut [ReconcileEntry], geoip: &dyn GeoIpPor
 
     let hosts: Vec<Option<String>> = entries
         .iter()
-        .map(|e| {
-            e.node
-                .as_ref()
-                .map(|n| n.endpoint.host.uri_host().to_owned())
-        })
+        .map(|e| e.node.as_ref().map(|n| n.endpoint.host.address_host()))
         .collect();
 
     // WHY: dedupe hosts before lookup so nodes sharing a host (common in

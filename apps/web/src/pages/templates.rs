@@ -360,9 +360,9 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
     rsx! {
         div { class: "space-y-4",
             div { class: "flex items-center justify-between",
-                h2 { class: "text-lg font-semibold text-stone-900 dark:text-stone-100", {t(l, "nav.templates")} }
+                h2 { class: "text-lg font-semibold text-foreground", {t(l, "nav.templates")} }
                 button {
-                    class: "rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700",
+                    class: "rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover",
                     onclick: open_create,
                     {t(l, "tpl.add")}
                 }
@@ -370,23 +370,23 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
 
             if *loading.read() {
                 div { class: "flex items-center justify-center py-12",
-                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-amber-600 dark:border-stone-700 dark:border-t-amber-500" }
+                    div { class: "h-6 w-6 animate-spin rounded-full border-2 border-line border-t-accent" }
                 }
             } else if !error.read().is_empty() {
                 div { class: "rounded-md bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400", "{error}" }
             } else if templates.read().is_empty() {
-                div { class: "rounded-md border border-stone-200 p-8 text-center dark:border-stone-800",
-                    p { class: "text-sm text-stone-500 dark:text-stone-400", {t(l, "tpl.empty")} }
+                div { class: "rounded-md border border-line-soft p-8 text-center",
+                    p { class: "text-sm text-muted", {t(l, "tpl.empty")} }
                 }
             } else {
-                div { class: "overflow-x-auto rounded-lg border border-stone-200 dark:border-stone-800",
+                div { class: "overflow-x-auto rounded-lg border border-line-soft",
                     table { class: "w-full text-sm",
                         thead {
-                            tr { class: "border-b border-stone-200 bg-stone-50 dark:border-stone-800 dark:bg-stone-900",
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "tpl.name")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "tpl.version")} }
-                                th { class: "px-4 py-3 text-left font-medium text-stone-500 dark:text-stone-400", {t(l, "tpl.updated_at")} }
-                                th { class: "px-4 py-3 text-right font-medium text-stone-500 dark:text-stone-400", "" }
+                            tr { class: "border-b border-line-soft bg-canvas",
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "tpl.name")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "tpl.version")} }
+                                th { class: "px-4 py-3 text-left font-medium text-muted", {t(l, "tpl.updated_at")} }
+                                th { class: "px-4 py-3 text-right font-medium text-muted", "" }
                             }
                         }
                         tbody {
@@ -401,34 +401,34 @@ pub fn TemplatesPage(props: TemplatesProps) -> Element {
                                     rsx! {
                                         tr {
                                             key: "{id}",
-                                            class: "border-b border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-800/50",
+                                            class: "border-b border-line-soft hover:bg-canvas",
                                             td { class: "px-4 py-3",
-                                                div { class: "font-medium text-stone-900 dark:text-stone-100", "{tmpl.name}" }
+                                                div { class: "font-medium text-foreground", "{tmpl.name}" }
                                                 if !tmpl.description.is_empty() {
-                                                    div { class: "text-xs text-stone-500 dark:text-stone-400", "{tmpl.description}" }
+                                                    div { class: "text-xs text-muted", "{tmpl.description}" }
                                                 }
                                             }
-                                            td { class: "px-4 py-3 text-stone-500 dark:text-stone-400", "v{tmpl.active_version}" }
-                                            td { class: "px-4 py-3 text-xs text-stone-500 dark:text-stone-400", "{tmpl.updated_at}" }
+                                            td { class: "px-4 py-3 text-muted", "v{tmpl.active_version}" }
+                                            td { class: "px-4 py-3 text-xs text-muted", "{tmpl.updated_at}" }
                                             td { class: "px-4 py-3 text-right",
                                                 div { class: "flex flex-wrap justify-end gap-1",
                                                     button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                                                        class: "rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-surface-muted",
                                                         onclick: move |_| open_edit(edit_t.clone()),
                                                         {t(l, "common.edit")}
                                                     }
                                                     button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                                                        class: "rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-surface-muted",
                                                         onclick: move |_| open_versions(ver_t.clone()),
                                                         {t(l, "tpl.versions")}
                                                     }
                                                     button {
-                                                        class: "rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800",
+                                                        class: "rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-surface-muted",
                                                         onclick: move |_| open_preview(prev_t.clone()),
                                                         {t(l, "tpl.preview")}
                                                     }
                                                     button {
-                                                        class: "rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20",
+                                                        class: "rounded-md border border-accent px-2 py-1 text-xs text-accent-text hover:bg-accent-soft",
                                                         onclick: move |_| open_generate(gen_t.clone()),
                                                         {t(l, "tpl.generate")}
                                                     }

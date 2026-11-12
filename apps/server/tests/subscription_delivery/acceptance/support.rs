@@ -143,11 +143,21 @@ pub(super) async fn subscription(
     profile: &str,
     ids: Option<&[String]>,
 ) -> String {
-    let response = router.clone().oneshot(with_cookie(post_json("/api/v1/subscriptions", &json!({"name":"acceptance","slug":format!("acceptance-{}",ulid::Ulid::new()),"template_id":template,"profile":profile,"node_selection":selection(ids)}).to_string()), cookie)).await.expect("subscription create");
+    let response = subscription_response(router, cookie, template, profile, ids).await;
     let status = response.status();
     let body = body_to_json(response).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
     body["token_plaintext"].as_str().expect("token").to_owned()
+}
+
+pub(super) async fn subscription_response(
+    router: &axum::Router,
+    cookie: &str,
+    template: &str,
+    profile: &str,
+    ids: Option<&[String]>,
+) -> axum::response::Response {
+    router.clone().oneshot(with_cookie(post_json("/api/v1/subscriptions", &json!({"name":"acceptance","slug":format!("acceptance-{}",ulid::Ulid::new()),"template_id":template,"profile":profile,"node_selection":selection(ids)}).to_string()), cookie)).await.expect("subscription create")
 }
 
 pub(super) fn assert_report(report: &Value, included: &[String], excluded: &[String]) {

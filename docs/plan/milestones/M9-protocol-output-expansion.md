@@ -394,3 +394,38 @@ Shadowrocket: excluded.
 - `python3 scripts/check_docs.py` passes.
 - OpenAPI spec regenerated (no API surface change in M9; spec unchanged if
   no new routes).
+
+## Forward proxy expansion (PARSE-005/006/007/008, NODE-001, OUT-016)
+
+SOCKS5 and HTTP CONNECT gain typed payloads. HTTPS is HTTP CONNECT with TLS
+between client and proxy; it is never NaiveProxy. Authentication, endpoint,
+TLS verification state, certificate pins and HTTP headers must survive parsing,
+storage and each representable output. Unsupported fields retain the raw entry
+with a reason and cannot become an enabled usable node.
+
+SOCKS5 DNS intent is a typed policy: `unspecified` follows the importing
+client configuration, `local` resolves the destination before SOCKS CONNECT,
+and `remote` sends the destination domain to the proxy. This is destination
+resolution, distinct from resolving the proxy server's own address. The
+`socks5://` and `socks5h://` spellings follow curl's local/remote distinction;
+`socks://` is the unqualified share-form alias. It is one RFC 1928 wire
+protocol, not a new `socks5h` protocol kind. Explicit DNS intent is rejected
+by targets without a corresponding per-node representation. A target's
+implicit default is not proof that an explicit DNS policy is preserved.
+
+URI and Canonical JSON retain all modeled DNS policies. Native Clash uses
+`type: socks5` and `type: http` with `tls: true` for HTTPS. Import also accepts
+explicit `socks5h` and `https` aliases without downgrading them. Native output
+uses documented target spelling. No database migration is required: typed
+configs use existing encrypted JSON columns; old unsupported rows remain
+inspectable and must be re-imported or refreshed to obtain typed configs.
+
+Verification requires round trips, encrypted persistence, real blank-instance
+Web import and subscription delivery, and pinned independent core checks.
+URI DNS behavior additionally uses a controlled SOCKS endpoint and curl.
+Official format references: [RFC 1928](https://www.rfc-editor.org/rfc/rfc1928),
+[curl proxy schemes](https://curl.se/libcurl/c/CURLOPT_PROXY.html),
+[Mihomo SOCKS](https://wiki.metacubex.one/en/config/proxies/socks/),
+[Mihomo HTTP](https://wiki.metacubex.one/en/config/proxies/http/),
+[sing-box SOCKS](https://sing-box.sagernet.org/configuration/outbound/socks/),
+[sing-box HTTP](https://sing-box.sagernet.org/configuration/outbound/http/).

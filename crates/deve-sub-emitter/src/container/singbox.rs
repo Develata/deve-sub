@@ -25,6 +25,7 @@ pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
         return Err(EmitError::Encode("duplicate sing-box node tags".into()));
     }
     for node in nodes {
+        super::fidelity::check(node, super::fidelity::Target::SingBox)?;
         if node.protocol == ProtocolKind::WireGuard {
             endpoints.push(super::singbox_wireguard::emit(node)?);
         } else if node.protocol == ProtocolKind::ShadowTls {
@@ -56,7 +57,10 @@ pub fn emit(nodes: &[Node]) -> Result<String, EmitError> {
 }
 
 fn emit_outbound(node: &Node) -> Result<Value, EmitError> {
-    let server = node.endpoint.host.uri_host();
+    if matches!(node.protocol, ProtocolKind::Socks5 | ProtocolKind::Http) {
+        return super::forward_proxy::singbox(node);
+    }
+    let server = node.endpoint.host.address_host();
     let port = node.endpoint.port;
     let tag = node.display_name.clone();
 
@@ -99,8 +103,19 @@ fn push_tls_fields(fields: &mut Vec<(String, Value)>, node: &Node) {
     if let Some(ref sni) = tls.server_name {
         tls_obj.insert("server_name".to_owned(), Value::String(sni.clone()));
     }
-    if let Some(true) = tls.skip_cert_verify {
-        tls_obj.insert("insecure".to_owned(), Value::Bool(true));
+    if let Some(insecure) = tls.skip_cert_verify {
+        tls_obj.insert("insecure".to_owned(), Value::Bool(insecure));
+    }
+    if !tls.certificate_pins.is_empty() {
+        tls_obj.insert(
+            "certificate_public_key_sha256".into(),
+            json!(
+                tls.certificate_pins
+                    .iter()
+                    .map(|p| p.as_str().trim_start_matches("spkiSHA256:"))
+                    .collect::<Vec<_>>()
+            ),
+        );
     }
     if !tls.alpn.is_empty() {
         tls_obj.insert(
@@ -498,7 +513,12 @@ fn singbox_transport(transport: &Transport) -> Option<Value> {
     let mut obj = Map::new();
     obj.insert("type".to_owned(), Value::String(type_.to_owned()));
     if let Some(ref path) = transport.path {
-        obj.insert("path".to_owned(), Value::String(path.clone()));
+        let field = if transport.kind == TransportKind::Grpc {
+            "service_name"
+        } else {
+            "path"
+        };
+        obj.insert(field.to_owned(), Value::String(path.clone()));
     }
     if let Some(ref host) = transport.host {
         match transport.kind {
@@ -524,7 +544,7 @@ fn shadowtls_pair(node: &Node, shadowtls_tag: String) -> Result<(Value, Value), 
         _ => return Err(EmitError::MissingField("shadowtls config")),
     };
 
-    let server = node.endpoint.host.uri_host();
+    let server = node.endpoint.host.address_host();
     let port = node.endpoint.port;
     // --- shadowtls outbound ---
     let mut stls_obj = Map::new();

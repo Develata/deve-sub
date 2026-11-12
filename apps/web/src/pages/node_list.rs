@@ -26,8 +26,8 @@ pub struct NodeListProps {
 pub fn NodeList(mut props: NodeListProps) -> Element {
     let l = *props.lang.read();
     rsx! {
-        p { id: "nodes-scroll-hint", class: "text-xs text-stone-600 dark:text-stone-400", {t(l, "nodes.scroll_hint")} }
-        div { class: "node-table overflow-auto rounded-lg border border-stone-200 dark:border-stone-800",
+        p { id: "nodes-scroll-hint", class: "text-xs text-muted", {t(l, "nodes.scroll_hint")} }
+        div { class: "node-table overflow-auto rounded-lg border border-line-soft",
             role: "table", tabindex: "0", aria_label: t(l, "nodes.title"), aria_describedby: "nodes-scroll-hint",
             aria_rowcount: props.total + 1, aria_colcount: "6",
             id: "nodes-scroll", "data-total-rows": "{props.total}", style: "height: {props.viewport_height}px;",
@@ -36,7 +36,7 @@ pub fn NodeList(mut props: NodeListProps) -> Element {
                     props.scroll_top.set(el.scroll_top() as f64);
                 }
             },
-            div { role: "row", aria_rowindex: "1", class: "node-grid node-table-header bg-stone-50 dark:bg-stone-900", "data-node-header": "true",
+            div { role: "row", aria_rowindex: "1", class: "node-grid node-table-header bg-canvas", "data-node-header": "true",
                 span { role: "columnheader", aria_label: t(l, "nodes.select") }
                 span { role: "columnheader", {t(l, "nodes.override_name")} } span { role: "columnheader", {t(l, "nodes.protocol")} }
                 span { role: "columnheader", {t(l, "nodes.region")} } span { role: "columnheader", {t(l, "nodes.status")} } span { role: "columnheader", {t(l, "nodes.actions")} }
@@ -48,6 +48,7 @@ pub fn NodeList(mut props: NodeListProps) -> Element {
                             let id = node.id.clone(); let checkbox_id = id.clone(); let row_id = id.clone();
                             let tags_id = id.clone(); let override_id = id.clone(); let region_id = id.clone();
                             let chain_id = id.clone(); let chain = node.chain.clone();
+                            let details = node.clone();
                             let checked = props.selected.read().ids().contains(&id);
                             rsx! {
                                 div { role: "row", aria_rowindex: (props.offset_y / props.item_height) as usize + index + 2, key: "{id}", "data-node-row": "{id}",
@@ -61,16 +62,23 @@ pub fn NodeList(mut props: NodeListProps) -> Element {
                                     }
                                     }
                                     div { role: "rowheader", class: "min-w-0",
-                                        div { class: "truncate text-sm font-medium", title: "{node.display_name}", "{node.display_name}" }
-                                        div { class: "flex items-center gap-1 overflow-hidden text-xs text-stone-500",
+                                        button { class: "block max-w-full truncate text-left text-sm font-medium underline-offset-2 hover:underline",
+                                            title: "{node.display_name}", aria_label: format!("{} {}", t(l, "nodes.details"), node.display_name),
+                                            onclick: move |event| { event.stop_propagation(); props.modal.set(NodeModal::Details(Box::new(details.clone()))); },
+                                            "{node.display_name}"
+                                        }
+                                        div { class: "flex items-center gap-1 overflow-hidden text-xs text-muted",
                                             span { class: "truncate", "{node.host}:{node.port}" }
                                             for tag in &node.tags { span { class: "node-tag", title: "{tag.name}", span { class: "node-tag-dot", style: format!("background-color: {}", tag.color.as_deref().unwrap_or("#b45309")), aria_hidden: "true" } "{tag.name}" } }
                                         }
                                     }
-                                    span { role: "cell", class: "text-xs font-medium", "{node.protocol}" }
+                                    span { role: "cell", class: "text-xs font-medium",
+                                        "{node.protocol}"
+                                        if node.connection.tls_enabled == Some(true) { span { class: "block text-muted", "TLS" } }
+                                    }
                                     span { role: "cell", class: "text-sm", {node.region.as_deref().unwrap_or("—")} }
-                                    span { role: "cell", class: if node.is_active { "text-xs text-green-700 dark:text-green-400" } else { "text-xs text-stone-500" },
-                                        if node.is_active { {t(l, "nodes.enabled")} } else { {t(l, "nodes.disabled")} }
+                                    span { role: "cell", class: if node.is_active { "text-xs text-green-700 dark:text-green-400" } else { "text-xs text-muted" },
+                                        if node.security_quarantined { {t(l, "nodes.security_quarantined")} } else if node.is_active { {t(l, "nodes.enabled")} } else { {t(l, "nodes.disabled")} }
                                     }
                                     div { role: "cell", class: "flex items-center", onclick: move |e| e.stop_propagation(),
                                         button { class: "node-row-action", onclick: move |_| props.modal.set(NodeModal::Override(override_id.clone())), {t(l, "nodes.row_override")} }
@@ -85,6 +93,6 @@ pub fn NodeList(mut props: NodeListProps) -> Element {
                 }
             }
         }
-        if props.total == 0 { p { class: "py-4 text-center text-sm text-stone-500", {t(l, "nodes.no_matches")} } }
+        if props.total == 0 { p { class: "py-4 text-center text-sm text-muted", {t(l, "nodes.no_matches")} } }
     }
 }

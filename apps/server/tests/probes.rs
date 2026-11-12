@@ -110,8 +110,10 @@ impl TestApp {
                     as Arc<dyn TemplateRepository>,
                 version_repo: Arc::new(SqliteTemplateVersionRepository::new(pool.clone()))
                     as Arc<dyn TemplateVersionRepository>,
-                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(pool.clone()))
-                    as Arc<dyn GenerationCacheRepository>,
+                cache_repo: Arc::new(SqliteGenerationCacheRepository::new(
+                    pool.clone(),
+                    Arc::clone(&master_key),
+                )) as Arc<dyn GenerationCacheRepository>,
                 subscription_repo: Arc::new(SqliteSubscriptionRepository::new(pool.clone()))
                     as Arc<dyn SubscriptionRepository>,
                 subscription_token_repo: Arc::new(SqliteSubscriptionTokenRepository::new(
@@ -940,101 +942,8 @@ async fn real_proxy_probe_run_via_api_produces_results() {
     assert_eq!(results[0]["skipped"], false);
 }
 
-/// NODE-016: batch cancel of an in-flight probe run. In-flight probes are
-/// aborted (timeout) and pending probes are skipped. The run reaches
-/// `Cancelled` status with partial results.
-#[tokio::test]
-async fn batch_cancel_probe_run_aborts_inflight_and_skips_pending() {
-    let app = TestApp::new().await;
-    let router = app.router();
-    let cookie = setup_and_login(&router).await;
-
-    // 192.0.2.0/24 is TEST-NET-1 (RFC 5737) — documentation-only, unroutable.
-    // TCP connect hangs until the probe timeout fires, giving us a window to
-    // cancel while probes are in-flight. Each node uses a distinct IP so the
-    // import dedup (which keys on endpoint) treats them as unique.
-    let mut node_ids = Vec::new();
-    for i in 1..=35 {
-        let uri = format!("trojan://pw@192.0.2.{i}:80?sni=example.com#cancel-node-{i}");
-        let id = import_node(&router, &cookie, &uri).await;
-        node_ids.push(id);
-    }
-
-    let ids_json = node_ids
-        .iter()
-        .map(|id| format!("\"{id}\""))
-        .collect::<Vec<_>>()
-        .join(",");
-    let run_body = format!(r#"{{"probe_type":"tcp_connect","node_ids":[{ids_json}]}}"#);
-    let run_resp = router
-        .clone()
-        .oneshot(with_cookie(
-            post_json("/api/v1/probe-runs", &run_body),
-            &cookie,
-        ))
-        .await
-        .expect("run");
-    assert_eq!(run_resp.status(), StatusCode::CREATED);
-    let run_id = body_to_json(run_resp).await["run"]["id"]
-        .as_str()
-        .expect("run id")
-        .to_owned();
-
-    let cancel_resp = router
-        .clone()
-        .oneshot(with_cookie(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/api/v1/probe-runs/{run_id}/cancel"))
-                .body(Body::empty())
-                .expect("cancel request"),
-            &cookie,
-        ))
-        .await
-        .expect("cancel");
-    assert_eq!(cancel_resp.status(), StatusCode::OK);
-
-    let mut final_json = serde_json::Value::Null;
-    for _ in 0..150 {
-        let resp = router
-            .clone()
-            .oneshot(with_cookie(
-                get(&format!("/api/v1/probe-runs/{run_id}")),
-                &cookie,
-            ))
-            .await
-            .expect("poll");
-        let json = body_to_json(resp).await;
-        let status = json["run"]["status"].as_str().unwrap_or("");
-        if status == "completed" || status == "cancelled" || status == "failed" {
-            final_json = json;
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-
-    assert_eq!(
-        final_json["run"]["status"], "cancelled",
-        "run must be cancelled, not completed"
-    );
-    let results = final_json["run"]["results"]
-        .as_array()
-        .expect("results array");
-    assert_eq!(results.len(), 35);
-
-    for r in results {
-        assert!(
-            r["rtt_ms"].is_null(),
-            "rtt_ms must be null for unroutable endpoint"
-        );
-    }
-
-    let skipped_count = results.iter().filter(|r| r["skipped"] == true).count();
-    assert!(
-        skipped_count > 0,
-        "expected at least 1 skipped probe, got {skipped_count}"
-    );
-}
+#[path = "probes/cancellation.rs"]
+mod cancellation;
 
 #[path = "resource_admission/probe.rs"]
 mod resource_admission;

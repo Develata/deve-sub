@@ -16,8 +16,40 @@ public delivery surface, and `deve-sub subscription` CLI commands.
 `Subscription` is an independent aggregate root: it binds one `Template` (by
 id + version pinning), carries its own node-selection configuration, and owns
 its delivery configuration (token, short code, traffic limit, expiry). Template
-changes do not silently mutate an existing Subscription's selection snapshot;
-the Subscription is regenerated on demand at delivery time.
+changes do not silently mutate an explicit dynamic or fixed selection. A
+subscription may instead choose `inherit_template`, which deliberately follows
+the selector of its active or pinned template version. New Web and CLI forms
+default to inheritance; existing explicit selectors retain their meaning.
+The Subscription is regenerated on demand at delivery time.
+
+### Selection and save validation (GEN-005/006, OUT-016)
+
+The authenticated subscription list includes each row's current short code.
+The application reads credentials only for the authorized owner page, through
+a bulk repository query; it must not add one credential query per row.
+
+The Web form exposes three choices: inherit the template selector, apply
+subscription-owned dynamic filters, or pin specific node IDs. Inheritance is a
+subscription-only mode: a template must define dynamic or fixed selection.
+Groups cannot widen any selected set. Save, refresh, preview and public delivery
+resolve the same selector and profile.
+
+Before creating a credential or persisting a create/update, the Application
+command runs the read-only generation preview using the selected template
+version, target profile and selector. A template/profile mismatch, a generation
+incompatibility, or zero eligible compatible nodes rejects the save with HTTP
+422 and a useful reason. Storage failures remain server errors. This validates
+the current pool snapshot; subsequent source withdrawal still takes precedence
+at delivery. Failed saves leave subscriptions and credentials unchanged.
+Explicitly disabling an existing subscription with unchanged generation fields
+remains possible after its pool becomes empty or incompatible. This revocation
+does not generate output; re-enabling or changing generation fields requires
+the normal preview validation.
+
+Generation cache semantics v6 invalidate v5 output after these selection and
+forward-proxy changes. Cache selection metadata retains the explicit
+`inherit_template` intent, while the template version participates in the key.
+Existing selector JSON remains readable; no SQL schema migration is required.
 
 Traffic enforcement in M6 covers the policy framework plus data sources
 available without probes: airport `subscription-userinfo` response headers and

@@ -43,7 +43,7 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
     let mut rng = StdRng::from_entropy();
     let sealed = header::seal_request_header(&cmd_key, target.port(), target.host(), &mut rng);
 
-    let tcp = TcpStream::connect((node.endpoint.host.uri_host(), node.endpoint.port))
+    let tcp = TcpStream::connect((node.endpoint.host.address_host(), node.endpoint.port))
         .await
         .map_err(|_| ErrorClass::Refused)?;
 
@@ -51,7 +51,7 @@ async fn dial_inner(node: &Node, target: &TestTarget) -> Result<BoxedStream, Err
         .tls
         .as_ref()
         .and_then(|t| t.server_name.clone())
-        .unwrap_or_else(|| node.endpoint.host.uri_host());
+        .unwrap_or_else(|| node.endpoint.host.address_host());
 
     let connector = connector(node, vec![]).map_err(|_| ErrorClass::TlsFailed)?;
     let server_name =
@@ -213,6 +213,15 @@ mod tests {
 
     #[tokio::test]
     async fn vmess_round_trip() {
+        round_trip_at("127.0.0.1:0").await;
+    }
+
+    #[tokio::test]
+    async fn vmess_ipv6_round_trip() {
+        round_trip_at("[::1]:0").await;
+    }
+
+    async fn round_trip_at(bind_address: &str) {
         let http_target = LocalHttpTarget::start().await;
         let cert = TestCert::generate();
         let acceptor = cert.acceptor();
@@ -223,7 +232,7 @@ mod tests {
         let uuid = uuid::Uuid::from_bytes(uuid_bytes);
         let cmd_key = header::cmd_key(&uuid_bytes);
 
-        let vmess_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        let vmess_listener = tokio::net::TcpListener::bind(bind_address)
             .await
             .expect("bind");
         let vmess_addr = vmess_listener.local_addr().expect("addr");
@@ -359,7 +368,10 @@ mod tests {
                 packet_encoding: None,
             }),
             endpoint: Endpoint {
-                host: Host::Ipv4("127.0.0.1".parse().expect("ipv4")),
+                host: match addr.ip() {
+                    std::net::IpAddr::V4(ip) => Host::Ipv4(ip),
+                    std::net::IpAddr::V6(ip) => Host::Ipv6(ip),
+                },
                 port: addr.port(),
             },
             authentication: Authentication::Uuid {
@@ -368,7 +380,7 @@ mod tests {
             transport: None,
             tls: Some(TlsConfig {
                 enabled: true,
-                server_name: Some("127.0.0.1".to_owned()),
+                server_name: None,
                 skip_cert_verify: Some(true),
                 alpn: vec![],
                 client_fingerprint: None,

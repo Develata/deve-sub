@@ -1,5 +1,49 @@
 # 05 — Protocol Engine
 
+## Native field fidelity
+
+Native `server`/`address` fields and DNS inputs use bare IPv6 addresses.
+URI authorities and the existing storage host representation retain brackets.
+The sing-box gRPC transport uses `service_name`; `path` belongs to transports
+that actually define a path.
+
+Mihomo numeric YAML `name`, `password` and Reality `short-id` scalars are
+preserved as text. Already textual leading-zero values such as `01020304`
+remain unchanged. This does not make arbitrary maps or lists valid strings.
+Mihomo Hysteria2 unitless `up`/`down` values mean Mbps; explicit units such as
+`100bps` retain their meaning. The existing URI bandwidth extension uses its
+own interpretation. sing-box's native whole-Mbps fields cannot represent
+fractional Mbps: reject that conversion instead of rounding to zero.
+Mihomo TUIC `heartbeat-interval` is a nonnegative integer number of milliseconds.
+
+Certificate pins carry the source trust policy, not merely a digest.
+`pinSHA256:` is a Hysteria/Naive URI leaf-certificate pin;
+`mihomoFingerprintSHA256:` preserves native Mihomo's chain-certificate
+fingerprint policy; `spkiSHA256:` identifies the sing-box public-key pin.
+These are not interchangeable. Generic native emitters and compatibility
+checks reject conversions without an equivalent supported policy, including
+Hysteria URI leaf pins to Mihomo or pinned sing-box 1.14. Xray/V2Ray native pin
+fields without implemented preservation are explicitly unsupported on import.
+An `insecure` setting never authorizes dropping a pin.
+
+The verified native Shadowsocks plugin subset is simple-obfs HTTP/TLS and
+v2ray-plugin WebSocket with preserved host, path, TLS flag and multiplex mode.
+Native Mihomo `obfs` maps to SIP003 `obfs-local`; known target defaults become
+explicit. Unknown options, escaped separators, duplicate options and unsupported
+modes are rejected for native conversion. Xray/V2Ray SIP003 plugin conversion
+is not implemented. Explicit empty native plugin hosts are also unimplemented
+and rejected; only omitted hosts receive the source client's default.
+URI storage retains plugin text for URI output.
+
+These rules concern new generation. Encryption of a historical cache payload
+does not establish its protocol fidelity. The earlier unpublished v6 candidate
+could cache lossy output; targeted revalidation of such retained entries remains
+a readiness blocker. Native pins dropped during an earlier import cannot be
+reconstructed from canonical rows alone; affected historical nodes require a
+verified source recovery/reimport strategy. Fresh-import tests do not prove that
+upgrade path. Do not mark the full acceptance matrix ready from codec unit tests
+or client configuration-load checks alone.
+
 ## Scope
 
 This chapter defines the canonical node model, the separation of input formats
@@ -249,6 +293,15 @@ alpn, fingerprint, inner-protocol + inner-config
 
 ShadowTLS is a TLS-camouflage wrapper. The canonical model carries the
 ShadowTLS handshake parameters plus a typed inner protocol config.
+
+An explicit native wrapper marker is authoritative: malformed options,
+unsupported versions, conflicting wrapper/plugin slots, unknown option keys,
+or a missing/empty V2/V3 password retain the raw entry as Unsupported. They
+must never fall back to the ordinary inner protocol. Native compatibility and
+emission also validate canonical password and plugin-slot invariants. Until
+their target mapping is verified, Mihomo SS/Snell wrappers with extra TLS
+policy (ALPN, verification overrides, fingerprints, Reality or pins) are
+explicitly rejected, never emitted with those fields discarded.
 
 Mihomo has no standalone `type: shadow-tls`. The emitter projects ShadowTLS
 as an obfuscation layer under the inner protocol: `plugin: shadow-tls` for ss,

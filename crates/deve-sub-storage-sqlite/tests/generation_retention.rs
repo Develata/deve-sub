@@ -1,8 +1,11 @@
 #![allow(clippy::expect_used)]
 //! OUT-014: live subscription fallback survives other selectors and version pins.
 
+use std::sync::Arc;
+
 use deve_sub_domain::{GenerationCacheEntry, GenerationCacheRepository};
 use deve_sub_kernel::{GenerationCacheId, TemplateId};
+use deve_sub_security::MasterKey;
 use deve_sub_storage_sqlite::SqliteGenerationCacheRepository;
 
 #[path = "generation_retention/source_withdrawal.rs"]
@@ -10,6 +13,8 @@ mod source_withdrawal;
 
 struct Fixture {
     pool: sqlx::SqlitePool,
+    sequence: std::sync::atomic::AtomicU64,
+    key: Arc<MasterKey>,
     cache: SqliteGenerationCacheRepository,
     template: TemplateId,
     _directory: tempfile::TempDir,
@@ -36,9 +41,12 @@ impl Fixture {
             .execute(&pool)
             .await
             .expect("template");
+        let key = Arc::new(MasterKey::from_bytes(&[0x42; 32]));
         Self {
-            cache: SqliteGenerationCacheRepository::new(pool.clone()),
+            cache: SqliteGenerationCacheRepository::new(pool.clone(), Arc::clone(&key)),
             pool,
+            sequence: std::sync::atomic::AtomicU64::new(1),
+            key,
             template,
             _directory: directory,
         }
@@ -52,7 +60,7 @@ impl Fixture {
 
     async fn store(&self, selection: &str, version: u64, mode: &str) -> GenerationCacheEntry {
         let id = GenerationCacheId::new();
-        let entry = GenerationCacheEntry {
+        let mut entry = GenerationCacheEntry {
             id,
             template_id: self.template,
             template_version: version,
@@ -60,11 +68,14 @@ impl Fixture {
             mode: mode.into(),
             selection_mode: "fixed".into(),
             selection_payload: selection.into(),
-            pool_revision: 1,
+            pool_revision: self
+                .sequence
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             cache_key: id.to_string(),
             content: format!("fixture-{id}"),
             is_active: false,
         };
+        rekey(&mut entry);
         self.cache.store(&entry).await.expect("store");
         entry
     }
@@ -222,4 +233,17 @@ async fn out014_retention_preserves_pins_and_lenient_fallback_separately() {
             .id,
         tracking.id
     );
+}
+
+fn rekey(entry: &mut GenerationCacheEntry) {
+    entry.cache_key = deve_sub_domain::CacheKeyParams {
+        template_id: entry.template_id,
+        template_version: entry.template_version,
+        profile: &entry.profile,
+        mode: entry.mode.parse().expect("fixture mode"),
+        selection_mode: &entry.selection_mode,
+        selection_payload: &entry.selection_payload,
+        pool_revision: deve_sub_kernel::Revision::new(entry.pool_revision),
+    }
+    .compute_key();
 }

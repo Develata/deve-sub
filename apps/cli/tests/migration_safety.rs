@@ -65,6 +65,16 @@ impl Fixture {
             .expect("pool")
     }
     async fn run(&self, command: &[&str], key: Option<&Path>, extra: &[&str]) -> Output {
+        // Set only the child umask: parallel tests must not change process-wide
+        // state, and a restrictive developer shell must not hide privacy bugs.
+        #[cfg(unix)]
+        let mut c = {
+            let mut c = Command::new("/bin/sh");
+            c.args(["-c", "umask 000; exec \"$@\"", "migration-safety"])
+                .arg(BIN);
+            c
+        };
+        #[cfg(not(unix))]
         let mut c = Command::new(BIN);
         c.current_dir(self.directory.path())
             .env_remove("DEVE_SUB_KEY_PATH")

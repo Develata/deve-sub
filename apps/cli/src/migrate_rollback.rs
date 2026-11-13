@@ -16,9 +16,7 @@ pub(crate) async fn save(
     version: i64,
     key: Option<&MasterKey>,
 ) -> Result<PathBuf> {
-    let directory = tempfile::Builder::new()
-        .prefix(".deve-sub-pre-migrate-")
-        .tempdir_in(parent)
+    let directory = crate::private_directory::create(".deve-sub-pre-migrate-", Some(parent))
         .context("create private rollback directory before migration")?;
     let snapshot = directory.path().join("database.sqlite");
     database::vacuum_into(pool, &snapshot).await?;

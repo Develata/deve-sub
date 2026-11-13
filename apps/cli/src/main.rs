@@ -16,6 +16,7 @@ mod db_lock;
 mod health;
 mod migrate;
 mod node_cmds;
+mod private_directory;
 mod runtime;
 mod serve;
 mod serve_args;

@@ -133,9 +133,7 @@ pub(super) async fn run(args: MigrateArgs) -> Result<()> {
         rollback::save_security_evidence(&recovery, review)?;
     }
     source.close().await;
-    let stage = tempfile::Builder::new()
-        .prefix(".deve-sub-migrate-")
-        .tempdir_in(parent)?;
+    let stage = crate::private_directory::create(".deve-sub-migrate-", Some(parent))?;
     let staged_path = stage.path().join("database.sqlite");
     std::fs::copy(recovery.join("database.sqlite"), &staged_path)?;
     rollback::restrict(&staged_path)?;

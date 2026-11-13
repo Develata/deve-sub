@@ -205,7 +205,8 @@ pub async fn backup(args: BackupArgs) -> Result<()> {
     let pool = open_db(&db_path, 1).await?;
     database::verify_key_binding(&pool, master_key_fingerprint.as_deref(), None).await?;
     cache_backup_fingerprint(&pool, master_key_fingerprint.as_deref()).await?;
-    let snapshot_dir = tempfile::tempdir().context("failed to create temp dir for snapshot")?;
+    let snapshot_dir = crate::private_directory::create(".deve-sub-snapshot-", None)
+        .context("failed to create private temp dir for snapshot")?;
     let snapshot_path = snapshot_dir.path().join("database.sqlite");
     vacuum_into(&pool, &snapshot_path).await?;
     pool.close().await;
@@ -318,7 +319,8 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
 
     tracing::info!(input = %args.input.display(), db_path = %db_path, "starting restore");
 
-    let extract_dir = tempfile::tempdir().context("failed to create temp dir for extraction")?;
+    let extract_dir = crate::private_directory::create(".deve-sub-extract-", None)
+        .context("failed to create private temp dir for extraction")?;
     let (manifest, snapshot_path) = extract_archive(&args.input, extract_dir.path())?;
 
     if manifest.version != BACKUP_FORMAT_VERSION {
@@ -429,9 +431,7 @@ pub async fn restore(args: RestoreArgs) -> Result<()> {
     // WHY: SQLite replays a same-named WAL even after the main file is replaced.
     // A private per-attempt directory isolates crashed restores and removes our
     // own DB/WAL/SHM on ordinary errors. Sibling placement keeps rename atomic.
-    let staging_dir = tempfile::Builder::new()
-        .prefix(".deve-sub-restore-")
-        .tempdir_in(restore_parent)
+    let staging_dir = crate::private_directory::create(".deve-sub-restore-", Some(restore_parent))
         .context("failed to create private restore staging directory")?;
     let staging_path = staging_dir.path().join("database.sqlite");
 

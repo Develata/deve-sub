@@ -48,6 +48,10 @@ binding the snapshot hash, schema and key fingerprint. The directory is 0700
 and files 0600 on Unix. These rollback snapshots may contain old plaintext and
 are separate from normal encrypted backup archives. `--rollback-dir` chooses
 the parent for a new unique directory; existing backups are never overwritten.
+Private snapshot, extraction and staging directories must request 0700 in
+their creation syscall before writing any contents, independently of the
+caller's umask. The migration safety integration cases run each CLI child
+under umask 000 without changing the parallel test process's umask.
 
 Apply forward schema and keyed payload conversion only to a sibling staging
 copy. Verify schema, cache, key binding, integrity, foreign keys and original

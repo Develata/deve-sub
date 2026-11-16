@@ -23,8 +23,40 @@ pub(crate) const REQUIRED_JOBS: &[&str] = &[
     "multiarch",
 ];
 
+pub(crate) const CI_REQUIRED_JOBS: &[&str] = &[
+    "inventory",
+    "fmt-check",
+    "clippy",
+    "test",
+    "test-doc",
+    "openapi-diff",
+    "rust-gate",
+    "compatibility",
+    "docs",
+    "web-wasm",
+    "build-release",
+    "resource-soak",
+    "supply-chain",
+    "http-api-lifecycle",
+    "installer-lifecycle",
+    "normal-non-browser",
+    "normal-non-browser-gate",
+    "docker",
+    "multiarch",
+];
+
 pub(crate) fn evaluate(needs: &Value, event: &str) -> Value {
-    let required: BTreeSet<_> = REQUIRED_JOBS.iter().copied().collect();
+    evaluate_profile(needs, event, "full")
+}
+
+pub(crate) fn evaluate_profile(needs: &Value, event: &str, profile: &str) -> Value {
+    let jobs = match profile {
+        "full" => REQUIRED_JOBS,
+        "ci-non-browser" => CI_REQUIRED_JOBS,
+        _ => return json!({"status":"fail", "profile":profile, "errors":["unknown CI profile"]}),
+    };
+
+    let required: BTreeSet<_> = jobs.iter().copied().collect();
     let supplied: BTreeSet<_> = needs
         .as_object()
         .into_iter()
@@ -53,7 +85,9 @@ pub(crate) fn evaluate(needs: &Value, event: &str) -> Value {
         results.insert(job, outcome);
     }
     json!({
-        "schema_version": 3, "profile": "full", "jobs": results,
+        "schema_version": 3, "profile": profile,
+        "full_acceptance_readiness": "NOT_ASSERTED",
+        "local_browser_scope": if profile == "ci-non-browser" { "NOT_RUN: 151 primary browser cases require local evidence" } else { "job aggregation only" }, "jobs": results,
         "status": if errors.is_empty() { "pass" } else { "fail" },
         "errors": errors, "case_execution": "not asserted by job aggregation",
     })
@@ -62,6 +96,30 @@ pub(crate) fn evaluate(needs: &Value, event: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn limited_profile_is_never_full_and_unknown_profiles_fail() {
+        let needs: Value = CI_REQUIRED_JOBS
+            .iter()
+            .map(|j| ((*j).to_owned(), json!({"result":"success"})))
+            .collect();
+        assert_eq!(
+            evaluate_profile(&needs, "push", "ci-non-browser")["status"],
+            "pass"
+        );
+        assert_eq!(evaluate(&needs, "push")["status"], "fail");
+        assert_eq!(evaluate_profile(&needs, "push", "other")["status"], "fail");
+        for job in CI_REQUIRED_JOBS {
+            for state in ["failure", "skipped", "cancelled", "unknown"] {
+                let mut failed = needs.clone();
+                failed[*job]["result"] = json!(state);
+                assert_eq!(
+                    evaluate_profile(&failed, "push", "ci-non-browser")["status"],
+                    "fail"
+                );
+            }
+        }
+    }
 
     fn passing() -> Value {
         REQUIRED_JOBS

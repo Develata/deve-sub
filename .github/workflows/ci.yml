@@ -5,10 +5,10 @@ on:
   push:
     # WHY: this security candidate needs push CI for the ARM64 runtime gate.
     branches: [main, fix/bounded-quality-2026-10-13, perf/bounded-audit-2026-10-13, perf/regression-convergence-2026-10-14, fix/rustls-security-2026-10-15, backup/round5-cp10-native-ci-20261112]
-  # WHY (ADR-0008): nightly full baseline detects drift before a release.
+  # WHY (ADR-0008): nightly non-browser baseline detects drift before a release.
   schedule:
     - cron: "0 19 * * *"
-  # Release builds wait for this same complete baseline (DS-AUD-B04).
+  # Release builds wait for this same non-browser baseline; release separately requires local evidence (DS-AUD-B04).
   workflow_call:
     outputs:
       wasm-manifest-sha256:
@@ -41,7 +41,7 @@ jobs:
       - run: python3 -m unittest discover -s scripts/ci/tests
       - run: python3 scripts/tests/test_soak.py
       - run: python3 scripts/tests/test_docker_health_deadline.py
-      - run: node --test tests/e2e/verify-locked-browser.test.cjs
+      - run: node --test tests/e2e/verify-locked-browser.test.cjs tests/e2e/browser-preparation.test.cjs
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: ci-tool
@@ -321,24 +321,11 @@ jobs:
       - run: cargo install cargo-deny --locked --version 0.20.2
       - run: cargo deny --locked check
 
-  browser-e2e:
-    name: browser-e2e:${{ matrix.suite }}
+  http-api-lifecycle:
+    name: http-api-and-process-lifecycle
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [rust-gate, web-wasm, build-release]
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        include:
-          - suite: legacy
-            args: "--config playwright.config.ts"
-          - suite: functional-api
-            args: "--config functional.config.ts --project functional-api --workers 2"
-          - suite: functional-desktop
-            args: "--config functional.config.ts --project functional-desktop --workers 2"
-          - suite: functional-mobile
-            args: "--config functional.config.ts --project functional-mobile --workers 2"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # WHY (ADR-0008, Phase 3-A/B): consume the exact producer artifacts.
@@ -363,46 +350,58 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "20"
-      - name: Install E2E dependencies
+      - name: Install test runner without browsers
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: npm ci
         working-directory: tests/e2e
+      - name: Run HTTP API and process lifecycle without a browser
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/deve-sub-no-browser
+        run: python3 scripts/ci/suite.py --profile ci-non-browser --output "$RUNNER_TEMP/http-api-lifecycle"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: http-api-lifecycle-results
+          path: ${{ runner.temp }}/http-api-lifecycle/
+          if-no-files-found: error
+          retention-days: 7
+
+  installer-lifecycle:
+    name: native-installer-lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [rust-gate, web-wasm, build-release]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # WHY (ADR-0008, Phase 3-A/B): consume the exact producer artifacts.
+      - name: Download WASM dist
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: wasm-dist
+          path: apps/web/dist
+      - name: Download release binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-binary
+          path: target/release
+      - name: Make binary executable
+        env:
+          BINARY_MANIFEST_SHA256: ${{ needs.build-release.outputs.manifest-sha256 }}
+          WASM_MANIFEST_SHA256: ${{ needs.web-wasm.outputs.manifest-sha256 }}
+        run: |
+          python3 scripts/ci/artifact.py verify --kind binary --root target/release --manifest-sha256 "$BINARY_MANIFEST_SHA256"
+          python3 scripts/ci/artifact.py verify --kind wasm --root apps/web/dist --manifest-sha256 "$WASM_MANIFEST_SHA256"
+          chmod +x target/release/deve-sub
       - name: Verify native installer lifecycle
-        if: matrix.suite == 'legacy'
         run: |
           sudo apt-get update
           sudo apt-get install -y bubblewrap
           sudo python3 scripts/tests/test_install.py --required --binary target/release/deve-sub --web-dir apps/web/dist
-      - name: Install locked Playwright Chromium
-        run: ./node_modules/.bin/playwright install --with-deps chromium
-        working-directory: tests/e2e
-      - name: Verify existing locked Playwright Chromium
-        run: node verify-locked-browser.cjs
-        working-directory: tests/e2e
-      - name: Verify browser process lifecycle
-        if: matrix.suite == 'legacy'
-        run: npx playwright test --config lifecycle.config.ts
-        working-directory: tests/e2e
-      - name: Run browser lane
-        env:
-          CI_BROWSER_ARGS: ${{ matrix.args }}
-        run: |
-          # shellcheck disable=SC2086
-          npx playwright test $CI_BROWSER_ARGS
-        working-directory: tests/e2e
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: always()
-        with:
-          name: playwright-report-${{ matrix.suite }}
-          path: |
-            tests/e2e/playwright-report/
-            tests/e2e/test-results/
-          retention-days: 7
 
   # Real normal paths: fixed coverage, independent state and shared candidate builds.
-  normal-acceptance:
-    name: normal-acceptance:${{ matrix.lane }}
+  normal-non-browser:
+    name: normal-non-browser:${{ matrix.lane }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: [rust-gate, web-wasm, build-release]
@@ -411,16 +410,6 @@ jobs:
       max-parallel: 4
       matrix:
         include:
-          - lane: protocol-1
-          - lane: protocol-2
-          - lane: protocol-3
-          - lane: protocol-4
-          - lane: api
-          - lane: browser
-          - lane: themes-1
-          - lane: themes-2
-          - lane: themes-3
-          - lane: themes-4
           - lane: dns
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -442,62 +431,44 @@ jobs:
           python3 scripts/ci/artifact.py verify --kind binary --root target/release --manifest-sha256 "$BINARY_MANIFEST_SHA256"
           python3 scripts/ci/artifact.py verify --kind wasm --root apps/web/dist --manifest-sha256 "$WASM_MANIFEST_SHA256"
           chmod +x target/release/deve-sub
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: "24.19.0"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12.14"
-      - run: npm ci
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-        working-directory: tests/e2e
-      - name: Install locked Playwright Chromium
-        if: matrix.lane != 'dns'
-        run: ./node_modules/.bin/playwright install --with-deps chromium
-        working-directory: tests/e2e
-      - name: Verify existing locked Playwright Chromium
-        if: matrix.lane != 'dns'
-        run: node verify-locked-browser.cjs
-        working-directory: tests/e2e
       - run: python3 -m pip install pyyaml==6.0.3
-      - name: Install normal protocol validators
-        if: startsWith(matrix.lane, 'protocol-')
-        run: python3 scripts/install-validators.py "$RUNNER_TEMP/validators"
       - name: Run complete normal lane
         env:
           NORMAL_LANE: ${{ matrix.lane }}
           DEVE_SUB_VALIDATORS: ${{ runner.temp }}/validators
-        run: python3 scripts/ci/normal.py run --lane "$NORMAL_LANE" --output "$RUNNER_TEMP/normal"
+        run: python3 scripts/ci/normal.py run --profile ci-non-browser --lane "$NORMAL_LANE" --output "$RUNNER_TEMP/normal"
       - name: Preserve normal execution evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: normal-results-${{ matrix.lane }}
+          name: normal-ci-results-${{ matrix.lane }}
           path: ${{ runner.temp }}/normal/
           if-no-files-found: error
           retention-days: 7
 
-  normal-gate:
-    name: normal-coverage-gate
+  normal-non-browser-gate:
+    name: normal-non-browser-coverage-gate
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: always()
-    needs: [normal-acceptance, build-release, web-wasm, rust-gate]
+    needs: [normal-non-browser, build-release, web-wasm, rust-gate]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: normal-results-*
+          pattern: normal-ci-results-*
           path: ${{ runner.temp }}/normal-results
           merge-multiple: false
-      - name: Require all normal shards and cases
+      - name: Require complete non-browser normal scope
         if: always()
         env:
           CI_NORMAL_NEEDS: ${{ toJSON(needs) }}
-        run: python3 scripts/ci/normal.py gate --reports "$RUNNER_TEMP/normal-results" --output "$RUNNER_TEMP/normal-result.json"
+        run: python3 scripts/ci/normal.py gate --profile ci-non-browser --reports "$RUNNER_TEMP/normal-results" --output "$RUNNER_TEMP/normal-result.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
@@ -600,12 +571,12 @@ jobs:
           NATIVE_PLATFORM: ${{ matrix.platform }}
         run: python3 scripts/tests/test_docker_health.py --image "deve-sub-$NATIVE_ARCH" --platform "$NATIVE_PLATFORM"
 
-  acceptance-gate:
-    name: acceptance-gate
+  ci-non-browser-gate:
+    name: ci-non-browser-gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: always()
-    needs: [inventory, fmt-check, clippy, test, test-doc, openapi-diff, rust-gate, compatibility, docs, web-wasm, build-release, resource-soak, supply-chain, browser-e2e, normal-acceptance, normal-gate, docker, multiarch]
+    needs: [inventory, fmt-check, clippy, test, test-doc, openapi-diff, rust-gate, compatibility, docs, web-wasm, build-release, resource-soak, supply-chain, http-api-lifecycle, installer-lifecycle, normal-non-browser, normal-non-browser-gate, docker, multiarch]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dtolnay/rust-toolchain@4716b85f2fac3e324e64fa2810f6b5c3905760a5 # 1.97.1
@@ -616,11 +587,11 @@ jobs:
         with:
           shared-key: ci-tool
           save-if: false
-      - name: Require complete full-baseline job results
+      - name: Require all non-browser CI job results
         if: always()
         env:
           CI_NEEDS: ${{ toJSON(needs) }}
-        run: cargo run --locked -p deve-sub-ci -- gate --output "$RUNNER_TEMP/ci-result.json"
+        run: cargo run --locked -p deve-sub-ci -- gate --profile ci-non-browser --output "$RUNNER_TEMP/ci-result.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:

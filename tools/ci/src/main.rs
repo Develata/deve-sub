@@ -24,27 +24,41 @@ fn main() -> Result<()> {
             let packages = inventory::workspace(&metadata(&root)?)?;
             let shards = inventory::validate(&workflow, &packages)?;
             println!(
-                "Full static baseline: {shards} Rust shards, {} packages, 4 browser lanes, 11 normal lanes",
+                "CI non-browser inventory: {shards} Rust shards, {} packages, HTTP API15, lifecycle3, DNS1; local browser151 required separately",
                 packages.len()
             );
         }
+        [command, profile_flag, profile, output_flag, output]
+            if command == "gate" && profile_flag == "--profile" && output_flag == "--output" =>
+        {
+            write_gate(output, profile)?;
+        }
         [command, output_flag, output] if command == "gate" && output_flag == "--output" => {
-            let needs: Value = serde_json::from_str(&env::var("CI_NEEDS")?)?;
-            let report = gate::evaluate(&needs, &env::var("GITHUB_EVENT_NAME")?);
-            let path = Path::new(output);
-            if let Some(parent) = path
-                .parent()
-                .filter(|parent| !parent.as_os_str().is_empty())
-            {
-                fs::create_dir_all(parent)?;
-            }
-            let json = serde_json::to_string_pretty(&report)?;
-            fs::write(path, format!("{json}\n"))?;
-            println!("{json}");
-            ensure!(report["status"] == "pass", "full baseline failed");
+            write_gate(output, "full")?;
         }
         _ => bail!("usage: deve-sub-ci inventory | gate --output PATH"),
     }
+    Ok(())
+}
+
+fn write_gate(output: &str, profile: &str) -> Result<()> {
+    let needs: Value = serde_json::from_str(&env::var("CI_NEEDS")?)?;
+    let event = env::var("GITHUB_EVENT_NAME")?;
+    let report = if profile == "full" {
+        gate::evaluate(&needs, &event)
+    } else {
+        gate::evaluate_profile(&needs, &event, profile)
+    };
+    let path = Path::new(output);
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(
+        path,
+        format!("{}\n", serde_json::to_string_pretty(&report)?),
+    )?;
+    println!("{report}");
+    ensure!(report["status"] == "pass", "{profile} CI profile failed");
     Ok(())
 }
 

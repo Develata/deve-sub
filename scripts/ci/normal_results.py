@@ -29,6 +29,18 @@ def context():
     }
 
 
+def profile_plan(plan, profile):
+    if profile == 'full':
+        return plan
+    if profile != 'ci-non-browser':
+        raise ValueError('unknown normal profile')
+    dns = plan['lanes']['dns']
+    if dns['kind'] != 'dns' or dns['args'] or len(dns['cases']) != 1:
+        raise ValueError('non-browser profile requires the exact DNS capability')
+    return {**plan, 'scope': 'CI non-browser normal DNS only; local browser scope NOT_RUN',
+            'lanes': {'dns': dns}}
+
+
 def specs(report):
     """Keep every test occurrence, so duplicate reports cannot collapse away."""
     result = []
@@ -82,10 +94,12 @@ def dns_results(proof, binary_sha256, case_id):
     return [{"id": case_id, "status": "PASS"}]
 
 
-def evaluate(reports, plan, expected_context, needs):
+def evaluate(reports, plan, expected_context, needs, profile='full'):
     """GitHub completion and exact per-case evidence are both required."""
+    plan = profile_plan(plan, profile)
     errors, cases = [], []
-    expected_jobs = {"normal-acceptance", "build-release", "web-wasm", "rust-gate"}
+    matrix = 'normal-acceptance' if profile == 'full' else 'normal-non-browser'
+    expected_jobs = {matrix, "build-release", "web-wasm", "rust-gate"}
     if set(needs) != expected_jobs:
         errors.append("required producer/matrix job inventory differs")
     for job in expected_jobs:
@@ -97,6 +111,8 @@ def evaluate(reports, plan, expected_context, needs):
     if len(names) != len(set(names)) or set(names) != set(plan["lanes"]):
         errors.append("missing, duplicate or unknown normal lane report")
     for report in reports:
+        if report.get('profile', 'full') != profile:
+            errors.append('normal evidence profile mismatch')
         lane = report.get("lane")
         if lane not in plan["lanes"]:
             continue
@@ -124,6 +140,7 @@ def evaluate(reports, plan, expected_context, needs):
         errors.append(str(error))
     return {
         "schema_version": 1, "scope": plan["scope"], "context": expected_context,
+        'profile': profile,
         "status": "FAIL" if errors else "PASS", "errors": errors,
         "expected_lanes": len(plan["lanes"]), "received_lanes": len(reports),
         "expected_cases": len(expected), "cases": cases, "jobs": needs,

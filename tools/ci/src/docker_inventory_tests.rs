@@ -72,30 +72,26 @@ fn native_steps_cannot_be_skipped_replaced_or_suppressed() {
 }
 
 #[test]
-fn browser_preflight_cannot_be_replaced_by_download_or_ignored() {
-    for job in ["browser-e2e", "normal-acceptance"] {
-        for (key, value) in [
-            ("run", json!("npx playwright install chromium")),
-            ("continue-on-error", json!(true)),
-        ] {
-            rejected(|w| {
-                let step = w["jobs"][job]["steps"]
-                    .as_array_mut()
-                    .expect("steps")
-                    .iter_mut()
-                    .find(|s| s["name"] == "Verify existing locked Playwright Chromium")
-                    .expect("preflight");
-                step[key] = value;
-            });
-        }
+fn browser_acquisition_is_forbidden_in_every_ci_job() {
+    for job in [
+        "http-api-lifecycle",
+        "normal-non-browser",
+        "installer-lifecycle",
+    ] {
         rejected(|w| {
-            let step = w["jobs"][job]["steps"]
+            w["jobs"][job]["steps"]
                 .as_array_mut()
                 .expect("steps")
-                .iter_mut()
-                .find(|s| s["run"] == "npm ci")
-                .expect("dependencies");
-            step.as_object_mut().expect("step").remove("env");
+                .push(json!({"run":"npx playwright install chromium"}))
         });
     }
+    rejected(|w| {
+        let step = w["jobs"]["http-api-lifecycle"]["steps"]
+            .as_array_mut()
+            .expect("steps")
+            .iter_mut()
+            .find(|s| s["run"] == "npm ci")
+            .expect("dependencies");
+        step.as_object_mut().expect("step").remove("env");
+    });
 }

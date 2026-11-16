@@ -10,32 +10,40 @@ the original parallelization decision. Product behavior and the production
 
 ## Static execution and final gate
 
-Every supported event runs the full baseline. The explicit
-`backup/round5-cp10-native-ci-20261112` verification branch is also a supported
-push target; it does not authorize publication or merging to main.
-The workflow's static matrix
-owns package partitioning; Cargo metadata proves that every workspace member
-belongs to exactly one shard. Inventory validation also requires the exact
-locked/all-targets/all-features Cargo command, without conditions, filters,
-error suppression or additional shell commands. Doctests remain a separate gate.
-Selective CI and shadow impact planning are not enabled.
+Every supported CI event runs the explicit `ci-non-browser` profile. The
+verification backup branch is a supported push target, not publication authority.
+Rust shards retain the exact locked/all-targets/all-features command and every
+workspace member once. Rust, audit, WASM, compatibility, DNS, native installer,
+Docker, soak, HTTP API and process-lifecycle checks remain required. No browser
+installation, preflight or browser invocation runs on GitHub runners.
 
-Repository-only `deve-sub-ci` owns static inventory and final result evaluation.
-It is a small Rust workspace binary with no application dependencies, not a
-production subcommand or a second scheduler. GitHub Actions still owns process
-execution. Artifact transfer and OS/browser-specific tooling retain their
-existing Python/TypeScript entrypoints.
+Execution follows actual fixture dependencies. Functional API has 15 HTTP-only
+cases; lifecycle has three Node/filesystem/socket failure-path cases; DNS has
+one controlled handshake. Those 19 cases stay in CI. Normal's nominal API and
+protocol cases request page/browser fixtures and remain local with the other
+browser cases. Playwright's test runner and discovery do not by themselves
+require a browser. The registered primary inventory remains 170 cases: 19 CI
+and 151 local-browser cases (16 legacy, 96 functional viewport cases, 39 normal).
+The separate Compose-browser runtime case retains its existing external/runtime
+prerequisites and is reported separately, not silently removed or promoted.
 
-Browser execution has four static lanes: legacy UI (including process lifecycle
-checks), functional API, functional desktop and functional mobile. All lanes
-must run, with `fail-fast: false` and at most four runners. The shared-state
-legacy suite remains serial; isolated functional lanes use two workers each on
-CI to bound simultaneous servers and password-hashing memory on each runner.
-The legacy lane also runs isolated native installer smoke against its verified
-binary and Web artifacts; missing bubblewrap or build inputs fail the lane.
-Inventory rejects missing/duplicate lanes and weakened commands. Each lane
-uploads a uniquely named diagnostic artifact; the job aggregate blocks the
-final gate if any lane fails or is cancelled.
+The CI result is named `ci-non-browser-gate`, never `acceptance-gate` or profile
+`full`. Missing/failed/cancelled required CI jobs still fail; only the existing
+PR multiarch exception is reported not-run. The old full-profile evaluator
+remains strict, so non-browser-only results cannot pass it. Required-check
+configuration is not edited: an owner must explicitly review any check-name
+migration; an old required acceptance-gate remains unsatisfied until then.
+
+The normal catalogue remains all 11 lanes/40 cases. Its default full profile
+still requires complete discovery and execution evidence. The explicit
+ci-non-browser profile executes only DNS and reports the other scope as NOT_RUN;
+it cannot be aggregated as full. HTTP/API and lifecycle keep their original
+configs, IDs, fixtures and assertions, with no browser provisioning or selector.
+The isolated native installer remains a required Linux bubblewrap job.
+
+Repository-only `deve-sub-ci` owns the fixed CI job inventory and profile result.
+Python owns normal/browser result adaptation; test configs retain their
+existing fixtures. There is no generic scheduler or selective shadow planner.
 
 Only superseded runs for the same PR share a workflow concurrency group and
 cancel one another. Non-PR groups include the unique workflow run ID: using a
@@ -46,11 +54,15 @@ unbounded deadlines. Runtime consumers continue
 to use their finer request/test/startup/teardown deadlines.
 
 Static checks and candidate builds may run concurrently. Runtime consumers
-wait for their exact artifacts; Docker still builds from source. Distribution
-builds, signing and publication wait for the entire reusable CI workflow.
-The final `acceptance-gate` always evaluates every required GitHub job.
-Only multiarch on PR may be skipped, reported as not-run. Missing jobs,
-unexpected skips, cancellation and failure block acceptance.
+wait for their exact artifacts; Docker still builds from source. Distribution builds, signing and publication require both the non-browser CI
+and a separate `acceptance-gate` in the release workflow. That full gate checks
+an independently approved digest of a local-browser evidence bundle from the
+same clean commit/source/lock/toolchain and source-bound binary/Web producers.
+It validates actual full151 startup and all 151 exact raw case results, with
+no skips/retries. Missing, stale or corrupt evidence fails closed before build.
+A passing CI job is not full acceptance. The external evidence handoff is not
+configured or authorized by this source change; release stays blocked until
+an owner approves and supplies the immutable bundle and independent digest.
 
 The convergence round removes the shadow planner and Rust execution receipts.
 The planner did not reduce execution or provide measured selection benefits.
@@ -116,7 +128,7 @@ execution and each lane's assigned cases afterwards. Adding/removing a test
 requires updating this reviewed coverage projection. This is a static coverage
 inventory, not selective scheduling or an alternate business authority.
 
-The normal result gate runs with `always()` and requires successful producer
+The explicitly scoped CI normal result gate runs with `always()` and requires successful producer
 and matrix job outcomes plus every expected case result from this source,
 workflow run and attempt. Missing/duplicate/unknown cases, missing shards,
 unexpected skips, expected-failure tests, retries, cancellation, timeout and
@@ -131,15 +143,27 @@ must report those gaps separately; a green automated gate cannot promote them.
 The reviewed workflow has read-only repository access, no production secrets,
 no publishing steps and no additional scheduled trigger.
 
-Browser preparation only verifies an
-already-present executable matching the locked Playwright browser version and
-revision. It records that executable's SHA-256 and exports its exact path to
-the test configs. It never downloads a browser or substitutes a system version.
-Missing or mismatched assets leave browser cases not-run and fail the job and
-final gate. The legacy installer and process lifecycle checks run before this
-preflight so their independent evidence is still available. An operator must
-provide an existing lawful exact asset or an already-authorized target
-environment; moving a refused download to another runner is not a remedy.
+Local browser suites use one preparation entrypoint before actual browser use.
+HTTP-only and process-lifecycle tests in CI do not invoke this preparation. It checks
+the installed Playwright packages against the lockfile, selects the registry's
+full Chromium executable and verifies its exact version and revision metadata.
+It then launches that explicit executable through Playwright, checks the
+connected browser version, closes it and verifies that its bytes did not change
+before exporting its path. Headless execution of full Chromium is allowed;
+headless shell and system-browser substitution are not. The local preparation caller imposes a one-minute deadline, in addition to
+the bounded version/launch probes.
+
+Preparation consumes an already-present lawful asset through the standard
+Playwright cache contract. Version policy, asset supply and acceptance remain
+separate: no permitted provisioner is configured by this workflow, and it never
+downloads a browser. The recorded executable SHA-256 identifies observed bytes;
+it does not authenticate the publisher. An operator must establish the asset's
+authorized source and integrity before placing it in an authorized environment.
+Moving a refused download to another runner is not a remedy. Missing assets,
+lock/version mismatches, launch or cleanup failures leave preparation and
+dependent cases not-run and fail the job and final gate. No path is exported
+before preparation succeeds. The independent installer and Node lifecycle checks stay in CI and do not
+require a browser. Local browser children all receive the same prepared path.
 
 Browser invocations own their ports, temporary databases/keys, identities,
 fixtures, child processes and logs. Setup and teardown use the same run-local
@@ -192,3 +216,27 @@ The Web job also regenerates the committed Tailwind CSS using the pinned
 a committed build input so native/Docker release builds do not require Node.
 After Rust class names or input.css change, run `npm ci --prefix apps/web` and
 `npm run --prefix apps/web build:css` before building WASM.
+
+## Local-browser evidence and full release boundary
+
+`python3 scripts/ci/local_browser.py run|verify` owns the local-browser bundle.
+Run on the final clean candidate commit, output outside tracked sources, and
+supply independently hashed source-bound binary/Web producer manifests. The
+runner must reject stale producers rather than attach new source labels to old
+binaries. It records platform, exact commands, timeouts, exits, preparation,
+raw report hashes and all exact cases. It sets the prepared executable path in
+every browser child environment. Unknown cases, missing/duplicate cases,
+skips/retries/global errors, source mutation and startup/cleanup failure fail.
+The full release verifier requires a clean matching commit; development runs
+on a dirty tree cannot certify release. This initially supports the existing
+Linux producer manifest contract; macOS producer/runtime capability remains
+separate NOT_RUN until a matching native contract/environment is verified.
+
+The bundle is trusted execution evidence from the reviewed local runner, not
+cryptographic proof against its owner. Its expected manifest digest comes from
+separate operator review; an embedded self-hash or PASS string cannot certify
+itself. No arbitrary URL fetch, browser acquisition or new storage integration
+is introduced. Release `acceptance-gate` expects an already-approved bundle at
+its documented input path plus the separately approved digest. This handoff is
+currently unconfigured, so both tag and manual release stay blocked. Publication
+and that handoff still require explicit concrete-content approval.

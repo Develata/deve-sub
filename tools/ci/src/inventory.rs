@@ -1,4 +1,4 @@
-use crate::gate::REQUIRED_JOBS;
+use crate::gate::CI_REQUIRED_JOBS as REQUIRED_JOBS;
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -15,21 +15,6 @@ mod tests;
 
 pub(crate) const CONCURRENCY_GROUP: &str = "ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}";
 pub(crate) const CANCEL_PR: &str = "${{ github.event_name == 'pull_request' }}";
-const BROWSER_SUITES: &[(&str, &str)] = &[
-    ("legacy", "--config playwright.config.ts"),
-    (
-        "functional-api",
-        "--config functional.config.ts --project functional-api --workers 2",
-    ),
-    (
-        "functional-desktop",
-        "--config functional.config.ts --project functional-desktop --workers 2",
-    ),
-    (
-        "functional-mobile",
-        "--config functional.config.ts --project functional-mobile --workers 2",
-    ),
-];
 
 pub(crate) fn workspace(metadata: &Value) -> Result<BTreeSet<String>> {
     let members = array(&metadata["workspace_members"])?;
@@ -63,7 +48,7 @@ pub(crate) fn validate(workflow: &Value, packages: &BTreeSet<String>) -> Result<
     let expected: BTreeSet<_> = required
         .iter()
         .copied()
-        .chain(["acceptance-gate"])
+        .chain(["ci-non-browser-gate"])
         .collect();
     ensure!(
         jobs.keys().map(String::as_str).collect::<BTreeSet<_>>() == expected,
@@ -80,14 +65,20 @@ pub(crate) fn validate(workflow: &Value, packages: &BTreeSet<String>) -> Result<
             job.get("continue-on-error").is_none(),
             "{name}: job cannot suppress errors"
         );
-        if !["multiarch", "acceptance-gate", "normal-gate"].contains(&name.as_str()) {
+        if ![
+            "multiarch",
+            "ci-non-browser-gate",
+            "normal-non-browser-gate",
+        ]
+        .contains(&name.as_str())
+        {
             ensure!(
                 job.get("if").is_none(),
                 "{name}: baseline job cannot be conditional"
             );
         }
     }
-    let gate = &jobs["acceptance-gate"];
+    let gate = &jobs["ci-non-browser-gate"];
     let needs = array(&gate["needs"])?;
     ensure!(
         needs.iter().map(string).collect::<Result<BTreeSet<_>>>()? == required
@@ -100,10 +91,12 @@ pub(crate) fn validate(workflow: &Value, packages: &BTreeSet<String>) -> Result<
         "only PR multiarch may be skipped"
     );
     let count = rust_shards(&jobs["test"], packages)?;
-    browser_lanes(&jobs["browser-e2e"])?;
-    normal::validate(&jobs["normal-acceptance"], &jobs["normal-gate"])?;
+    normal::validate(
+        &jobs["normal-non-browser"],
+        &jobs["normal-non-browser-gate"],
+    )?;
     docker::validate(&jobs["docker"], &jobs["multiarch"])?;
-    browser::validate(&jobs["browser-e2e"], &jobs["normal-acceptance"])?;
+    browser::validate(workflow)?;
     Ok(count)
 }
 
@@ -169,59 +162,6 @@ fn rust_shards(test: &Value, packages: &BTreeSet<String>) -> Result<usize> {
         seen.difference(packages).collect::<Vec<_>>()
     );
     Ok(shards.len())
-}
-
-fn browser_lanes(browser: &Value) -> Result<()> {
-    reject_overrides(browser)?;
-    let rows = matrix(browser)?;
-    ensure!(
-        browser["strategy"]["max-parallel"] == 4,
-        "browser lanes must be bounded at four"
-    );
-    let expected: BTreeSet<_> = BROWSER_SUITES.iter().copied().collect();
-    let actual: BTreeSet<_> = rows
-        .iter()
-        .map(|row| Ok((string(&row["suite"])?, string(&row["args"])?)))
-        .collect::<Result<_>>()?;
-    ensure!(
-        rows.len() == expected.len() && actual == expected,
-        "browser suite partition is incomplete or altered"
-    );
-    let steps = array(&browser["steps"])?;
-    let command = steps
-        .iter()
-        .find(|step| step["name"] == "Run browser lane")
-        .context("browser lane command missing")?;
-    ensure!(
-        command
-            == &json!({
-                "name": "Run browser lane", "env": {"CI_BROWSER_ARGS": "${{ matrix.args }}"},
-                "run": "# shellcheck disable=SC2086\nnpx playwright test $CI_BROWSER_ARGS\n", "working-directory": "tests/e2e",
-            }),
-        "browser command cannot be filtered, skipped or error-suppressed"
-    );
-    let installer = named_step(browser, "Verify native installer lifecycle")?;
-    ensure!(
-        installer
-            == &json!({
-                "name": "Verify native installer lifecycle", "if": "matrix.suite == 'legacy'",
-                "run": "sudo apt-get update\nsudo apt-get install -y bubblewrap\nsudo python3 scripts/tests/test_install.py --required --binary target/release/deve-sub --web-dir apps/web/dist\n",
-            }),
-        "legacy lane must verify the native installer without skipping prerequisites"
-    );
-    let lifecycle = steps
-        .iter()
-        .find(|step| step["name"] == "Verify browser process lifecycle")
-        .context("lifecycle command missing")?;
-    ensure!(
-        lifecycle
-            == &json!({
-                "name": "Verify browser process lifecycle", "if": "matrix.suite == 'legacy'",
-                "run": "npx playwright test --config lifecycle.config.ts", "working-directory": "tests/e2e",
-            }),
-        "legacy lane must also verify browser process lifecycle"
-    );
-    Ok(())
 }
 
 fn matrix(job: &Value) -> Result<&Vec<Value>> {

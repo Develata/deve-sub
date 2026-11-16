@@ -43,27 +43,29 @@ fn current_complete_workflow_passes() {
 #[test]
 fn normal_case_lanes_gate_and_validators_cannot_be_weakened() {
     rejected(|workflow| {
-        workflow["jobs"]["normal-acceptance"]["strategy"]["matrix"]["include"]
+        workflow["jobs"]["normal-non-browser"]["strategy"]["matrix"]["include"]
             .as_array_mut()
             .expect("matrix")
             .pop();
     });
     rejected(|workflow| {
-        workflow["jobs"]["normal-acceptance"]["strategy"]["matrix"]["include"][1] =
-            json!({"lane":"protocol-1"});
+        workflow["jobs"]["normal-non-browser"]["strategy"]["matrix"]["include"][0] =
+            json!({"lane":"browser"});
     });
     rejected(|workflow| {
-        workflow["jobs"]["normal-acceptance"]["strategy"]["max-parallel"] = json!(8)
+        workflow["jobs"]["normal-non-browser"]["strategy"]["max-parallel"] = json!(8)
     });
     rejected(|workflow| {
-        workflow["jobs"]["normal-acceptance"]["strategy"]["fail-fast"] = json!(true)
+        workflow["jobs"]["normal-non-browser"]["strategy"]["fail-fast"] = json!(true)
     });
-    rejected(|workflow| workflow["jobs"]["normal-gate"]["if"] = json!("success()"));
+    rejected(|workflow| workflow["jobs"]["normal-non-browser-gate"]["if"] = json!("success()"));
     for (job, name) in [
-        ("normal-acceptance", "Run complete normal lane"),
-        ("normal-acceptance", "Verify normal candidate artifacts"),
-        ("normal-acceptance", "Install normal protocol validators"),
-        ("normal-gate", "Require all normal shards and cases"),
+        ("normal-non-browser", "Run complete normal lane"),
+        ("normal-non-browser", "Verify normal candidate artifacts"),
+        (
+            "normal-non-browser-gate",
+            "Require complete non-browser normal scope",
+        ),
     ] {
         for key in ["if", "continue-on-error", "run"] {
             rejected(|workflow| {
@@ -147,13 +149,13 @@ fn replaced_filtered_skipped_or_suppressed_rust_command_blocks() {
 fn every_missing_final_gate_leaf_blocks() {
     for leaf in REQUIRED_JOBS {
         rejected(|workflow| {
-            workflow["jobs"]["acceptance-gate"]["needs"]
+            workflow["jobs"]["ci-non-browser-gate"]["needs"]
                 .as_array_mut()
                 .expect("needs")
                 .retain(|job| job != leaf)
         });
     }
-    rejected(|workflow| workflow["jobs"]["acceptance-gate"]["if"] = json!("success()"));
+    rejected(|workflow| workflow["jobs"]["ci-non-browser-gate"]["if"] = json!("success()"));
 }
 
 #[test]
@@ -166,7 +168,7 @@ fn baseline_jobs_cannot_ignore_failures_or_skip() {
 
 #[test]
 fn every_job_has_a_finite_deadline() {
-    for leaf in REQUIRED_JOBS.iter().copied().chain(["acceptance-gate"]) {
+    for leaf in REQUIRED_JOBS.iter().copied().chain(["ci-non-browser-gate"]) {
         for timeout in [
             Value::Null,
             json!(0),
@@ -185,76 +187,41 @@ fn main_and_release_runs_cannot_cancel_each_other() {
 }
 
 #[test]
-fn browser_coverage_cannot_omit_duplicate_or_filter_a_suite() {
-    for index in 0..4 {
-        rejected(|workflow| {
-            workflow["jobs"]["browser-e2e"]["strategy"]["matrix"]["include"]
-                .as_array_mut()
-                .expect("matrix")
-                .remove(index);
-        });
-        rejected(|workflow| {
-            workflow["jobs"]["browser-e2e"]["strategy"]["matrix"]["include"][index]["args"] =
-                json!("--grep one_test")
-        });
-    }
-    rejected(|workflow| {
-        let rows = workflow["jobs"]["browser-e2e"]["strategy"]["matrix"]["include"]
-            .as_array_mut()
-            .expect("matrix");
-        rows.push(rows[0].clone());
-    });
-}
-
-#[test]
-fn browser_lifecycle_and_lane_commands_cannot_be_suppressed() {
-    for name in ["Run browser lane", "Verify browser process lifecycle"] {
-        for (key, value) in [
-            ("continue-on-error", json!(true)),
-            ("if", json!("false")),
-            ("run", json!("true")),
-        ] {
-            rejected(|workflow| {
-                let steps = workflow["jobs"]["browser-e2e"]["steps"]
+fn non_browser_commands_and_installation_policy_cannot_be_weakened() {
+    for (job, name) in [
+        (
+            "http-api-lifecycle",
+            "Run HTTP API and process lifecycle without a browser",
+        ),
+        ("installer-lifecycle", "Verify native installer lifecycle"),
+    ] {
+        for key in ["run", "if", "continue-on-error"] {
+            rejected(|w| {
+                let step = w["jobs"][job]["steps"]
                     .as_array_mut()
-                    .expect("steps");
-                let step = steps
+                    .expect("steps")
                     .iter_mut()
-                    .find(|step| step["name"] == name)
-                    .expect("browser step");
-                step[key] = value;
+                    .find(|s| s["name"] == name)
+                    .expect("step");
+                step[key] = json!("false");
             });
         }
     }
-}
-
-#[test]
-fn matrices_cannot_hide_failures_or_exclude_lanes() {
-    for job in ["test", "browser-e2e"] {
-        rejected(|workflow| workflow["jobs"][job]["strategy"]["fail-fast"] = json!(true));
-        rejected(|workflow| workflow["jobs"][job]["strategy"]["matrix"]["exclude"] = json!([]));
-        rejected(|workflow| workflow["jobs"][job]["env"] = json!({"RUSTFLAGS": "changed"}));
-    }
-    rejected(|workflow| workflow["jobs"]["browser-e2e"]["strategy"]["max-parallel"] = json!(100));
-}
-
-#[test]
-fn installer_smoke_cannot_skip_or_suppress_failures() {
-    for (key, value) in [
-        ("if", json!("false")),
-        ("run", json!("true")),
-        ("continue-on-error", json!(true)),
-    ] {
-        rejected(|workflow| {
-            let steps = workflow["jobs"]["browser-e2e"]["steps"]
-                .as_array_mut()
-                .expect("steps");
-            let step = steps
-                .iter_mut()
-                .find(|step| step["name"] == "Verify native installer lifecycle")
-                .expect("installer step");
-            step[key] = value;
-        });
+    rejected(|w| {
+        w["jobs"]["http-api-lifecycle"]["steps"]
+            .as_array_mut()
+            .expect("steps")
+            .push(json!({"run":"npx playwright install chromium"}));
+    });
+    rejected(|w| {
+        w["jobs"]["http-api-lifecycle"]["steps"]
+            .as_array_mut()
+            .expect("steps")
+            .push(json!({"run":"node verify-locked-browser.cjs"}));
+    });
+    for job in ["test", "normal-non-browser"] {
+        rejected(|w| w["jobs"][job]["strategy"]["fail-fast"] = json!(true));
+        rejected(|w| w["jobs"][job]["strategy"]["matrix"]["exclude"] = json!([]));
     }
 }
 

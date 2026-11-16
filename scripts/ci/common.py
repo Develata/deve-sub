@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import tomllib
+import signal
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,3 +51,11 @@ def identity(root=ROOT):
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def install_interrupt_handlers():
+    """Let owned-process finally blocks run on coordinator termination."""
+    def interrupted(_number, _frame):
+        raise InterruptedError('acceptance coordinator interrupted')
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)

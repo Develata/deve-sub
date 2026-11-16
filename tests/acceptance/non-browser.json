@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "profile": "ci-non-browser",
+  "groups": {
+    "http-api": {
+      "args": [
+        "--config",
+        "functional.config.ts",
+        "--project",
+        "functional-api",
+        "--workers",
+        "2"
+      ],
+      "cases": [
+        "delivery-cache.api.spec.ts::FUNC-DELIVERY-RETENTION concurrent selectors retain independent last-good output::functional-api",
+        "logging-api.spec.ts::log001_default_logs_correlate_results_and_redact_secrets::functional-api",
+        "logging-api.spec.ts::audit005_runtime_retention_reclaims_only_expired_events::functional-api",
+        "tags.api.spec.ts::FUNC-TAG-INPUT tag normalization, Unicode and reference errors::functional-api",
+        "tags.api.spec.ts::FUNC-CHAIN-RACE concurrent opposing chains never commit a cycle::functional-api",
+        "tags.api.spec.ts::FUNC-TAG-RACE concurrent additions, replacement rollback and removal::functional-api",
+        "tags.api.spec.ts::FUNC-TAG-IDENTITY concurrent names, rename and delete versus assignment::functional-api",
+        "tags.api.spec.ts::FUNC-NODE-FILTER concurrent enable and region changes retain both fields::functional-api",
+        "tags.api.spec.ts::FUNC-IMPORT-RACE concurrent duplicate imports preserve one node identity::functional-api",
+        "templates.api.spec.ts::FUNC-CLASH-FIDELITY provider DNS order and colliding node names survive generation::functional-api",
+        "templates.api.spec.ts::FUNC-CLASH-ROUNDTRIP native routing YAML saves and generates unchanged rules::functional-api",
+        "templates.api.spec.ts::FUNC-TEMPLATE-CONCURRENT parallel saves and rollbacks preserve unique complete versions::functional-api",
+        "templates.api.spec.ts::FUNC-TEMPLATE-PIN fallback stays inside the pinned version and deletion explains references::functional-api",
+        "templates.api.spec.ts::FUNC-CLASH-VALIDATION unavailable members block locally and invalid references preserve good output::functional-api",
+        "templates.api.spec.ts::FUNC-TEMPLATE-VERSION update after rollback allocates a new history number::functional-api"
+      ]
+    },
+    "lifecycle": {
+      "args": [
+        "--config",
+        "lifecycle.config.ts"
+      ],
+      "cases": [
+        "lifecycle.spec.ts::log setup failure removes state before a child exists::",
+        "lifecycle.spec.ts::migration spawn failure removes state and closes its log::",
+        "lifecycle.spec.ts::occupied port is rejected without adopting or stopping its owner::"
+      ]
+    }
+  },
+  "browser_required": false
+}

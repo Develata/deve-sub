@@ -27,7 +27,11 @@ One release contains:
 - `deve-sub-sbom.json` and `deve-sub-web-sbom.json`: CycloneDX inventories
   for the native CLI and frontend-enabled WASM binary, respectively.
 
-Manual `workflow_dispatch` runs full CI, both native build/smoke jobs and
+Manual `workflow_dispatch` requires ci-non-browser and a separate full
+acceptance-gate that verifies operator-approved same-clean-commit local browser
+evidence before either distribution build. The evidence handoff is currently
+unconfigured and absent input blocks tag and manual release. A green reduced CI
+alone never permits release. After both gates pass it runs both native build/smoke jobs and
 artifact assembly, including signature and SBOM generation, without creating
 a tag, Release or image publication. Successful manual runs retain exactly the
 eight distribution assets listed above as the `release-candidate` Actions

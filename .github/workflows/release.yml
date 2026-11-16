@@ -10,15 +10,25 @@ permissions:
   contents: read
 
 jobs:
-  # WHY (DS-AUD-B04): a tag push must pass the full verification suite
-  # before any binary is built. Reuses ci.yml (fmt/clippy/test/docs/wasm/
-  # e2e/docker) via workflow_call. If any ci job fails, the build job is
-  # skipped — no release is published (fail-closed).
+  # CI verifies its named non-browser profile. The independent full gate below
+  # must also pass before any distribution candidate or release is built.
   verify:
     name: Verify (ci suite)
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
+
+  acceptance-gate:
+    name: acceptance-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: verify
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Require reviewed local-browser evidence for this clean source
+        env:
+          LOCAL_BROWSER_MANIFEST_SHA256: ${{ vars.LOCAL_BROWSER_MANIFEST_SHA256 }}
+        run: python3 scripts/ci/local_browser.py verify --root "$RUNNER_TEMP/local-browser-evidence" --manifest-sha256 "$LOCAL_BROWSER_MANIFEST_SHA256" --release
 
   # WHY (DS-AUD-B04): the tag name (minus leading `v`) must equal the
   # Cargo version. Prevents tagging v0.2.0 against a worktree that still
@@ -58,7 +68,7 @@ jobs:
     name: Build ${{ matrix.asset }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    needs: [verify, version-check]
+    needs: [verify, acceptance-gate, version-check]
     strategy:
       fail-fast: true
       matrix:
@@ -132,7 +142,7 @@ jobs:
     name: Assemble release artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [build, verify, version-check]
+    needs: [build, verify, acceptance-gate, version-check]
     # Apply any owner-configured protection rules on the release environment.
     # Declaring an environment alone does not configure required reviewers.
     environment: release

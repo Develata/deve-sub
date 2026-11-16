@@ -10,8 +10,8 @@ import subprocess
 import sys
 
 sys.dont_write_bytecode = True
-from common import ROOT, digest, write_json
-from normal_results import catalogue, context, dns_results, evaluate, exact, playwright_results, specs
+from common import ROOT, digest, write_json, install_interrupt_handlers
+from normal_results import catalogue, context, dns_results, evaluate, exact, playwright_results, specs, profile_plan
 
 E2E = ROOT / "tests/e2e"
 PLAYWRIGHT = ["node", "node_modules/@playwright/test/cli.js", "test", "--config", "normal.config.ts"]
@@ -34,36 +34,45 @@ def inventory(plan):
     exact(discovery(), required, "full discovered catalogue")
 
 
-def execute(command, cwd, environment, log):
+def execute(command, cwd, environment, log, timeout=900):
     """Cancel/reap this process group only; never leave its isolated server alive."""
     process = None
     try:
         with log.open("w") as output:
             process = subprocess.Popen(command, cwd=cwd, env=environment, stdout=output,
                                        stderr=subprocess.STDOUT, start_new_session=True)
-            return process.wait(timeout=900)
+            return process.wait(timeout=timeout)
     finally:
-        if process and process.poll() is None:
-            os.killpg(process.pid, signal.SIGTERM)
+        if process:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+            # A direct child can exit on TERM while its owned descendants ignore
+            # TERM. Reaping that child alone must not leave the group running.
             try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            if process.poll() is None:
                 process.wait(timeout=5)
 
 
-def run_lane(name, output):
-    plan = catalogue()
+def run_lane(name, output, profile='full'):
+    plan = profile_plan(catalogue(), profile)
     lane = plan["lanes"][name]
     output.mkdir(parents=True, exist_ok=True)
     report = {
-        "schema_version": 1, "lane": name, "context": context(),
+        "schema_version": 1, "lane": name, "context": context(), 'profile': profile,
         "started_at": datetime.now(timezone.utc).isoformat(), "status": "FAIL",
         "exit_code": None, "errors": [],
         "cases": [{"id": case, "status": "NOT_RUN"} for case in lane["cases"]],
     }
     try:
-        inventory(plan)
+        if profile == 'full':
+            inventory(plan)
         env = os.environ.copy()
         env["DEVE_SUB_NORMAL_OUTPUT"] = str(output / "browser")
         binary = Path(env.get("DEVE_SUB_BINARY", ROOT / "target/release/deve-sub")).resolve()
@@ -100,9 +109,9 @@ def run_lane(name, output):
     return 0 if report["status"] == "PASS" else 1
 
 
-def aggregate(directory, output):
+def aggregate(directory, output, profile='full'):
     reports, errors = [], []
-    plan = catalogue()
+    plan = profile_plan(catalogue(), profile)
     for path in sorted(directory.rglob("summary.json")):
         try:
             report = json.loads(path.read_text())
@@ -129,7 +138,7 @@ def aggregate(directory, output):
     except ValueError as error:
         needs = {}
         errors.append(str(error))
-    result = evaluate(reports, plan, context(), needs)
+    result = evaluate(reports, plan, context(), needs, profile)
     result["errors"].extend(errors)
     if errors:
         result["status"] = "FAIL"
@@ -142,6 +151,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("inventory", "run", "gate"))
     parser.add_argument("--lane", choices=tuple(catalogue()["lanes"]))
+    parser.add_argument('--profile', choices=['full', 'ci-non-browser'], default='full')
     parser.add_argument("--output", type=Path)
     parser.add_argument("--reports", type=Path)
     args = parser.parse_args()
@@ -152,13 +162,10 @@ def main():
     if not args.output or (args.operation == "run" and not args.lane) or (args.operation == "gate" and not args.reports):
         parser.error("run needs --lane/--output; gate needs --reports/--output")
     if args.operation == "run":
-        return run_lane(args.lane, args.output.resolve())
-    return aggregate(args.reports.resolve(), args.output.resolve())
+        return run_lane(args.lane, args.output.resolve(), args.profile)
+    return aggregate(args.reports.resolve(), args.output.resolve(), args.profile)
 
 
 if __name__ == "__main__":
-    def interrupted(_number, _frame):
-        raise InterruptedError("normal lane interrupted")
-    signal.signal(signal.SIGTERM, interrupted)
-    signal.signal(signal.SIGINT, interrupted)
+    install_interrupt_handlers()
     raise SystemExit(main())

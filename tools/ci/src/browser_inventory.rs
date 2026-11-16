@@ -1,44 +1,98 @@
-//! Browser preparation requires an existing exact asset, never a moved download.
+//! Keep actual browser execution local and its complete catalogue registered.
 use super::*;
 
-pub(super) fn validate(browser: &Value, normal: &Value) -> Result<()> {
-    for (job, condition) in [(browser, None), (normal, Some("matrix.lane != 'dns'"))] {
-        let name = "Verify existing locked Playwright Chromium";
-        let mut expected = json!({"name": name, "run": "node verify-locked-browser.cjs", "working-directory": "tests/e2e"});
-        if let Some(condition) = condition {
-            expected["if"] = json!(condition);
+pub(super) fn validate(workflow: &Value) -> Result<()> {
+    let jobs = &workflow["jobs"];
+    for job in jobs.as_object().context("jobs")?.values() {
+        for step in array(&job["steps"])? {
+            let run = step["run"].as_str().unwrap_or("");
+            ensure!(
+                ![
+                    "playwright install",
+                    "cli.js install",
+                    "verify-locked-browser.cjs",
+                    "--project functional-desktop",
+                    "--project functional-mobile"
+                ]
+                .iter()
+                .any(|s| run.contains(s)),
+                "CI cannot provision, preflight or execute browsers"
+            );
         }
+    }
+    let http = &jobs["http-api-lifecycle"];
+    ensure!(
+        named_step(http, "Run HTTP API and process lifecycle without a browser")?
+            == &json!({
+        "name":"Run HTTP API and process lifecycle without a browser",
+        "env":{"PLAYWRIGHT_BROWSERS_PATH":"${{ runner.temp }}/deve-sub-no-browser"},
+        "run":"python3 scripts/ci/suite.py --profile ci-non-browser --output \"$RUNNER_TEMP/http-api-lifecycle\""}),
+        "HTTP and lifecycle coverage cannot be filtered or suppressed"
+    );
+    ensure!(
+        named_step(http, "Install test runner without browsers")?
+            == &json!({
+        "name":"Install test runner without browsers", "env":{"PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD":"1"},
+        "run":"npm ci", "working-directory":"tests/e2e"}),
+        "runner dependencies must not acquire browsers"
+    );
+    ensure!(
+        named_step(
+            &jobs["installer-lifecycle"],
+            "Verify native installer lifecycle"
+        )? == &json!({
+        "name":"Verify native installer lifecycle", "run":"sudo apt-get update\nsudo apt-get install -y bubblewrap\nsudo python3 scripts/tests/test_install.py --required --binary target/release/deve-sub --web-dir apps/web/dist\n"}),
+        "required Linux installer cannot skip prerequisites or failures"
+    );
+    for name in ["http-api-lifecycle", "installer-lifecycle"] {
         ensure!(
-            named_step(job, name)? == &expected,
-            "browser capability preflight cannot download, substitute or suppress a missing exact asset"
+            jobs[name]["needs"] == json!(["rust-gate", "web-wasm", "build-release"]),
+            "runtime consumers require exact producers"
         );
-        let steps = array(&job["steps"])?;
-        let installs: Vec<_> = steps.iter().filter(|s| s["run"] == "npm ci").collect();
         ensure!(
-            installs.len() == 1
-                && installs[0]["env"] == json!({"PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"}),
-            "dependency installation must disable automatic browser acquisition"
-        );
-        ensure!(
-            !steps.iter().any(|s| s["run"]
+            named_step(&jobs[name], "Make binary executable")?["run"]
                 .as_str()
-                .is_some_and(|r| r.contains("playwright install") || r.contains("cli.js install"))),
-            "browser acquisition is outside the permitted workflow"
+                .is_some_and(|r| r.contains("artifact.py verify --kind binary")
+                    && r.contains("artifact.py verify --kind wasm")),
+            "both producer manifests remain verified"
         );
     }
-    let steps = array(&browser["steps"])?;
-    let position = |name: &str| {
-        steps
-            .iter()
-            .position(|s| s["name"] == name)
-            .with_context(|| format!("missing {name}"))
-    };
-    let preflight = position("Verify existing locked Playwright Chromium")?;
+    let local: Value =
+        serde_json::from_str(include_str!("../../../tests/acceptance/local-browser.json"))?;
+    let api: Value =
+        serde_json::from_str(include_str!("../../../tests/acceptance/non-browser.json"))?;
+    let normal: Value =
+        serde_json::from_str(include_str!("../../../tests/acceptance/normal-ci.json"))?;
     ensure!(
-        position("Verify native installer lifecycle")? < preflight
-            && position("Verify browser process lifecycle")? < preflight
-            && preflight < position("Run browser lane")?,
-        "independent legacy checks precede browser capability preflight, which precedes execution"
+        local["profile"] == "local-browser" && api["profile"] == "ci-non-browser",
+        "separate evidence profiles required"
     );
+    for (group, count) in [
+        ("legacy", 16),
+        ("functional-desktop", 48),
+        ("functional-mobile", 48),
+    ] {
+        ensure!(
+            array(&local["groups"][group]["cases"])?.len() == count,
+            "local browser cases lost"
+        );
+    }
+    ensure!(
+        array(&api["groups"]["http-api"]["cases"])?.len() == 15
+            && array(&api["groups"]["lifecycle"]["cases"])?.len() == 3,
+        "non-browser coverage lost"
+    );
+    ensure!(
+        local["groups"]["normal"]["catalogue"] == "normal-ci.json: all kind=playwright cases",
+        "normal browser catalogue must retain all cases"
+    );
+    let normal_cases = normal["lanes"]
+        .as_object()
+        .context("normal lanes")?
+        .values()
+        .filter(|v| v["kind"] == "playwright")
+        .map(|v| v["cases"].as_array().map_or(0, Vec::len))
+        .sum::<usize>();
+    ensure!(normal_cases == 39, "full normal browser scope changed");
     Ok(())
 }

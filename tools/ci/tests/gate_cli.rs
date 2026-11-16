@@ -7,7 +7,7 @@ fn needs() -> Value {
     let workflow =
         deve_sub_yaml::parse_source_json(include_str!("../../../.github/workflows/ci.yml"))
             .expect("workflow YAML");
-    workflow["jobs"]["acceptance-gate"]["needs"]
+    workflow["jobs"]["ci-non-browser-gate"]["needs"]
         .as_array()
         .expect("required jobs")
         .iter()
@@ -24,7 +24,7 @@ fn run(needs: Value, event: &str) -> (bool, Value) {
     let directory = tempfile::tempdir().expect("temporary report directory");
     let path = directory.path().join("nested/ci-result.json");
     let output = Command::new(env!("CARGO_BIN_EXE_deve-sub-ci"))
-        .args(["gate", "--output"])
+        .args(["gate", "--profile", "ci-non-browser", "--output"])
         .arg(&path)
         .env("CI_NEEDS", needs.to_string())
         .env("GITHUB_EVENT_NAME", event)
@@ -41,16 +41,18 @@ fn passing_cli_persists_schema_three_report() {
     assert!(success);
     assert_eq!(report["schema_version"], 3);
     assert_eq!(report["status"], "pass");
+    assert_eq!(report["profile"], "ci-non-browser");
+    assert_eq!(report["full_acceptance_readiness"], "NOT_ASSERTED");
 }
 
 #[test]
-fn cancelled_browser_lane_writes_failed_report_before_nonzero_exit() {
+fn cancelled_non_browser_lane_writes_failed_report_before_nonzero_exit() {
     let mut needs = needs();
-    needs["browser-e2e"]["result"] = json!("cancelled");
+    needs["http-api-lifecycle"]["result"] = json!("cancelled");
     let (success, report) = run(needs, "pull_request");
     assert!(!success);
     assert_eq!(report["status"], "fail");
-    assert_eq!(report["jobs"]["browser-e2e"]["status"], "cancelled");
+    assert_eq!(report["jobs"]["http-api-lifecycle"]["status"], "cancelled");
 }
 
 #[test]

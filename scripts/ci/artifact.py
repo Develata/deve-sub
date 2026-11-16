@@ -28,6 +28,19 @@ def files(root, kind):
             raise ValueError(f"artifact is not a regular file: {name}")
         if name != MANIFEST:
             result[name] = {"sha256": digest(path), "size": path.stat().st_size}
+    return validate_inventory(result, kind)
+
+
+def validate_inventory(result, kind):
+    """Shared producer inventory contract for payload and retained evidence."""
+    if not isinstance(result, dict):
+        raise ValueError('invalid producer file inventory')
+    for name, meta in result.items():
+        path = Path(name)
+        if (path.is_absolute() or '..' in path.parts or not isinstance(meta, dict)
+                or type(meta.get('size')) is not int or meta['size'] < 0
+                or not re.fullmatch(r'[0-9a-f]{64}', meta.get('sha256', ''))):
+            raise ValueError('invalid producer file identity')
     if kind == "binary":
         if set(result) != {"deve-sub"} or not result["deve-sub"]["size"]:
             raise ValueError("binary artifact must contain exactly one nonempty deve-sub")
@@ -71,15 +84,22 @@ def verify(root, kind, source, manifest_sha256):
         raise ValueError("manifest digest differs from the producer job output")
     manifest = json.loads(path.read_text())
     expected = context(kind, source)
+    validate_manifest(manifest, expected)
+    if manifest["files"] != files(root, kind):
+        raise ValueError("artifact file inventory, size or digest mismatch")
+    return manifest
+
+
+def validate_manifest(manifest, expected):
+    """One strict schema for CI payloads and approved retained producer evidence."""
     if set(manifest) != set(expected) | {"compiler", "files"}:
         raise ValueError("unknown or incomplete manifest schema")
     for key, value in expected.items():
         if manifest[key] != value:
             raise ValueError(f"artifact context mismatch: {key}")
-    if not isinstance(manifest["compiler"], str) or not manifest["compiler"].startswith(f"rustc {source['toolchain']} "):
+    if not isinstance(manifest["compiler"], str) or not manifest["compiler"].startswith(f"rustc {expected['toolchain']} "):
         raise ValueError("artifact compiler differs from the pinned toolchain")
-    if manifest["files"] != files(root, kind):
-        raise ValueError("artifact file inventory, size or digest mismatch")
+    validate_inventory(manifest['files'], expected['kind'])
     return manifest
 
 

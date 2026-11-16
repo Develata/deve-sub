@@ -374,12 +374,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bubblewrap
           sudo python3 scripts/tests/test_install.py --required --binary target/release/deve-sub --web-dir apps/web/dist
-      - name: Verify browser process lifecycle
-        if: matrix.suite == 'legacy'
-        run: npx playwright test --config lifecycle.config.ts
+      - name: Install locked Playwright Chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
         working-directory: tests/e2e
       - name: Verify existing locked Playwright Chromium
         run: node verify-locked-browser.cjs
+        working-directory: tests/e2e
+      - name: Verify browser process lifecycle
+        if: matrix.suite == 'legacy'
+        run: npx playwright test --config lifecycle.config.ts
         working-directory: tests/e2e
       - name: Run browser lane
         env:
@@ -448,6 +451,10 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        working-directory: tests/e2e
+      - name: Install locked Playwright Chromium
+        if: matrix.lane != 'dns'
+        run: ./node_modules/.bin/playwright install --with-deps chromium
         working-directory: tests/e2e
       - name: Verify existing locked Playwright Chromium
         if: matrix.lane != 'dns'

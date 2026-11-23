@@ -133,7 +133,7 @@ impl AuditLogRepository for SqliteAuditLogRepository {
         }
         query.push_str(" ORDER BY id DESC LIMIT ?");
 
-        let mut q = sqlx::query_as::<_, AuditLogRow>(&query);
+        let mut q = sqlx::query_as::<_, AuditLogRow>(sqlx::AssertSqlSafe(&query));
 
         if let Some(ref actor_id) = filter.actor_id {
             q = q.bind(actor_id.to_string());

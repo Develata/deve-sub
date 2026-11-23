@@ -171,7 +171,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
         }
         sql.push_str(" ORDER BY n.id ASC LIMIT ?");
 
-        let mut q = sqlx::query_as::<_, NodeRow>(sqlx::AssertSqlSafe(&sql));
+        let mut q = sqlx::query_as::<_, NodeRow>(sqlx::AssertSqlSafe(sql.as_str()));
         if let Some(p) = &proto_json {
             q = q.bind(p);
         }
@@ -197,7 +197,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
             "SELECT {NODE_COLUMNS} FROM nodes n \
              LEFT JOIN node_overrides o ON o.node_id = n.id WHERE n.id = ?"
         );
-        let row: Option<NodeRow> = sqlx::query_as::<_, NodeRow>(sqlx::AssertSqlSafe(&sql))
+        let row: Option<NodeRow> = sqlx::query_as::<_, NodeRow>(sqlx::AssertSqlSafe(sql.as_str()))
             .bind(id.to_string())
             .fetch_optional(&self.pool)
             .await
@@ -224,7 +224,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                  LEFT JOIN node_overrides o ON o.node_id = n.id \
                  WHERE n.id IN ({placeholders})"
             );
-            let mut query = sqlx::query_as::<_, NodeRow>(sqlx::AssertSqlSafe(&sql));
+            let mut query = sqlx::query_as::<_, NodeRow>(sqlx::AssertSqlSafe(sql.as_str()));
             for id in chunk {
                 query = query.bind(id.to_string());
             }
@@ -397,7 +397,7 @@ impl NodePoolRepository for SqliteNodePoolRepository {
                 .trim_end_matches(',')
                 .to_owned();
             let sql = format!("SELECT id FROM nodes WHERE id IN ({placeholders})");
-            let mut query = sqlx::query_as::<_, (String,)>(&sql);
+            let mut query = sqlx::query_as::<_, (String,)>(sqlx::AssertSqlSafe(sql.as_str()));
             for id in chunk {
                 query = query.bind(id.to_string());
             }

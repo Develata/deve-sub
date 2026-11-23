@@ -135,7 +135,7 @@ async fn get_index_names(pool: &SqlitePool) -> Vec<String> {
 
 async fn get_columns(pool: &SqlitePool, table: &str) -> Vec<String> {
     let rows: Vec<(String,)> =
-        sqlx::query_as(&format!("SELECT name FROM pragma_table_info('{table}')"))
+        sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT name FROM pragma_table_info('{table}')")))
             .fetch_all(pool)
             .await
             .expect("failed to query table info");

@@ -47,7 +47,7 @@ pub(super) async fn vacuum_into(pool: &sqlx::sqlite::SqlitePool, target: &Path) 
         bail!("snapshot path contains a single quote — refusing to interpolate into VACUUM INTO");
     }
     let sql = format!("VACUUM INTO '{target_str}'");
-    sqlx::query(sqlx::AssertSqlSafe(&sql))
+    sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .execute(pool)
         .await
         .context("VACUUM INTO failed")?;

@@ -215,7 +215,7 @@ impl SourceRepository for SqliteSourceRepository {
 
     async fn find_by_id(&self, id: SourceId) -> Result<Option<Source>, SourceError> {
         let sql = format!("SELECT {SOURCE_COLUMNS} FROM sources WHERE id = ?");
-        let row: Option<SourceRow> = sqlx::query_as(sqlx::AssertSqlSafe(&sql))
+        let row: Option<SourceRow> = sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
             .bind(id.to_string())
             .fetch_optional(&self.pool)
             .await
@@ -225,7 +225,7 @@ impl SourceRepository for SqliteSourceRepository {
 
     async fn find_by_name(&self, name: &str) -> Result<Option<Source>, SourceError> {
         let sql = format!("SELECT {SOURCE_COLUMNS} FROM sources WHERE name = ?");
-        let row: Option<SourceRow> = sqlx::query_as(sqlx::AssertSqlSafe(&sql))
+        let row: Option<SourceRow> = sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
             .bind(name)
             .fetch_optional(&self.pool)
             .await
@@ -242,7 +242,7 @@ impl SourceRepository for SqliteSourceRepository {
                 let sql = format!(
                     "SELECT {SOURCE_COLUMNS} FROM sources WHERE id > ? ORDER BY id LIMIT ?"
                 );
-                sqlx::query_as(sqlx::AssertSqlSafe(&sql))
+                sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
                     .bind(c.to_string())
                     .bind(limit)
                     .fetch_all(&self.pool)
@@ -251,7 +251,7 @@ impl SourceRepository for SqliteSourceRepository {
             }
             None => {
                 let sql = format!("SELECT {SOURCE_COLUMNS} FROM sources ORDER BY id LIMIT ?");
-                sqlx::query_as(sqlx::AssertSqlSafe(&sql))
+                sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
                     .bind(limit)
                     .fetch_all(&self.pool)
                     .await

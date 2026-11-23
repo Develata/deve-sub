@@ -50,7 +50,7 @@ impl SqliteSourceRepository {
              update_interval_secs = ?, enabled = ?, keep_on_fail = ?, filter_rules_json = ? \
              WHERE id = ? RETURNING {SOURCE_COLUMNS}"
         );
-        let row: SourceRow = sqlx::query_as(&sql)
+        let row: SourceRow = sqlx::query_as(sqlx::AssertSqlSafe(&sql))
             .bind(&update.name)
             .bind(update.source_type.to_string())
             .bind(url_encrypted)

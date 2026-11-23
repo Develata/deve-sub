@@ -133,7 +133,7 @@ impl TrafficRepository for SqliteTrafficRepository {
             "probe_traffic_totals",
             "traffic_daily_snapshots",
         ] {
-            sqlx::query(&format!("DELETE FROM {table} WHERE subscription_id = ?"))
+            sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM {table} WHERE subscription_id = ?")))
                 .bind(subscription_id.to_string())
                 .execute(&mut *tx)
                 .await

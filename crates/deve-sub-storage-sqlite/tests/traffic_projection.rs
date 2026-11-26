@@ -34,7 +34,7 @@ async fn insert(pool: &SqlitePool, id: &str, amount: i64, when: &str) -> Result<
     Ok(())
 }
 async fn scalar(pool: &SqlitePool, sql: &str) -> i64 {
-    sqlx::query_scalar(sql)
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
         .fetch_one(pool)
         .await
         .expect("query")

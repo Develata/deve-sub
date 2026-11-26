@@ -133,11 +133,13 @@ impl TrafficRepository for SqliteTrafficRepository {
             "probe_traffic_totals",
             "traffic_daily_snapshots",
         ] {
-            sqlx::query(&format!("DELETE FROM {table} WHERE subscription_id = ?"))
-                .bind(subscription_id.to_string())
-                .execute(&mut *tx)
-                .await
-                .map_err(storage_error)?;
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "DELETE FROM {table} WHERE subscription_id = ?"
+            )))
+            .bind(subscription_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_error)?;
         }
         tx.commit().await.map_err(storage_error)?;
         Ok(())

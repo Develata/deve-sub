@@ -219,7 +219,7 @@ impl SqliteNodePoolRepository {
                     "SELECT node_id FROM node_source_bindings \
                      WHERE node_id IN ({placeholders}) GROUP BY node_id"
                 );
-                let mut query = sqlx::query_as::<_, (String,)>(&sql);
+                let mut query = sqlx::query_as::<_, (String,)>(sqlx::AssertSqlSafe(sql.as_str()));
                 for id in chunk {
                     query = query.bind(id);
                 }

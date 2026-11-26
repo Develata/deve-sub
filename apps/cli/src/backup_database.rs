@@ -21,7 +21,7 @@ pub(super) async fn collect_row_counts(
     let mut counts = BTreeMap::new();
     for table in COUNTED_TABLES {
         let sql = format!("SELECT COUNT(*) FROM {table}");
-        match sqlx::query_as::<_, (i64,)>(sql.as_str())
+        match sqlx::query_as::<_, (i64,)>(sqlx::AssertSqlSafe(sql.as_str()))
             .fetch_one(pool)
             .await
         {
@@ -47,7 +47,7 @@ pub(super) async fn vacuum_into(pool: &sqlx::sqlite::SqlitePool, target: &Path) 
         bail!("snapshot path contains a single quote — refusing to interpolate into VACUUM INTO");
     }
     let sql = format!("VACUUM INTO '{target_str}'");
-    sqlx::query(&sql)
+    sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .execute(pool)
         .await
         .context("VACUUM INTO failed")?;

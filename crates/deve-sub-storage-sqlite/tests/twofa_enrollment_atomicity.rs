@@ -183,7 +183,7 @@ async fn enrollment_write_failures_roll_back_flag_secret_and_recovery_codes() {
             .await
             .expect("existing orphan recovery batch");
         let before = f.snapshot().await;
-        sqlx::query(trigger)
+        sqlx::query(sqlx::AssertSqlSafe(trigger))
             .execute(&f.pool)
             .await
             .expect("failure trigger");

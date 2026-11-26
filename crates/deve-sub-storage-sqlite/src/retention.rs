@@ -40,9 +40,9 @@ pub(crate) async fn prune(pool: &SqlitePool) -> Result<u64, StorageError> {
     for (table, predicate) in policies {
         // WHY: LIMIT in the selection works on SQLite builds without the
         // optional DELETE LIMIT extension. Constants cannot carry user SQL.
-        let result = sqlx::query(&format!(
+        let result = sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE rowid IN (SELECT rowid FROM {table} WHERE {predicate} LIMIT 500)"
-        ))
+        )))
         .execute(pool).await?;
         total += result.rows_affected();
         if result.rows_affected() > 0 {

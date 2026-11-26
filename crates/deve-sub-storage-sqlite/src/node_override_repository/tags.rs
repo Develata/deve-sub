@@ -55,7 +55,7 @@ impl SqliteNodeOverrideRepository {
                 } else {
                     "INSERT INTO node_tags (node_id, tag_id) VALUES (?, ?) ON CONFLICT DO NOTHING"
                 };
-                sqlx::query(sql)
+                sqlx::query(sqlx::AssertSqlSafe(sql))
                     .bind(node.to_string())
                     .bind(tag.to_string())
                     .execute(&mut *tx)

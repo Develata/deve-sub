@@ -128,7 +128,7 @@ impl SourceSnapshotRepository for SqliteSourceSnapshotRepository {
              FROM source_snapshots \
              WHERE is_active = 1 AND source_id IN ({placeholders})"
         );
-        let mut query = sqlx::query_as::<_, SnapshotRow>(&sql);
+        let mut query = sqlx::query_as::<_, SnapshotRow>(sqlx::AssertSqlSafe(sql.as_str()));
         for id in source_ids {
             query = query.bind(id.to_string());
         }
